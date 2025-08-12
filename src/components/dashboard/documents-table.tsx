@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -9,119 +9,153 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, FileText, CheckCircle, AlertCircle, Sparkles, FileWarning } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
-import { useToast } from "@/hooks/use-toast"
 import { format } from 'date-fns';
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { ArrowUpDown } from 'lucide-react';
 
-const typeIcons: { [key in Document['tipo_documento']]: React.ReactNode } = {
-  Factura: <FileText className="h-4 w-4 text-blue-400" />,
-  Informe: <FileText className="h-4 w-4 text-green-400" />,
-  Contrato: <FileText className="h-4 w-4 text-purple-400" />,
-  Otro: <FileText className="h-4 w-4 text-gray-400" />,
+type SortConfig = {
+  key: keyof Document | null;
+  direction: 'ascending' | 'descending';
 };
-
-const typeColors: { [key in Document['tipo_documento']]: string } = {
-    Factura: "border-transparent bg-blue-900/50 text-blue-300 hover:bg-blue-900/80",
-    Informe: "border-transparent bg-green-900/50 text-green-300 hover:bg-green-900/80",
-    Contrato: "border-transparent bg-purple-900/50 text-purple-300 hover:bg-purple-900/80",
-    Otro: "border-transparent bg-gray-700/50 text-gray-300 hover:bg-gray-700/80",
-};
-
 
 export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
-  const { toast } = useToast();
+  const [filters, setFilters] = useState<{ [key: string]: string }>({});
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_subida', direction: 'descending' });
 
-  const handleSummarizeClick = (doc: Document) => {
+  const handleRowClick = (doc: Document) => {
     setSelectedDoc(doc);
     setIsSummarizeOpen(true);
   };
-
-  const handleValidateClick = (doc: Document) => {
-    toast({
-        title: "Document Validated",
-        description: `Document "${doc.nombre_archivo}" has been marked as validated.`,
-    });
-    // In a real app, you would also update the document's state here.
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-ES', {
+        style: 'currency',
+        currency: 'EUR',
+    }).format(amount);
   };
+
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }));
+  };
+
+  const handleSort = (key: keyof Document) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const filteredAndSortedDocuments = useMemo(() => {
+    let filteredData = [...documents];
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        filteredData = filteredData.filter(doc => {
+            const docValue = (doc as any)[key];
+            if (typeof docValue === 'string') {
+                return docValue.toLowerCase().includes(value.toLowerCase());
+            }
+            if (typeof docValue === 'number') {
+                return docValue.toString().toLowerCase().includes(value.toLowerCase());
+            }
+             if (key === 'fecha_subida') {
+                return format(new Date(docValue), 'PPP').toLowerCase().includes(value.toLowerCase());
+            }
+            return false;
+        });
+      }
+    });
+
+    if (sortConfig.key) {
+      filteredData.sort((a, b) => {
+        const aValue = a[sortConfig.key!];
+        const bValue = b[sortConfig.key!];
+
+        if (aValue === null || aValue === undefined) return 1;
+        if (bValue === null || bValue === undefined) return -1;
+        
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return filteredData;
+  }, [documents, filters, sortConfig]);
+
+  const renderSortArrow = (key: keyof Document) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
+  };
+
+  const columns: { key: keyof Document, label: string, isCurrency?: boolean }[] = [
+      { key: 'numero_factura', label: 'Nº Factura' },
+      { key: 'fecha_subida', label: 'Fecha' },
+      { key: 'proveedor', label: 'Proveedor' },
+      { key: 'cif', label: 'CIF' },
+      { key: 'contenido', label: 'Concepto' },
+      { key: 'base_imponible', label: 'Base', isCurrency: true },
+      { key: 'iva', label: 'IVA', isCurrency: true },
+      { key: 'total', label: 'Total', isCurrency: true },
+  ]
 
   return (
     <>
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Upload Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id_documento}>
-                  <TableCell className="font-medium">{doc.nombre_archivo}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn("gap-1", typeColors[doc.tipo_documento])}>
-                        {typeIcons[doc.tipo_documento]}
-                        {doc.tipo_documento}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{format(new Date(doc.fecha_subida), 'PPP')}</TableCell>
-                  <TableCell>
-                    {doc.incidencia ? (
-                      <Badge variant="destructive" className="gap-1.5 pl-1.5">
-                        <FileWarning className="h-3.5 w-3.5" />
-                        Incidence
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="border-transparent gap-1.5 pl-1.5 text-green-400 bg-green-900/50 hover:bg-green-900/80">
-                        <CheckCircle className="h-3.5 w-3.5" />
-                        OK
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">More actions</span>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {columns.map(col => (
+                    <TableHead key={col.key}>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleSort(col.key)}
+                          className="px-0 hover:bg-transparent -ml-0.5"
+                        >
+                          {col.label}
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => handleSummarizeClick(doc)}>
-                          <Sparkles className="mr-2 h-4 w-4" />
-                          Summarize
-                        </DropdownMenuItem>
-                        {doc.incidencia && (
-                          <DropdownMenuItem onSelect={() => handleValidateClick(doc)}>
-                            <AlertCircle className="mr-2 h-4 w-4" />
-                            Validate Incidence
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                        <Input
+                          placeholder={`Buscar ${col.label}...`}
+                          value={filters[col.key] || ''}
+                          onChange={e => handleFilterChange(col.key, e.target.value)}
+                          className="h-8"
+                        />
+                      </div>
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredAndSortedDocuments.map((doc) => (
+                  <TableRow key={doc.id_documento} onClick={() => handleRowClick(doc)} className="cursor-pointer">
+                    <TableCell className="font-medium">{doc.numero_factura}</TableCell>
+                    <TableCell>{format(new Date(doc.fecha_subida), 'dd/MM/yyyy')}</TableCell>
+                    <TableCell>{doc.proveedor}</TableCell>
+                    <TableCell>{doc.cif}</TableCell>
+                    <TableCell className="max-w-xs truncate">{doc.contenido}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(doc.base_imponible)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(doc.iva)}</TableCell>
+                    <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
       <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
