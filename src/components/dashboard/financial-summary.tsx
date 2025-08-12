@@ -1,22 +1,12 @@
 'use client';
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-type QuarterlyData = {
-  [key: number]: {
-    sales: number;
-    expenses: number;
-    ivaRepercutido: number;
-    ivaSoportado: number;
-  };
+type ChartData = {
+  name: string;
+  sales: number;
+  expenses: number;
 };
 
 const formatCurrency = (amount: number) => {
@@ -26,63 +16,54 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-export function FinancialSummary({ data }: { data: QuarterlyData }) {
-  const quarters = [1, 2, 3, 4];
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="rounded-lg border bg-background p-2 shadow-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col space-y-1">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="font-bold text-primary">{formatCurrency(payload[0].value)}</span>
+            <span className="font-bold text-destructive">{formatCurrency(payload[1].value)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const totals = {
-    sales: quarters.reduce((acc, q) => acc + data[q].sales, 0),
-    expenses: quarters.reduce((acc, q) => acc + data[q].expenses, 0),
-    benefit: quarters.reduce((acc, q) => acc + (data[q].sales - data[q].expenses), 0),
-  };
+  return null;
+};
 
+
+export function FinancialSummary({ data }: { data: ChartData[] }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Resumen Financiero</CardTitle>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Concepto</TableHead>
-              {quarters.map(q => (
-                <TableHead key={q} className="text-right">
-                  Trimestre {q}
-                </TableHead>
-              ))}
-              <TableHead className="text-right font-bold">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow>
-              <TableCell className="font-medium">Ventas / Ingresos</TableCell>
-              {quarters.map(q => (
-                <TableCell key={q} className="text-right">
-                  {formatCurrency(data[q].sales)}
-                </TableCell>
-              ))}
-              <TableCell className="text-right font-bold">{formatCurrency(totals.sales)}</TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="font-medium">Gastos</TableCell>
-              {quarters.map(q => (
-                <TableCell key={q} className="text-right">
-                  {formatCurrency(data[q].expenses)}
-                </TableCell>
-              ))}
-              <TableCell className="text-right font-bold">{formatCurrency(totals.expenses)}</TableCell>
-            </TableRow>
-            <TableRow className="bg-muted/50">
-              <TableCell className="font-bold">Beneficio antes de IRPF</TableCell>
-              {quarters.map(q => (
-                <TableCell key={q} className="text-right font-bold">
-                  {formatCurrency(data[q].sales - data[q].expenses)}
-                </TableCell>
-              ))}
-              <TableCell className="text-right font-extrabold">{formatCurrency(totals.benefit)}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+      <CardContent className="pl-2">
+        <ResponsiveContainer width="100%" height={350}>
+          <BarChart data={data}>
+            <XAxis
+              dataKey="name"
+              stroke="#888888"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              stroke="#888888"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) => formatCurrency(value as number)}
+            />
+            <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomTooltip />} />
+            <Legend iconType="circle" />
+            <Bar dataKey="sales" name="Ventas / Ingresos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="expenses" name="Gastos" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );
