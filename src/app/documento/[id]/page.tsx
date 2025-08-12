@@ -15,7 +15,6 @@ import { Form } from '@/components/ui/form';
 
 
 export default function DocumentoPage({ params }: { params: { id: string } }) {
-  const id = parseInt(params.id, 10);
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,31 +22,17 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const { toast } = useToast();
 
   const form = useForm<DocumentUpdatePayload>({
-    resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: {
-        numero_factura: '',
-        fecha_emision: '',
-        proveedor: '',
-        cif: '',
-        base_imponible: 0,
-        total: 0,
-        tipo_documento: 'Factura',
-        incidencia: false,
-        fecha_vencimiento: '',
-        moneda: 'EUR',
-        observaciones: '',
-        entidades: [],
-        lineas: [],
-        iva_details: [],
-    }
+    resolver: zodResolver(DocumentUpdateSchema)
   });
 
   useEffect(() => {
+    const id = parseInt(params.id, 10);
+    if (isNaN(id)) {
+      notFound();
+      return;
+    }
+
     async function fetchDocument() {
-      if (isNaN(id)) {
-        notFound();
-        return;
-      }
       try {
         setIsLoading(true);
         const fetchedDoc = await getDocumentById(id);
@@ -74,13 +59,12 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
       }
     }
     fetchDocument();
-  }, [id, form, toast]);
+  }, [params.id, form, toast]);
 
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
     setIsSaving(true);
     try {
-      // The provider and cif are inside the entities array, we need to extract them for the payload
       const mainEntity = data.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor' || e.rol === 'cliente' || e.rol === 'receptor');
       const payload = {
         ...data,
@@ -89,7 +73,7 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
       };
 
       await updateDocument(doc.id_documento, payload);
-      const updatedDoc = await getDocumentById(id);
+      const updatedDoc = await getDocumentById(doc.id_documento);
       setDoc(updatedDoc);
       if (updatedDoc) {
         form.reset({
