@@ -78,7 +78,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 return docValue.toString().toLowerCase().includes(value.toLowerCase());
             }
              if (key === 'fecha_subida') {
-                const date = new Date(docValue).toLocaleDateString('es-ES');
+                const date = new Date(docValue).toLocaleDateString('es-ES', { timeZone: 'UTC' });
                 return date.includes(value);
             }
             return false;
@@ -159,7 +159,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 {filteredAndSortedDocuments.map((doc) => (
                   <TableRow key={doc.id_documento} className="cursor-pointer">
                     <TableCell className="font-medium">{doc.numero_factura}</TableCell>
-                    <TableCell>{new Date(doc.fecha_subida).toLocaleDateString('es-ES')}</TableCell>
+                    <TableCell>{new Date(doc.fecha_subida).toLocaleDateString('es-ES', { timeZone: 'UTC' })}</TableCell>
                     <TableCell>{doc.proveedor}</TableCell>
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
