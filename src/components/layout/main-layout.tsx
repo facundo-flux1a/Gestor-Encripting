@@ -80,7 +80,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <div className="group-data-[collapsible=icon]:hidden">
                 <AppLogo />
             </div>
-            <SidebarTrigger asChild className="group-data-[collapsible=icon]:block hidden">
+            <SidebarTrigger className="group-data-[collapsible=icon]:block hidden">
                 <AppLogo />
             </SidebarTrigger>
             <div className="group-data-[collapsible=icon]:hidden">
