@@ -32,21 +32,7 @@ interface ImpuestoPacket extends RowDataPacket {
     cuota: number;
 }
 
-export async function getDocuments(): Promise<Document[]> {
-    const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT 
-            d.id,
-            d.numero_documento,
-            d.tipo_documento,
-            d.incidencia,
-            d.fecha_emision,
-            d.importe_total,
-            d.importe_sin_impuestos,
-            d.observaciones
-        FROM documentos d
-        ORDER BY d.fecha_emision DESC
-    `);
-
+async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     const documents = await Promise.all(documentRows.map(async (doc) => {
         const [fileRows] = await db.query<ArchivoPacket[]>(
             'SELECT nombre_archivo FROM archivos_documento WHERE documento_id = ? LIMIT 1',
@@ -68,11 +54,11 @@ export async function getDocuments(): Promise<Document[]> {
 
         let ingreso = 0;
         let gasto = 0;
-        // Si el importe es positivo, es un ingreso. Si es negativo, un gasto.
-        if (doc.importe_total > 0) {
-            ingreso = doc.importe_total;
+        
+        if (doc.tipo_documento === 'Factura' && proveedor) {
+             gasto = doc.importe_total;
         } else {
-            gasto = Math.abs(doc.importe_total);
+             ingreso = doc.importe_total;
         }
 
         const iva_details: IvaDetail[] = impuestoRows.map(tax => ({
@@ -89,9 +75,9 @@ export async function getDocuments(): Promise<Document[]> {
             numero_factura: doc.numero_documento,
             nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo : `doc-${doc.id}`,
             tipo_documento: doc.tipo_documento,
-            fecha_subida: doc.fecha_emision, // Corresponde a fecha_emision
+            fecha_subida: doc.fecha_emision,
             incidencia: !!doc.incidencia,
-            contenido: doc.observaciones, // Asumimos que observaciones es el concepto
+            contenido: doc.observaciones,
             ingreso: ingreso,
             gasto: gasto,
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
@@ -103,6 +89,43 @@ export async function getDocuments(): Promise<Document[]> {
         };
     }));
     
-    // Quick fix for types
     return documents as unknown as Document[];
+}
+
+export async function getDocuments(): Promise<Document[]> {
+    const [documentRows] = await db.query<DocumentPacket[]>(`
+        SELECT 
+            d.id,
+            d.numero_documento,
+            d.tipo_documento,
+            d.incidencia,
+            d.fecha_emision,
+            d.importe_total,
+            d.importe_sin_impuestos,
+            d.observaciones
+        FROM documentos d
+        ORDER BY d.fecha_emision DESC
+    `);
+    
+    return mapDocumentPacketsToDocuments(documentRows);
+}
+
+
+export async function getIncidents(): Promise<Document[]> {
+    const [documentRows] = await db.query<DocumentPacket[]>(`
+        SELECT 
+            d.id,
+            d.numero_documento,
+            d.tipo_documento,
+            d.incidencia,
+            d.fecha_emision,
+            d.importe_total,
+            d.importe_sin_impuestos,
+            d.observaciones
+        FROM documentos d
+        WHERE d.incidencia = 1
+        ORDER BY d.fecha_emision DESC
+    `);
+
+    return mapDocumentPacketsToDocuments(documentRows);
 }

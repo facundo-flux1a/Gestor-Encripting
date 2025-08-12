@@ -103,8 +103,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Incidents">
-                 <Link href="/">
+              <SidebarMenuButton asChild isActive={pathname === '/incidents'} tooltip="Incidents">
+                 <Link href="/incidents">
                   <Bell />
                   Incidents
                 </Link>
