@@ -9,7 +9,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarInset,
-  SidebarFooter
+  SidebarFooter,
+  SidebarTrigger,
+  SidebarRail,
 } from "@/components/ui/sidebar";
 import {
   FileText,
@@ -30,12 +32,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils";
+
+export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
+    return (
+        <div className={cn("flex h-14 items-center gap-4 border-b bg-background/60 px-4 backdrop-blur-sm lg:h-auto lg:border-none lg:bg-transparent lg:px-0", className)}>
+            <SidebarTrigger className="flex md:hidden" />
+            <div className="w-full flex-1">{children}</div>
+        </div>
+    )
+}
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   return (
     <SidebarProvider>
-      <Sidebar>
+      <Sidebar collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -47,7 +59,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/'}>
+              <SidebarMenuButton asChild isActive={pathname === '/'} tooltip="Dashboard">
                 <Link href="/">
                   <LayoutDashboard />
                   Dashboard
@@ -55,7 +67,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild tooltip="All Documents">
                  <Link href="/">
                   <FileText />
                   All Documents
@@ -63,7 +75,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild tooltip="Incidents">
                  <Link href="/">
                   <Bell />
                   Incidents
@@ -80,7 +92,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   <AvatarImage data-ai-hint="profile avatar" src="https://placehold.co/100x100.png" alt="User Avatar" />
                   <AvatarFallback>JD</AvatarFallback>
                 </Avatar>
-                <div className="text-left">
+                <div className="text-left group-data-[collapsible=icon]:hidden">
                   <p className="text-sm font-medium">Jane Doe</p>
                   <p className="text-xs text-muted-foreground">jane.doe@example.com</p>
                 </div>
@@ -104,6 +116,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
+        <SidebarRail />
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>

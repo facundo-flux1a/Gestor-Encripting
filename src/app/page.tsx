@@ -1,4 +1,4 @@
-import { MainLayout } from "@/components/layout/main-layout";
+import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
@@ -7,6 +7,8 @@ import {
   FileWarning,
   FileType,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 
 export default async function Home() {
   const documents = await getDocuments();
@@ -20,9 +22,22 @@ export default async function Home() {
   return (
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
-        <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        </div>
+        <MainLayoutHeader>
+            <div className="flex items-center justify-between space-y-2">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                    <p className="text-muted-foreground">
+                        Una vista general de todos tus documentos.
+                    </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button>
+                        <Upload className="mr-2" />
+                        Subir Documento
+                    </Button>
+                </div>
+            </div>
+        </MainLayoutHeader>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <StatsCard title="Total Documents" value={totalDocuments.toString()} icon={FileText} />
             <StatsCard title="Incidents" value={incidentDocuments.toString()} icon={FileWarning} />
