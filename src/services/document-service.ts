@@ -179,11 +179,14 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     );
 
     // Update 'entidades_documento' table
+    // This assumes there's a single provider/emitter per document to update. 
+    // If there could be more, this logic would need to be more specific.
     await db.query<OkPacket>(
       'UPDATE entidades_documento SET nombre = ?, identificador_fiscal = ? WHERE documento_id = ? AND (rol = ? OR rol = ?)',
       [proveedor, cif, id, 'proveedor', 'emisor']
     );
-
+    
+    // Here you could add more logic to update lines, taxes, etc. if needed.
     
     return docResult;
 }
