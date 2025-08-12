@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { type Document } from '@/lib/types';
 import {
@@ -14,6 +15,8 @@ import {
     TableCell,
     TableRow,
   } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Pencil } from 'lucide-react';
 
 export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Document | null; isOpen: boolean; setIsOpen: (open: boolean) => void }) {
   
@@ -62,10 +65,6 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
                         <TableCell className="font-semibold">Tipo Documento</TableCell>
                         <TableCell>{doc.tipo_documento}</TableCell>
                     </TableRow>
-                    <TableRow>
-                        <TableCell className="font-semibold">Concepto</TableCell>
-                        <TableCell>{doc.contenido}</TableCell>
-                    </TableRow>
                      <TableRow>
                         <TableCell className="font-semibold">Base Imponible</TableCell>
                         <TableCell className="text-right">{formatCurrency(doc.base_imponible)}</TableCell>
@@ -83,6 +82,12 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
                 </TableBody>
             </Table>
         </div>
+        <DialogFooter>
+          <Button variant="outline">
+            <Pencil className="mr-2 h-4 w-4" />
+            Editar
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
