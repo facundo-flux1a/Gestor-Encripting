@@ -34,6 +34,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils";
+import { useSidebar } from "@/components/ui/sidebar";
+
+function AppLogo() {
+  return (
+    <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+        </Button>
+        <h1 className="text-xl font-semibold">FluxiDocs</h1>
+    </div>
+  )
+}
+
+function SidebarToggle() {
+    const { state, toggleSidebar } = useSidebar();
+    
+    return (
+        <Button 
+            variant="ghost" 
+            size="icon"
+            className="hidden size-8 p-1.5 md:flex"
+            onClick={toggleSidebar}
+        >
+          {state === 'expanded' ? <PanelLeftClose /> : <PanelRightClose />}
+        </Button>
+    )
+}
 
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
     return (
@@ -50,18 +77,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <Sidebar collapsible="icon">
         <SidebarHeader className="flex items-center justify-between p-2">
-          <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
-            </Button>
-            <h1 className="text-xl font-semibold">FluxiDocs</h1>
-          </div>
-           <SidebarTrigger className="hidden size-8 p-1.5 md:flex group-data-[collapsible=icon]:hidden">
-              <PanelLeftClose />
-           </SidebarTrigger>
-           <SidebarTrigger className="hidden size-8 p-1.5 md:flex group-data-[collapsible=icon]:flex">
-              <PanelRightClose />
-           </SidebarTrigger>
+            <div className="group-data-[collapsible=icon]:hidden">
+                <AppLogo />
+            </div>
+            <SidebarTrigger asChild className="group-data-[collapsible=icon]:block hidden">
+                <AppLogo />
+            </SidebarTrigger>
+            <div className="group-data-[collapsible=icon]:hidden">
+                <SidebarToggle />
+            </div>
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
