@@ -55,7 +55,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let ingreso = 0;
         let gasto = 0;
         
-        // Asumimos que si hay un proveedor es un gasto (factura recibida), si no, un ingreso (factura emitida)
         if (proveedor) {
              gasto = doc.importe_total;
         } else if (cliente) {
@@ -111,6 +110,29 @@ export async function getDocuments(): Promise<Document[]> {
     return mapDocumentPacketsToDocuments(documentRows);
 }
 
+export async function getDocumentById(id: number): Promise<Document | null> {
+    const [documentRows] = await db.query<DocumentPacket[]>(`
+        SELECT 
+            d.id,
+            d.numero_documento,
+            d.tipo_documento,
+            d.incidencia,
+            d.fecha_emision,
+            d.importe_total,
+            d.importe_sin_impuestos,
+            d.observaciones
+        FROM documentos d
+        WHERE d.id = ?
+    `, [id]);
+
+    if (documentRows.length === 0) {
+        return null;
+    }
+
+    const documents = await mapDocumentPacketsToDocuments(documentRows);
+    return documents[0];
+}
+
 
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
@@ -141,13 +163,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     );
 
     // Update 'entidades_documento' table
-    // For simplicity, we assume one entity and update it. A more complex scenario might need to check roles.
     await db.query<OkPacket>(
       'UPDATE entidades_documento SET nombre = ?, identificador_fiscal = ? WHERE documento_id = ? AND (rol = ? OR rol = ?)',
       [proveedor, cif, id, 'proveedor', 'emisor']
     );
 
-    // TODO: Update 'impuestos_documento' if IVA details are editable
     
     return docResult;
 }

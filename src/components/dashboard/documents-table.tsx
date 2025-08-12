@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Table,
   TableBody,
@@ -21,7 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DocumentDetailsDialog } from './document-details-dialog';
 import { IvaBadge } from './iva-badge';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -41,18 +41,12 @@ const formatCurrency = (amount: number) => {
 export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [filters, setFilters] = useState<{ [key: string]: string }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_subida', direction: 'descending' });
 
   const handleSummarizeClick = (doc: Document) => {
     setSelectedDoc(doc);
     setIsSummarizeOpen(true);
-  };
-  
-  const handleDetailsClick = (doc: Document) => {
-    setSelectedDoc(doc);
-    setIsDetailsOpen(true);
   };
 
   const handleFilterChange = (column: string, value: string) => {
@@ -202,8 +196,10 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleDetailsClick(doc)}>
-                            Ver más detalles
+                          <DropdownMenuItem asChild>
+                            <Link href={`/documento/${doc.id_documento}`}>
+                                Ver más detalles
+                            </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleSummarizeClick(doc)}>
                             Resumir con IA
@@ -220,7 +216,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
       </Card>
       </TooltipProvider>
       <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
-      <DocumentDetailsDialog doc={selectedDoc} isOpen={isDetailsOpen} setIsOpen={setIsDetailsOpen} />
     </>
   );
 }
