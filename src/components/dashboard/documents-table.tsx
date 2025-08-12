@@ -22,10 +22,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DocumentDetailsDialog } from './document-details-dialog';
+import { IvaBadge } from './iva-badge';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type SortConfig = {
   key: keyof Document | null;
   direction: 'ascending' | 'descending';
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency: 'EUR',
+  }).format(amount);
 };
 
 export function DocumentsTable({ documents }: { documents: Document[] }) {
@@ -43,13 +53,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const handleDetailsClick = (doc: Document) => {
     setSelectedDoc(doc);
     setIsDetailsOpen(true);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency: 'EUR',
-    }).format(amount);
   };
 
   const handleFilterChange = (column: string, value: string) => {
@@ -107,20 +110,21 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     return filteredData;
   }, [documents, filters, sortConfig]);
 
-  const columns: { key: keyof Document, label: string, isCurrency?: boolean }[] = [
+  const columns: { key: keyof Document, label: string }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
       { key: 'fecha_subida', label: 'Fecha' },
       { key: 'proveedor', label: 'Proveedor' },
       { key: 'cif', label: 'CIF' },
       { key: 'tipo_documento', label: 'Tipo' },
       { key: 'contenido', label: 'Concepto' },
-      { key: 'base_imponible', label: 'Base', isCurrency: true },
+      { key: 'base_imponible', label: 'Base' },
       { key: 'iva_details', label: 'IVA' },
-      { key: 'total', label: 'Total', isCurrency: true },
+      { key: 'total', label: 'Total' },
   ]
 
   return (
     <>
+    <TooltipProvider>
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -164,11 +168,22 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
                     <TableCell className="max-w-xs truncate">{doc.contenido}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(doc.base_imponible)}</TableCell>
                     <TableCell className="text-right">
-                        {doc.iva_details.map((iva, index) => (
-                            <div key={index}>{`${iva.tipo_impuesto} ${iva.porcentaje}%: ${formatCurrency(iva.cuota)}`}</div>
-                        ))}
+                       <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Badge className="bg-vat-base text-white">{formatCurrency(doc.base_imponible)}</Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Base Imponible</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell className="text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          {doc.iva_details.map((iva, index) => (
+                              <IvaBadge key={index} iva={iva} />
+                          ))}
+                        </div>
                     </TableCell>
                     <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
                     <TableCell>
@@ -196,6 +211,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
           </div>
         </CardContent>
       </Card>
+      </TooltipProvider>
       <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
       <DocumentDetailsDialog doc={selectedDoc} isOpen={isDetailsOpen} setIsOpen={setIsDetailsOpen} />
     </>

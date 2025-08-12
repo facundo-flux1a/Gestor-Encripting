@@ -36,6 +36,11 @@ body {
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 267 49% 20%;
     --sidebar-ring: 283 100% 41%;
+    --vat-base: 220 13% 69%;
+    --vat-21: 350 78% 55%;
+    --vat-10: 25 81% 55%;
+    --vat-4: 160 78% 45%;
+    --vat-other: 260 78% 55%;
   }
 
   .dark {
@@ -66,6 +71,11 @@ body {
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 267 49% 20%;
     --sidebar-ring: 283 100% 61%;
+    --vat-base: 220 13% 29%;
+    --vat-21: 350 68% 35%;
+    --vat-10: 25 71% 35%;
+    --vat-4: 160 68% 25%;
+    --vat-other: 260 68% 35%;
   }
 }
 

@@ -65,6 +65,13 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+        vat: {
+          base: 'hsl(var(--vat-base))',
+          '21': 'hsl(var(--vat-21))',
+          '10': 'hsl(var(--vat-10))',
+          '4': 'hsl(var(--vat-4))',
+          other: 'hsl(var(--vat-other))',
+        }
       },
       borderRadius: {
         lg: 'var(--radius)',
