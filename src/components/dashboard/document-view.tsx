@@ -1,13 +1,13 @@
 
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, FileText, User, Building, Phone, Mail, Calendar, Hash, FileUp, Info, Trash2, PlusCircle, Package, ArrowRight, UserSquare, Building2, Receipt } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp } from "lucide-react";
 import { format } from 'date-fns';
-import { type Document, type DocumentUpdatePayload } from "@/lib/types";
+import { type Document } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,76 +35,6 @@ const formatDate = (date: string | null) => {
         return 'Fecha inválida';
     }
 }
-
-const renderJsonData = (data: any) => {
-    if (!data) return <p className="text-sm text-muted-foreground">No hay datos extra.</p>;
-
-    const jsonData = typeof data === 'string' ? JSON.parse(data) : data;
-    const output = jsonData.output;
-    if (!output) return <p className="text-sm text-muted-foreground">No hay datos extra en el formato esperado.</p>;
-
-    const renderKeyValue = (key: string, value: any) => (
-        <div key={key} className="flex items-start">
-            <span className="font-semibold text-muted-foreground w-32 shrink-0">{key}:</span>
-            <span className="flex-1 break-words">{String(value)}</span>
-        </div>
-    );
-
-    const renderEntityCard = (title: string, icon: React.ReactNode, entity: any) => (
-        entity && (
-            <Card className="bg-muted/30 border-muted/50">
-                <CardHeader className="pb-4">
-                    <CardTitle className="text-base flex items-center gap-2">{icon} {title}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs space-y-1">
-                    {Object.entries(entity).map(([key, value]) => renderKeyValue(key, value))}
-                </CardContent>
-            </Card>
-        )
-    );
-    
-    return (
-        <div className="text-xs space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-                {renderEntityCard("Cliente", <UserSquare className="w-4 h-4" />, output.cliente)}
-                {renderEntityCard("Empresa Emisora", <Building2 className="w-4 h-4" />, output.empresa_emisora)}
-                {renderEntityCard("Documento", <Receipt className="w-4 h-4" />, output.documento)}
-            </div>
-
-            {output.lineas?.map((linea: any, index: number) => (
-                <div key={index} className="p-4 rounded-lg border border-muted/50 space-y-3">
-                    <div className="flex justify-between items-center">
-                        <h4 className="font-semibold flex items-center gap-2"><Package className="w-4 h-4" /> Albarán: {linea.albaran}</h4>
-                        <Badge variant="outline">Fecha: {formatDate(linea.fecha_albaran)}</Badge>
-                    </div>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Código</TableHead>
-                                <TableHead>Descripción</TableHead>
-                                <TableHead className="text-right">Cantidad</TableHead>
-                                <TableHead className="text-right">P. Unitario</TableHead>
-                                <TableHead className="text-right">Importe</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {linea.articulos?.map((articulo: any, artIndex: number) => (
-                                <TableRow key={artIndex}>
-                                    <TableCell className="font-mono">{articulo.codigo}</TableCell>
-                                    <TableCell>{articulo.descripcion}</TableCell>
-                                    <TableCell className="text-right">{articulo.cantidad}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(articulo.precio_unitario)}</TableCell>
-                                    <TableCell className="text-right font-medium">{formatCurrency(articulo.importe_linea)}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            ))}
-        </div>
-    );
-};
-
 
 interface DocumentViewProps {
     doc: Document;
@@ -234,12 +164,6 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     )}
                                 />
                             </div>
-                           {doc.datos_extra && (
-                                <div className="mt-6">
-                                    <h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra del Documento</h4>
-                                    {renderJsonData(doc.datos_extra)}
-                                </div>
-                            )}
                         </CardContent>
                     </Card>
 
@@ -310,7 +234,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                             </CardHeader>
                             <CardContent className="text-sm space-y-3">
                                <div className="flex items-center gap-3">
-                                   <Hash className="text-muted-foreground w-4 h-4" /> 
+                                   <FileText className="text-muted-foreground w-4 h-4" /> 
                                    <span className="font-medium">ID Fiscal:</span>
                                    <FormField control={form.control} name={`entidades.${index}.identificador_fiscal`} render={({field}) => isEditing ? <Input {...field} value={field.value || ''} className="h-8"/> : <span>{(entidad as any).identificador_fiscal}</span>} />
                                 </div>
