@@ -12,7 +12,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { type Document, type IvaDetail, DocumentUpdateSchema } from '@/lib/types';
+import { type Document, DocumentUpdateSchema } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,14 +33,15 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
   
   useEffect(() => {
     if (doc) {
+      const date = new Date(doc.fecha_subida);
+      const formattedDate = date.toISOString().split('T')[0];
       reset({
         numero_factura: doc.numero_factura,
-        fecha_subida: doc.fecha_subida.split('T')[0], // Format for input[type=date]
+        fecha_subida: formattedDate,
         proveedor: doc.proveedor,
         cif: doc.cif,
         base_imponible: doc.base_imponible,
         total: doc.total,
-        // TODO: Add editing for IVA details
       });
     }
   }, [doc, reset]);
