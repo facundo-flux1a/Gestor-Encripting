@@ -1,9 +1,8 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document } from '@/lib/types';
+import type { Document, IvaDetail } from '@/lib/types';
 import type { RowDataPacket } from 'mysql2';
-import { format } from 'date-fns';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -24,6 +23,13 @@ interface EntidadPacket extends RowDataPacket {
     nombre: string;
     identificador_fiscal: string;
     rol: string;
+}
+
+interface ImpuestoPacket extends RowDataPacket {
+    tipo_impuesto: string;
+    porcentaje: number;
+    base_imponible: number;
+    cuota: number;
 }
 
 export async function getDocuments(): Promise<Document[]> {
@@ -48,11 +54,13 @@ export async function getDocuments(): Promise<Document[]> {
         );
         
         const [entidadRows] = await db.query<EntidadPacket[]>(
-            "SELECT nombre, identificador_fiscal, rol FROM entidades_documento WHERE documento_id = ? AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1",
+            "SELECT nombre, identificador_fiscal, rol FROM entidades_documento WHERE documento_id = ?",
             [doc.id]
         );
+        
+        const proveedor = entidadRows.find(e => e.rol === 'proveedor') || entidadRows.find(e => e.rol === 'emisor');
 
-        const [impuestoRows] = await db.query<RowDataPacket[]>(
+        const [impuestoRows] = await db.query<ImpuestoPacket[]>(
             'SELECT tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
             [doc.id]
         );
@@ -66,22 +74,30 @@ export async function getDocuments(): Promise<Document[]> {
             gasto = doc.importe_total;
         }
 
-        const iva = impuestoRows.reduce((acc, tax) => acc + tax.cuota, 0);
+        const iva_details: IvaDetail[] = impuestoRows.map(tax => ({
+            tipo_impuesto: tax.tipo_impuesto,
+            porcentaje: tax.porcentaje,
+            base_imponible: tax.base_imponible,
+            cuota: tax.cuota,
+        }));
+        
+        const total_iva = iva_details.reduce((acc, tax) => acc + tax.cuota, 0);
 
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
             nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo : `doc-${doc.id}`,
             tipo_documento: doc.tipo_documento,
-            fecha_subida: format(new Date(doc.fecha_emision), 'dd/MM/yyyy'),
+            fecha_subida: doc.fecha_emision,
             incidencia: !!doc.incidencia,
             contenido: doc.observaciones, // Concepto
             ingreso: ingreso,
             gasto: gasto,
-            proveedor: entidadRows.length > 0 ? entidadRows[0].nombre : 'N/A',
-            cif: entidadRows.length > 0 ? entidadRows[0].identificador_fiscal : 'N/A',
+            proveedor: proveedor ? proveedor.nombre : 'N/A',
+            cif: proveedor ? proveedor.identificador_fiscal : 'N/A',
             base_imponible: doc.importe_sin_impuestos,
-            iva: iva,
+            iva: total_iva,
+            iva_details: iva_details,
             total: doc.importe_total,
         };
     }));
