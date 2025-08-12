@@ -17,7 +17,7 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/comp
 import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray } from "react-hook-form";
 
-const formatCurrency = (amount: number, currency: string = 'EUR') => {
+const formatCurrency = (amount: number | null | undefined, currency: string = 'EUR') => {
     if (typeof amount !== 'number' || isNaN(amount)) return 'N/A';
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
@@ -206,7 +206,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).precio_unitario, doc.moneda)}
                                             </TableCell>
                                             <TableCell className="text-right w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as any).descuento_porcentaje}%`}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as any).descuento_porcentaje || 0}%`}
                                             </TableCell>
                                             <TableCell className="text-right font-medium w-28">
                                                 {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).importe_linea, doc.moneda)}
@@ -363,5 +363,4 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             </div>
         </>
     );
-
-    
+}
