@@ -1,3 +1,5 @@
+'use client';
+
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
@@ -5,6 +7,7 @@ import { IvaSummary } from "@/components/dashboard/iva-summary";
 import { type Document } from "@/lib/types";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { FileText, FileWarning, Euro } from "lucide-react";
+import { useEffect, useState } from "react";
 
 // Helper to get the quarter from a date
 const getQuarter = (date: Date) => {
@@ -71,9 +74,28 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
   };
 
-export default async function Home() {
-  const documents = await getDocuments();
+export default function Home() {
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        getDocuments().then(docs => {
+            setDocuments(docs);
+            setIsLoading(false);
+        });
+    }, []);
+
   const { chartData, totalSales, totalExpenses, totalIncidents, totalDocuments } = processDataForSummary(documents);
+
+  if (isLoading) {
+      return (
+          <MainLayout>
+              <div className="flex flex-1 items-center justify-center">
+                  <p>Cargando dashboard...</p>
+              </div>
+          </MainLayout>
+      )
+  }
 
   return (
     <MainLayout>

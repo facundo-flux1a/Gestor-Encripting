@@ -24,16 +24,21 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: async () => {
-        if (isNaN(id)) return {};
-        const fetchedDoc = await getDocumentById(id);
-        if (!fetchedDoc) return {};
-        return {
-            ...fetchedDoc,
-            fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
-            fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
-            fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
-        }
+    defaultValues: {
+        numero_factura: '',
+        fecha_emision: '',
+        proveedor: '',
+        cif: '',
+        base_imponible: 0,
+        total: 0,
+        tipo_documento: 'Factura',
+        incidencia: false,
+        fecha_vencimiento: '',
+        moneda: 'EUR',
+        observaciones: '',
+        entidades: [],
+        lineas: [],
+        iva_details: [],
     }
   });
 
@@ -86,12 +91,14 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
       await updateDocument(doc.id_documento, payload);
       const updatedDoc = await getDocumentById(id);
       setDoc(updatedDoc);
-      form.reset({
-        ...updatedDoc,
-        fecha_emision: updatedDoc.fecha_emision ? new Date(updatedDoc.fecha_emision).toISOString().split('T')[0] : '',
-        fecha_vencimiento: updatedDoc.fecha_vencimiento ? new Date(updatedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
-        fecha_creacion: updatedDoc.fecha_creacion ? new Date(updatedDoc.fecha_creacion).toISOString().split('T')[0] : '',
-      });
+      if (updatedDoc) {
+        form.reset({
+          ...updatedDoc,
+          fecha_emision: updatedDoc.fecha_emision ? new Date(updatedDoc.fecha_emision).toISOString().split('T')[0] : '',
+          fecha_vencimiento: updatedDoc.fecha_vencimiento ? new Date(updatedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
+          fecha_creacion: updatedDoc.fecha_creacion ? new Date(updatedDoc.fecha_creacion).toISOString().split('T')[0] : '',
+        });
+      }
       toast({
         title: 'Éxito',
         description: 'Documento actualizado correctamente.',

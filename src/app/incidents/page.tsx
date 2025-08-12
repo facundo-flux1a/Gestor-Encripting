@@ -1,9 +1,20 @@
+'use client';
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getIncidents } from "@/services/document-service";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
+import { useEffect, useState } from "react";
+import type { Document } from "@/lib/types";
 
-export default async function IncidentsPage() {
-  const documents = await getIncidents();
+export default function IncidentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getIncidents().then(docs => {
+        setDocuments(docs);
+        setIsLoading(false);
+    });
+  }, []);
   
   return (
     <MainLayout>
@@ -19,7 +30,7 @@ export default async function IncidentsPage() {
             </div>
         </MainLayoutHeader>
         <div>
-            <DocumentsTable documents={documents} />
+           {isLoading ? <p>Cargando incidencias...</p> : <DocumentsTable documents={documents} />}
         </div>
       </div>
     </MainLayout>

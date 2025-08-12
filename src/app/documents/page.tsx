@@ -1,11 +1,22 @@
+'use client';
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { Document } from "@/lib/types";
 
-export default async function DocumentsPage() {
-  const documents = await getDocuments();
+export default function DocumentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getDocuments().then(docs => {
+        setDocuments(docs);
+        setIsLoading(false);
+    });
+  }, []);
   
   return (
     <MainLayout>
@@ -27,7 +38,7 @@ export default async function DocumentsPage() {
             </div>
         </MainLayoutHeader>
         <div>
-            <DocumentsTable documents={documents} />
+            {isLoading ? <p>Cargando documentos...</p> : <DocumentsTable documents={documents} />}
         </div>
       </div>
     </MainLayout>
