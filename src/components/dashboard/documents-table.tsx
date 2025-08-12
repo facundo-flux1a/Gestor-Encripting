@@ -167,7 +167,16 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     <TableCell>{doc.proveedor}</TableCell>
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
-                    <TableCell className="max-w-xs truncate">{doc.contenido}</TableCell>
+                    <TableCell className="max-w-[200px] truncate md:max-w-xs">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span>{doc.contenido}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-sm">{doc.contenido}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TableCell>
                     <TableCell className="text-right">
                        <Tooltip>
                         <TooltipTrigger asChild>
