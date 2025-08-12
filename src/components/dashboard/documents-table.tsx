@@ -124,7 +124,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
   return (
     <>
-    <TooltipProvider>
+    <TooltipProvider delayDuration={200}>
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
