@@ -96,6 +96,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         }
 
         const iva_details: IvaDetail[] = impuestoRows.map(tax => ({
+            id: tax.id,
             tipo_impuesto: tax.tipo_impuesto,
             porcentaje: tax.porcentaje,
             base_imponible: tax.base_imponible,
@@ -180,6 +181,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     try {
         const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
+        const total_iva = iva_details.reduce((sum, item) => sum + item.cuota, 0);
+
         const [docResult] = await connection.query<OkPacket>(
           'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, incidencia = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
           [numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, id]
@@ -187,7 +190,6 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 
         // This is a simplified update. A full implementation would handle additions/deletions.
         for (const entidad of entidades) {
-            // @ts-ignore
             if(entidad.id) {
                  await connection.query(
                     'UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ? WHERE id = ?',
@@ -196,7 +198,6 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             }
         }
         for (const linea of lineas) {
-             // @ts-ignore
              if(linea.id) {
                 await connection.query(
                     'UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ? WHERE id = ?',
@@ -205,7 +206,6 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             }
         }
         for (const iva of iva_details) {
-            // @ts-ignore
             if(iva.id) {
                 await connection.query(
                     'UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?',

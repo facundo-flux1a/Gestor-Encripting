@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { UseFormReturn } from "react-hook-form";
-import { useFieldArray } from "react-hook-form";
+import { useFieldArray, useWatch } from "react-hook-form";
 
 const formatCurrency = (amount: number | null | undefined, currency: string = 'EUR') => {
     if (typeof amount !== 'number' || isNaN(amount)) return 'N/A';
@@ -25,10 +25,11 @@ const formatCurrency = (amount: number | null | undefined, currency: string = 'E
     }).format(amount);
 };
 
-const formatDate = (date: string | null) => {
+const formatDate = (date: string | null | undefined) => {
     if (!date) return 'N/A';
     try {
         const d = new Date(date);
+        // Ensure date is treated as UTC to avoid timezone shifts
         const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
         return format(utcDate, 'dd/MM/yyyy');
     } catch {
@@ -46,6 +47,8 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({ control: form.control, name: "entidades" });
     const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({ control: form.control, name: "lineas" });
     const { fields: ivaFields, append: appendIva, remove: removeIva } = useFieldArray({ control: form.control, name: "iva_details" });
+    
+    const formValues = useWatch({ control: form.control });
 
 
     const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false) => {
@@ -85,7 +88,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
                         <FormControl>
                             {isEditing ? (
-                                <Input type="date" {...field} className="h-8 text-sm"/>
+                                <Input type="date" {...field} value={field.value ? field.value.split('T')[0] : ''} className="h-8 text-sm"/>
                             ) : (
                                 <p className="text-sm font-medium">{formatDate(field.value)}</p>
                             )}
@@ -293,41 +296,47 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-base pt-4 border-t">
-                                    <div className="flex justify-between font-medium items-center">
+                                     <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Base Imponible</span>
-                                        <FormField
-                                            control={form.control}
-                                            name='base_imponible'
-                                            render={({ field }) => isEditing ? (
-                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
-                                            ) : (
-                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
-                                            )}
-                                        />
+                                        {isEditing ? (
+                                            <FormField
+                                                control={form.control}
+                                                name='base_imponible'
+                                                render={({ field }) => (
+                                                    <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right font-mono" />
+                                                )}
+                                            />
+                                        ) : (
+                                            <span className="font-mono">{formatCurrency(formValues.base_imponible, doc.moneda)}</span>
+                                        )}
                                     </div>
                                     <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Total IVA</span>
-                                         <FormField
-                                            control={form.control}
-                                            name='iva'
-                                            render={({ field }) => isEditing ? (
-                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
-                                            ) : (
-                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
-                                            )}
-                                        />
+                                        {isEditing ? (
+                                             <FormField
+                                                control={form.control}
+                                                name='iva'
+                                                render={({ field }) => (
+                                                    <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right font-mono" />
+                                                )}
+                                            />
+                                        ) : (
+                                            <span className="font-mono">{formatCurrency(formValues.iva, doc.moneda)}</span>
+                                        )}
                                     </div>
                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
                                         <span className="text-foreground">Total</span>
-                                        <FormField
-                                            control={form.control}
-                                            name='total'
-                                            render={({ field }) => isEditing ? (
-                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
-                                            ) : (
-                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
-                                            )}
-                                        />
+                                         {isEditing ? (
+                                             <FormField
+                                                control={form.control}
+                                                name='total'
+                                                render={({ field }) => (
+                                                    <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right font-mono" />
+                                                )}
+                                            />
+                                        ) : (
+                                            <span className="font-mono">{formatCurrency(formValues.total, doc.moneda)}</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
