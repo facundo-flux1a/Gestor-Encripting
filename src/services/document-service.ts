@@ -23,6 +23,7 @@ interface ArchivoPacket extends RowDataPacket {
 interface EntidadPacket extends RowDataPacket {
     nombre: string;
     identificador_fiscal: string;
+    rol: string;
 }
 
 export async function getDocuments(): Promise<Document[]> {
@@ -47,7 +48,7 @@ export async function getDocuments(): Promise<Document[]> {
         );
         
         const [entidadRows] = await db.query<EntidadPacket[]>(
-            "SELECT nombre, identificador_fiscal FROM entidades_documento WHERE documento_id = ? AND rol = 'proveedor' LIMIT 1",
+            "SELECT nombre, identificador_fiscal, rol FROM entidades_documento WHERE documento_id = ? AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1",
             [doc.id]
         );
 
