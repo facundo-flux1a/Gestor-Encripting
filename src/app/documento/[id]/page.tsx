@@ -23,18 +23,15 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: {
-      numero_factura: '',
-      fecha_subida: '',
-      proveedor: '',
-      cif: '',
-      base_imponible: 0,
-      total: 0,
-    },
+    // defaultValues are set in useEffect after fetching the data
   });
 
   useEffect(() => {
     async function fetchDocument() {
+      if (isNaN(id)) {
+        notFound();
+        return;
+      }
       try {
         setIsLoading(true);
         const fetchedDoc = await getDocumentById(id);
@@ -42,7 +39,7 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           notFound();
         } else {
           setDoc(fetchedDoc);
-          form.reset({
+           form.reset({
             numero_factura: fetchedDoc.numero_factura,
             fecha_subida: new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0],
             proveedor: fetchedDoc.proveedor,
@@ -62,10 +59,8 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
         setIsLoading(false);
       }
     }
-    if (id) {
-      fetchDocument();
-    }
-  }, [id, form.reset, toast]);
+    fetchDocument();
+  }, [id, form, toast]);
 
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
