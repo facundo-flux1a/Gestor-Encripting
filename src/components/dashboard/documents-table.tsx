@@ -116,7 +116,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
       { key: 'proveedor', label: 'Proveedor' },
       { key: 'cif', label: 'CIF' },
       { key: 'tipo_documento', label: 'Tipo' },
-      { key: 'contenido', label: 'Concepto' },
       { key: 'base_imponible', label: 'Base' },
       { key: 'iva_details', label: 'IVA' },
       { key: 'total', label: 'Total' },
@@ -167,16 +166,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     <TableCell>{doc.proveedor}</TableCell>
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
-                    <TableCell className="max-w-[200px] truncate md:max-w-xs">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span>{doc.contenido}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p className="max-w-sm">{doc.contenido}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TableCell>
                     <TableCell className="text-right">
                        <Tooltip>
                         <TooltipTrigger asChild>

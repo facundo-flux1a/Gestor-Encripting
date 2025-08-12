@@ -63,10 +63,6 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
                         <TableCell>{doc.tipo_documento}</TableCell>
                     </TableRow>
                      <TableRow>
-                        <TableCell className="font-semibold">Concepto</TableCell>
-                        <TableCell>{doc.contenido}</TableCell>
-                    </TableRow>
-                     <TableRow>
                         <TableCell className="font-semibold">Base Imponible</TableCell>
                         <TableCell className="text-right">{formatCurrency(doc.base_imponible)}</TableCell>
                     </TableRow>
