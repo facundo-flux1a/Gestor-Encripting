@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { getDocumentById, updateDocument } from '@/services/document-service';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
@@ -14,7 +14,8 @@ import { Loader2, Edit, X, Save } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 
 
-export default function DocumentoPage({ params }: { params: { id: string } }) {
+export default function DocumentoPage() {
+  const params = useParams();
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,11 +23,13 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const { toast } = useToast();
 
   const form = useForm<DocumentUpdatePayload>({
-    resolver: zodResolver(DocumentUpdateSchema)
+    resolver: zodResolver(DocumentUpdateSchema),
   });
 
   useEffect(() => {
-    const id = parseInt(params.id, 10);
+    const idParam = params.id;
+    const id = parseInt(Array.isArray(idParam) ? idParam[0] : idParam, 10);
+
     if (isNaN(id)) {
       notFound();
       return;
