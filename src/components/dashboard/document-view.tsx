@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,22 +35,50 @@ const formatDate = (date: string | null) => {
     }
 }
 
-const renderJsonData = (data: any) => {
+const renderJsonData = (data: any, isEditing: boolean) => {
     if (!data) return <p className="text-sm text-muted-foreground">No hay datos extra.</p>;
-    
+
     const jsonData = typeof data === 'string' ? JSON.parse(data) : data;
+
+    const renderValue = (value: any) => {
+        if (typeof value === 'object' && value !== null) {
+            if (Array.isArray(value)) {
+                return (
+                    <div className="pl-4 mt-1 space-y-1">
+                        {value.map((item, index) => (
+                            <div key={index} className="flex">
+                                <span className="text-muted-foreground mr-2">-</span>
+                                <div className="flex-1">{renderValue(item)}</div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            }
+            return (
+                <div className="pl-4 mt-1 space-y-2">
+                    {Object.entries(value).map(([key, val]) => (
+                        <div key={key}>
+                            <span className="font-semibold text-muted-foreground uppercase tracking-wider text-xs">{key}:</span>
+                            <div className="pl-2">{renderValue(val)}</div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        return <span className="break-words">{String(value).replace(/"/g, '')}</span>;
+    };
 
     return (
         <div className="text-xs bg-muted/30 p-4 rounded-lg mt-4 space-y-2 border">
-             {Object.entries(jsonData).map(([key, value]) => (
-                <div key={key} className="grid grid-cols-2 gap-2 text-xs">
+            {Object.entries(jsonData).map(([key, value]) => (
+                <div key={key}>
                     <span className="font-semibold text-muted-foreground uppercase tracking-wider">{key}</span>
-                    <span className="break-words">{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value).replace(/"/g, '')}</span>
+                    <div className="pl-2">{renderValue(value)}</div>
                 </div>
             ))}
         </div>
     );
-}
+};
 
 interface DocumentViewProps {
     doc: Document;
@@ -179,7 +208,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     )}
                                 />
                             </div>
-                            {doc.datos_extra && <div className="mt-6"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra del Documento</h4>{renderJsonData(doc.datos_extra)}</div>}
+                            {doc.datos_extra && <div className="mt-6"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra del Documento</h4>{renderJsonData(doc.datos_extra, isEditing)}</div>}
                         </CardContent>
                     </Card>
 
@@ -213,19 +242,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).descripcion}
                                             </TableCell>
                                             <TableCell className="w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8"/>} /> : (line as any).cantidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (line as any).cantidad}
                                             </TableCell>
                                             <TableCell className="w-20">
                                                 {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).unidad}
                                             </TableCell>
                                             <TableCell className="text-right w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : formatCurrency((line as any).precio_unitario, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((line as any).precio_unitario, doc.moneda)}
                                             </TableCell>
                                             <TableCell className="text-right w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : `${(line as any).descuento_porcentaje}%`}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(line as any).descuento_porcentaje}%`}
                                             </TableCell>
                                             <TableCell className="text-right font-medium w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : formatCurrency((line as any).importe_linea, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((line as any).importe_linea, doc.moneda)}
                                             </TableCell>
                                             {isEditing && <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button></TableCell>}
                                         </TableRow>
@@ -270,7 +299,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                    <FormField control={form.control} name={`entidades.${index}.direccion`} render={({field}) => isEditing ? <Textarea {...field} value={field.value || ''} className="text-sm"/> : <span className="flex-1">{(entidad as any).direccion || 'N/A'}</span>} />
                                 </div>
 
-                                {(entidad as any).datos_extra && <div className="pt-2"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra de la Entidad</h4>{renderJsonData((entidad as any).datos_extra)}</div>}
+                                {(entidad as any).datos_extra && <div className="pt-2"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra de la Entidad</h4>{renderJsonData((entidad as any).datos_extra, isEditing)}</div>}
                             </CardContent>
                         </Card>
                     ))}
@@ -292,8 +321,8 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 {isEditing ? (
                                                     <>
                                                         <FormField control={form.control} name={`iva_details.${index}.tipo_impuesto`} render={({field}) => <Input {...field} className="h-8 w-24" />}/>
-                                                        <FormField control={form.control} name={`iva_details.${index}.porcentaje`} render={({field}) => <Input type="number" {...field} className="h-8 w-20" />} />
-                                                        <FormField control={form.control} name={`iva_details.${index}.cuota`} render={({field}) => <Input type="number" {...field} className="h-8 w-24 text-right" />} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.porcentaje`} render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-20" />} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.cuota`} render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-24 text-right" />} />
                                                         <Button type="button" variant="ghost" size="icon" onClick={() => removeIva(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                                                     </>
                                                 ) : (
@@ -313,12 +342,12 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 <div className="space-y-2 text-base pt-4 border-t">
                                      <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Base Imponible</span>
-                                        {isEditing ? <FormField control={form.control} name='base_imponible' render={({field}) => <Input type="number" {...field} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
+                                        {isEditing ? <FormField control={form.control} name='base_imponible' render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
                                      </div>
                                      <div className="flex justify-between font-medium"><span className="text-muted-foreground">Total IVA</span><span>{formatCurrency(doc.iva, doc.moneda)}</span></div>
                                      <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
                                         <span className="text-foreground">Total</span>
-                                        {isEditing ? <FormField control={form.control} name='total' render={({field}) => <Input type="number" {...field} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
+                                        {isEditing ? <FormField control={form.control} name='total' render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
                                     </div>
                                 </div>
                             </div>
@@ -328,7 +357,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             </div>
             
             {/* Other Details Grid */}
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-2 gap-8 mt-8">
                 {/* Attached Files Card */}
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><FileUp /> Archivos Adjuntos</CardTitle></CardHeader>
@@ -382,3 +411,5 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 }
+
+    
