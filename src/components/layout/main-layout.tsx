@@ -11,14 +11,15 @@ import {
   SidebarInset,
   SidebarFooter,
   SidebarTrigger,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 import {
   FileText,
   LayoutDashboard,
   Bell,
   UserCircle,
-  Settings
+  Settings,
+  PanelLeftClose,
+  PanelRightClose
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -48,13 +49,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
+        <SidebarHeader className="flex items-center justify-between p-2">
+          <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
             </Button>
             <h1 className="text-xl font-semibold">FluxiDocs</h1>
           </div>
+           <SidebarTrigger className="hidden size-8 p-1.5 md:flex group-data-[collapsible=icon]:hidden">
+              <PanelLeftClose />
+           </SidebarTrigger>
+           <SidebarTrigger className="hidden size-8 p-1.5 md:flex group-data-[collapsible=icon]:flex">
+              <PanelRightClose />
+           </SidebarTrigger>
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
@@ -116,7 +123,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
-        <SidebarRail />
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
