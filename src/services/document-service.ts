@@ -3,6 +3,7 @@
 import db from '@/lib/db';
 import type { Document } from '@/lib/types';
 import type { RowDataPacket } from 'mysql2';
+import { format } from 'date-fns';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -71,7 +72,7 @@ export async function getDocuments(): Promise<Document[]> {
             numero_factura: doc.numero_documento,
             nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo : `doc-${doc.id}`,
             tipo_documento: doc.tipo_documento,
-            fecha_subida: new Date(doc.fecha_emision).toISOString(),
+            fecha_subida: format(new Date(doc.fecha_emision), 'dd/MM/yyyy'),
             incidencia: !!doc.incidencia,
             contenido: doc.observaciones, // Concepto
             ingreso: ingreso,

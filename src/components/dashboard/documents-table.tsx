@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
-import { format } from 'date-fns';
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowUpDown } from 'lucide-react';
 
@@ -66,7 +65,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 return docValue.toString().toLowerCase().includes(value.toLowerCase());
             }
              if (key === 'fecha_subida') {
-                return format(new Date(docValue), 'PPP').toLowerCase().includes(value.toLowerCase());
+                return docValue.toLowerCase().includes(value.toLowerCase());
             }
             return false;
         });
@@ -144,7 +143,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 {filteredAndSortedDocuments.map((doc) => (
                   <TableRow key={doc.id_documento} onClick={() => handleRowClick(doc)} className="cursor-pointer">
                     <TableCell className="font-medium">{doc.numero_factura}</TableCell>
-                    <TableCell>{format(new Date(doc.fecha_subida), 'dd/MM/yyyy')}</TableCell>
+                    <TableCell>{doc.fecha_subida}</TableCell>
                     <TableCell>{doc.proveedor}</TableCell>
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell className="max-w-xs truncate">{doc.contenido}</TableCell>
