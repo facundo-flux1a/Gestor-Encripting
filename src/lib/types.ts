@@ -10,6 +10,7 @@ export type IvaDetail = z.infer<typeof IvaDetailSchema>;
 
 
 export const DocumentEntitySchema = z.object({
+    id: z.number().optional(),
     rol: z.string(),
     nombre: z.string().nullable(),
     direccion: z.string().nullable(),
@@ -21,6 +22,7 @@ export const DocumentEntitySchema = z.object({
 export type DocumentEntity = z.infer<typeof DocumentEntitySchema>;
 
 export const DocumentLineSchema = z.object({
+    id: z.number().optional(),
     codigo: z.string().nullable(),
     descripcion: z.string().nullable(),
     cantidad: z.coerce.number(),
@@ -34,6 +36,7 @@ export const DocumentLineSchema = z.object({
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
 export const DocumentFileSchema = z.object({
+    id: z.number().optional(),
     tipo_archivo: z.string().nullable(),
     nombre_archivo: z.string().nullable(),
     ruta_archivo: z.string().nullable(),
@@ -77,9 +80,9 @@ export const DocumentUpdateSchema = z.object({
   fecha_emision: z.string().min(1, "La fecha es obligatoria."),
   proveedor: z.string().min(1, "El proveedor es obligatorio."),
   cif: z.string().min(1, "El CIF es obligatorio."),
-  base_imponible: z.coerce.number().positive("La base imponible debe ser positiva."),
-  total: z.coerce.number().positive("El total debe ser positivo."),
-  // Add other fields from Document that should be editable
+  base_imponible: z.coerce.number(),
+  iva: z.coerce.number(),
+  total: z.coerce.number(),
   tipo_documento: z.enum(['Factura', 'Informe', 'Contrato', 'Otro']),
   incidencia: z.boolean(),
   fecha_vencimiento: z.string().nullable(),

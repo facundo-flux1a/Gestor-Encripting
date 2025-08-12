@@ -293,14 +293,41 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-base pt-4 border-t">
-                                     <div className="flex justify-between font-medium items-center">
+                                    <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Base Imponible</span>
-                                        {isEditing ? <FormField control={form.control} name='base_imponible' render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
-                                     </div>
-                                     <div className="flex justify-between font-medium"><span className="text-muted-foreground">Total IVA</span><span>{formatCurrency(doc.iva, doc.moneda)}</span></div>
-                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
+                                        <FormField
+                                            control={form.control}
+                                            name='base_imponible'
+                                            render={({ field }) => isEditing ? (
+                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
+                                            ) : (
+                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
+                                            )}
+                                        />
+                                    </div>
+                                    <div className="flex justify-between font-medium items-center">
+                                        <span className="text-muted-foreground">Total IVA</span>
+                                         <FormField
+                                            control={form.control}
+                                            name='iva'
+                                            render={({ field }) => isEditing ? (
+                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
+                                            ) : (
+                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
+                                            )}
+                                        />
+                                    </div>
+                                    <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
                                         <span className="text-foreground">Total</span>
-                                        {isEditing ? <FormField control={form.control} name='total' render={({field}) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
+                                        <FormField
+                                            control={form.control}
+                                            name='total'
+                                            render={({ field }) => isEditing ? (
+                                                <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 w-32 text-right" />
+                                            ) : (
+                                                <span>{formatCurrency(field.value, doc.moneda)}</span>
+                                            )}
+                                        />
                                     </div>
                                 </div>
                             </div>
