@@ -39,10 +39,12 @@ import { useSidebar } from "@/components/ui/sidebar";
 function AppLogo() {
   return (
     <div className="flex items-center gap-2">
+      <SidebarTrigger>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
         </Button>
-        <h1 className="text-xl font-semibold">FluxiDocs</h1>
+      </SidebarTrigger>
+      <h1 className="text-xl font-semibold group-data-[collapsible=icon]:hidden">FluxiDocs</h1>
     </div>
   )
 }
@@ -77,12 +79,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <Sidebar collapsible="icon">
         <SidebarHeader className="flex items-center justify-between p-2">
-            <div className="group-data-[collapsible=icon]:hidden">
-                <AppLogo />
-            </div>
-            <SidebarTrigger className="group-data-[collapsible=icon]:block hidden">
-                <AppLogo />
-            </SidebarTrigger>
+            <AppLogo />
             <div className="group-data-[collapsible=icon]:hidden">
                 <SidebarToggle />
             </div>
@@ -98,8 +95,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="All Documents">
-                 <Link href="/">
+              <SidebarMenuButton asChild isActive={pathname === '/documents'} tooltip="All Documents">
+                 <Link href="/documents">
                   <FileText />
                   All Documents
                 </Link>
