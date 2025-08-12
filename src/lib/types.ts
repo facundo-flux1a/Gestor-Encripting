@@ -7,22 +7,64 @@ export type IvaDetail = {
   cuota: number;
 };
 
+export type DocumentEntity = {
+    rol: string;
+    nombre: string;
+    direccion: string | null;
+    identificador_fiscal: string | null;
+    telefono: string | null;
+    email: string | null;
+    datos_extra: any | null;
+};
+
+export type DocumentLine = {
+    codigo: string | null;
+    descripcion: string | null;
+    cantidad: number;
+    unidad: string | null;
+    precio_unitario: number;
+    descuento_porcentaje: number;
+    precio_neto: number;
+    importe_linea: number;
+    datos_extra: any | null;
+};
+
+export type DocumentFile = {
+    tipo_archivo: string | null;
+    nombre_archivo: string | null;
+    ruta_archivo: string | null;
+    hash_archivo: string | null;
+    fecha_subida: string;
+};
+
 export type Document = {
   id_documento: number;
   numero_factura: string;
-  nombre_archivo: string;
   tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
-  fecha_subida: string; // Corresponds to fecha_emision
   incidencia: boolean;
-  contenido: string; // Corresponds to observaciones
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  fecha_creacion: string;
+  moneda: string;
+  observaciones: string | null;
+  datos_extra: any | null;
   ingreso: number;
   gasto: number;
-  proveedor: string;
-  cif: string;
   base_imponible: number;
   iva: number;
-  iva_details: IvaDetail[];
   total: number;
+  
+  entidades: DocumentEntity[];
+  lineas: DocumentLine[];
+  iva_details: IvaDetail[];
+  archivos: DocumentFile[];
+  
+  // Legacy fields for compatibility - will be removed later
+  fecha_subida: string; 
+  proveedor: string;
+  cif: string;
+  nombre_archivo: string;
+  contenido: string;
 };
 
 export const DocumentUpdateSchema = z.object({

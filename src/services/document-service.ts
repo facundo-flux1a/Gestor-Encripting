@@ -1,28 +1,52 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail, DocumentUpdatePayload } from '@/lib/types';
+import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
-    numero_documento: string;
     tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
     incidencia: number; // MySQL BOOLEAN is 0 or 1
+    numero_documento: string;
     fecha_emision: string;
+    fecha_vencimiento: string | null;
     importe_total: number;
     importe_sin_impuestos: number;
-    observaciones: string;
+    moneda: string;
+    observaciones: string | null;
+    datos_extra: any | null;
+    fecha_creacion: string;
 }
 
 interface ArchivoPacket extends RowDataPacket {
-    nombre_archivo: string;
+    tipo_archivo: string | null;
+    nombre_archivo: string | null;
+    ruta_archivo: string | null;
+    hash_archivo: string | null;
+    fecha_subida: string;
 }
 
 interface EntidadPacket extends RowDataPacket {
-    nombre: string;
-    identificador_fiscal: string;
     rol: string;
+    nombre: string;
+    direccion: string | null;
+    identificador_fiscal: string | null;
+    telefono: string | null;
+    email: string | null;
+    datos_extra: any | null;
+}
+
+interface LineaPacket extends RowDataPacket {
+    codigo: string | null;
+    descripcion: string | null;
+    cantidad: number;
+    unidad: string | null;
+    precio_unitario: number;
+    descuento_porcentaje: number;
+    precio_neto: number;
+    importe_linea: number;
+    datos_extra: any | null;
 }
 
 interface ImpuestoPacket extends RowDataPacket {
@@ -35,26 +59,32 @@ interface ImpuestoPacket extends RowDataPacket {
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     const documents = await Promise.all(documentRows.map(async (doc) => {
         const [fileRows] = await db.query<ArchivoPacket[]>(
-            'SELECT nombre_archivo FROM archivos_documento WHERE documento_id = ? LIMIT 1',
+            'SELECT tipo_archivo, nombre_archivo, ruta_archivo, hash_archivo, fecha_subida FROM archivos_documento WHERE documento_id = ?',
             [doc.id]
         );
         
         const [entidadRows] = await db.query<EntidadPacket[]>(
-            "SELECT nombre, identificador_fiscal, rol FROM entidades_documento WHERE documento_id = ?",
+            "SELECT rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra FROM entidades_documento WHERE documento_id = ?",
             [doc.id]
         );
         
-        const proveedor = entidadRows.find(e => e.rol === 'proveedor') || entidadRows.find(e => e.rol === 'emisor');
-        const cliente = entidadRows.find(e => e.rol === 'cliente') || entidadRows.find(e => e.rol === 'receptor');
-
+        const [lineaRows] = await db.query<LineaPacket[]>(
+            'SELECT codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra FROM lineas_documento WHERE documento_id = ?',
+            [doc.id]
+        );
+        
         const [impuestoRows] = await db.query<ImpuestoPacket[]>(
             'SELECT tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
             [doc.id]
         );
+        
+        const proveedor = entidadRows.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
+        const cliente = entidadRows.find(e => e.rol === 'cliente' || e.rol === 'receptor');
 
         let ingreso = 0;
         let gasto = 0;
         
+        // Asignación de ingreso/gasto según la entidad principal
         if (proveedor) {
              gasto = doc.importe_total;
         } else if (cliente) {
@@ -73,19 +103,30 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
-            nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo : `doc-${doc.id}`,
             tipo_documento: doc.tipo_documento,
-            fecha_subida: doc.fecha_emision,
             incidencia: !!doc.incidencia,
-            contenido: doc.observaciones,
+            fecha_emision: doc.fecha_emision,
+            fecha_vencimiento: doc.fecha_vencimiento,
+            fecha_creacion: doc.fecha_creacion,
+            moneda: doc.moneda,
+            observaciones: doc.observaciones,
+            datos_extra: doc.datos_extra,
             ingreso: ingreso,
             gasto: gasto,
-            proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
-            cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
             base_imponible: doc.importe_sin_impuestos,
             iva: total_iva,
-            iva_details: iva_details,
             total: doc.importe_total,
+            entidades: entidadRows as DocumentEntity[],
+            lineas: lineaRows as DocumentLine[],
+            iva_details: iva_details,
+            archivos: fileRows as DocumentFile[],
+
+            // Legacy fields for backward compatibility
+            fecha_subida: doc.fecha_emision,
+            proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
+            cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
+            nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
+            contenido: doc.observaciones ?? "",
         };
     }));
     
@@ -94,17 +135,9 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
 
 export async function getDocuments(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT 
-            d.id,
-            d.numero_documento,
-            d.tipo_documento,
-            d.incidencia,
-            d.fecha_emision,
-            d.importe_total,
-            d.importe_sin_impuestos,
-            d.observaciones
-        FROM documentos d
-        ORDER BY d.fecha_emision DESC
+        SELECT *
+        FROM documentos
+        ORDER BY fecha_emision DESC
     `);
     
     return mapDocumentPacketsToDocuments(documentRows);
@@ -112,17 +145,9 @@ export async function getDocuments(): Promise<Document[]> {
 
 export async function getDocumentById(id: number): Promise<Document | null> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT 
-            d.id,
-            d.numero_documento,
-            d.tipo_documento,
-            d.incidencia,
-            d.fecha_emision,
-            d.importe_total,
-            d.importe_sin_impuestos,
-            d.observaciones
-        FROM documentos d
-        WHERE d.id = ?
+        SELECT *
+        FROM documentos
+        WHERE id = ?
     `, [id]);
 
     if (documentRows.length === 0) {
@@ -133,21 +158,12 @@ export async function getDocumentById(id: number): Promise<Document | null> {
     return documents[0];
 }
 
-
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT 
-            d.id,
-            d.numero_documento,
-            d.tipo_documento,
-            d.incidencia,
-            d.fecha_emision,
-            d.importe_total,
-            d.importe_sin_impuestos,
-            d.observaciones
-        FROM documentos d
-        WHERE d.incidencia = 1
-        ORDER BY d.fecha_emision DESC
+        SELECT *
+        FROM documentos
+        WHERE incidencia = 1
+        ORDER BY fecha_emision DESC
     `);
 
     return mapDocumentPacketsToDocuments(documentRows);
