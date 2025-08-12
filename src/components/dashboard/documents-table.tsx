@@ -157,7 +157,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
               </TableHeader>
               <TableBody>
                 {filteredAndSortedDocuments.map((doc) => (
-                  <TableRow key={doc.id_documento} className="cursor-pointer">
+                  <TableRow key={doc.id_documento}>
                     <TableCell className="font-medium">{doc.numero_factura}</TableCell>
                     <TableCell>{new Date(doc.fecha_subida).toLocaleDateString('es-ES', { timeZone: 'UTC' })}</TableCell>
                     <TableCell>{doc.proveedor}</TableCell>
