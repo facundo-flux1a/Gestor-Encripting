@@ -7,7 +7,6 @@ import {
   FileText,
   FileWarning,
   FileType,
-  UploadCloud,
 } from "lucide-react";
 
 export default async function Home() {
@@ -23,7 +22,7 @@ export default async function Home() {
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
         <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-3xl font-bold tracking-tight">Facturas Recibidas</h2>
+            <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <StatsCard title="Total Documents" value={totalDocuments.toString()} icon={FileText} />
