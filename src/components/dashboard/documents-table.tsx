@@ -203,7 +203,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleDetailsClick(doc)}>
-                            Ver Detalles
+                            Ver más detalles
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleSummarizeClick(doc)}>
                             Resumir con IA
