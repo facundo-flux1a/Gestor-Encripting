@@ -79,7 +79,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
             }
              if (key === 'fecha_subida') {
                 const date = new Date(docValue).toLocaleDateString('es-ES');
-                return date.toLowerCase().includes(value.toLowerCase());
+                return date.includes(value);
             }
             return false;
         });
