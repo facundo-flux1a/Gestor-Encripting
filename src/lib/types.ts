@@ -1,5 +1,5 @@
 export type Document = {
-  id_documento: string;
+  id_documento: number;
   nombre_archivo: string;
   tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
   fecha_subida: string;

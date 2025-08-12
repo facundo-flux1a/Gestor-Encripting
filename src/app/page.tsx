@@ -1,5 +1,5 @@
 import { MainLayout } from "@/components/layout/main-layout";
-import { documents } from "@/lib/data";
+import { getDocuments } from "@/services/document-service";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { FinancialOverview } from "@/components/dashboard/financial-overview";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
@@ -15,7 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
-export default function Home() {
+export default async function Home() {
+  const documents = await getDocuments();
+  
   const totalDocuments = documents.length;
   const incidentDocuments = documents.filter((doc) => doc.incidencia).length;
   
