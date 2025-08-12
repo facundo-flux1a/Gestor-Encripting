@@ -51,7 +51,7 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
                         <TableCell>{new Date(doc.fecha_subida).toLocaleDateString('es-ES')}</TableCell>
                     </TableRow>
                      <TableRow>
-                        <TableCell className="font-semibold">Proveedor</TableCell>
+                        <TableCell className="font-semibold">Proveedor/Cliente</TableCell>
                         <TableCell>{doc.proveedor}</TableCell>
                     </TableRow>
                      <TableRow>
@@ -61,6 +61,10 @@ export function DocumentDetailsDialog({ doc, isOpen, setIsOpen }: { doc: Documen
                      <TableRow>
                         <TableCell className="font-semibold">Tipo Documento</TableCell>
                         <TableCell>{doc.tipo_documento}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell className="font-semibold">Concepto</TableCell>
+                        <TableCell>{doc.contenido}</TableCell>
                     </TableRow>
                      <TableRow>
                         <TableCell className="font-semibold">Base Imponible</TableCell>

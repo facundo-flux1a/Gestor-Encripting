@@ -59,6 +59,7 @@ export async function getDocuments(): Promise<Document[]> {
         );
         
         const proveedor = entidadRows.find(e => e.rol === 'proveedor') || entidadRows.find(e => e.rol === 'emisor');
+        const cliente = entidadRows.find(e => e.rol === 'cliente') || entidadRows.find(e => e.rol === 'receptor');
 
         const [impuestoRows] = await db.query<ImpuestoPacket[]>(
             'SELECT tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
@@ -67,11 +68,11 @@ export async function getDocuments(): Promise<Document[]> {
 
         let ingreso = 0;
         let gasto = 0;
-        if (doc.tipo_documento === 'Factura' || doc.tipo_documento === 'Informe') {
-             ingreso = doc.importe_total > 0 ? doc.importe_total : 0;
-             gasto = doc.importe_total <= 0 ? Math.abs(doc.importe_total) : 0;
+        // Si el importe es positivo, es un ingreso. Si es negativo, un gasto.
+        if (doc.importe_total > 0) {
+            ingreso = doc.importe_total;
         } else {
-            gasto = doc.importe_total;
+            gasto = Math.abs(doc.importe_total);
         }
 
         const iva_details: IvaDetail[] = impuestoRows.map(tax => ({
@@ -88,13 +89,13 @@ export async function getDocuments(): Promise<Document[]> {
             numero_factura: doc.numero_documento,
             nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo : `doc-${doc.id}`,
             tipo_documento: doc.tipo_documento,
-            fecha_subida: doc.fecha_emision,
+            fecha_subida: doc.fecha_emision, // Corresponde a fecha_emision
             incidencia: !!doc.incidencia,
-            contenido: doc.observaciones, // Concepto
+            contenido: doc.observaciones, // Asumimos que observaciones es el concepto
             ingreso: ingreso,
             gasto: gasto,
-            proveedor: proveedor ? proveedor.nombre : 'N/A',
-            cif: proveedor ? proveedor.identificador_fiscal : 'N/A',
+            proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
+            cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
             base_imponible: doc.importe_sin_impuestos,
             iva: total_iva,
             iva_details: iva_details,

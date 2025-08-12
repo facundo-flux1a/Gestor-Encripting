@@ -4,7 +4,7 @@ import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { IvaSummary } from "@/components/dashboard/iva-summary";
 import { type Document } from "@/lib/types";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { FileText, FileWarning, FileType, Euro } from "lucide-react";
+import { FileText, FileWarning, Euro } from "lucide-react";
 
 // Helper to get the quarter from a date
 const getQuarter = (date: Date) => {
@@ -27,11 +27,16 @@ const processDataForSummary = (documents: Document[]) => {
     let totalSales = 0;
     let totalExpenses = 0;
     let totalIncidents = 0;
-    const documentTypes = new Set<string>();
 
     documents.forEach(doc => {
-        const quarter = getQuarter(new Date(doc.fecha_subida));
-        documentTypes.add(doc.tipo_documento);
+        const date = new Date(doc.fecha_subida);
+        // Validate date before processing
+        if (isNaN(date.getTime())) {
+            console.warn(`Invalid date for document ${doc.id_documento}: ${doc.fecha_subida}`);
+            return;
+        }
+
+        const quarter = getQuarter(date);
 
         if(doc.incidencia) {
             totalIncidents++;
@@ -56,7 +61,7 @@ const processDataForSummary = (documents: Document[]) => {
 
     const chartData = Object.values(quarterlyData);
 
-    return { chartData, totalSales, totalExpenses, totalIncidents, documentTypes: documentTypes.size, totalDocuments: documents.length };
+    return { chartData, totalSales, totalExpenses, totalIncidents, totalDocuments: documents.length };
 };
 
 const formatCurrency = (amount: number) => {
@@ -68,7 +73,7 @@ const formatCurrency = (amount: number) => {
 
 export default async function Home() {
   const documents = await getDocuments();
-  const { chartData, totalSales, totalExpenses, totalIncidents, documentTypes, totalDocuments } = processDataForSummary(documents);
+  const { chartData, totalSales, totalExpenses, totalIncidents, totalDocuments } = processDataForSummary(documents);
 
   return (
     <MainLayout>

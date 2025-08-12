@@ -10,9 +10,9 @@ export type Document = {
   numero_factura: string;
   nombre_archivo: string;
   tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
-  fecha_subida: string; // Should be a date string like 'YYYY-MM-DD'
+  fecha_subida: string; // Corresponds to fecha_emision
   incidencia: boolean;
-  contenido: string; // Concepto
+  contenido: string; // Corresponds to observaciones
   ingreso: number;
   gasto: number;
   proveedor: string;

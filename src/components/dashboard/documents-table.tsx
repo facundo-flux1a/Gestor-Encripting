@@ -113,7 +113,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const columns: { key: keyof Document, label: string }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
       { key: 'fecha_subida', label: 'Fecha' },
-      { key: 'proveedor', label: 'Proveedor' },
+      { key: 'proveedor', label: 'Proveedor/Cliente' },
       { key: 'cif', label: 'CIF' },
       { key: 'tipo_documento', label: 'Tipo' },
       { key: 'base_imponible', label: 'Base' },
@@ -163,7 +163,16 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                   <TableRow key={doc.id_documento}>
                     <TableCell className="font-medium">{doc.numero_factura}</TableCell>
                     <TableCell>{new Date(doc.fecha_subida).toLocaleDateString('es-ES', { timeZone: 'UTC' })}</TableCell>
-                    <TableCell>{doc.proveedor}</TableCell>
+                    <TableCell>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="truncate max-w-xs block">{doc.proveedor}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{doc.proveedor}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
                     <TableCell className="text-right">
