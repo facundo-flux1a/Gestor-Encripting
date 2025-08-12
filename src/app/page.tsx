@@ -1,7 +1,6 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { FinancialOverview } from "@/components/dashboard/financial-overview";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import {
   FileText,
@@ -29,7 +28,6 @@ export default async function Home() {
             <StatsCard title="Incidents" value={incidentDocuments.toString()} icon={FileWarning} />
             <StatsCard title="Document Types" value={totalTypes.toString()} icon={FileType} />
         </div>
-        <FinancialOverview documents={documents} />
         <div>
             <DocumentsTable documents={documents} />
         </div>
