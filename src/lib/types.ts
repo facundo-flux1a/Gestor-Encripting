@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type IvaDetail = {
   tipo_impuesto: string;
   porcentaje: number;
@@ -22,3 +24,14 @@ export type Document = {
   iva_details: IvaDetail[];
   total: number;
 };
+
+export const DocumentUpdateSchema = z.object({
+  numero_factura: z.string().min(1, "El número de factura es obligatorio."),
+  fecha_subida: z.string().min(1, "La fecha es obligatoria."),
+  proveedor: z.string().min(1, "El proveedor es obligatorio."),
+  cif: z.string().min(1, "El CIF es obligatorio."),
+  base_imponible: z.number().positive("La base imponible debe ser positiva."),
+  total: z.number().positive("El total debe ser positivo."),
+});
+
+export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;

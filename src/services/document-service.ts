@@ -1,8 +1,8 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail } from '@/lib/types';
-import type { RowDataPacket } from 'mysql2';
+import type { Document, IvaDetail, DocumentUpdatePayload } from '@/lib/types';
+import type { RowDataPacket, OkPacket } from 'mysql2';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -55,9 +55,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let ingreso = 0;
         let gasto = 0;
         
-        if (doc.tipo_documento === 'Factura' && proveedor) {
+        // Asumimos que si hay un proveedor es un gasto (factura recibida), si no, un ingreso (factura emitida)
+        if (proveedor) {
              gasto = doc.importe_total;
-        } else {
+        } else if (cliente) {
              ingreso = doc.importe_total;
         }
 
@@ -89,7 +90,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         };
     }));
     
-    return documents as unknown as Document[];
+    return documents;
 }
 
 export async function getDocuments(): Promise<Document[]> {
@@ -128,4 +129,25 @@ export async function getIncidents(): Promise<Document[]> {
     `);
 
     return mapDocumentPacketsToDocuments(documentRows);
+}
+
+export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<OkPacket> {
+    const { numero_factura, fecha_subida, proveedor, cif, base_imponible, total } = data;
+    
+    // Update 'documentos' table
+    const [docResult] = await db.query<OkPacket>(
+      'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
+      [numero_factura, fecha_subida, base_imponible, total, id]
+    );
+
+    // Update 'entidades_documento' table
+    // For simplicity, we assume one entity and update it. A more complex scenario might need to check roles.
+    await db.query<OkPacket>(
+      'UPDATE entidades_documento SET nombre = ?, identificador_fiscal = ? WHERE documento_id = ? AND (rol = ? OR rol = ?)',
+      [proveedor, cif, id, 'proveedor', 'emisor']
+    );
+
+    // TODO: Update 'impuestos_documento' if IVA details are editable
+    
+    return docResult;
 }
