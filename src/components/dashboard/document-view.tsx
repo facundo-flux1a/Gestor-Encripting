@@ -6,7 +6,10 @@ import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertCircle, CheckCircle2, FileText, User, Building, Phone, Mail, Calendar, Hash, FileUp, Info } from "lucide-react";
 import { format } from 'date-fns';
-import { type Document } from "@/lib/types";
+import { type Document, type DocumentUpdatePayload } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import type { UseFormReturn } from "react-hook-form";
 
 const formatCurrency = (amount: number, currency: string = 'EUR') => {
     return new Intl.NumberFormat('es-ES', {
@@ -18,7 +21,10 @@ const formatCurrency = (amount: number, currency: string = 'EUR') => {
 const formatDate = (date: string | null) => {
     if (!date) return 'N/A';
     try {
-        return format(new Date(date.split('T')[0]), 'dd/MM/yyyy');
+        const d = new Date(date);
+        // add timezone offset to avoid being one day off
+        const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
+        return format(utcDate, 'dd/MM/yyyy');
     } catch {
         return 'Fecha inválida';
     }
@@ -41,7 +47,41 @@ const renderJsonData = (data: any) => {
     );
 }
 
-export function DocumentView({ doc }: { doc: Document }) {
+interface DocumentViewProps {
+    doc: Document;
+    isEditing: boolean;
+    form: UseFormReturn<DocumentUpdatePayload>;
+}
+
+export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
+    const renderEditableField = (name: keyof DocumentUpdatePayload, label: string, currentValue: string | number, type: string = "text", isCurrency: boolean = false) => {
+        return (
+             <FormField
+                control={form.control}
+                name={name}
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
+                    <FormControl>
+                        {isEditing ? (
+                             <Input 
+                                {...field} 
+                                type={type} 
+                                className="h-8 text-sm"
+                                onChange={e => field.onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
+                             />
+                        ) : (
+                            <p className="text-sm font-medium">{isCurrency ? formatCurrency(currentValue as number, doc.moneda) : currentValue}</p>
+                        )}
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+        )
+    }
+
+
     return (
         <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -54,8 +94,28 @@ export function DocumentView({ doc }: { doc: Document }) {
                         </CardHeader>
                         <CardContent>
                             <div className="grid md:grid-cols-3 gap-6 text-sm">
-                                <div><span className="font-semibold text-muted-foreground block">Nº Documento</span>{doc.numero_factura}</div>
-                                <div><span className="font-semibold text-muted-foreground block">Fecha Emisión</span>{formatDate(doc.fecha_emision)}</div>
+                                <div>
+                                    {renderEditableField("numero_factura", "Nº Documento", doc.numero_factura)}
+                                </div>
+                                <div>
+                                    <FormField
+                                        control={form.control}
+                                        name="fecha_emision"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-muted-foreground text-xs">Fecha Emisión</FormLabel>
+                                            <FormControl>
+                                                {isEditing ? (
+                                                    <Input type="date" {...field} className="h-8 text-sm"/>
+                                                ) : (
+                                                    <p className="text-sm font-medium">{formatDate(doc.fecha_emision)}</p>
+                                                )}
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                                 <div><span className="font-semibold text-muted-foreground block">Fecha Vencimiento</span>{formatDate(doc.fecha_vencimiento)}</div>
                                 <div><span className="font-semibold text-muted-foreground block">Fecha Creación</span>{formatDate(doc.fecha_creacion)}</div>
                                 <div><span className="font-semibold text-muted-foreground block">Moneda</span>{doc.moneda}</div>
@@ -111,24 +171,31 @@ export function DocumentView({ doc }: { doc: Document }) {
 
                 <div className="space-y-8">
                     {/* Entities Card */}
-                    {doc.entidades.map((entidad, index) => (
+                    {doc.entidades.map((entidad, index) => {
+                         const isProvider = entidad.rol.toLowerCase().includes('proveedor') || entidad.rol.toLowerCase().includes('emisor');
+                         return (
                          <Card key={index}>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-xl">
-                                    {entidad.rol.toLowerCase().includes('proveedor') || entidad.rol.toLowerCase().includes('emisor') ? <Building /> : <User />}
+                                    {isProvider ? <Building /> : <User />}
                                     {entidad.rol}
                                 </CardTitle>
-                                <CardDescription>{entidad.nombre}</CardDescription>
+                                {isEditing && isProvider ? renderEditableField('proveedor', 'Nombre', entidad.nombre) : <CardDescription>{entidad.nombre}</CardDescription>}
                             </CardHeader>
                             <CardContent className="text-sm space-y-3">
-                                <p className="flex items-center gap-3"><Hash className="text-muted-foreground w-4 h-4" /> <span className="font-medium">ID Fiscal:</span> {entidad.identificador_fiscal}</p>
+                               <div className="flex items-center gap-3">
+                                   <Hash className="text-muted-foreground w-4 h-4" /> 
+                                   <span className="font-medium">ID Fiscal:</span>
+                                   {isEditing && isProvider ? renderEditableField('cif', '', entidad.identificador_fiscal || '') : entidad.identificador_fiscal}
+                                </div>
                                 <p className="flex items-center gap-3"><Mail className="text-muted-foreground w-4 h-4" /> <span className="font-medium">Email:</span> {entidad.email || 'N/A'}</p>
                                 <p className="flex items-center gap-3"><Phone className="text-muted-foreground w-4 h-4" /> <span className="font-medium">Teléfono:</span> {entidad.telefono || 'N/A'}</p>
                                 <p className="flex items-start gap-3"><FileText className="text-muted-foreground w-4 h-4 mt-1" /> <span className="font-medium">Dirección:</span> <span className="flex-1">{entidad.direccion || 'N/A'}</span></p>
                                 {entidad.datos_extra && <div className="pt-2"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra de la Entidad</h4>{renderJsonData(entidad.datos_extra)}</div>}
                             </CardContent>
                         </Card>
-                    ))}
+                         )
+                    })}
                      {/* Financial Details Card */}
                     <Card>
                         <CardHeader><CardTitle>Detalles Financieros</CardTitle></CardHeader>
@@ -150,9 +217,15 @@ export function DocumentView({ doc }: { doc: Document }) {
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-base pt-4 border-t">
-                                     <div className="flex justify-between font-medium"><span className="text-muted-foreground">Base Imponible</span><span>{formatCurrency(doc.base_imponible, doc.moneda)}</span></div>
+                                     <div className="flex justify-between font-medium">
+                                        <span className="text-muted-foreground">Base Imponible</span>
+                                        {isEditing ? renderEditableField('base_imponible', '', doc.base_imponible, 'number', true) : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
+                                     </div>
                                      <div className="flex justify-between font-medium"><span className="text-muted-foreground">Total IVA</span><span>{formatCurrency(doc.iva, doc.moneda)}</span></div>
-                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3"><span className="text-foreground">Total</span><span>{formatCurrency(doc.total, doc.moneda)}</span></div>
+                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3">
+                                        <span className="text-foreground">Total</span>
+                                        {isEditing ? renderEditableField('total', '', doc.total, 'number', true) : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
+                                    </div>
                                 </div>
                             </div>
                         </CardContent>

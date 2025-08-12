@@ -69,7 +69,7 @@ export type Document = {
 
 export const DocumentUpdateSchema = z.object({
   numero_factura: z.string().min(1, "El número de factura es obligatorio."),
-  fecha_subida: z.string().min(1, "La fecha es obligatoria."),
+  fecha_emision: z.string().min(1, "La fecha es obligatoria."),
   proveedor: z.string().min(1, "El proveedor es obligatorio."),
   cif: z.string().min(1, "El CIF es obligatorio."),
   base_imponible: z.coerce.number().positive("La base imponible debe ser positiva."),
