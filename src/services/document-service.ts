@@ -20,6 +20,7 @@ interface DocumentPacket extends RowDataPacket {
 }
 
 interface ArchivoPacket extends RowDataPacket {
+    id: number;
     tipo_archivo: string | null;
     nombre_archivo: string | null;
     ruta_archivo: string | null;
@@ -28,6 +29,7 @@ interface ArchivoPacket extends RowDataPacket {
 }
 
 interface EntidadPacket extends RowDataPacket {
+    id: number;
     rol: string;
     nombre: string;
     direccion: string | null;
@@ -38,6 +40,7 @@ interface EntidadPacket extends RowDataPacket {
 }
 
 interface LineaPacket extends RowDataPacket {
+    id: number;
     codigo: string | null;
     descripcion: string | null;
     cantidad: number;
@@ -50,6 +53,7 @@ interface LineaPacket extends RowDataPacket {
 }
 
 interface ImpuestoPacket extends RowDataPacket {
+    id: number;
     tipo_impuesto: string;
     porcentaje: number;
     base_imponible: number;
@@ -59,22 +63,22 @@ interface ImpuestoPacket extends RowDataPacket {
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     const documents = await Promise.all(documentRows.map(async (doc) => {
         const [fileRows] = await db.query<ArchivoPacket[]>(
-            'SELECT tipo_archivo, nombre_archivo, ruta_archivo, hash_archivo, fecha_subida FROM archivos_documento WHERE documento_id = ?',
+            'SELECT id, tipo_archivo, nombre_archivo, ruta_archivo, hash_archivo, fecha_subida FROM archivos_documento WHERE documento_id = ?',
             [doc.id]
         );
         
         const [entidadRows] = await db.query<EntidadPacket[]>(
-            "SELECT rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra FROM entidades_documento WHERE documento_id = ?",
+            "SELECT id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra FROM entidades_documento WHERE documento_id = ?",
             [doc.id]
         );
         
         const [lineaRows] = await db.query<LineaPacket[]>(
-            'SELECT codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra FROM lineas_documento WHERE documento_id = ?',
+            'SELECT id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra FROM lineas_documento WHERE documento_id = ?',
             [doc.id]
         );
         
         const [impuestoRows] = await db.query<ImpuestoPacket[]>(
-            'SELECT tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
+            'SELECT id, tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
             [doc.id]
         );
         
@@ -84,7 +88,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let ingreso = 0;
         let gasto = 0;
         
-        // Asignación de ingreso/gasto según la entidad principal
         if (proveedor) {
              gasto = doc.importe_total;
         } else if (cliente) {
@@ -110,14 +113,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_creacion: doc.fecha_creacion,
             moneda: doc.moneda,
             observaciones: doc.observaciones,
-            datos_extra: doc.datos_extra,
+            datos_extra: doc.datos_extra ? (typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra) : null,
             ingreso: ingreso,
             gasto: gasto,
             base_imponible: doc.importe_sin_impuestos,
             iva: total_iva,
             total: doc.importe_total,
-            entidades: entidadRows as DocumentEntity[],
-            lineas: lineaRows as DocumentLine[],
+            entidades: entidadRows.map(e => ({...e, datos_extra: e.datos_extra ? (typeof e.datos_extra === 'string' ? JSON.parse(e.datos_extra) : e.datos_extra) : null })),
+            lineas: lineaRows.map(l => ({...l, datos_extra: l.datos_extra ? (typeof l.datos_extra === 'string' ? JSON.parse(l.datos_extra) : l.datos_extra) : null })),
             iva_details: iva_details,
             archivos: fileRows as DocumentFile[],
 
@@ -170,23 +173,52 @@ export async function getIncidents(): Promise<Document[]> {
 }
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<OkPacket> {
-    const { numero_factura, fecha_subida, proveedor, cif, base_imponible, total } = data;
-    
-    // Update 'documentos' table
-    const [docResult] = await db.query<OkPacket>(
-      'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
-      [numero_factura, fecha_subida, base_imponible, total, id]
-    );
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
 
-    // Update 'entidades_documento' table
-    // This assumes there's a single provider/emitter per document to update. 
-    // If there could be more, this logic would need to be more specific.
-    await db.query<OkPacket>(
-      'UPDATE entidades_documento SET nombre = ?, identificador_fiscal = ? WHERE documento_id = ? AND (rol = ? OR rol = ?)',
-      [proveedor, cif, id, 'proveedor', 'emisor']
-    );
-    
-    // Here you could add more logic to update lines, taxes, etc. if needed.
-    
-    return docResult;
+    try {
+        const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
+        
+        const [docResult] = await connection.query<OkPacket>(
+          'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, incidencia = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
+          [numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, id]
+        );
+
+        // This is a simplified update. A full implementation would handle additions/deletions.
+        for (const entidad of entidades) {
+            // @ts-ignore
+            if(entidad.id) {
+                 await connection.query(
+                    'UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ? WHERE id = ?',
+                    [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, entidad.id]
+                 );
+            }
+        }
+        for (const linea of lineas) {
+             // @ts-ignore
+             if(linea.id) {
+                await connection.query(
+                    'UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ? WHERE id = ?',
+                    [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, linea.id]
+                );
+            }
+        }
+        for (const iva of iva_details) {
+            // @ts-ignore
+            if(iva.id) {
+                await connection.query(
+                    'UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?',
+                    [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]
+                );
+            }
+        }
+
+        await connection.commit();
+        return docResult;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
 }

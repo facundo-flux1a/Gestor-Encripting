@@ -1,41 +1,46 @@
 import { z } from 'zod';
 
-export type IvaDetail = {
-  tipo_impuesto: string;
-  porcentaje: number;
-  base_imponible: number;
-  cuota: number;
-};
+export const IvaDetailSchema = z.object({
+  tipo_impuesto: z.string(),
+  porcentaje: z.coerce.number(),
+  base_imponible: z.coerce.number(),
+  cuota: z.coerce.number(),
+});
+export type IvaDetail = z.infer<typeof IvaDetailSchema>;
 
-export type DocumentEntity = {
-    rol: string;
-    nombre: string;
-    direccion: string | null;
-    identificador_fiscal: string | null;
-    telefono: string | null;
-    email: string | null;
-    datos_extra: any | null;
-};
 
-export type DocumentLine = {
-    codigo: string | null;
-    descripcion: string | null;
-    cantidad: number;
-    unidad: string | null;
-    precio_unitario: number;
-    descuento_porcentaje: number;
-    precio_neto: number;
-    importe_linea: number;
-    datos_extra: any | null;
-};
+export const DocumentEntitySchema = z.object({
+    rol: z.string(),
+    nombre: z.string().nullable(),
+    direccion: z.string().nullable(),
+    identificador_fiscal: z.string().nullable(),
+    telefono: z.string().nullable(),
+    email: z.string().nullable(),
+    datos_extra: z.any().nullable(),
+});
+export type DocumentEntity = z.infer<typeof DocumentEntitySchema>;
 
-export type DocumentFile = {
-    tipo_archivo: string | null;
-    nombre_archivo: string | null;
-    ruta_archivo: string | null;
-    hash_archivo: string | null;
-    fecha_subida: string;
-};
+export const DocumentLineSchema = z.object({
+    codigo: z.string().nullable(),
+    descripcion: z.string().nullable(),
+    cantidad: z.coerce.number(),
+    unidad: z.string().nullable(),
+    precio_unitario: z.coerce.number(),
+    descuento_porcentaje: z.coerce.number(),
+    precio_neto: z.coerce.number(),
+    importe_linea: z.coerce.number(),
+    datos_extra: z.any().nullable(),
+});
+export type DocumentLine = z.infer<typeof DocumentLineSchema>;
+
+export const DocumentFileSchema = z.object({
+    tipo_archivo: z.string().nullable(),
+    nombre_archivo: z.string().nullable(),
+    ruta_archivo: z.string().nullable(),
+    hash_archivo: z.string().nullable(),
+    fecha_subida: z.string(),
+});
+export type DocumentFile = z.infer<typeof DocumentFileSchema>;
 
 export type Document = {
   id_documento: number;
@@ -74,6 +79,15 @@ export const DocumentUpdateSchema = z.object({
   cif: z.string().min(1, "El CIF es obligatorio."),
   base_imponible: z.coerce.number().positive("La base imponible debe ser positiva."),
   total: z.coerce.number().positive("El total debe ser positivo."),
+  // Add other fields from Document that should be editable
+  tipo_documento: z.enum(['Factura', 'Informe', 'Contrato', 'Otro']),
+  incidencia: z.boolean(),
+  fecha_vencimiento: z.string().nullable(),
+  moneda: z.string().length(3, "La moneda debe tener 3 caracteres."),
+  observaciones: z.string().nullable(),
+  entidades: z.array(DocumentEntitySchema),
+  lineas: z.array(DocumentLineSchema),
+  iva_details: z.array(IvaDetailSchema),
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;

@@ -4,12 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, FileText, User, Building, Phone, Mail, Calendar, Hash, FileUp, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileText, User, Building, Phone, Mail, Calendar, Hash, FileUp, Info, Trash2, PlusCircle } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { UseFormReturn } from "react-hook-form";
+import { useFieldArray } from "react-hook-form";
 
 const formatCurrency = (amount: number, currency: string = 'EUR') => {
     return new Intl.NumberFormat('es-ES', {
@@ -22,7 +27,6 @@ const formatDate = (date: string | null) => {
     if (!date) return 'N/A';
     try {
         const d = new Date(date);
-        // add timezone offset to avoid being one day off
         const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
         return format(utcDate, 'dd/MM/yyyy');
     } catch {
@@ -50,31 +54,58 @@ const renderJsonData = (data: any) => {
 interface DocumentViewProps {
     doc: Document;
     isEditing: boolean;
-    form: UseFormReturn<DocumentUpdatePayload>;
+    form: UseFormReturn<any>; // Use any to avoid excessive type mapping for now
 }
 
 export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
-    const renderEditableField = (name: keyof DocumentUpdatePayload, label: string, currentValue: string | number, type: string = "text", isCurrency: boolean = false) => {
+    const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({ control: form.control, name: "entidades" });
+    const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({ control: form.control, name: "lineas" });
+    const { fields: ivaFields, append: appendIva, remove: removeIva } = useFieldArray({ control: form.control, name: "iva_details" });
+
+
+    const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false) => {
         return (
              <FormField
                 control={form.control}
-                name={name}
+                name={fieldName}
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
-                    <FormControl>
-                        {isEditing ? (
-                             <Input 
-                                {...field} 
-                                type={type} 
-                                className="h-8 text-sm"
-                                onChange={e => field.onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
-                             />
-                        ) : (
-                            <p className="text-sm font-medium">{isCurrency ? formatCurrency(currentValue as number, doc.moneda) : currentValue}</p>
-                        )}
-                    </FormControl>
-                    <FormMessage />
+                        <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
+                        <FormControl>
+                            {isEditing ? (
+                                <Input 
+                                    {...field}
+                                    type={isCurrency ? 'number' : 'text'} 
+                                    className="h-8 text-sm"
+                                    onChange={e => field.onChange(isCurrency ? parseFloat(e.target.value) || 0 : e.target.value)}
+                                />
+                            ) : (
+                                <p className="text-sm font-medium">{isCurrency ? formatCurrency(field.value as number, doc.moneda) : field.value}</p>
+                            )}
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+        )
+    }
+
+     const renderEditableDate = (fieldName: string, label: string) => {
+        return (
+             <FormField
+                control={form.control}
+                name={fieldName}
+                render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
+                        <FormControl>
+                            {isEditing ? (
+                                <Input type="date" {...field} className="h-8 text-sm"/>
+                            ) : (
+                                <p className="text-sm font-medium">{formatDate(field.value)}</p>
+                            )}
+                        </FormControl>
+                        <FormMessage />
                     </FormItem>
                 )}
             />
@@ -90,47 +121,63 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5" /> Información General</CardTitle>
-                            <CardDescription>{doc.tipo_documento}</CardDescription>
+                            <FormField
+                                control={form.control}
+                                name="tipo_documento"
+                                render={({ field }) => isEditing ? (
+                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger><SelectValue placeholder="Tipo de Documento" /></SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="Factura">Factura</SelectItem>
+                                            <SelectItem value="Informe">Informe</SelectItem>
+                                            <SelectItem value="Contrato">Contrato</SelectItem>
+                                            <SelectItem value="Otro">Otro</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <CardDescription>{field.value}</CardDescription>
+                                )}
+                            />
                         </CardHeader>
                         <CardContent>
                             <div className="grid md:grid-cols-3 gap-6 text-sm">
-                                <div>
-                                    {renderEditableField("numero_factura", "Nº Documento", doc.numero_factura)}
-                                </div>
-                                <div>
-                                    <FormField
-                                        control={form.control}
-                                        name="fecha_emision"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="text-muted-foreground text-xs">Fecha Emisión</FormLabel>
+                                {renderEditableField("numero_factura", "Nº Documento")}
+                                {renderEditableDate("fecha_emision", "Fecha Emisión")}
+                                {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
+                                {renderEditableDate("fecha_creacion", "Fecha Creación")}
+                                {renderEditableField("moneda", "Moneda")}
+                                
+                                <FormField
+                                    control={form.control}
+                                    name="incidencia"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
                                             <FormControl>
                                                 {isEditing ? (
-                                                    <Input type="date" {...field} className="h-8 text-sm"/>
+                                                    <div className="flex items-center space-x-2 pt-2">
+                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} id="incidencia-check"/>
+                                                        <label htmlFor="incidencia-check" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                            Con Incidencia
+                                                        </label>
+                                                    </div>
                                                 ) : (
-                                                    <p className="text-sm font-medium">{formatDate(doc.fecha_emision)}</p>
+                                                    field.value ? (
+                                                        <Badge variant="destructive" className="flex items-center gap-2">
+                                                            <AlertCircle className="h-4 w-4" /> Con Incidencia
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="secondary" className="flex items-center gap-2">
+                                                            <CheckCircle2 className="h-4 w-4" /> Verificado
+                                                        </Badge>
+                                                    )
                                                 )}
                                             </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-                                <div><span className="font-semibold text-muted-foreground block">Fecha Vencimiento</span>{formatDate(doc.fecha_vencimiento)}</div>
-                                <div><span className="font-semibold text-muted-foreground block">Fecha Creación</span>{formatDate(doc.fecha_creacion)}</div>
-                                <div><span className="font-semibold text-muted-foreground block">Moneda</span>{doc.moneda}</div>
-                                <div>
-                                    <span className="font-semibold text-muted-foreground block">Estado</span>
-                                    {doc.incidencia ? (
-                                        <Badge variant="destructive" className="flex items-center gap-2">
-                                            <AlertCircle className="h-4 w-4" /> Con Incidencia
-                                        </Badge>
-                                    ) : (
-                                        <Badge variant="secondary" className="flex items-center gap-2">
-                                            <CheckCircle2 className="h-4 w-4" /> Verificado
-                                        </Badge>
+                                        </FormItem>
                                     )}
-                                </div>
+                                />
                             </div>
                             {doc.datos_extra && <div className="mt-6"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra del Documento</h4>{renderJsonData(doc.datos_extra)}</div>}
                         </CardContent>
@@ -138,31 +185,52 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
 
                     {/* Document Lines Card */}
                     <Card>
-                        <CardHeader><CardTitle>Líneas del Documento</CardTitle></CardHeader>
+                        <CardHeader className="flex-row items-center justify-between">
+                            <CardTitle>Líneas del Documento</CardTitle>
+                             {isEditing && <Button type="button" size="sm" variant="outline" onClick={() => appendLinea({ codigo: '', descripcion: '', cantidad: 1, unidad: 'ud', precio_unitario: 0, descuento_porcentaje: 0, precio_neto: 0, importe_linea: 0, datos_extra: null })}><PlusCircle className="mr-2" /> Añadir Línea</Button>}
+                        </CardHeader>
                         <CardContent>
                              <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Código</TableHead>
                                         <TableHead>Descripción</TableHead>
-                                        <TableHead className="text-right">Cantidad</TableHead>
+                                        <TableHead>Cantidad</TableHead>
+                                        <TableHead>Unidad</TableHead>
                                         <TableHead className="text-right">P. Unitario</TableHead>
                                         <TableHead className="text-right">Dto. %</TableHead>
                                         <TableHead className="text-right">Importe</TableHead>
+                                        {isEditing && <TableHead></TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {doc.lineas.map((line, index) => (
-                                        <TableRow key={index}>
-                                            <TableCell className="font-mono text-xs">{line.codigo || 'N/A'}</TableCell>
-                                            <TableCell>{line.descripcion}</TableCell>
-                                            <TableCell className="text-right">{line.cantidad} {line.unidad}</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(line.precio_unitario, doc.moneda)}</TableCell>
-                                            <TableCell className="text-right">{line.descuento_porcentaje}%</TableCell>
-                                            <TableCell className="text-right font-medium">{formatCurrency(line.importe_linea, doc.moneda)}</TableCell>
+                                    {lineaFields.map((line, index) => (
+                                        <TableRow key={line.id}>
+                                            <TableCell className="font-mono text-xs w-24">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).codigo || 'N/A'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).descripcion}
+                                            </TableCell>
+                                            <TableCell className="w-24">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8"/>} /> : (line as any).cantidad}
+                                            </TableCell>
+                                            <TableCell className="w-20">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).unidad}
+                                            </TableCell>
+                                            <TableCell className="text-right w-28">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : formatCurrency((line as any).precio_unitario, doc.moneda)}
+                                            </TableCell>
+                                            <TableCell className="text-right w-20">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : `${(line as any).descuento_porcentaje}%`}
+                                            </TableCell>
+                                            <TableCell className="text-right font-medium w-28">
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} className="h-8 text-right"/>} /> : formatCurrency((line as any).importe_linea, doc.moneda)}
+                                            </TableCell>
+                                            {isEditing && <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button></TableCell>}
                                         </TableRow>
                                     ))}
-                                    {doc.lineas.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No hay líneas en este documento.</TableCell></TableRow>}
+                                    {lineaFields.length === 0 && <TableRow><TableCell colSpan={isEditing ? 8 : 7} className="text-center text-muted-foreground py-8">No hay líneas en este documento.</TableCell></TableRow>}
                                 </TableBody>
                             </Table>
                         </CardContent>
@@ -171,60 +239,86 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
 
                 <div className="space-y-8">
                     {/* Entities Card */}
-                    {doc.entidades.map((entidad, index) => {
-                         const isProvider = entidad.rol.toLowerCase().includes('proveedor') || entidad.rol.toLowerCase().includes('emisor');
-                         return (
-                         <Card key={index}>
+                    {entidadFields.map((entidad, index) => (
+                         <Card key={entidad.id}>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-xl">
-                                    {isProvider ? <Building /> : <User />}
-                                    {entidad.rol}
+                                    {(entidad as any).rol.toLowerCase().includes('proveedor') || (entidad as any).rol.toLowerCase().includes('emisor') ? <Building /> : <User />}
+                                    <FormField control={form.control} name={`entidades.${index}.rol`} render={({field}) => isEditing ? <Input {...field} className="h-8"/> : <span>{(entidad as any).rol}</span>} />
                                 </CardTitle>
-                                {isEditing && isProvider ? renderEditableField('proveedor', 'Nombre', entidad.nombre) : <CardDescription>{entidad.nombre}</CardDescription>}
+                                <FormField control={form.control} name={`entidades.${index}.nombre`} render={({field}) => isEditing ? <Input {...field} value={field.value || ''} className="h-8"/> : <CardDescription>{(entidad as any).nombre}</CardDescription>} />
                             </CardHeader>
                             <CardContent className="text-sm space-y-3">
                                <div className="flex items-center gap-3">
                                    <Hash className="text-muted-foreground w-4 h-4" /> 
                                    <span className="font-medium">ID Fiscal:</span>
-                                   {isEditing && isProvider ? renderEditableField('cif', '', entidad.identificador_fiscal || '') : entidad.identificador_fiscal}
+                                   <FormField control={form.control} name={`entidades.${index}.identificador_fiscal`} render={({field}) => isEditing ? <Input {...field} value={field.value || ''} className="h-8"/> : <span>{(entidad as any).identificador_fiscal}</span>} />
                                 </div>
-                                <p className="flex items-center gap-3"><Mail className="text-muted-foreground w-4 h-4" /> <span className="font-medium">Email:</span> {entidad.email || 'N/A'}</p>
-                                <p className="flex items-center gap-3"><Phone className="text-muted-foreground w-4 h-4" /> <span className="font-medium">Teléfono:</span> {entidad.telefono || 'N/A'}</p>
-                                <p className="flex items-start gap-3"><FileText className="text-muted-foreground w-4 h-4 mt-1" /> <span className="font-medium">Dirección:</span> <span className="flex-1">{entidad.direccion || 'N/A'}</span></p>
-                                {entidad.datos_extra && <div className="pt-2"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra de la Entidad</h4>{renderJsonData(entidad.datos_extra)}</div>}
+                                <div className="flex items-center gap-3">
+                                   <Mail className="text-muted-foreground w-4 h-4" /> 
+                                   <span className="font-medium">Email:</span>
+                                   <FormField control={form.control} name={`entidades.${index}.email`} render={({field}) => isEditing ? <Input type="email" {...field} value={field.value || ''} className="h-8"/> : <span>{(entidad as any).email || 'N/A'}</span>} />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                   <Phone className="text-muted-foreground w-4 h-4" /> 
+                                   <span className="font-medium">Teléfono:</span>
+                                   <FormField control={form.control} name={`entidades.${index}.telefono`} render={({field}) => isEditing ? <Input {...field} value={field.value || ''} className="h-8"/> : <span>{(entidad as any).telefono || 'N/A'}</span>} />
+                                </div>
+                                <div className="flex items-start gap-3">
+                                   <FileText className="text-muted-foreground w-4 h-4 mt-1" /> 
+                                   <span className="font-medium">Dirección:</span>
+                                   <FormField control={form.control} name={`entidades.${index}.direccion`} render={({field}) => isEditing ? <Textarea {...field} value={field.value || ''} className="text-sm"/> : <span className="flex-1">{(entidad as any).direccion || 'N/A'}</span>} />
+                                </div>
+
+                                {(entidad as any).datos_extra && <div className="pt-2"><h4 className="font-semibold mb-2 text-muted-foreground">Datos Extra de la Entidad</h4>{renderJsonData((entidad as any).datos_extra)}</div>}
                             </CardContent>
                         </Card>
-                         )
-                    })}
+                    ))}
                      {/* Financial Details Card */}
                     <Card>
-                        <CardHeader><CardTitle>Detalles Financieros</CardTitle></CardHeader>
+                        <CardHeader className="flex-row items-center justify-between">
+                            <CardTitle>Detalles Financieros</CardTitle>
+                        </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
                                 <div>
-                                    <h4 className="font-semibold mb-4 text-base text-muted-foreground">Resumen de Impuestos</h4>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="font-semibold text-base text-muted-foreground">Resumen de Impuestos</h4>
+                                        {isEditing && <Button type="button" size="sm" variant="outline" onClick={() => appendIva({ tipo_impuesto: 'IVA', porcentaje: 21, base_imponible: 0, cuota: 0 })}><PlusCircle className="mr-2 h-4 w-4" />Añadir</Button>}
+                                    </div>
                                     <div className="space-y-2">
-                                        {doc.iva_details.map((iva, index) => (
-                                            <div key={index} className="flex justify-between items-center p-3 rounded-md bg-muted/50">
-                                                <div className="flex items-center gap-2">
-                                                    <IvaBadge iva={iva} />
-                                                    <span className="text-sm">{`${iva.tipo_impuesto} (${iva.porcentaje}%)`}</span>
-                                                </div>
-                                                <span className="font-mono text-sm">{formatCurrency(iva.cuota, doc.moneda)}</span>
+                                        {ivaFields.map((iva, index) => (
+                                            <div key={iva.id} className="flex justify-between items-center p-3 rounded-md bg-muted/50 gap-2">
+                                                {isEditing ? (
+                                                    <>
+                                                        <FormField control={form.control} name={`iva_details.${index}.tipo_impuesto`} render={({field}) => <Input {...field} className="h-8 w-24" />}/>
+                                                        <FormField control={form.control} name={`iva_details.${index}.porcentaje`} render={({field}) => <Input type="number" {...field} className="h-8 w-20" />} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.cuota`} render={({field}) => <Input type="number" {...field} className="h-8 w-24 text-right" />} />
+                                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeIva(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex items-center gap-2">
+                                                            <IvaBadge iva={iva as any} />
+                                                            <span className="text-sm">{`${(iva as any).tipo_impuesto} (${(iva as any).porcentaje}%)`}</span>
+                                                        </div>
+                                                        <span className="font-mono text-sm">{formatCurrency((iva as any).cuota, doc.moneda)}</span>
+                                                    </>
+                                                )}
                                             </div>
                                         ))}
-                                         {doc.iva_details.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No hay impuestos detallados.</p>}
+                                         {ivaFields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No hay impuestos detallados.</p>}
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-base pt-4 border-t">
-                                     <div className="flex justify-between font-medium">
+                                     <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Base Imponible</span>
-                                        {isEditing ? renderEditableField('base_imponible', '', doc.base_imponible, 'number', true) : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
+                                        {isEditing ? <FormField control={form.control} name='base_imponible' render={({field}) => <Input type="number" {...field} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.base_imponible, doc.moneda)}</span>}
                                      </div>
                                      <div className="flex justify-between font-medium"><span className="text-muted-foreground">Total IVA</span><span>{formatCurrency(doc.iva, doc.moneda)}</span></div>
-                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3">
+                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
                                         <span className="text-foreground">Total</span>
-                                        {isEditing ? renderEditableField('total', '', doc.total, 'number', true) : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
+                                        {isEditing ? <FormField control={form.control} name='total' render={({field}) => <Input type="number" {...field} className="h-8 w-32 text-right" />} /> : <span>{formatCurrency(doc.total, doc.moneda)}</span>}
                                     </div>
                                 </div>
                             </div>
@@ -265,9 +359,23 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                 <Card>
                     <CardHeader><CardTitle>Observaciones</CardTitle></CardHeader>
                     <CardContent className="space-y-4">
-                       <div className="text-sm text-foreground bg-muted/30 border p-4 rounded-lg min-h-[100px]">
-                        {doc.observaciones || "No hay observaciones."}
-                       </div>
+                        <FormField
+                            control={form.control}
+                            name="observaciones"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormControl>
+                                    {isEditing ? (
+                                        <Textarea {...field} value={field.value || ''} className="text-sm min-h-[120px]"/>
+                                    ) : (
+                                         <div className="text-sm text-foreground bg-muted/30 border p-4 rounded-lg min-h-[100px]">
+                                            {field.value || "No hay observaciones."}
+                                        </div>
+                                    )}
+                                    </FormControl>
+                                </FormItem>
+                            )}
+                        />
                     </CardContent>
                 </Card>
             </div>

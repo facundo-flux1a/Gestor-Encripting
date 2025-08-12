@@ -24,7 +24,17 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
-    // defaultValues will be set in useEffect
+    defaultValues: async () => {
+        if (isNaN(id)) return {};
+        const fetchedDoc = await getDocumentById(id);
+        if (!fetchedDoc) return {};
+        return {
+            ...fetchedDoc,
+            fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
+            fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
+            fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
+        }
+    }
   });
 
   useEffect(() => {
@@ -41,12 +51,10 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
         } else {
           setDoc(fetchedDoc);
            form.reset({
-            numero_factura: fetchedDoc.numero_factura,
-            fecha_emision: new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0],
-            proveedor: fetchedDoc.proveedor,
-            cif: fetchedDoc.cif,
-            base_imponible: fetchedDoc.base_imponible,
-            total: fetchedDoc.total,
+            ...fetchedDoc,
+            fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
+            fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
+            fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
           });
         }
       } catch (error) {
@@ -67,9 +75,23 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
     if (!doc) return;
     setIsSaving(true);
     try {
-      await updateDocument(doc.id_documento, data);
-      const updatedDoc = await getDocumentById(id); // Re-fetch to get the latest data
+      // The provider and cif are inside the entities array, we need to extract them for the payload
+      const mainEntity = data.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor' || e.rol === 'cliente' || e.rol === 'receptor');
+      const payload = {
+        ...data,
+        proveedor: mainEntity?.nombre || '',
+        cif: mainEntity?.identificador_fiscal || ''
+      };
+
+      await updateDocument(doc.id_documento, payload);
+      const updatedDoc = await getDocumentById(id);
       setDoc(updatedDoc);
+      form.reset({
+        ...updatedDoc,
+        fecha_emision: updatedDoc.fecha_emision ? new Date(updatedDoc.fecha_emision).toISOString().split('T')[0] : '',
+        fecha_vencimiento: updatedDoc.fecha_vencimiento ? new Date(updatedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
+        fecha_creacion: updatedDoc.fecha_creacion ? new Date(updatedDoc.fecha_creacion).toISOString().split('T')[0] : '',
+      });
       toast({
         title: 'Éxito',
         description: 'Documento actualizado correctamente.',
@@ -90,12 +112,10 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const resetForm = () => {
       if (!doc) return;
       form.reset({
-        numero_factura: doc.numero_factura,
-        fecha_emision: new Date(doc.fecha_emision).toISOString().split('T')[0],
-        proveedor: doc.proveedor,
-        cif: doc.cif,
-        base_imponible: doc.base_imponible,
-        total: doc.total,
+        ...doc,
+        fecha_emision: doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : '',
+        fecha_vencimiento: doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : '',
+        fecha_creacion: doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString().split('T')[0] : '',
     });
   }
 
