@@ -188,28 +188,28 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {lineaFields.map((line, index) => (
-                                        <TableRow key={line.id}>
+                                    {lineaFields.map((linea, index) => (
+                                        <TableRow key={linea.id}>
                                             <TableCell className="font-mono text-xs w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).codigo || 'N/A'}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).codigo || 'N/A'}
                                             </TableCell>
                                             <TableCell>
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).descripcion}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).descripcion}
                                             </TableCell>
                                             <TableCell className="w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (line as any).cantidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (linea as any).cantidad}
                                             </TableCell>
                                             <TableCell className="w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (line as any).unidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).unidad}
                                             </TableCell>
                                             <TableCell className="text-right w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((line as any).precio_unitario, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).precio_unitario, doc.moneda)}
                                             </TableCell>
                                             <TableCell className="text-right w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(line as any).descuento_porcentaje}%`}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as any).descuento_porcentaje}%`}
                                             </TableCell>
                                             <TableCell className="text-right font-medium w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((line as any).importe_linea, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).importe_linea, doc.moneda)}
                                             </TableCell>
                                             {isEditing && <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button></TableCell>}
                                         </TableRow>
@@ -363,4 +363,5 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             </div>
         </>
     );
-}
+
+    
