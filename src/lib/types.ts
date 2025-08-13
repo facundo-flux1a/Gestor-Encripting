@@ -49,7 +49,7 @@ export type DocumentFile = z.infer<typeof DocumentFileSchema>;
 export type Document = {
   id_documento: number;
   numero_factura: string;
-  tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
+  tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Nomina' | 'otro';
   incidencia: boolean;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -68,7 +68,7 @@ export type Document = {
   iva_details: IvaDetail[];
   archivos: DocumentFile[];
   
-  // Legacy fields for compatibility - will be removed later
+
   fecha_subida: string; 
   proveedor: string;
   cif: string;

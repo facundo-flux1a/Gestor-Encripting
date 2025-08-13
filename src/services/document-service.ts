@@ -1,4 +1,3 @@
-
 'use server';
 
 import db from '@/lib/db';
@@ -61,6 +60,22 @@ interface ImpuestoPacket extends RowDataPacket {
     cuota: number;
 }
 
+// Función para mapear los tipos de documento de la BD al tipo Document
+function mapTipoDocumento(dbTipo: 'Factura' | 'Informe' | 'Contrato' | 'Otro'): 'Factura' | 'Informe' | 'Contrato' | 'Nomina' | 'otro' {
+    switch (dbTipo) {
+        case 'Otro':
+            return 'otro';
+        case 'Factura':
+            return 'Factura';
+        case 'Informe':
+            return 'Informe';
+        case 'Contrato':
+            return 'Contrato';
+        default:
+            return 'otro';
+    }
+}
+
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     const documents = await Promise.all(documentRows.map(async (doc) => {
         const [fileRows] = await db.query<ArchivoPacket[]>(
@@ -108,7 +123,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
-            tipo_documento: doc.tipo_documento,
+            tipo_documento: mapTipoDocumento(doc.tipo_documento), // Aplicar el mapeo aquí
             incidencia: !!doc.incidencia,
             fecha_emision: doc.fecha_emision,
             fecha_vencimiento: doc.fecha_vencimiento,
@@ -125,8 +140,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             lineas: lineaRows.map(l => ({...l, datos_extra: l.datos_extra ? (typeof l.datos_extra === 'string' ? JSON.parse(l.datos_extra) : l.datos_extra) : null })),
             iva_details: iva_details,
             archivos: fileRows as DocumentFile[],
-
-            // Legacy fields for backward compatibility
             fecha_subida: doc.fecha_emision,
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
             cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
@@ -183,9 +196,27 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         
         const total_iva = iva_details.reduce((sum, item) => sum + item.cuota, 0);
 
+        // Mapear el tipo_documento de vuelta al formato de la BD para el UPDATE
+        let dbTipoDocumento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
+        switch (tipo_documento) {
+            case 'otro':
+                dbTipoDocumento = 'Otro';
+                break;
+            case 'Factura':
+            case 'Informe':
+            case 'Contrato':
+                dbTipoDocumento = tipo_documento;
+                break;
+            case 'Nomina':
+                dbTipoDocumento = 'Otro';
+                break;
+            default:
+                dbTipoDocumento = 'Otro';
+        }
+
         const [docResult] = await connection.query<OkPacket>(
           'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, incidencia = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
-          [numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, id]
+          [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, incidencia, fecha_vencimiento, moneda, observaciones, id]
         );
 
         // This is a simplified update. A full implementation would handle additions/deletions.

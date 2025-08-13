@@ -7,7 +7,7 @@ import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp } from "lucide-react";
 import { format } from 'date-fns';
-import { type Document } from "@/lib/types";
+import { type Document, type IvaDetail, type DocumentLine } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -109,23 +109,27 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5" /> Información General</CardTitle>
-                            <FormField
+                             <FormField
                                 control={form.control}
                                 name="tipo_documento"
-                                render={({ field }) => isEditing ? (
-                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                render={({ field }) => (
+                                    <FormItem>
                                         <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Tipo de Documento" /></SelectTrigger>
+                                            {isEditing ? (
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <SelectTrigger><SelectValue placeholder="Tipo de Documento" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Factura">Factura</SelectItem>
+                                                        <SelectItem value="Informe">Informe</SelectItem>
+                                                        <SelectItem value="Contrato">Contrato</SelectItem>
+                                                        <SelectItem value="Otro">Otro</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <CardDescription>{field.value}</CardDescription>
+                                            )}
                                         </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="Factura">Factura</SelectItem>
-                                            <SelectItem value="Informe">Informe</SelectItem>
-                                            <SelectItem value="Contrato">Contrato</SelectItem>
-                                            <SelectItem value="Otro">Otro</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                ) : (
-                                    <CardDescription>{field.value}</CardDescription>
+                                    </FormItem>
                                 )}
                             />
                         </CardHeader>
@@ -191,32 +195,34 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {lineaFields.map((linea, index) => (
+                                    {lineaFields.map((linea, index) => {
+                                        const currentLinea = doc.lineas[index] || {};
+                                        return (
                                         <TableRow key={linea.id}>
                                             <TableCell className="font-mono text-xs w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).codigo || 'N/A'}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).codigo || 'N/A'}
                                             </TableCell>
                                             <TableCell>
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).descripcion}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).descripcion}
                                             </TableCell>
                                             <TableCell className="w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (linea as any).cantidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (linea as DocumentLine).cantidad}
                                             </TableCell>
                                             <TableCell className="w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as any).unidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).unidad}
                                             </TableCell>
                                             <TableCell className="text-right w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).precio_unitario, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as DocumentLine).precio_unitario, doc.moneda)}
                                             </TableCell>
                                             <TableCell className="text-right w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as any).descuento_porcentaje || 0}%`}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as DocumentLine).descuento_porcentaje || 0}%`}
                                             </TableCell>
                                             <TableCell className="text-right font-medium w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as any).importe_linea, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as DocumentLine).importe_linea, doc.moneda)}
                                             </TableCell>
                                             {isEditing && <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button></TableCell>}
                                         </TableRow>
-                                    ))}
+                                    )})}
                                     {lineaFields.length === 0 && <TableRow><TableCell colSpan={isEditing ? 8 : 7} className="text-center text-muted-foreground py-8">No hay líneas en este documento.</TableCell></TableRow>}
                                 </TableBody>
                             </Table>
@@ -284,10 +290,10 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-2">
-                                                            <IvaBadge iva={iva as any} />
-                                                            <span className="text-sm">{`${(iva as any).tipo_impuesto} (${(iva as any).porcentaje}%)`}</span>
+                                                            <IvaBadge iva={iva as IvaDetail} />
+                                                            <span className="text-sm">{`${(iva as IvaDetail).tipo_impuesto} (${(iva as IvaDetail).porcentaje}%)`}</span>
                                                         </div>
-                                                        <span className="font-mono text-sm">{formatCurrency((iva as any).cuota, doc.moneda)}</span>
+                                                        <span className="font-mono text-sm">{formatCurrency((iva as IvaDetail).cuota, doc.moneda)}</span>
                                                     </>
                                                 )}
                                             </div>
@@ -307,7 +313,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(formValues.base_imponible, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(doc.base_imponible, doc.moneda)}</span>
                                         )}
                                     </div>
                                     <div className="flex justify-between font-medium items-center">
@@ -321,7 +327,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(formValues.iva, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(doc.iva, doc.moneda)}</span>
                                         )}
                                     </div>
                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
@@ -335,7 +341,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(formValues.total, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(doc.total, doc.moneda)}</span>
                                         )}
                                     </div>
                                 </div>
@@ -400,3 +406,5 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 }
+
+    
