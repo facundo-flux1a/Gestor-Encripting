@@ -88,7 +88,7 @@ export default function ProductDetailPage() {
         
         const totalSpent = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0);
         const totalQuantity = history.reduce((acc, item) => acc + (item.cantidad || 0), 0);
-        const averagePurchaseValue = totalSpent / history.length;
+        const averagePurchaseValue = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0) / history.length;
         
         return { averagePurchaseValue, totalSpent, totalQuantity };
 
