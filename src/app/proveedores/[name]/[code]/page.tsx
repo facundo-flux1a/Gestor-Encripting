@@ -2,7 +2,7 @@
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
-import { useParams, notFound, usePathname } from "next/navigation";
+import { useParams, notFound } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { getProductHistory } from "@/services/document-service";
 import type { DocumentLine } from "@/lib/types";
@@ -95,8 +95,8 @@ export default function ProductDetailPage() {
         }
         
         // Estadísticas básicas
-        const totalSpent = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0);
-        const totalQuantity = history.reduce((acc, item) => acc + (item.cantidad || 0), 0);
+        const totalSpent = history.reduce((acc, item) => acc + (Number(item.importe_linea) || 0), 0);
+        const totalQuantity = history.reduce((acc, item) => acc + (Number(item.cantidad) || 0), 0);
         const averagePurchaseValue = history.length > 0 ? totalSpent / history.length : 0;
         
         // Análisis de precios
@@ -435,7 +435,7 @@ export default function ProductDetailPage() {
                                             <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
                                             <p>
                                                 {advancedStats.priceAnalysis.priceVariation < 10 ? 
-                                                'Producto con precio estable, buen para planificación' :
+                                                'Producto con precio estable, bueno para planificación' :
                                                 'Monitorear fluctuaciones de precio para optimizar costos'}
                                             </p>
                                         </div>
