@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray, useWatch } from "react-hook-form";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -161,6 +162,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 <CardDescription>{field.value || doc.tipo_documento}</CardDescription>
                                             )}
                                         </FormControl>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
@@ -227,9 +229,12 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     </Card>
 
                     {/* Document Lines Card */}
-                    <Card>
+                     <Card>
                         <CardHeader className="flex-row items-center justify-between">
-                            <CardTitle>Líneas del Documento</CardTitle>
+                           <div className="flex items-center gap-2">
+                                <FileText className="h-5 w-5" />
+                                <CardTitle>Líneas del Documento</CardTitle>
+                           </div>
                             {isEditing && (
                                 <Button 
                                     type="button" 
@@ -252,162 +257,87 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                             )}
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Código</TableHead>
-                                        <TableHead>Descripción</TableHead>
-                                        <TableHead>Cantidad</TableHead>
-                                        <TableHead>Unidad</TableHead>
-                                        <TableHead className="text-right">P. Unitario</TableHead>
-                                        <TableHead className="text-right">Dto. %</TableHead>
-                                        <TableHead className="text-right">Importe</TableHead>
-                                        {isEditing && <TableHead></TableHead>}
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {lineaFields.map((linea, index) => {
-                                        return (
-                                            <TableRow key={linea.id}>
-                                                <TableCell className="font-mono text-xs w-24">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.codigo`} 
-                                                            render={({field}) => (
-                                                                <Input {...field} value={field.value || ''} className="h-8"/>
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        formValues.lineas?.[index]?.codigo || 'N/A'
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.descripcion`} 
-                                                            render={({field}) => (
-                                                                <Input {...field} value={field.value || ''} className="h-8"/>
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        formValues.lineas?.[index]?.descripcion
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="w-24">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.cantidad`} 
-                                                            render={({field}) => (
-                                                                <Input 
-                                                                    type="number" 
-                                                                    {...field} 
-                                                                    value={field.value || 0} 
-                                                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                    className="h-8"
-                                                                />
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                       formValues.lineas?.[index]?.cantidad
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="w-20">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.unidad`} 
-                                                            render={({field}) => (
-                                                                <Input {...field} value={field.value || ''} className="h-8"/>
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        formValues.lineas?.[index]?.unidad
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right w-28">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.precio_unitario`} 
-                                                            render={({field}) => (
-                                                                <Input 
-                                                                    type="number" 
-                                                                    {...field} 
-                                                                    value={field.value || 0} 
-                                                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                    className="h-8 text-right"
-                                                                />
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(formValues.lineas?.[index]?.precio_unitario, doc.moneda)
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right w-20">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.descuento_porcentaje`} 
-                                                            render={({field}) => (
-                                                                <Input 
-                                                                    type="number" 
-                                                                    {...field} 
-                                                                    value={field.value || 0} 
-                                                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                    className="h-8 text-right"
-                                                                />
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        `${formValues.lineas?.[index]?.descuento_porcentaje || 0}%`
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right font-medium w-28">
-                                                    {isEditing ? (
-                                                        <FormField 
-                                                            control={form.control} 
-                                                            name={`lineas.${index}.importe_linea`} 
-                                                            render={({field}) => (
-                                                                <Input 
-                                                                    type="number" 
-                                                                    {...field} 
-                                                                    value={field.value || 0} 
-                                                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                    className="h-8 text-right"
-                                                                />
-                                                            )} 
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(formValues.lineas?.[index]?.importe_linea, doc.moneda)
-                                                    )}
-                                                </TableCell>
-                                                {isEditing && (
-                                                    <TableCell>
-                                                        <Button 
-                                                            type="button" 
-                                                            variant="ghost" 
-                                                            size="icon" 
-                                                            onClick={() => removeLinea(index)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4 text-destructive"/>
-                                                        </Button>
-                                                    </TableCell>
-                                                )}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    {lineaFields.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={isEditing ? 8 : 7} className="text-center text-muted-foreground py-8">
-                                                No hay líneas en este documento.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                             <div className="space-y-4">
+                                {lineaFields.map((linea, index) => {
+                                    const currentLinea = formValues.lineas?.[index] || {};
+                                    return (
+                                        <div key={linea.id} className={cn(
+                                            "p-4 rounded-lg",
+                                            isEditing ? "bg-muted/30 border" : "border-b last:border-b-0"
+                                        )}>
+                                            {isEditing ? (
+                                                // EDITING VIEW
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => (
+                                                        <FormItem className="md:col-span-2">
+                                                            <FormLabel>Descripción</FormLabel>
+                                                            <FormControl><Textarea {...field} value={field.value || ''} placeholder="Descripción del producto o servicio" /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                    <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => (
+                                                        <FormItem>
+                                                            <FormLabel>Código</FormLabel>
+                                                            <FormControl><Input {...field} value={field.value || ''} placeholder="SKU-123" /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                    <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => (
+                                                        <FormItem>
+                                                            <FormLabel>Cantidad</FormLabel>
+                                                            <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                     <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => (
+                                                        <FormItem>
+                                                            <FormLabel>P. Unitario</FormLabel>
+                                                            <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                     <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => (
+                                                        <FormItem>
+                                                            <FormLabel>Dto. %</FormLabel>
+                                                            <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                    <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => (
+                                                        <FormItem>
+                                                            <FormLabel>Importe</FormLabel>
+                                                            <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="font-bold" /></FormControl>
+                                                        </FormItem>
+                                                    )} />
+                                                    <div className="flex justify-end md:col-span-2">
+                                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // READ-ONLY VIEW
+                                                <div className="flex flex-col md:flex-row md:items-start gap-4">
+                                                    <Box className="h-8 w-8 text-primary flex-shrink-0 mt-1 hidden md:block" />
+                                                    <div className="flex-grow">
+                                                        <p className="font-semibold text-base">{currentLinea.descripcion}</p>
+                                                        <p className="text-sm text-muted-foreground font-mono">{currentLinea.codigo}</p>
+                                                        <div className="flex items-center gap-4 mt-2 text-sm">
+                                                            <Badge variant="secondary">Cant: {currentLinea.cantidad}</Badge>
+                                                            <Badge variant="outline" className="text-destructive border-destructive/50">Dto: {currentLinea.descuento_porcentaje || 0}%</Badge>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex-shrink-0 text-right">
+                                                         <p className="font-bold text-lg text-primary">{formatCurrency(currentLinea.importe_linea, doc.moneda)}</p>
+                                                         <p className="text-sm text-muted-foreground">{formatCurrency(currentLinea.precio_unitario, doc.moneda)} / {currentLinea.unidad}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+
+                                {lineaFields.length === 0 && (
+                                    <div className="text-center text-muted-foreground py-8">
+                                        <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                                        <h3 className="mt-2 text-sm font-medium">No hay líneas</h3>
+                                        <p className="mt-1 text-sm text-gray-500">No se han encontrado líneas en este documento.</p>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
