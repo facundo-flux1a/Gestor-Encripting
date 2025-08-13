@@ -12,7 +12,7 @@ import { ProductCard } from "@/components/dashboard/product-card";
 import { Input } from "@/components/ui/input";
 
 export default function ProveedorDetailPage() {
-    const params = useParams();
+    const params = useParams(); // Correct way to get params in a client component
     const [provider, setProvider] = useState<DocumentEntity | null>(null);
     const [documents, setDocuments] = useState<Document[]>([]);
     const [allProducts, setAllProducts] = useState<DocumentLine[]>([]);
