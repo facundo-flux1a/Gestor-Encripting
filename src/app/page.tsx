@@ -2,7 +2,7 @@
 'use client';
 
 import { MainLayout } from "@/components/layout/main-layout";
-import { getDocuments, getUniqueProviders, getAllProducts } from "@/services/document-service";
+import { getDocuments, getUniqueProvidersCount, getAllProducts } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { FileText, FileWarning, Euro, Users, Package, MinusCircle } from "lucide-react";
