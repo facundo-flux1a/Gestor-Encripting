@@ -1,10 +1,11 @@
 
 'use client';
 
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import type { DocumentEntity } from "@/lib/types";
-import { Building, ArrowRight } from "lucide-react";
+import { Building, ArrowRight, BarChart3 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "../ui/button";
 
 interface ProviderCardProps {
     provider: DocumentEntity;
@@ -13,10 +14,13 @@ interface ProviderCardProps {
 export function ProviderCard({ provider }: ProviderCardProps) {
     if (!provider.nombre || !provider.identificador_fiscal) return null;
     
+    const providerUrl = `/proveedores/${encodeURIComponent(provider.identificador_fiscal)}`;
+    const analyticsUrl = `${providerUrl}/analitica`;
+
     return (
-        <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal)}`} className="group">
-            <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">
-                <CardHeader className="flex-grow">
+        <Card className="h-full flex flex-col justify-between transition-all hover:border-primary hover:shadow-lg">
+            <Link href={providerUrl} className="group flex-grow">
+                <CardHeader>
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-3">
                              <div className="bg-muted rounded-lg p-2">
@@ -29,15 +33,23 @@ export function ProviderCard({ provider }: ProviderCardProps) {
                                 <CardDescription className="font-mono">{provider.identificador_fiscal}</CardDescription>
                             </div>
                         </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 flex-shrink-0" />
+                         <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 flex-shrink-0" />
                     </div>
                 </CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground">
-                        Ver detalles y productos del proveedor.
+                        Ver documentos y productos del proveedor.
                     </p>
                 </CardContent>
-            </Card>
-        </Link>
+            </Link>
+            <CardFooter className="pt-4 border-t">
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                    <Link href={analyticsUrl}>
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Ver Analítica
+                    </Link>
+                </Button>
+            </CardFooter>
+        </Card>
     );
 }

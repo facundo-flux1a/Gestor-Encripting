@@ -4,15 +4,17 @@
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { useParams, notFound } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Building, FileText, Package, Search } from "lucide-react";
+import { Building, FileText, Package, Search, BarChart3 } from "lucide-react";
 import { getDocumentsByProviderName, getProductsByProviderName, getProviderByFiscalId } from "@/services/document-service";
 import type { Document, DocumentLine, DocumentEntity } from "@/lib/types";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { ProductCard } from "@/components/dashboard/product-card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function ProveedorDetailPage() {
-    const params = useParams(); // Correct way to get params in a client component
+    const params = useParams();
     const [provider, setProvider] = useState<DocumentEntity | null>(null);
     const [documents, setDocuments] = useState<Document[]>([]);
     const [allProducts, setAllProducts] = useState<DocumentLine[]>([]);
@@ -20,10 +22,11 @@ export default function ProveedorDetailPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
+    const fiscalId = params.name as string;
+
     useEffect(() => {
-        const fiscalIdParam = params.name; // This is now the fiscal_id
-        if (fiscalIdParam) {
-            const decodedFiscalId = decodeURIComponent(fiscalIdParam as string);
+        if (fiscalId) {
+            const decodedFiscalId = decodeURIComponent(fiscalId);
             
             async function fetchData() {
                 setIsLoading(true);
@@ -54,7 +57,7 @@ export default function ProveedorDetailPage() {
         } else {
             notFound();
         }
-    }, [params.name]);
+    }, [fiscalId]);
     
     useEffect(() => {
         const lowercasedFilter = searchTerm.toLowerCase();
@@ -94,6 +97,12 @@ export default function ProveedorDetailPage() {
                                 Resumen de documentos y productos del proveedor.
                             </p>
                         </div>
+                         <Button asChild>
+                            <Link href={`/proveedores/${fiscalId}/analitica`}>
+                                <BarChart3 className="mr-2 h-4 w-4" />
+                                Ver Analítica
+                            </Link>
+                        </Button>
                     </div>
                 </MainLayoutHeader>
 

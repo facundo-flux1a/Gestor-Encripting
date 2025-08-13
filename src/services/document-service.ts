@@ -4,6 +4,7 @@
 import db from '@/lib/db';
 import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
+import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -448,4 +449,57 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
     return JSON.parse(JSON.stringify({ productInfo, history }));
 }
 
+export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAnalyticsData | null> {
+    const provider = await getProviderByFiscalId(fiscalId);
+    if (!provider) {
+        return null;
+    }
+
+    const [docs] = await db.query<DocumentPacket[]>(`
+        SELECT d.*
+        FROM documentos d
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+    `, [fiscalId]);
+
+    const docIds = docs.map(d => d.id);
+    const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
+
+    const totalSpent = docs.reduce((acc, doc) => acc + Number(doc.importe_total || 0), 0);
+    const totalDocuments = docs.length;
+    const averagePurchaseValue = totalDocuments > 0 ? totalSpent / totalDocuments : 0;
     
+    const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
+    lines.forEach(line => {
+        if (line.codigo && line.descripcion) {
+            if (!productSpend[line.codigo]) {
+                productSpend[line.codigo] = { codigo: line.codigo, descripcion: line.descripcion, total: 0 };
+            }
+            productSpend[line.codigo].total += Number(line.importe_linea || 0);
+        }
+    });
+
+    const topProductsBySpend = Object.values(productSpend)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5);
+
+    const monthlySpendMap: { [key: string]: number } = {};
+    docs.forEach(doc => {
+        const month = new Date(doc.fecha_emision).toISOString().substring(0, 7); // YYYY-MM
+        monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
+    });
+
+    const monthlySpend = Object.entries(monthlySpendMap)
+        .map(([month, total]) => ({ month, total }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+    return {
+        provider,
+        totalSpent,
+        totalDocuments,
+        uniqueProducts: Object.keys(productSpend).length,
+        averagePurchaseValue,
+        topProductsBySpend,
+        monthlySpend
+    };
+}
