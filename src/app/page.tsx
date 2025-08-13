@@ -1,10 +1,10 @@
 'use client';
 
-import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
+import { MainLayout } from "@/components/layout/main-layout";
 import { getDocuments, getUniqueProviders, getAllProducts } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { FileText, FileWarning, Euro, Users, Package, Filter, Download, Bell } from "lucide-react";
+import { FileText, FileWarning, Euro, Users, Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TotalsByProviderChart } from "@/components/dashboard/totals-by-provider-chart";
 import { DocumentStatusChart } from "@/components/dashboard/document-status-chart";
@@ -24,7 +24,7 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
 // === Procesador de datos ===
-const processDashboardData = (documents, providersCount, productsCount) => {
+const processDashboardData = (documents: any[], providersCount: number, productsCount: number) => {
   const quarterlyData = {
     '1': { name: 'T1', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
     '2': { name: 'T2', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
@@ -35,8 +35,8 @@ const processDashboardData = (documents, providersCount, productsCount) => {
   let totalSales = 0;
   let totalExpenses = 0;
   let totalIncidents = 0;
-  const providerExpenses = {};
-  const documentTypeCounts = {};
+  const providerExpenses: { [key: string]: number } = {};
+  const documentTypeCounts: { [key: string]: number } = {};
 
   documents.forEach(doc => {
     const date = new Date(doc.fecha_emision);
@@ -47,17 +47,17 @@ const processDashboardData = (documents, providersCount, productsCount) => {
     documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
 
     if (doc.ingreso > 0) {
-      quarterlyData[quarter].sales += doc.base_imponible;
-      totalSales += doc.base_imponible;
-      doc.iva_details.forEach(iva => quarterlyData[quarter].ivaRepercutido += iva.cuota);
+      quarterlyData[quarter].sales += (doc.base_imponible || 0);
+      totalSales += (doc.base_imponible || 0);
+      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaRepercutido += (iva.cuota || 0));
     }
 
     if (doc.gasto > 0) {
-      quarterlyData[quarter].expenses += doc.base_imponible;
-      totalExpenses += doc.base_imponible;
-      doc.iva_details.forEach(iva => quarterlyData[quarter].ivaSoportado += iva.cuota);
+      quarterlyData[quarter].expenses += (doc.base_imponible || 0);
+      totalExpenses += (doc.base_imponible || 0);
+      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (iva.cuota || 0));
       if (doc.proveedor && doc.proveedor !== 'N/A') {
-        providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + doc.gasto;
+        providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + (doc.gasto || 0);
       }
     }
   });
@@ -87,20 +87,10 @@ const processDashboardData = (documents, providersCount, productsCount) => {
 
 // === Página principal ===
 export default function Home() {
-  const [documents, setDocuments] = useState([]);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [providersCount, setProvidersCount] = useState(0);
   const [productsCount, setProductsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    periodo: 'trimestre',
-    proveedor: [],
-    tipoDocumento: '',
-    estado: '',
-    departamento: '',
-    responsable: '',
-    etiqueta: '',
-    producto: ''
-  });
 
   useEffect(() => {
     async function loadData() {
@@ -149,45 +139,13 @@ export default function Home() {
 
   return (
     <MainLayout>
-      {/* Barra superior */}
-      <div className="flex items-center justify-between p-4 bg-white shadow rounded-md">
-        <div className="flex gap-2 items-center">
-          <select
-            value={filters.periodo}
-            onChange={e => setFilters(f => ({ ...f, periodo: e.target.value }))}
-            className="border p-2 rounded"
-          >
-            <option value="trimestre">Trimestre actual</option>
-            <option value="mes">Mes actual</option>
-            <option value="año">Año actual</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Búsqueda global..."
-            className="border p-2 rounded"
-          />
-          <button className="p-2 border rounded flex items-center gap-1"><Bell size={16}/> Notificaciones</button>
+      <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         </div>
-        <div className="flex gap-2">
-          <button className="p-2 border rounded flex items-center gap-1"><Download size={16}/> CSV</button>
-          <button className="p-2 border rounded flex items-center gap-1"><Download size={16}/> PDF</button>
-        </div>
-      </div>
-
-      <div className="flex">
-        {/* Panel lateral */}
-        <aside className="w-64 p-4 bg-gray-50 border-r space-y-3">
-          <h3 className="font-bold flex items-center gap-1"><Filter size={16}/> Filtros</h3>
-          <select multiple className="border p-1 rounded"><option>Proveedor 1</option></select>
-          <select className="border p-1 rounded"><option>Tipo documento</option></select>
-          <select className="border p-1 rounded"><option>Estado</option></select>
-          <button className="bg-blue-500 text-white p-2 rounded w-full">Guardar vista rápida</button>
-        </aside>
-
-        {/* Contenido principal */}
-        <main className="flex-1 p-6 space-y-6">
+        <div className="space-y-4">
           {/* KPIs */}
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
             <StatsCard title="Ingresos" value={formatCurrency(totalSales)} icon={Euro} description="Periodo actual" />
             <StatsCard title="Gastos" value={formatCurrency(totalExpenses)} icon={Euro} description="Periodo actual" />
             <StatsCard title="Documentos" value={totalDocuments.toString()} icon={FileText} description="Total histórico" />
@@ -197,16 +155,24 @@ export default function Home() {
           </div>
 
           {/* Gráficas */}
-          <div className="grid gap-8 lg:grid-cols-5">
-            <div className="lg:col-span-3"><FinancialSummary data={financialChartData} /></div>
-            <div className="lg:col-span-2"><DocumentStatusChart data={documentStatusChartData} /></div>
-            <div className="lg:col-span-5"><TotalsByProviderChart data={providerChartData} /></div>
-            <div className="lg:col-span-5"><TimeSeriesChart data={financialChartData} /></div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <div className="col-span-1 lg:col-span-4">
+              <FinancialSummary data={financialChartData} />
+            </div>
+            <div className="col-span-1 lg:col-span-3">
+              <DocumentStatusChart data={documentStatusChartData} />
+            </div>
+            <div className="col-span-1 lg:col-span-full">
+                <TotalsByProviderChart data={providerChartData} />
+            </div>
+            <div className="col-span-1 lg:col-span-full">
+                <TimeSeriesChart data={financialChartData} />
+            </div>
+            <div className="col-span-1 lg:col-span-full">
+                <InsightsWidget variationPercent={variationPercent} topProviders={topProvidersByAmount} />
+            </div>
           </div>
-
-          {/* Insights rápidos */}
-          <InsightsWidget variationPercent={variationPercent} topProviders={topProvidersByAmount} />
-        </main>
+        </div>
       </div>
     </MainLayout>
   );
