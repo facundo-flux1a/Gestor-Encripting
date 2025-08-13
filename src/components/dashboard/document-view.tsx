@@ -1,11 +1,10 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -19,6 +18,7 @@ import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect } from "react";
 import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -87,6 +87,10 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     const formValues = useWatch({ control: form.control });
     const [lineaSearchTerm, setLineaSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    
+    const provider = useMemo(() => 
+        doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'),
+    [doc.entidades]);
 
     // Inicializar los arrays cuando cambie el documento o se inicie la edición
     useEffect(() => {
@@ -470,9 +474,17 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                             <Badge variant="outline" className="text-destructive border-destructive/50">Dto: {currentLinea.descuento_porcentaje || 0}%</Badge>
                                                         </div>
                                                     </div>
-                                                    <div className="flex-shrink-0 text-right">
+                                                    <div className="flex-shrink-0 text-right space-y-2">
                                                          <p className="font-bold text-lg text-primary">{formatCurrency(currentLinea.importe_linea, doc.moneda)}</p>
                                                          <p className="text-sm text-muted-foreground">{formatCurrency(currentLinea.precio_unitario, doc.moneda)} / {currentLinea.unidad}</p>
+                                                         {provider && currentLinea.codigo && (
+                                                            <Button size="sm" variant="outline" asChild>
+                                                                <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}/${encodeURIComponent(currentLinea.codigo)}`}>
+                                                                    <History className="mr-2 h-4 w-4" />
+                                                                    Ver Historial
+                                                                </Link>
+                                                            </Button>
+                                                         )}
                                                     </div>
                                                 </div>
                                             )}
