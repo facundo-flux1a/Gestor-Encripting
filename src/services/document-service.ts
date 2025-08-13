@@ -8,7 +8,7 @@ import type { RowDataPacket, OkPacket } from 'mysql2';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
-    tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
+    tipo_documento: string;
     incidencia: number; // MySQL BOOLEAN is 0 or 1
     numero_documento: string;
     fecha_emision: string;
@@ -45,6 +45,7 @@ interface EntidadPacket extends RowDataPacket {
 
 interface LineaPacket extends RowDataPacket {
     id: number;
+    documento_id: number;
     codigo: string | null;
     descripcion: string | null;
     cantidad: number;
@@ -54,8 +55,8 @@ interface LineaPacket extends RowDataPacket {
     precio_neto: number;
     importe_linea: number;
     datos_extra: any | null;
-    documento_id: number;
     fecha_emision: string; // Joined from documentos table
+    numero_documento: string; // Joined from documentos table
 }
 
 interface ImpuestoPacket extends RowDataPacket {
@@ -385,3 +386,42 @@ export async function getProductsByProviderName(fiscalId: string): Promise<Docum
     return JSON.parse(JSON.stringify(products));
 }
 
+export async function getProductHistory(providerFiscalId: string, productCode: string): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
+    const [lineaRows] = await db.query<LineaPacket[]>(`
+        SELECT 
+            ld.*, 
+            d.fecha_emision,
+            d.numero_documento
+        FROM lineas_documento ld
+        JOIN documentos d ON ld.documento_id = d.id
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        WHERE ed.identificador_fiscal = ? 
+          AND ld.codigo = ?
+          AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        ORDER BY d.fecha_emision DESC;
+    `, [providerFiscalId, productCode]);
+
+    if (lineaRows.length === 0) {
+        return { productInfo: null, history: [] };
+    }
+
+    const history: DocumentLine[] = lineaRows.map(l => ({
+        id: l.id,
+        documento_id: l.documento_id,
+        codigo: l.codigo,
+        descripcion: l.descripcion,
+        cantidad: l.cantidad,
+        unidad: l.unidad,
+        precio_unitario: l.precio_unitario,
+        descuento_porcentaje: l.descuento_porcentaje,
+        precio_neto: l.precio_neto,
+        importe_linea: l.importe_linea,
+        datos_extra: safeJsonParse(l.datos_extra),
+        fecha_emision: l.fecha_emision,
+        numero_documento: l.numero_documento,
+   }));
+
+    const productInfo = history[0]; // The first one is the most recent
+
+    return JSON.parse(JSON.stringify({ productInfo, history }));
+}

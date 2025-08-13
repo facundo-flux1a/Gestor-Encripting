@@ -26,6 +26,7 @@ export type DocumentEntity = z.infer<typeof DocumentEntitySchema>;
 
 export const DocumentLineSchema = z.object({
     id: z.number().optional(),
+    documento_id: z.number().optional(),
     codigo: z.string().nullable(),
     descripcion: z.string().nullable(),
     cantidad: z.coerce.number(),
@@ -36,6 +37,7 @@ export const DocumentLineSchema = z.object({
     importe_linea: z.coerce.number(),
     datos_extra: z.any().nullable(),
     fecha_emision: z.string().optional(), // for product listings
+    numero_documento: z.string().optional(), // for product history
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
