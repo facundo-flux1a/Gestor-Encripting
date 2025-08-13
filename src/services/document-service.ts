@@ -278,7 +278,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
-export async function getUniqueProviders(): Promise<number> {
+export async function getUniqueProvidersCount(): Promise<number> {
     const [providerRows] = await db.query<RowDataPacket[]>(`
        SELECT COUNT(DISTINCT identificador_fiscal) as count
        FROM entidades_documento
@@ -287,6 +287,39 @@ export async function getUniqueProviders(): Promise<number> {
     `);
 
     return providerRows[0].count || 0;
+}
+
+export async function getUniqueProviders(): Promise<DocumentEntity[]> {
+    const [providerRows] = await db.query<EntidadPacket[]>(`
+        SELECT 
+            identificador_fiscal, 
+            nombre,
+            MAX(id) as id,
+            MAX(rol) as rol,
+            MAX(direccion) as direccion,
+            MAX(telefono) as telefono,
+            MAX(email) as email,
+            MAX(datos_extra) as datos_extra
+        FROM entidades_documento
+        WHERE (rol = 'proveedor' OR rol = 'emisor')
+          AND identificador_fiscal IS NOT NULL 
+          AND identificador_fiscal != ''
+        GROUP BY identificador_fiscal, nombre
+        ORDER BY nombre ASC
+    `);
+
+    const providers: DocumentEntity[] = providerRows.map(p => ({
+        id: p.id,
+        rol: p.rol,
+        nombre: p.nombre,
+        direccion: p.direccion,
+        identificador_fiscal: p.identificador_fiscal,
+        telefono: p.telefono,
+        email: p.email,
+        datos_extra: safeJsonParse(p.datos_extra),
+    }));
+
+    return JSON.parse(JSON.stringify(providers));
 }
 
 export async function getAllProducts(): Promise<number> {

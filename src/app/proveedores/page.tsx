@@ -23,6 +23,7 @@ export default function ProveedoresPage() {
   }, []);
 
   useEffect(() => {
+    if (!allProviders) return;
     const lowercasedFilter = searchTerm.toLowerCase();
     const filtered = allProviders.filter(provider =>
       provider.nombre?.toLowerCase().includes(lowercasedFilter)
