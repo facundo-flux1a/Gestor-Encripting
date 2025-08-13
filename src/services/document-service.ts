@@ -148,7 +148,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         };
     }));
     
-    return documents;
+    // Ensure plain objects for serialization
+    return JSON.parse(JSON.stringify(documents));
 }
 
 export async function getDocuments(): Promise<Document[]> {
@@ -158,7 +159,8 @@ export async function getDocuments(): Promise<Document[]> {
         ORDER BY fecha_emision DESC
     `);
     
-    return mapDocumentPacketsToDocuments(documentRows);
+    const documents = await mapDocumentPacketsToDocuments(documentRows);
+    return JSON.parse(JSON.stringify(documents));
 }
 
 export async function getDocumentById(id: number): Promise<Document | null> {
@@ -173,7 +175,8 @@ export async function getDocumentById(id: number): Promise<Document | null> {
     }
 
     const documents = await mapDocumentPacketsToDocuments(documentRows);
-    return documents[0];
+    const document = documents[0];
+    return JSON.parse(JSON.stringify(document));
 }
 
 export async function getIncidents(): Promise<Document[]> {
@@ -184,7 +187,8 @@ export async function getIncidents(): Promise<Document[]> {
         ORDER BY fecha_emision DESC
     `);
 
-    return mapDocumentPacketsToDocuments(documentRows);
+    const documents = await mapDocumentPacketsToDocuments(documentRows);
+    return JSON.parse(JSON.stringify(documents));
 }
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<OkPacket> {
@@ -226,6 +230,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                     'UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ? WHERE id = ?',
                     [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, entidad.id]
                  );
+            } else {
+                 await connection.query(
+                    'INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email]
+                );
             }
         }
         for (const linea of lineas) {
@@ -234,6 +243,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                     'UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ? WHERE id = ?',
                     [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, linea.id]
                 );
+            } else {
+                 await connection.query(
+                    'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea]
+                );
             }
         }
         for (const iva of iva_details) {
@@ -241,6 +255,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                 await connection.query(
                     'UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?',
                     [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]
+                );
+            } else {
+                 await connection.query(
+                    'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
+                    [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
                 );
             }
         }

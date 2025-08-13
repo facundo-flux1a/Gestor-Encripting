@@ -26,6 +26,11 @@ export default function DocumentoPage() {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
+    defaultValues: {
+      entidades: [],
+      lineas: [],
+      iva_details: [],
+    }
   });
 
   useEffect(() => {
