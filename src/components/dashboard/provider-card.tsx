@@ -14,17 +14,21 @@ export function ProviderCard({ provider }: ProviderCardProps) {
     
     return (
         <Link href={`/proveedores/${encodeURIComponent(provider.nombre)}`} className="group">
-            <Card className="h-full transition-all group-hover:border-primary group-hover:shadow-lg">
-                <CardHeader>
+            <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">
+                <CardHeader className="flex-grow">
                     <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <Building className="h-5 w-5 text-primary" />
-                                {provider.nombre}
-                            </CardTitle>
-                            <CardDescription>{provider.identificador_fiscal}</CardDescription>
+                        <div className="flex items-center gap-3">
+                             <div className="bg-muted rounded-lg p-2">
+                                <Building className="h-6 w-6 text-primary" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-lg font-bold">
+                                    {provider.nombre}
+                                </CardTitle>
+                                <CardDescription className="font-mono">{provider.identificador_fiscal}</CardDescription>
+                            </div>
                         </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                        <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 flex-shrink-0" />
                     </div>
                 </CardHeader>
                 <CardContent>
