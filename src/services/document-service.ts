@@ -82,7 +82,7 @@ const safeJsonParse = (data: any): object | null => {
     if (typeof data === 'string') {
         try {
             const parsed = JSON.parse(data);
-            return typeof parsed === 'object' ? parsed : null;
+            return typeof parsed === 'object' && parsed !== null ? parsed : null;
         } catch (e) {
             return null;
         }
@@ -153,8 +153,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              cantidad: l.cantidad,
              unidad: l.unidad,
              precio_unitario: l.precio_unitario,
-             descuento_porcentaje: l.descuento_porcentaje,
-             precio_neto: l.precio_neto,
+             descuento_porcentaje: l.precio_neto,
              importe_linea: l.importe_linea,
              datos_extra: safeJsonParse(l.datos_extra),
         }));
@@ -320,5 +319,3 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         connection.release();
     }
 }
-
-    
