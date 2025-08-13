@@ -1,10 +1,11 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect } from "react";
+import { Separator } from "@/components/ui/separator";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -691,15 +693,16 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     {/* Financial Details Card */}
                     <Card>
                         <CardHeader className="flex-row items-center justify-between">
-                            <CardTitle>Detalles Financieros</CardTitle>
+                            <CardTitle className="flex items-center gap-2"><Euro className="h-5 w-5"/>Detalles Financieros</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-base text-muted-foreground">Resumen de Impuestos</h4>
-                                        {isEditing && (
-                                            <Button 
+                                {isEditing ? (
+                                    // EDITING VIEW
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-semibold text-muted-foreground">Desglose de Impuestos</h4>
+                                             <Button 
                                                 type="button" 
                                                 size="sm" 
                                                 variant="outline" 
@@ -712,179 +715,116 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             >
                                                 <PlusCircle className="mr-2 h-4 w-4" />Añadir
                                             </Button>
-                                        )}
-                                    </div>
-                                    <div className="space-y-2">
-                                        {(isEditing ? ivaFields : doc.iva_details || []).map((iva, index) => {
-                                            const currentIva = isEditing 
-                                                ? (formValues.iva_details?.[index] || iva)
-                                                : iva;
-                                            
-                                            return (
-                                                <div key={isEditing ? iva.id : `iva-${index}`} className="flex justify-between items-center p-3 rounded-md bg-muted/50 gap-2">
-                                                    {isEditing ? (
-                                                        <>
-                                                            <FormField 
-                                                                control={form.control} 
-                                                                name={`iva_details.${index}.tipo_impuesto`} 
-                                                                render={({field}) => (
-                                                                    <Input 
-                                                                        {...field} 
-                                                                        value={field.value ?? ''} 
-                                                                        className="h-8 w-24"
-                                                                        placeholder="IVA" 
-                                                                    />
-                                                                )}
-                                                            />
-                                                            <FormField 
-                                                                control={form.control} 
-                                                                name={`iva_details.${index}.porcentaje`} 
-                                                                render={({field}) => (
-                                                                    <Input 
-                                                                        type="number" 
-                                                                        step="0.01"
-                                                                        {...field} 
-                                                                        value={field.value ?? 0}
-                                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                        className="h-8 w-20" 
-                                                                        placeholder="21"
-                                                                    />
-                                                                )} 
-                                                            />
-                                                            <FormField 
-                                                                control={form.control} 
-                                                                name={`iva_details.${index}.base_imponible`} 
-                                                                render={({field}) => (
-                                                                    <Input 
-                                                                        type="number" 
-                                                                        step="0.01"
-                                                                        {...field} 
-                                                                        value={field.value ?? 0}
-                                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                        className="h-8 w-24 text-right" 
-                                                                        placeholder="Base"
-                                                                    />
-                                                                )} 
-                                                            />
-                                                            <FormField 
-                                                                control={form.control} 
-                                                                name={`iva_details.${index}.cuota`} 
-                                                                render={({field}) => (
-                                                                    <Input 
-                                                                        type="number" 
-                                                                        step="0.01"
-                                                                        {...field} 
-                                                                        value={field.value ?? 0}
-                                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                                        className="h-8 w-24 text-right" 
-                                                                        placeholder="Cuota"
-                                                                    />
-                                                                )} 
-                                                            />
-                                                            <Button 
-                                                                type="button" 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                onClick={() => removeIva(index)}
-                                                            >
-                                                                <Trash2 className="h-4 w-4 text-destructive"/>
-                                                            </Button>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="flex items-center gap-2">
-                                                                <IvaBadge iva={currentIva as IvaDetail} />
-                                                                <span className="text-sm">
-                                                                    {`${currentIva.tipo_impuesto} (${currentIva.porcentaje}%)`}
-                                                                </span>
-                                                            </div>
-                                                            <span className="font-mono text-sm">
-                                                                {formatCurrency(currentIva.cuota, doc.moneda)}
-                                                            </span>
-                                                        </>
-                                                    )}
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {ivaFields.map((iva, index) => (
+                                                <div key={iva.id} className="p-4 rounded-lg bg-muted/50 border relative">
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <FormField control={form.control} name={`iva_details.${index}.tipo_impuesto`} render={({field}) => (
+                                                            <FormItem>
+                                                                <FormLabel>Tipo</FormLabel>
+                                                                <FormControl><Input {...field} value={field.value ?? ''} placeholder="IVA" /></FormControl>
+                                                            </FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.porcentaje`} render={({field}) => (
+                                                            <FormItem>
+                                                                <FormLabel>Porcentaje %</FormLabel>
+                                                                <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} placeholder="21" /></FormControl>
+                                                            </FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.base_imponible`} render={({field}) => (
+                                                            <FormItem>
+                                                                <FormLabel>Base</FormLabel>
+                                                                <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} placeholder="Base" /></FormControl>
+                                                            </FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name={`iva_details.${index}.cuota`} render={({field}) => (
+                                                            <FormItem>
+                                                                <FormLabel>Cuota</FormLabel>
+                                                                <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} placeholder="Cuota" /></FormControl>
+                                                            </FormItem>
+                                                        )} />
+                                                    </div>
+                                                    <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2" onClick={() => removeIva(index)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive"/>
+                                                    </Button>
                                                 </div>
-                                            );
-                                        })}
-                                        {(isEditing ? ivaFields.length === 0 : (doc.iva_details?.length || 0) === 0) && (
-                                            <p className="text-sm text-muted-foreground text-center py-4">
-                                                No hay impuestos detallados.
-                                            </p>
-                                        )}
+                                            ))}
+                                        </div>
+
+                                        <Separator className="my-6" />
+
+                                        <div className="space-y-4">
+                                            <h4 className="font-semibold text-muted-foreground">Totales</h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                            <FormField control={form.control} name='base_imponible' render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Base Imponible</FormLabel>
+                                                    <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                                                </FormItem>
+                                            )} />
+                                            <FormField control={form.control} name='iva' render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Total IVA</FormLabel>
+                                                    <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                                                </FormItem>
+                                            )} />
+                                            </div>
+                                             <FormField control={form.control} name='total' render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-lg">Total</FormLabel>
+                                                    <FormControl><Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="text-xl font-bold" /></FormControl>
+                                                </FormItem>
+                                            )} />
+                                        </div>
+
                                     </div>
-                                </div>
-                                
-                                <div className="space-y-2 text-base pt-4 border-t">
-                                    <div className="flex justify-between font-medium items-center">
-                                        <span className="text-muted-foreground">Base Imponible</span>
-                                        {isEditing ? (
-                                            <FormField
-                                                control={form.control}
-                                                name='base_imponible'
-                                                render={({ field }) => (
-                                                    <Input 
-                                                        type="number" 
-                                                        step="0.01"
-                                                        {...field} 
-                                                        value={field.value ?? doc.base_imponible}
-                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                        className="h-8 w-32 text-right font-mono" 
-                                                    />
+                                ) : (
+                                    // READ-ONLY VIEW
+                                    <>
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="font-semibold text-base text-muted-foreground">Resumen de Impuestos</h4>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {(doc.iva_details || []).map((iva, index) => (
+                                                    <div key={`iva-${index}`} className="flex justify-between items-center p-3 rounded-md bg-muted/50 gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <IvaBadge iva={iva} />
+                                                            <span className="text-sm">
+                                                                {`${iva.tipo_impuesto} (${iva.porcentaje}%)`}
+                                                            </span>
+                                                        </div>
+                                                        <span className="font-mono text-sm">
+                                                            {formatCurrency(iva.cuota, doc.moneda)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                {(doc.iva_details?.length || 0) === 0 && (
+                                                    <p className="text-sm text-muted-foreground text-center py-4">
+                                                        No hay impuestos detallados.
+                                                    </p>
                                                 )}
-                                            />
-                                        ) : (
-                                            <span className="font-mono">
-                                                {formatCurrency(getCurrentValue('base_imponible'), doc.moneda)}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex justify-between font-medium items-center">
-                                        <span className="text-muted-foreground">Total IVA</span>
-                                        {isEditing ? (
-                                             <FormField
-                                                control={form.control}
-                                                name='iva'
-                                                render={({ field }) => (
-                                                    <Input 
-                                                        type="number" 
-                                                        step="0.01"
-                                                        {...field} 
-                                                        value={field.value ?? doc.iva}
-                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                        className="h-8 w-32 text-right font-mono"
-                                                    />
-                                                )}
-                                            />
-                                        ) : (
-                                            <span className="font-mono">
-                                                {formatCurrency(getCurrentValue('iva'), doc.moneda)}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex justify-between font-bold text-lg items-center text-primary pt-2 mt-2 border-t">
-                                        <span>Total</span>
-                                        {isEditing ? (
-                                             <FormField
-                                                control={form.control}
-                                                name='total'
-                                                render={({ field }) => (
-                                                    <Input 
-                                                        type="number" 
-                                                        step="0.01"
-                                                        {...field} 
-                                                        value={field.value ?? doc.total}
-                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                        className="h-8 w-32 text-right font-mono" 
-                                                    />
-                                                )}
-                                            />
-                                        ) : (
-                                            <span className="font-mono">
-                                                {formatCurrency(getCurrentValue('total'), doc.moneda)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-2 text-base pt-4 border-t">
+                                            <div className="flex justify-between font-medium items-center">
+                                                <span className="text-muted-foreground">Base Imponible</span>
+                                                <span className="font-mono">{formatCurrency(getCurrentValue('base_imponible'), doc.moneda)}</span>
+                                            </div>
+                                            <div className="flex justify-between font-medium items-center">
+                                                <span className="text-muted-foreground">Total IVA</span>
+                                                <span className="font-mono">{formatCurrency(getCurrentValue('iva'), doc.moneda)}</span>
+                                            </div>
+                                            <div className="flex justify-between font-bold text-lg items-center text-primary pt-2 mt-2 border-t">
+                                                <span>Total</span>
+                                                <span className="font-mono">{formatCurrency(getCurrentValue('total'), doc.moneda)}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
