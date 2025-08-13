@@ -103,6 +103,7 @@ export default function Home() {
           getUniqueProvidersCount(),
           getAllProducts()
         ]);
+
         setDocuments(docs);
         setProvidersCount(provsCount);
         setProductsCount(prodsCount);
