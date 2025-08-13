@@ -2,7 +2,7 @@
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
-import { useParams, notFound } from "next/navigation";
+import { useParams, notFound, usePathname } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { getProductHistory } from "@/services/document-service";
 import type { DocumentLine } from "@/lib/types";
@@ -50,10 +50,10 @@ export default function ProductDetailPage() {
     const [history, setHistory] = useState<DocumentLine[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        const providerId = params.name as string;
-        const productCode = params.code as string;
+    const providerId = params.name as string;
+    const productCode = params.code as string;
 
+    useEffect(() => {
         if (providerId && productCode) {
             async function fetchData() {
                 setIsLoading(true);
@@ -81,7 +81,7 @@ export default function ProductDetailPage() {
         } else {
             notFound();
         }
-    }, [params.name, params.code]);
+    }, [providerId, productCode]);
     
     const advancedStats = useMemo(() => {
         if (history.length === 0) {
@@ -101,21 +101,21 @@ export default function ProductDetailPage() {
         
         // Análisis de precios
         const prices = history.map(item => parseFloat(item.precio_unitario || '0')).filter(p => p > 0);
-        const minPrice = Math.min(...prices);
-        const maxPrice = Math.max(...prices);
-        const priceVariation = prices.length > 1 ? ((maxPrice - minPrice) / minPrice * 100) : 0;
+        const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+        const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+        const priceVariation = minPrice > 0 ? ((maxPrice - minPrice) / minPrice * 100) : 0;
         
         // Tendencia de precios (últimas 3 vs primeras 3 compras)
         const recentPrices = prices.slice(-3);
         const oldPrices = prices.slice(0, 3);
-        const recentAvg = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
-        const oldAvg = oldPrices.reduce((a, b) => a + b, 0) / oldPrices.length;
+        const recentAvg = recentPrices.length > 0 ? recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length : 0;
+        const oldAvg = oldPrices.length > 0 ? oldPrices.reduce((a, b) => a + b, 0) / oldPrices.length : 0;
         const currentTrend = recentAvg > oldAvg * 1.05 ? 'rising' : 
                            recentAvg < oldAvg * 0.95 ? 'falling' : 'stable';
         
         // Patrones de compra
         const quantities = history.map(item => parseFloat(item.cantidad || '0'));
-        const avgOrderSize = quantities.reduce((a, b) => a + b, 0) / quantities.length;
+        const avgOrderSize = quantities.length > 0 ? quantities.reduce((a, b) => a + b, 0) / quantities.length : 0;
         
         // Frecuencia de compra
         const dates = history.map(item => new Date(item.fecha_emision || '')).sort((a, b) => a.getTime() - b.getTime());
@@ -124,7 +124,7 @@ export default function ProductDetailPage() {
             totalDaysBetween += Math.abs(dates[i].getTime() - dates[i-1].getTime()) / (1000 * 60 * 60 * 24);
         }
         const frequencyDays = dates.length > 1 ? Math.round(totalDaysBetween / (dates.length - 1)) : 0;
-        const lastPurchase = dates[dates.length - 1];
+        const lastPurchase = dates.length > 0 ? dates[dates.length - 1] : null;
         
         // Análisis de performance
         const totalTransactions = history.length;
@@ -140,7 +140,7 @@ export default function ProductDetailPage() {
             alerts.push({ type: 'info', message: 'Tendencia de precios al alza' });
         }
         const daysSinceLastPurchase = lastPurchase ? Math.floor((Date.now() - lastPurchase.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-        if (daysSinceLastPurchase > frequencyDays * 1.5 && frequencyDays > 0) {
+        if (lastPurchase && daysSinceLastPurchase > frequencyDays * 1.5 && frequencyDays > 0) {
             alerts.push({ type: 'warning', message: 'Período inusualmente largo desde última compra' });
         }
         
@@ -223,11 +223,11 @@ export default function ProductDetailPage() {
                                 title="Valor Compra Promedio" 
                                 value={formatCurrency(advancedStats.basicStats.averagePurchaseValue)} 
                                 icon={Euro}
-                                description="En todas las compras"
+                                description="Promedio por transacción"
                             />
                             <StatsCard 
                                 title="Unidades Totales" 
-                                value={`${advancedStats.basicStats.totalQuantity.toLocaleString('es-ES')} ${productInfo.unidad}s`} 
+                                value={`${Math.round(advancedStats.basicStats.totalQuantity).toLocaleString('es-ES')} ${productInfo.unidad ? (productInfo.unidad + 's') : ''}`}
                                 icon={Package}
                                 description={`${productInfo.unidad}s compradas`}
                             />
@@ -476,7 +476,7 @@ export default function ProductDetailPage() {
                                         {history.map((item, index) => {
                                             const currentPrice = parseFloat(item.precio_unitario || '0');
                                             const avgPrice = (advancedStats.priceAnalysis.minPrice + advancedStats.priceAnalysis.maxPrice) / 2;
-                                            const priceVariation = ((currentPrice - avgPrice) / avgPrice * 100);
+                                            const priceVariation = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice * 100) : 0;
                                             
                                             return (
                                                 <TableRow key={item.id}>
