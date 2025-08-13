@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import db from '@/lib/db';
@@ -279,11 +280,20 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     const [providerRows] = await db.query<EntidadPacket[]>(`
-        SELECT *
-        FROM entidades_documento 
-        WHERE (rol = 'proveedor' OR rol = 'emisor') AND nombre IS NOT NULL AND nombre != '' AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
-        GROUP BY nombre, identificador_fiscal, id, rol, direccion, telefono, email, datos_extra
-        ORDER BY nombre ASC
+        WITH RankedProviders AS (
+            SELECT 
+                e.*,
+                ROW_NUMBER() OVER(PARTITION BY e.identificador_fiscal ORDER BY d.fecha_emision DESC) as rn
+            FROM entidades_documento e
+            JOIN documentos d ON e.documento_id = d.id
+            WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') 
+              AND e.nombre IS NOT NULL AND e.nombre != '' 
+              AND e.identificador_fiscal IS NOT NULL AND e.identificador_fiscal != ''
+        )
+        SELECT * 
+        FROM RankedProviders 
+        WHERE rn = 1
+        ORDER BY nombre ASC;
     `);
 
     const providers: DocumentEntity[] = providerRows.map(p => ({
@@ -374,3 +384,4 @@ export async function getProductsByProviderName(fiscalId: string): Promise<Docum
 
     return JSON.parse(JSON.stringify(products));
 }
+
