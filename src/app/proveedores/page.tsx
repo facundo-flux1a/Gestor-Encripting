@@ -4,17 +4,30 @@ import { getUniqueProviders } from "@/services/document-service";
 import { useEffect, useState } from "react";
 import type { DocumentEntity } from "@/lib/types";
 import { ProviderCard } from "@/components/dashboard/provider-card";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 
 export default function ProveedoresPage() {
-  const [providers, setProviders] = useState<DocumentEntity[]>([]);
+  const [allProviders, setAllProviders] = useState<DocumentEntity[]>([]);
+  const [filteredProviders, setFilteredProviders] = useState<DocumentEntity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     getUniqueProviders().then(provs => {
-        setProviders(provs);
+        setAllProviders(provs);
+        setFilteredProviders(provs);
         setIsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    const lowercasedFilter = searchTerm.toLowerCase();
+    const filtered = allProviders.filter(provider =>
+      provider.nombre?.toLowerCase().includes(lowercasedFilter)
+    );
+    setFilteredProviders(filtered);
+  }, [searchTerm, allProviders]);
   
   return (
     <MainLayout>
@@ -29,15 +42,34 @@ export default function ProveedoresPage() {
                 </div>
             </div>
         </MainLayoutHeader>
+        <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+                placeholder="Buscar proveedor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-12 pl-10 text-lg"
+            />
+        </div>
         <div>
             {isLoading ? (
                 <p>Cargando proveedores...</p>
             ) : (
+              filteredProviders.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {providers.map(provider => (
+                    {filteredProviders.map(provider => (
                         <ProviderCard key={provider.identificador_fiscal} provider={provider} />
                     ))}
                 </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                    <Search className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium">No se encontraron proveedores</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                        Prueba con otro término de búsqueda.
+                    </p>
+                </div>
+              )
             )}
         </div>
       </div>
