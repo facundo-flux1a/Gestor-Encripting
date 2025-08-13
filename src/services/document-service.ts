@@ -153,7 +153,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              cantidad: l.cantidad,
              unidad: l.unidad,
              precio_unitario: l.precio_unitario,
-             descuento_porcentaje: l.precio_neto,
+             descuento_porcentaje: l.descuento_porcentaje,
+             precio_neto: l.precio_neto,
              importe_linea: l.importe_linea,
              datos_extra: safeJsonParse(l.datos_extra),
         }));
@@ -244,24 +245,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     try {
         const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
-        const total_iva = iva_details.reduce((sum, item) => sum + item.cuota, 0);
-
-        // Mapear el tipo_documento de vuelta al formato de la BD para el UPDATE
         let dbTipoDocumento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
         switch (tipo_documento) {
-            case 'otro':
-                dbTipoDocumento = 'Otro';
-                break;
-            case 'Factura':
-            case 'Informe':
-            case 'Contrato':
-                dbTipoDocumento = tipo_documento;
-                break;
-            case 'Nomina':
-                dbTipoDocumento = 'Otro';
-                break;
-            default:
-                dbTipoDocumento = 'Otro';
+            case 'otro': dbTipoDocumento = 'Otro'; break;
+            case 'Nomina': dbTipoDocumento = 'Otro'; break; // Assuming Nomina maps to Otro
+            default: dbTipoDocumento = tipo_documento;
         }
 
         const [docResult] = await connection.query<OkPacket>(
@@ -269,9 +257,9 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, incidencia, fecha_vencimiento, moneda, observaciones, id]
         );
 
-        // This is a simplified update. A full implementation would handle additions/deletions.
+        // A more robust update: handle creations, updates. Deletions would need separate logic.
         for (const entidad of entidades) {
-            if(entidad.id) {
+            if (entidad.id) {
                  await connection.query(
                     'UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ? WHERE id = ?',
                     [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, entidad.id]
@@ -284,7 +272,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             }
         }
         for (const linea of lineas) {
-             if(linea.id) {
+             if (linea.id) {
                 await connection.query(
                     'UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ? WHERE id = ?',
                     [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, linea.id]
@@ -297,7 +285,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             }
         }
         for (const iva of iva_details) {
-            if(iva.id) {
+            if (iva.id) {
                 await connection.query(
                     'UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?',
                     [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]
@@ -314,8 +302,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         return docResult;
     } catch (error) {
         await connection.rollback();
+        console.error("Error updating document:", error);
         throw error;
     } finally {
         connection.release();
     }
 }
+
+    
