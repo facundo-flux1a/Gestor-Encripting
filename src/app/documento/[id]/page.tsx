@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -10,7 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save } from 'lucide-react';
+import { Loader2, Edit, X, Save, ExternalLink } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 
 
@@ -128,6 +129,8 @@ export default function DocumentoPage() {
     return notFound();
   }
 
+  const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
+
   return (
     <MainLayout>
       <Form {...form}>
@@ -154,10 +157,20 @@ export default function DocumentoPage() {
                             </Button>
                         </>
                     ) : (
-                        <Button type="button" onClick={() => setIsEditing(true)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                        </Button>
+                        <>
+                         {documentUrl && (
+                            <Button variant="outline" asChild>
+                                <a href={documentUrl} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Ver Documento
+                                </a>
+                            </Button>
+                         )}
+                         <Button type="button" onClick={() => setIsEditing(true)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                         </Button>
+                        </>
                     )}
                     </div>
                 </div>
