@@ -93,16 +93,16 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         if (isEditing) {
             // Solo resetear si los arrays están vacíos o si el documento cambió
             if (entidadFields.length === 0 && doc.entidades?.length > 0) {
-                doc.entidades.forEach(entidad => appendEntidad(entidad));
+                form.reset({ ...form.getValues(), entidades: doc.entidades });
             }
             if (lineaFields.length === 0 && doc.lineas?.length > 0) {
-                doc.lineas.forEach(linea => appendLinea(linea));
+                form.reset({ ...form.getValues(), lineas: doc.lineas });
             }
             if (ivaFields.length === 0 && doc.iva_details?.length > 0) {
-                doc.iva_details.forEach(iva => appendIva(iva));
+                form.reset({ ...form.getValues(), iva_details: doc.iva_details });
             }
         }
-    }, [isEditing, doc.id_documento]); // Dependencia en doc.id_documento para detectar cambio de documento
+    }, [isEditing, doc.id_documento, doc.entidades, doc.lineas, doc.iva_details, form]);
 
     const filteredLineaFields = useMemo(() => {
         if (!lineaSearchTerm) {
@@ -237,8 +237,9 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                     <SelectTrigger><SelectValue placeholder="Tipo de Documento" /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="Factura">Factura</SelectItem>
-                                                        <SelectItem value="Informe">Informe</SelectItem>
+                                                        <SelectItem value="Nomina">Nómina</SelectItem>
                                                         <SelectItem value="Contrato">Contrato</SelectItem>
+                                                        <SelectItem value="Alquiler">Alquiler</SelectItem>
                                                         <SelectItem value="Otro">Otro</SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -497,6 +498,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     <Button
                                         variant="outline"
                                         size="sm"
+                                        type="button"
                                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                         disabled={currentPage === 1}
                                     >
@@ -506,6 +508,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     <Button
                                         variant="outline"
                                         size="sm"
+                                        type="button"
                                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                         disabled={currentPage === totalPages}
                                     >

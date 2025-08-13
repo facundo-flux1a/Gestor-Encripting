@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export const IvaDetailSchema = z.object({
@@ -49,7 +50,7 @@ export type DocumentFile = z.infer<typeof DocumentFileSchema>;
 export type Document = {
   id_documento: number;
   numero_factura: string;
-  tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Nomina' | 'otro';
+  tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
   incidencia: boolean;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -84,7 +85,7 @@ export const DocumentUpdateSchema = z.object({
   base_imponible: z.coerce.number(),
   iva: z.coerce.number(),
   total: z.coerce.number(),
-  tipo_documento: z.enum(['Factura', 'Informe', 'Contrato', 'Otro']),
+  tipo_documento: z.enum(['Factura', 'Nomina', 'Contrato', 'Alquiler', 'Otro']),
   incidencia: z.boolean(),
   fecha_vencimiento: z.string().nullable(),
   moneda: z.string().length(3, "La moneda debe tener 3 caracteres."),

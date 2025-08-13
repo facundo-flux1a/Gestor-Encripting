@@ -7,7 +7,7 @@ import type { RowDataPacket, OkPacket } from 'mysql2';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
-    tipo_documento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
+    tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
     incidencia: number; // MySQL BOOLEAN is 0 or 1
     numero_documento: string;
     fecha_emision: string;
@@ -62,19 +62,12 @@ interface ImpuestoPacket extends RowDataPacket {
 }
 
 // Función para mapear los tipos de documento de la BD al tipo Document
-function mapTipoDocumento(dbTipo: 'Factura' | 'Informe' | 'Contrato' | 'Otro'): 'Factura' | 'Informe' | 'Contrato' | 'Nomina' | 'otro' {
-    switch (dbTipo) {
-        case 'Otro':
-            return 'otro';
-        case 'Factura':
-            return 'Factura';
-        case 'Informe':
-            return 'Informe';
-        case 'Contrato':
-            return 'Contrato';
-        default:
-            return 'otro';
+function mapTipoDocumento(dbTipo: string): 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro' {
+    const allowedTypes: ('Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro')[] = ['Factura', 'Nomina', 'Contrato', 'Alquiler', 'Otro'];
+    if (allowedTypes.includes(dbTipo as any)) {
+        return dbTipo as 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
     }
+    return 'Otro';
 }
 
 // Helper function to safely parse JSON. Ensures the output is an object or null.
@@ -153,7 +146,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              cantidad: l.cantidad,
              unidad: l.unidad,
              precio_unitario: l.precio_unitario,
-             descuento_porcentaje: l.precio_neto,
+             descuento_porcentaje: l.descuento_porcentaje,
+             precio_neto: l.precio_neto,
              importe_linea: l.importe_linea,
              datos_extra: safeJsonParse(l.datos_extra),
         }));
@@ -244,12 +238,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     try {
         const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
-        let dbTipoDocumento: 'Factura' | 'Informe' | 'Contrato' | 'Otro';
-        switch (tipo_documento) {
-            case 'otro': dbTipoDocumento = 'Otro'; break;
-            case 'Nomina': dbTipoDocumento = 'Otro'; break; // Assuming Nomina maps to Otro
-            default: dbTipoDocumento = tipo_documento;
-        }
+        let dbTipoDocumento: string = tipo_documento;
 
         const [docResult] = await connection.query<OkPacket>(
           'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, incidencia = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
@@ -307,5 +296,3 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         connection.release();
     }
 }
-
-    
