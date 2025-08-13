@@ -20,7 +20,8 @@ import {
   Settings,
   PanelLeftClose,
   PanelRightClose,
-  Users
+  Users,
+  LogOut,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -74,10 +75,46 @@ function SidebarToggle() {
 
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
     return (
-        <div className={cn("flex h-14 items-center gap-4 border-b bg-background/60 px-4 backdrop-blur-sm lg:h-auto lg:border-none lg:bg-transparent lg:px-0", className)}>
+        <header className={cn("sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/60 px-4 backdrop-blur-sm sm:h-16 sm:px-6", className)}>
             <SidebarTrigger className="flex md:hidden" />
-            <div className="w-full flex-1">{children}</div>
-        </div>
+            <div className="hidden md:flex">
+                <SidebarToggle />
+            </div>
+            <div className="flex-1">{children}</div>
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Bell className="h-4 w-4" />
+                    <span className="sr-only">Notificaciones</span>
+                </Button>
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                         <Avatar className="h-8 w-8">
+                          <AvatarImage data-ai-hint="profile avatar" src="https://placehold.co/100x100.png" alt="User Avatar" />
+                          <AvatarFallback>JD</AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56" align="end">
+                      <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem>
+                        <UserCircle className="mr-2 h-4 w-4" />
+                        <span>Perfil</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Ajustes</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem>
+                         <LogOut className="mr-2 h-4 w-4" />
+                        <span>Cerrar sesión</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+            </div>
+        </header>
     )
 }
 
@@ -88,9 +125,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <Sidebar collapsible="icon">
         <SidebarHeader className="flex items-center justify-between p-2">
             <AppLogo />
-            <div className="group-data-[collapsible=icon]:hidden">
-                <SidebarToggle />
-            </div>
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
@@ -103,23 +137,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/documents'} tooltip="All Documents">
+              <SidebarMenuButton asChild isActive={pathname.startsWith('/documents')} tooltip="Documentos">
                  <Link href="/documents">
                   <FileText />
-                  All Documents
+                  Documentos
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/incidents'} tooltip="Incidents">
+              <SidebarMenuButton asChild isActive={pathname === '/incidents'} tooltip="Incidencias">
                  <Link href="/incidents">
                   <Bell />
-                  Incidents
+                  Incidencias
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/proveedores'} tooltip="Proveedores">
+              <SidebarMenuButton asChild isActive={pathname.startsWith('/proveedores')} tooltip="Proveedores">
                  <Link href="/proveedores">
                   <Users />
                   Proveedores
@@ -129,36 +163,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-2 p-2 h-auto">
-                 <Avatar className="h-8 w-8">
-                  <AvatarImage data-ai-hint="profile avatar" src="https://placehold.co/100x100.png" alt="User Avatar" />
-                  <AvatarFallback>JD</AvatarFallback>
-                </Avatar>
-                <div className="text-left group-data-[collapsible=icon]:hidden">
-                  <p className="text-sm font-medium">Jane Doe</p>
-                  <p className="text-xs text-muted-foreground">jane.doe@example.com</p>
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 mb-2" side="top" align="start">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <UserCircle className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+           <div className="p-2 group-data-[collapsible=icon]:hidden">
+                <Button variant="outline" className="w-full">
+                    <Settings className="mr-2" />
+                    Ajustes
+                </Button>
+           </div>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
