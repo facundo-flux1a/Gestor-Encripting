@@ -7,10 +7,9 @@ import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { FileText, FileWarning, Euro, Users, Package, MinusCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { TotalsByProviderChart } from "@/components/dashboard/totals-by-provider-chart";
 import { DocumentStatusChart } from "@/components/dashboard/document-status-chart";
-import { TimeSeriesChart } from "@/components/dashboard/time-series-chart"; 
-import { InsightsWidget } from "@/components/dashboard/insights-widget"; 
+import { TimeSeriesChart } from "@/components/dashboard/time-series-chart";
+import { InsightsWidget } from "@/components/dashboard/insights-widget";
 
 // === Helpers ===
 const getQuarter = (date: Date) => {
@@ -70,15 +69,13 @@ const processDashboardData = (documents: any[], providersCount: number, products
   const financialChartData = Object.values(quarterlyData);
   const providerChartData = Object.values(providerExpenses)
     .sort((a, b) => b.total - a.total)
-    .slice(0, 5)
-    .map(p => ({ name: p.name, total: p.total, fiscalId: p.fiscalId }));
+    .slice(0, 5);
 
   const documentStatusChartData = Object.entries(documentTypeCounts)
     .map(([name, value]) => ({ name, value }));
 
   return {
     financialChartData,
-    providerChartData,
     documentStatusChartData,
     totalExpenses,
     totalBaseExpenses,
@@ -87,7 +84,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
     totalProviders: providersCount,
     totalProducts: productsCount,
     variationPercent: 40, // ejemplo estático
-    topProvidersByAmount: providerChartData.slice(0, 3),
+    topProvidersByAmount: providerChartData,
   };
 };
 
@@ -121,7 +118,6 @@ export default function Home() {
 
   const {
     financialChartData,
-    providerChartData,
     documentStatusChartData,
     totalExpenses,
     totalBaseExpenses,
@@ -169,13 +165,10 @@ export default function Home() {
               <DocumentStatusChart data={documentStatusChartData} />
             </div>
             <div className="col-span-1 lg:col-span-full">
-                <TotalsByProviderChart data={providerChartData} />
+                <InsightsWidget variationPercent={variationPercent} topProviders={topProvidersByAmount} />
             </div>
             <div className="col-span-1 lg:col-span-full">
                 <TimeSeriesChart data={financialChartData} />
-            </div>
-            <div className="col-span-1 lg:col-span-full">
-                <InsightsWidget variationPercent={variationPercent} topProviders={topProvidersByAmount} />
             </div>
           </div>
         </div>

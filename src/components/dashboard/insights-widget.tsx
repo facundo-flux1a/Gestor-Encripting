@@ -2,12 +2,13 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Users, BadgePercent } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { TrendingUp, TrendingDown, Users, BadgePercent, ArrowRight, Building } from 'lucide-react';
+import Link from 'next/link';
 
 type ProviderData = {
   name: string;
   total: number;
+  fiscalId: string;
 };
 
 type InsightsWidgetProps = {
@@ -27,7 +28,7 @@ export function InsightsWidget({ variationPercent, topProviders }: InsightsWidge
         <CardTitle>Insights Rápidos</CardTitle>
         <CardDescription>Análisis clave del periodo actual.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-2">
+      <CardContent className="grid gap-8 md:grid-cols-2">
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <BadgePercent className="h-5 w-5" />
@@ -50,17 +51,35 @@ export function InsightsWidget({ variationPercent, topProviders }: InsightsWidge
         <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Top 3 Proveedores por Gasto
+                Top 5 Proveedores por Gasto
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-3">
                 {topProviders.map((provider, index) => (
-                    <div key={index} className="flex justify-between items-center text-sm">
-                       <div className="flex items-center gap-2">
-                         <Badge variant="secondary" className="w-6 h-6 flex items-center justify-center">{index + 1}</Badge>
-                         <span className="font-medium">{provider.name}</span>
-                       </div>
-                        <span className="font-mono font-semibold">{formatCurrency(provider.total)}</span>
-                    </div>
+                    <Link 
+                        key={provider.fiscalId} 
+                        href={`/proveedores/${encodeURIComponent(provider.fiscalId)}`}
+                        className="group"
+                    >
+                        <Card className="transition-all group-hover:border-primary group-hover:shadow-md">
+                            <CardContent className="p-3">
+                                <div className="flex justify-between items-center text-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-muted rounded-md p-2">
+                                           <Building className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold">{provider.name}</p>
+                                            <p className="font-mono text-xs text-muted-foreground">{provider.fiscalId}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-base text-primary">{formatCurrency(provider.total)}</p>
+                                        <p className="text-xs text-muted-foreground">Ver detalles</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
                 ))}
                  {topProviders.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
