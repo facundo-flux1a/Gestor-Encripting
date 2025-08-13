@@ -109,11 +109,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let ingreso = 0;
         let gasto = 0;
         
+        // This logic seems reversed. If there is a provider, it's an expense (gasto) for us.
+        // If there is a client, it's a sale (ingreso) for us.
         if (proveedor) {
              gasto = doc.importe_total;
         } else if (cliente) {
              ingreso = doc.importe_total;
         }
+
 
         const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
             id: tax.id,
@@ -179,7 +182,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             lineas: lineas,
             iva_details: iva_details,
             archivos: archivos,
-            fecha_subida: doc.fecha_emision,
+            fecha_subida: doc.fecha_emision, // Using emision as subida for now
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
             cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
             nombre_archivo: currentFiles.length > 0 ? currentFiles[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
@@ -242,28 +245,27 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, incidencia, fecha_vencimiento, moneda, observaciones, id]
         );
 
-        // Delete existing details to re-insert them, simplifying logic
-        await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
-        await connection.query('DELETE FROM lineas_documento WHERE documento_id = ?', [id]);
-        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
-
+        // Update/Insert logic
         for (const entidad of entidades) {
-            await connection.query(
-                'INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]
-            );
+            if (entidad.id) {
+                await connection.query('UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ?, datos_extra = ? WHERE id = ?', [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra), entidad.id]);
+            } else {
+                await connection.query('INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]);
+            }
         }
         for (const linea of lineas) {
-            await connection.query(
-                'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]
-            );
+            if (linea.id) {
+                await connection.query('UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ?, datos_extra = ? WHERE id = ?', [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra), linea.id]);
+            } else {
+                await connection.query('INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]);
+            }
         }
         for (const iva of iva_details) {
-            await connection.query(
-                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
-                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
-            );
+             if (iva.id) {
+                await connection.query('UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?', [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]);
+            } else {
+                await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]);
+            }
         }
 
         await connection.commit();
@@ -279,9 +281,10 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     const [providerRows] = await db.query<EntidadPacket[]>(`
-        SELECT DISTINCT nombre, identificador_fiscal
+        SELECT id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra
         FROM entidades_documento 
         WHERE (rol = 'proveedor' OR rol = 'emisor') AND nombre IS NOT NULL AND nombre != ''
+        GROUP BY nombre, identificador_fiscal
         ORDER BY nombre ASC
     `);
 
@@ -299,27 +302,63 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     return JSON.parse(JSON.stringify(providers));
 }
 
-export async function getDocumentsByProviderName(providerName: string): Promise<Document[]> {
+// Get by fiscal Id, as name can be repeated or contain special chars
+export async function getDocumentsByProviderName(fiscalId: string): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
         SELECT d.*
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.nombre = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
         ORDER BY d.fecha_emision DESC
-    `, [providerName]);
+    `, [fiscalId]);
 
     return mapDocumentPacketsToDocuments(documentRows);
 }
 
-export async function getProductsByProviderName(providerName: string): Promise<DocumentLine[]> {
+
+export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
+    const [providerRows] = await db.query<EntidadPacket[]>(`
+        SELECT *
+        FROM entidades_documento
+        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
+        LIMIT 1
+    `, [fiscalId]);
+
+    if (providerRows.length === 0) {
+        return null;
+    }
+    const p = providerRows[0];
+    const provider: DocumentEntity = {
+        id: p.id,
+        rol: p.rol,
+        nombre: p.nombre,
+        direccion: p.direccion,
+        identificador_fiscal: p.identificador_fiscal,
+        telefono: p.telefono,
+        email: p.email,
+        datos_extra: safeJsonParse(p.datos_extra),
+    };
+
+    return JSON.parse(JSON.stringify(provider));
+}
+
+
+export async function getProductsByProviderName(fiscalId: string): Promise<DocumentLine[]> {
     const [lineaRows] = await db.query<LineaPacket[]>(`
-        SELECT ld.*, d.fecha_emision
-        FROM lineas_documento ld
-        JOIN documentos d ON ld.documento_id = d.id
-        JOIN entidades_documento ed ON ld.documento_id = ed.documento_id
-        WHERE ed.nombre = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-        ORDER BY d.fecha_emision DESC
-    `, [providerName]);
+        WITH RankedLines AS (
+            SELECT 
+                ld.*, 
+                d.fecha_emision,
+                ROW_NUMBER() OVER(PARTITION BY ld.codigo ORDER BY d.fecha_emision DESC) as rn
+            FROM lineas_documento ld
+            JOIN documentos d ON ld.documento_id = d.id
+            JOIN entidades_documento ed ON ld.documento_id = ed.documento_id
+            WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+              AND ld.codigo IS NOT NULL AND ld.codigo != ''
+        )
+        SELECT * FROM RankedLines WHERE rn = 1
+        ORDER BY descripcion ASC;
+    `, [fiscalId]);
 
     const products: DocumentLine[] = lineaRows.map(l => ({
         id: l.id,

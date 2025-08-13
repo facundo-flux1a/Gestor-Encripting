@@ -1,12 +1,14 @@
 
 'use client';
 
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import type { DocumentLine } from "@/lib/types";
-import { Euro, Calendar } from "lucide-react";
+import { Euro, Calendar, ArrowRight } from "lucide-react";
 
 interface ProductCardProps {
     product: DocumentLine;
+    providerId: string;
 }
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
@@ -44,34 +46,40 @@ const formatDate = (date: string | null | undefined) => {
 }
 
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, providerId }: ProductCardProps) {
     if (!product.descripcion) return null;
+
+    const productUrl = `/proveedores/${encodeURIComponent(providerId)}/${encodeURIComponent(product.codigo || 'null')}`;
     
     return (
-        <Card className="h-full flex flex-col">
-            <CardHeader className="flex-grow pb-2">
-                <CardDescription className="font-mono text-xs">{product.codigo}</CardDescription>
-                <CardTitle className="text-base font-bold leading-tight">
-                    {product.descripcion}
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm text-primary font-semibold border-t pt-3">
-                    <div className="flex items-center gap-2">
-                        <Euro className="h-4 w-4" />
-                        <span>Precio Unitario</span>
+        <Link href={productUrl} className="group">
+            <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">
+                <CardHeader className="flex-grow pb-2">
+                    <CardDescription className="font-mono text-xs">{product.codigo}</CardDescription>
+                    <CardTitle className="text-base font-bold leading-tight">
+                        {product.descripcion}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between text-sm text-primary font-semibold border-t pt-3">
+                        <div className="flex items-center gap-2">
+                            <Euro className="h-4 w-4" />
+                            <span>Precio Unitario</span>
+                        </div>
+                        <span>{formatCurrency(product.precio_unitario)}</span>
                     </div>
-                    <span>{formatCurrency(product.precio_unitario)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                         <span>Última Compra</span>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                             <span>Última Compra</span>
+                        </div>
+                        <span>{formatDate(product.fecha_emision)}</span>
                     </div>
-                    <span>{formatDate(product.fecha_emision)}</span>
-                </div>
-            </CardContent>
-        </Card>
+                    <div className="flex justify-end pt-2">
+                        <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                    </div>
+                </CardContent>
+            </Card>
+        </Link>
     );
 }
-

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -10,10 +11,10 @@ interface ProviderCardProps {
 }
 
 export function ProviderCard({ provider }: ProviderCardProps) {
-    if (!provider.nombre) return null;
+    if (!provider.nombre || !provider.identificador_fiscal) return null;
     
     return (
-        <Link href={`/proveedores/${encodeURIComponent(provider.nombre)}`} className="group">
+        <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal)}`} className="group">
             <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">
                 <CardHeader className="flex-grow">
                     <div className="flex items-start justify-between gap-4">
