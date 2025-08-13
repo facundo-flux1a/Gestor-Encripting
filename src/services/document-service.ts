@@ -77,16 +77,17 @@ function mapTipoDocumento(dbTipo: 'Factura' | 'Informe' | 'Contrato' | 'Otro'): 
     }
 }
 
-// Helper function to safely parse JSON
-const safeJsonParse = (data: any) => {
+// Helper function to safely parse JSON. Ensures the output is an object or null.
+const safeJsonParse = (data: any): object | null => {
     if (typeof data === 'string') {
         try {
-            return JSON.parse(data);
+            const parsed = JSON.parse(data);
+            return typeof parsed === 'object' ? parsed : null;
         } catch (e) {
             return null;
         }
     }
-    return data || null;
+    return (typeof data === 'object' && data !== null) ? data : null;
 };
 
 
@@ -134,6 +135,40 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         
         const total_iva = iva_details.reduce((acc, tax) => acc + tax.cuota, 0);
 
+        const entidades: DocumentEntity[] = entidadRows.map(e => ({
+            id: e.id,
+            rol: e.rol,
+            nombre: e.nombre,
+            direccion: e.direccion,
+            identificador_fiscal: e.identificador_fiscal,
+            telefono: e.telefono,
+            email: e.email,
+            datos_extra: safeJsonParse(e.datos_extra),
+        }));
+
+        const lineas: DocumentLine[] = lineaRows.map(l => ({
+             id: l.id,
+             codigo: l.codigo,
+             descripcion: l.descripcion,
+             cantidad: l.cantidad,
+             unidad: l.unidad,
+             precio_unitario: l.precio_unitario,
+             descuento_porcentaje: l.descuento_porcentaje,
+             precio_neto: l.precio_neto,
+             importe_linea: l.importe_linea,
+             datos_extra: safeJsonParse(l.datos_extra),
+        }));
+        
+        const archivos: DocumentFile[] = fileRows.map(f => ({
+            id: f.id,
+            tipo_archivo: f.tipo_archivo,
+            nombre_archivo: f.nombre_archivo,
+            ruta_archivo: f.ruta_archivo,
+            hash_archivo: f.hash_archivo,
+            fecha_subida: f.fecha_subida,
+        }));
+
+
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
@@ -150,10 +185,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             base_imponible: doc.importe_sin_impuestos,
             iva: total_iva,
             total: doc.importe_total,
-            entidades: entidadRows.map(e => ({...e, datos_extra: safeJsonParse(e.datos_extra) })),
-            lineas: lineaRows.map(l => ({...l, datos_extra: safeJsonParse(l.datos_extra) })),
+            entidades: entidades,
+            lineas: lineas,
             iva_details: iva_details,
-            archivos: fileRows as DocumentFile[],
+            archivos: archivos,
             fecha_subida: doc.fecha_emision,
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
             cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
@@ -162,8 +197,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         };
     }));
     
-    // Ensure plain objects for serialization by converting to JSON and back.
     // This is the definitive fix for the "Only plain objects" error in Next.js.
+    // By re-parsing the stringified data, we remove any class instances or prototypes.
     return JSON.parse(JSON.stringify(documents));
 }
 
@@ -285,3 +320,5 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         connection.release();
     }
 }
+
+    
