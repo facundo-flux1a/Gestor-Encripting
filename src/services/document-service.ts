@@ -77,6 +77,19 @@ function mapTipoDocumento(dbTipo: 'Factura' | 'Informe' | 'Contrato' | 'Otro'): 
     }
 }
 
+// Helper function to safely parse JSON
+const safeJsonParse = (data: any) => {
+    if (typeof data === 'string') {
+        try {
+            return JSON.parse(data);
+        } catch (e) {
+            return null;
+        }
+    }
+    return data || null;
+};
+
+
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     const documents = await Promise.all(documentRows.map(async (doc) => {
         const [fileRows] = await db.query<ArchivoPacket[]>(
@@ -131,14 +144,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_creacion: doc.fecha_creacion,
             moneda: doc.moneda,
             observaciones: doc.observaciones,
-            datos_extra: doc.datos_extra ? (typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra) : null,
+            datos_extra: safeJsonParse(doc.datos_extra),
             ingreso: ingreso,
             gasto: gasto,
             base_imponible: doc.importe_sin_impuestos,
             iva: total_iva,
             total: doc.importe_total,
-            entidades: entidadRows.map(e => ({...e, datos_extra: e.datos_extra ? (typeof e.datos_extra === 'string' ? JSON.parse(e.datos_extra) : e.datos_extra) : null })),
-            lineas: lineaRows.map(l => ({...l, datos_extra: l.datos_extra ? (typeof l.datos_extra === 'string' ? JSON.parse(l.datos_extra) : l.datos_extra) : null })),
+            entidades: entidadRows.map(e => ({...e, datos_extra: safeJsonParse(e.datos_extra) })),
+            lineas: lineaRows.map(l => ({...l, datos_extra: safeJsonParse(l.datos_extra) })),
             iva_details: iva_details,
             archivos: fileRows as DocumentFile[],
             fecha_subida: doc.fecha_emision,
