@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -472,19 +473,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                         <div className="flex items-center gap-4 mt-2 text-sm">
                                                             <Badge variant="secondary">Cant: {currentLinea.cantidad}</Badge>
                                                             <Badge variant="outline" className="text-destructive border-destructive/50">Dto: {currentLinea.descuento_porcentaje || 0}%</Badge>
+                                                            {provider && currentLinea.codigo && (
+                                                                <Button size="sm" variant="link" asChild className="p-0 h-auto">
+                                                                    <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}/${encodeURIComponent(currentLinea.codigo)}`}>
+                                                                        <History className="mr-2 h-4 w-4" />
+                                                                        Ver Historial
+                                                                    </Link>
+                                                                </Button>
+                                                             )}
                                                         </div>
                                                     </div>
                                                     <div className="flex-shrink-0 text-right space-y-2">
                                                          <p className="font-bold text-lg text-primary">{formatCurrency(currentLinea.importe_linea, doc.moneda)}</p>
                                                          <p className="text-sm text-muted-foreground">{formatCurrency(currentLinea.precio_unitario, doc.moneda)} / {currentLinea.unidad}</p>
-                                                         {provider && currentLinea.codigo && (
-                                                            <Button size="sm" variant="outline" asChild>
-                                                                <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}/${encodeURIComponent(currentLinea.codigo)}`}>
-                                                                    <History className="mr-2 h-4 w-4" />
-                                                                    Ver Historial
-                                                                </Link>
-                                                            </Button>
-                                                         )}
                                                     </div>
                                                 </div>
                                             )}
