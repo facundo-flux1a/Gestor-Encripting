@@ -80,7 +80,7 @@ export default function ProductDetailPage() {
     const stats = useMemo(() => {
         if (history.length === 0) {
             return {
-                averagePrice: 0,
+                averagePurchaseValue: 0,
                 totalSpent: 0,
                 totalQuantity: 0,
             };
@@ -88,9 +88,9 @@ export default function ProductDetailPage() {
         
         const totalSpent = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0);
         const totalQuantity = history.reduce((acc, item) => acc + (item.cantidad || 0), 0);
-        const averagePrice = totalQuantity > 0 ? totalSpent / totalQuantity : 0;
+        const averagePurchaseValue = totalSpent / history.length;
         
-        return { averagePrice, totalSpent, totalQuantity };
+        return { averagePurchaseValue, totalSpent, totalQuantity };
 
     }, [history]);
 
@@ -127,9 +127,9 @@ export default function ProductDetailPage() {
                 </MainLayoutHeader>
                 
                 <section className="grid gap-4 md:grid-cols-3">
-                    <StatsCard title="Precio Promedio Ponderado" value={formatCurrency(stats.averagePrice)} icon={Euro} />
+                    <StatsCard title="Valor de Compra Promedio" value={formatCurrency(stats.averagePurchaseValue)} icon={Euro} />
                     <StatsCard title="Total Gastado" value={formatCurrency(stats.totalSpent)} icon={ShoppingCart} />
-                    <StatsCard title="Total Comprado" value={`${stats.totalQuantity.toLocaleString('es-ES')} unidades`} icon={TrendingUp} />
+                    <StatsCard title="Total Unidades Compradas" value={`${stats.totalQuantity.toLocaleString('es-ES')} unidades`} icon={TrendingUp} />
                 </section>
 
                 <section>
