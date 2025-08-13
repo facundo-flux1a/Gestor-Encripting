@@ -78,12 +78,21 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         if (!lineaSearchTerm) {
             return lineaFields.map((field, index) => ({ field, originalIndex: index }));
         }
+        const lowercasedFilter = lineaSearchTerm.toLowerCase();
         return lineaFields
             .map((field, index) => ({ field, originalIndex: index }))
-            .filter(({ field }) =>
-                field.descripcion?.toLowerCase().includes(lineaSearchTerm.toLowerCase()) ||
-                field.codigo?.toLowerCase().includes(lineaSearchTerm.toLowerCase())
-            );
+            .filter(({ field }) => {
+                // Search through all string or number values of the field object
+                return Object.values(field).some(value => {
+                    if (value === null || value === undefined) {
+                        return false;
+                    }
+                    if (typeof value === 'string' || typeof value === 'number') {
+                        return String(value).toLowerCase().includes(lowercasedFilter);
+                    }
+                    return false;
+                });
+            });
     }, [lineaFields, lineaSearchTerm]);
 
     const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false) => {
@@ -623,7 +632,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(formValues.base_imponible, doc.moneda)}
+                                                {formatCurrency(doc.base_imponible, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
@@ -645,7 +654,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(formValues.iva, doc.moneda)}
+                                                {formatCurrency(doc.iva, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
@@ -667,7 +676,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(formValues.total, doc.moneda)}
+                                                {formatCurrency(doc.total, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
