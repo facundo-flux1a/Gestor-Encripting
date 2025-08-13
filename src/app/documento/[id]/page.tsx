@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, X, Save, ExternalLink } from 'lucide-react';
 import { Form } from '@/components/ui/form';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 export default function DocumentoPage() {
@@ -133,53 +134,65 @@ export default function DocumentoPage() {
 
   return (
     <MainLayout>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
-                <MainLayoutHeader>
-                <div className="flex items-center justify-between space-y-2">
-                    <h2 className="text-3xl font-bold tracking-tight">
-                        {isEditing ? 'Editando Documento' : 'Detalles del Documento'}
-                    </h2>
-                    <div className="flex items-center space-x-2">
-                    {isEditing ? (
-                        <>
-                            <Button variant="outline" type="button" onClick={() => {
-                                setIsEditing(false);
-                                resetForm();
-                            }}>
-                                <X className="mr-2 h-4 w-4" />
-                                Cancelar
-                            </Button>
-                             <Button type="submit" disabled={isSaving}>
-                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                Guardar Cambios
-                            </Button>
-                        </>
-                    ) : (
-                        <>
-                         {documentUrl && (
-                            <Button variant="outline" asChild>
-                                <a href={documentUrl} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="mr-2 h-4 w-4" />
-                                Ver Documento
-                                </a>
-                            </Button>
-                         )}
-                         <Button type="button" onClick={() => setIsEditing(true)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
-                         </Button>
-                        </>
-                    )}
+        <TooltipProvider>
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)}>
+                    <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
+                        <MainLayoutHeader>
+                        <div className="flex items-center justify-between space-y-2">
+                            <h2 className="text-3xl font-bold tracking-tight">
+                                {isEditing ? 'Editando Documento' : 'Detalles del Documento'}
+                            </h2>
+                            <div className="flex items-center space-x-2">
+                            {isEditing ? (
+                                <>
+                                    <Button variant="outline" type="button" onClick={() => {
+                                        setIsEditing(false);
+                                        resetForm();
+                                    }}>
+                                        <X className="mr-2 h-4 w-4" />
+                                        Cancelar
+                                    </Button>
+                                    <Button type="submit" disabled={isSaving}>
+                                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                        Guardar Cambios
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                 <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div tabIndex={0}> 
+                                            <Button variant="outline" asChild={!!documentUrl} disabled={!documentUrl}>
+                                                <a href={documentUrl || undefined} target="_blank" rel="noopener noreferrer">
+                                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                                    Ver Documento
+                                                </a>
+                                            </Button>
+                                        </div>
+                                    </TooltipTrigger>
+                                    {!documentUrl && (
+                                        <TooltipContent>
+                                            <p>No hay un archivo adjunto para este documento.</p>
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
+                                
+                                <Button type="button" onClick={() => setIsEditing(true)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Editar
+                                </Button>
+                                </>
+                            )}
+                            </div>
+                        </div>
+                        </MainLayoutHeader>
+                        
+                        <DocumentView doc={doc} isEditing={isEditing} form={form} />
                     </div>
-                </div>
-                </MainLayoutHeader>
-                
-                <DocumentView doc={doc} isEditing={isEditing} form={form} />
-            </div>
-        </form>
-      </Form>
+                </form>
+            </Form>
+      </TooltipProvider>
     </MainLayout>
   );
 }

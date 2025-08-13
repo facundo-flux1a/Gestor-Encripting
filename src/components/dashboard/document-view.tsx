@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/comp
 import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
+import React, { useMemo, useState } from "react";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -71,6 +72,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     });
 
     const formValues = useWatch({ control: form.control });
+    const [lineaSearchTerm, setLineaSearchTerm] = useState('');
+
+    const filteredLineaFields = useMemo(() => {
+        if (!lineaSearchTerm) {
+            return lineaFields.map((field, index) => ({ field, originalIndex: index }));
+        }
+        return lineaFields
+            .map((field, index) => ({ field, originalIndex: index }))
+            .filter(({ field }) =>
+                field.descripcion?.toLowerCase().includes(lineaSearchTerm.toLowerCase()) ||
+                field.codigo?.toLowerCase().includes(lineaSearchTerm.toLowerCase())
+            );
+    }, [lineaFields, lineaSearchTerm]);
 
     const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false) => {
         return (
@@ -235,77 +249,88 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 <FileText className="h-5 w-5" />
                                 <CardTitle>Líneas del Documento</CardTitle>
                            </div>
-                            {isEditing && (
-                                <Button 
-                                    type="button" 
-                                    size="sm" 
-                                    variant="outline" 
-                                    onClick={() => appendLinea({ 
-                                        codigo: '', 
-                                        descripcion: '', 
-                                        cantidad: 1, 
-                                        unidad: 'unidad', 
-                                        precio_unitario: 0, 
-                                        descuento_porcentaje: 0, 
-                                        precio_neto: 0, 
-                                        importe_linea: 0, 
-                                        datos_extra: null 
-                                    })}
-                                >
-                                    <PlusCircle className="mr-2 h-4 w-4" /> Añadir Línea
-                                </Button>
-                            )}
+                           <div className="flex items-center gap-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input 
+                                        placeholder="Buscar líneas..."
+                                        value={lineaSearchTerm}
+                                        onChange={(e) => setLineaSearchTerm(e.target.value)}
+                                        className="h-9 pl-8 w-40 lg:w-56"
+                                    />
+                                </div>
+                                {isEditing && (
+                                    <Button 
+                                        type="button" 
+                                        size="sm" 
+                                        variant="outline" 
+                                        onClick={() => appendLinea({ 
+                                            codigo: '', 
+                                            descripcion: '', 
+                                            cantidad: 1, 
+                                            unidad: 'unidad', 
+                                            precio_unitario: 0, 
+                                            descuento_porcentaje: 0, 
+                                            precio_neto: 0, 
+                                            importe_linea: 0, 
+                                            datos_extra: null 
+                                        })}
+                                    >
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Añadir
+                                    </Button>
+                                )}
+                           </div>
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-4">
-                                {lineaFields.map((linea, index) => {
-                                    const currentLinea = formValues.lineas?.[index] || {};
+                                {filteredLineaFields.map(({ field, originalIndex }) => {
+                                    const currentLinea = formValues.lineas?.[originalIndex] || {};
                                     return (
-                                        <div key={linea.id} className={cn(
+                                        <div key={field.id} className={cn(
                                             "p-4 rounded-lg",
                                             isEditing ? "bg-muted/30 border" : "border-b last:border-b-0"
                                         )}>
                                             {isEditing ? (
                                                 // EDITING VIEW
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => (
+                                                    <FormField control={form.control} name={`lineas.${originalIndex}.descripcion`} render={({field}) => (
                                                         <FormItem className="md:col-span-2">
                                                             <FormLabel>Descripción</FormLabel>
                                                             <FormControl><Textarea {...field} value={field.value || ''} placeholder="Descripción del producto o servicio" /></FormControl>
                                                         </FormItem>
                                                     )} />
-                                                    <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => (
+                                                    <FormField control={form.control} name={`lineas.${originalIndex}.codigo`} render={({field}) => (
                                                         <FormItem>
                                                             <FormLabel>Código</FormLabel>
                                                             <FormControl><Input {...field} value={field.value || ''} placeholder="SKU-123" /></FormControl>
                                                         </FormItem>
                                                     )} />
-                                                    <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => (
+                                                    <FormField control={form.control} name={`lineas.${originalIndex}.cantidad`} render={({field}) => (
                                                         <FormItem>
                                                             <FormLabel>Cantidad</FormLabel>
                                                             <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
                                                         </FormItem>
                                                     )} />
-                                                     <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => (
+                                                     <FormField control={form.control} name={`lineas.${originalIndex}.precio_unitario`} render={({field}) => (
                                                         <FormItem>
                                                             <FormLabel>P. Unitario</FormLabel>
                                                             <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
                                                         </FormItem>
                                                     )} />
-                                                     <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => (
+                                                     <FormField control={form.control} name={`lineas.${originalIndex}.descuento_porcentaje`} render={({field}) => (
                                                         <FormItem>
                                                             <FormLabel>Dto. %</FormLabel>
                                                             <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
                                                         </FormItem>
                                                     )} />
-                                                    <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => (
+                                                    <FormField control={form.control} name={`lineas.${originalIndex}.importe_linea`} render={({field}) => (
                                                         <FormItem>
                                                             <FormLabel>Importe</FormLabel>
                                                             <FormControl><Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="font-bold" /></FormControl>
                                                         </FormItem>
                                                     )} />
                                                     <div className="flex justify-end md:col-span-2">
-                                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(originalIndex)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -330,11 +355,11 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     )
                                 })}
 
-                                {lineaFields.length === 0 && (
+                                {filteredLineaFields.length === 0 && (
                                     <div className="text-center text-muted-foreground py-8">
-                                        <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                                        <h3 className="mt-2 text-sm font-medium">No hay líneas</h3>
-                                        <p className="mt-1 text-sm text-gray-500">No se han encontrado líneas en este documento.</p>
+                                        <Search className="mx-auto h-12 w-12 text-gray-400" />
+                                        <h3 className="mt-2 text-sm font-medium">No se encontraron líneas</h3>
+                                        <p className="mt-1 text-sm text-gray-500">Prueba con otro término de búsqueda.</p>
                                     </div>
                                 )}
                             </div>
