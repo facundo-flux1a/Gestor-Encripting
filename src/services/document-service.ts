@@ -27,6 +27,7 @@ interface ArchivoPacket extends RowDataPacket {
     ruta_archivo: string | null;
     hash_archivo: string | null;
     fecha_subida: string;
+    documento_id: number;
 }
 
 interface EntidadPacket extends RowDataPacket {
@@ -38,6 +39,7 @@ interface EntidadPacket extends RowDataPacket {
     telefono: string | null;
     email: string | null;
     datos_extra: any | null;
+    documento_id: number;
 }
 
 interface LineaPacket extends RowDataPacket {
@@ -61,6 +63,7 @@ interface ImpuestoPacket extends RowDataPacket {
     porcentaje: number;
     base_imponible: number;
     cuota: number;
+    documento_id: number;
 }
 
 // Función para mapear los tipos de documento de la BD al tipo Document
@@ -109,14 +112,11 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let ingreso = 0;
         let gasto = 0;
         
-        // This logic seems reversed. If there is a provider, it's an expense (gasto) for us.
-        // If there is a client, it's a sale (ingreso) for us.
         if (proveedor) {
              gasto = doc.importe_total;
         } else if (cliente) {
              ingreso = doc.importe_total;
         }
-
 
         const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
             id: tax.id,
@@ -182,7 +182,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             lineas: lineas,
             iva_details: iva_details,
             archivos: archivos,
-            fecha_subida: doc.fecha_emision, // Using emision as subida for now
+            fecha_subida: doc.fecha_emision, 
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
             cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
             nombre_archivo: currentFiles.length > 0 ? currentFiles[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
@@ -190,8 +190,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         };
     });
     
-    // This is the definitive fix for the "Only plain objects" error in Next.js.
-    // By re-parsing the stringified data, we remove any class instances or prototypes.
     return JSON.parse(JSON.stringify(documents));
 }
 
@@ -281,10 +279,10 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     const [providerRows] = await db.query<EntidadPacket[]>(`
-        SELECT id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra
+        SELECT *
         FROM entidades_documento 
-        WHERE (rol = 'proveedor' OR rol = 'emisor') AND nombre IS NOT NULL AND nombre != ''
-        GROUP BY nombre, identificador_fiscal
+        WHERE (rol = 'proveedor' OR rol = 'emisor') AND nombre IS NOT NULL AND nombre != '' AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
+        GROUP BY nombre, identificador_fiscal, id, rol, direccion, telefono, email, datos_extra
         ORDER BY nombre ASC
     `);
 
