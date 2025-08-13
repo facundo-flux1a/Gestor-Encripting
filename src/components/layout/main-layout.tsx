@@ -19,7 +19,8 @@ import {
   UserCircle,
   Settings,
   PanelLeftClose,
-  PanelRightClose
+  PanelRightClose,
+  Users
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -107,6 +108,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                  <Link href="/incidents">
                   <Bell />
                   Incidents
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname === '/proveedores'} tooltip="Proveedores">
+                 <Link href="/proveedores">
+                  <Users />
+                  Proveedores
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

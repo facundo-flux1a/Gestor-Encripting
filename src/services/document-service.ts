@@ -296,3 +296,25 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         connection.release();
     }
 }
+
+export async function getUniqueProviders(): Promise<DocumentEntity[]> {
+    const [providerRows] = await db.query<EntidadPacket[]>(`
+        SELECT DISTINCT nombre, identificador_fiscal
+        FROM entidades_documento 
+        WHERE rol = 'proveedor' OR rol = 'emisor'
+        ORDER BY nombre ASC
+    `);
+
+    const providers: DocumentEntity[] = providerRows.map(p => ({
+        id: p.id,
+        rol: p.rol,
+        nombre: p.nombre,
+        direccion: p.direccion,
+        identificador_fiscal: p.identificador_fiscal,
+        telefono: p.telefono,
+        email: p.email,
+        datos_extra: safeJsonParse(p.datos_extra),
+    }));
+
+    return JSON.parse(JSON.stringify(providers));
+}
