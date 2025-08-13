@@ -35,7 +35,7 @@ export default function ProveedoresPage() {
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {providers.map(provider => (
-                        <ProviderCard key={provider.id} provider={provider} />
+                        <ProviderCard key={provider.identificador_fiscal} provider={provider} />
                     ))}
                 </div>
             )}
