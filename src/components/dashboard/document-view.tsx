@@ -7,7 +7,7 @@ import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp } from "lucide-react";
 import { format } from 'date-fns';
-import { type Document, type IvaDetail, type DocumentLine } from "@/lib/types";
+import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -40,7 +40,7 @@ const formatDate = (date: string | null | undefined) => {
 interface DocumentViewProps {
     doc: Document;
     isEditing: boolean;
-    form: UseFormReturn<any>; // Use any to avoid excessive type mapping for now
+    form: UseFormReturn<DocumentUpdatePayload>;
 }
 
 export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
@@ -55,7 +55,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         return (
              <FormField
                 control={form.control}
-                name={fieldName}
+                name={fieldName as keyof DocumentUpdatePayload}
                 render={({ field }) => (
                     <FormItem>
                         <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
@@ -82,13 +82,13 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         return (
              <FormField
                 control={form.control}
-                name={fieldName}
+                name={fieldName as keyof DocumentUpdatePayload}
                 render={({ field }) => (
                     <FormItem>
                         <FormLabel className="text-muted-foreground text-xs">{label}</FormLabel>
                         <FormControl>
                             {isEditing ? (
-                                <Input type="date" {...field} value={field.value ? field.value.split('T')[0] : ''} className="h-8 text-sm"/>
+                                <Input type="date" {...field} value={field.value ? String(field.value).split('T')[0] : ''} className="h-8 text-sm"/>
                             ) : (
                                 <p className="text-sm font-medium">{formatDate(field.value)}</p>
                             )}
@@ -138,7 +138,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 {renderEditableField("numero_factura", "Nº Documento")}
                                 {renderEditableDate("fecha_emision", "Fecha Emisión")}
                                 {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
-                                {renderEditableDate("fecha_creacion", "Fecha Creación")}
+                                {renderEditableField("fecha_creacion", "Fecha Creación")}
                                 {renderEditableField("moneda", "Moneda")}
                                 
                                 <FormField
@@ -196,29 +196,29 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 </TableHeader>
                                 <TableBody>
                                     {lineaFields.map((linea, index) => {
-                                        const currentLinea = doc.lineas[index] || {};
+                                        const currentLinea = formValues.lineas?.[index] || {};
                                         return (
                                         <TableRow key={linea.id}>
                                             <TableCell className="font-mono text-xs w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).codigo || 'N/A'}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.codigo`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : currentLinea.codigo || 'N/A'}
                                             </TableCell>
                                             <TableCell>
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).descripcion}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descripcion`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : currentLinea.descripcion}
                                             </TableCell>
                                             <TableCell className="w-24">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : (linea as DocumentLine).cantidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.cantidad`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8"/>} /> : currentLinea.cantidad}
                                             </TableCell>
                                             <TableCell className="w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : (linea as DocumentLine).unidad}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.unidad`} render={({field}) => <Input {...field} value={field.value || ''} className="h-8"/>} /> : currentLinea.unidad}
                                             </TableCell>
                                             <TableCell className="text-right w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as DocumentLine).precio_unitario, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.precio_unitario`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency(currentLinea.precio_unitario, doc.moneda)}
                                             </TableCell>
                                             <TableCell className="text-right w-20">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${(linea as DocumentLine).descuento_porcentaje || 0}%`}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.descuento_porcentaje`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : `${currentLinea.descuento_porcentaje || 0}%`}
                                             </TableCell>
                                             <TableCell className="text-right font-medium w-28">
-                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency((linea as DocumentLine).importe_linea, doc.moneda)}
+                                                {isEditing ? <FormField control={form.control} name={`lineas.${index}.importe_linea`} render={({field}) => <Input type="number" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 text-right"/>} /> : formatCurrency(currentLinea.importe_linea, doc.moneda)}
                                             </TableCell>
                                             {isEditing && <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button></TableCell>}
                                         </TableRow>
@@ -290,10 +290,10 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-2">
-                                                            <IvaBadge iva={iva as IvaDetail} />
-                                                            <span className="text-sm">{`${(iva as IvaDetail).tipo_impuesto} (${(iva as IvaDetail).porcentaje}%)`}</span>
+                                                            <IvaBadge iva={formValues.iva_details?.[index]} />
+                                                            <span className="text-sm">{`${formValues.iva_details?.[index]?.tipo_impuesto} (${formValues.iva_details?.[index]?.porcentaje}%)`}</span>
                                                         </div>
-                                                        <span className="font-mono text-sm">{formatCurrency((iva as IvaDetail).cuota, doc.moneda)}</span>
+                                                        <span className="font-mono text-sm">{formatCurrency(formValues.iva_details?.[index]?.cuota, doc.moneda)}</span>
                                                     </>
                                                 )}
                                             </div>
@@ -313,7 +313,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(doc.base_imponible, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(formValues.base_imponible, doc.moneda)}</span>
                                         )}
                                     </div>
                                     <div className="flex justify-between font-medium items-center">
@@ -327,7 +327,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(doc.iva, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(formValues.iva, doc.moneda)}</span>
                                         )}
                                     </div>
                                     <div className="flex justify-between font-bold text-primary text-xl border-t pt-3 mt-3 items-center">
@@ -341,7 +341,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 )}
                                             />
                                         ) : (
-                                            <span className="font-mono">{formatCurrency(doc.total, doc.moneda)}</span>
+                                            <span className="font-mono">{formatCurrency(formValues.total, doc.moneda)}</span>
                                         )}
                                     </div>
                                 </div>
