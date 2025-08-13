@@ -37,7 +37,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
   let totalExpenses = 0;
   let totalBaseExpenses = 0;
   let totalIncidents = 0;
-  const providerExpenses: { [key: string]: number } = {};
+  const providerExpenses: { [key: string]: { name: string; total: number; fiscalId: string } } = {};
   const documentTypeCounts: { [key: string]: number } = {};
 
   documents.forEach(doc => {
@@ -58,17 +58,21 @@ const processDashboardData = (documents: any[], providersCount: number, products
       totalBaseExpenses += baseImponible;
 
       (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (Number(iva.cuota) || 0));
-      if (doc.proveedor && doc.proveedor !== 'N/A') {
-        providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + total;
+      if (doc.proveedor && doc.proveedor !== 'N/A' && doc.cif) {
+         if (!providerExpenses[doc.cif]) {
+            providerExpenses[doc.cif] = { name: doc.proveedor, total: 0, fiscalId: doc.cif };
+        }
+        providerExpenses[doc.cif].total += total;
       }
     }
   });
 
   const financialChartData = Object.values(quarterlyData);
-  const providerChartData = Object.entries(providerExpenses)
-    .sort(([, a], [, b]) => b - a)
+  const providerChartData = Object.values(providerExpenses)
+    .sort((a, b) => b.total - a.total)
     .slice(0, 5)
-    .map(([name, total]) => ({ name, total }));
+    .map(p => ({ name: p.name, total: p.total, fiscalId: p.fiscalId }));
+
   const documentStatusChartData = Object.entries(documentTypeCounts)
     .map(([name, value]) => ({ name, value }));
 
@@ -103,7 +107,6 @@ export default function Home() {
           getUniqueProvidersCount(),
           getAllProducts()
         ]);
-
         setDocuments(docs);
         setProvidersCount(provsCount);
         setProductsCount(prodsCount);
