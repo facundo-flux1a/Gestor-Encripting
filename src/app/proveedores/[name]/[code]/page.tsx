@@ -3,14 +3,17 @@
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getProductHistory } from "@/services/document-service";
 import type { DocumentLine } from "@/lib/types";
-import { Loader2, Package, Tag, FileText, Calendar, Link as LinkIcon, Euro } from "lucide-react";
+import { Loader2, Package, Tag, FileText, Calendar, Link as LinkIcon, Euro, ShoppingCart, TrendingUp } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { StatsCard } from "@/components/dashboard/stats-card";
+import { ProductHistoryCharts } from "@/components/dashboard/product-history-charts";
+
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -73,6 +76,23 @@ export default function ProductDetailPage() {
             notFound();
         }
     }, [params]);
+    
+    const stats = useMemo(() => {
+        if (history.length === 0) {
+            return {
+                averagePrice: 0,
+                totalSpent: 0,
+                totalQuantity: 0,
+            };
+        }
+        
+        const totalSpent = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0);
+        const totalQuantity = history.reduce((acc, item) => acc + (item.cantidad || 0), 0);
+        const averagePrice = history.reduce((acc, item) => acc + (item.precio_unitario || 0), 0) / history.length;
+        
+        return { averagePrice, totalSpent, totalQuantity };
+
+    }, [history]);
 
     if (isLoading) {
         return (
@@ -105,11 +125,21 @@ export default function ProductDetailPage() {
                         </div>
                     </div>
                 </MainLayoutHeader>
+                
+                <section className="grid gap-4 md:grid-cols-3">
+                    <StatsCard title="Precio Promedio" value={formatCurrency(stats.averagePrice)} icon={Euro} />
+                    <StatsCard title="Total Gastado" value={formatCurrency(stats.totalSpent)} icon={ShoppingCart} />
+                    <StatsCard title="Total Comprado" value={`${stats.totalQuantity} unidades`} icon={TrendingUp} />
+                </section>
+
+                <section>
+                    <ProductHistoryCharts history={history} />
+                </section>
 
                 <section>
                     <h3 className="text-2xl font-semibold tracking-tight mb-4 flex items-center gap-2">
                         <FileText className="h-6 w-6" />
-                        Historial de Compras
+                        Historial de Compras Detallado
                     </h3>
                     <div className="rounded-lg border">
                         <Table>
