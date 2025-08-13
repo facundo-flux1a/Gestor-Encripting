@@ -2,10 +2,10 @@
 'use client';
 
 import { MainLayout } from "@/components/layout/main-layout";
-import { getDocuments, getUniqueProvidersCount, getAllProducts } from "@/services/document-service";
+import { getDocuments, getUniqueProviders, getAllProducts } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { FileText, FileWarning, Euro, Users, Package } from "lucide-react";
+import { FileText, FileWarning, Euro, Users, Package, MinusCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TotalsByProviderChart } from "@/components/dashboard/totals-by-provider-chart";
 import { DocumentStatusChart } from "@/components/dashboard/document-status-chart";
@@ -35,6 +35,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
 
   let totalSales = 0;
   let totalExpenses = 0;
+  let totalBaseExpenses = 0;
   let totalIncidents = 0;
   const providerExpenses: { [key: string]: number } = {};
   const documentTypeCounts: { [key: string]: number } = {};
@@ -46,20 +47,19 @@ const processDashboardData = (documents: any[], providersCount: number, products
 
     if (doc.incidencia) totalIncidents++;
     documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
-
-    // Correctly differentiate between sales (ingreso) and expenses (gasto)
-    if (doc.ingreso > 0) {
-      quarterlyData[quarter].sales += (doc.base_imponible || 0);
-      totalSales += (doc.base_imponible || 0);
-      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaRepercutido += (iva.cuota || 0));
-    }
-
+    
+    // Gastos
     if (doc.gasto > 0) {
-      quarterlyData[quarter].expenses += (doc.base_imponible || 0);
-      totalExpenses += (doc.total || 0); // Use doc.total for expenses sum as requested
-      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (iva.cuota || 0));
+      const baseImponible = Number(doc.base_imponible) || 0;
+      const total = Number(doc.total) || 0;
+      
+      quarterlyData[quarter].expenses += baseImponible;
+      totalExpenses += total;
+      totalBaseExpenses += baseImponible;
+
+      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (Number(iva.cuota) || 0));
       if (doc.proveedor && doc.proveedor !== 'N/A') {
-        providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + (doc.gasto || 0);
+        providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + total;
       }
     }
   });
@@ -76,8 +76,8 @@ const processDashboardData = (documents: any[], providersCount: number, products
     financialChartData,
     providerChartData,
     documentStatusChartData,
-    totalSales,
     totalExpenses,
+    totalBaseExpenses,
     totalIncidents,
     totalDocuments: documents.length,
     totalProviders: providersCount,
@@ -120,8 +120,8 @@ export default function Home() {
     financialChartData,
     providerChartData,
     documentStatusChartData,
-    totalSales,
     totalExpenses,
+    totalBaseExpenses,
     totalIncidents,
     totalDocuments,
     totalProviders,
@@ -149,8 +149,8 @@ export default function Home() {
         <div className="space-y-4">
           {/* KPIs */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-            <StatsCard title="Ingresos" value={formatCurrency(totalSales)} icon={Euro} description="Periodo actual" />
-            <StatsCard title="Gastos" value={formatCurrency(totalExpenses)} icon={Euro} description="Periodo actual" />
+            <StatsCard title="Gasto Total" value={formatCurrency(totalExpenses)} icon={Euro} description="Periodo actual (con IVA)" />
+            <StatsCard title="Gasto sin Impuestos" value={formatCurrency(totalBaseExpenses)} icon={MinusCircle} description="Periodo actual (sin IVA)" />
             <StatsCard title="Documentos" value={totalDocuments.toString()} icon={FileText} description="Total histórico" />
             <StatsCard title="Proveedores" value={totalProviders.toString()} icon={Users} description="Proveedores únicos" />
             <StatsCard title="Productos" value={totalProducts.toString()} icon={Package} description="Productos únicos" />

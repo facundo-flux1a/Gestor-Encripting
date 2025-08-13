@@ -114,9 +114,9 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         let gasto = 0;
         
         if (proveedor) {
-             gasto = doc.importe_total;
+             gasto = Number(doc.importe_total) || 0;
         } else if (cliente) {
-             ingreso = doc.importe_total;
+             ingreso = Number(doc.importe_total) || 0;
         }
 
         const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
@@ -127,7 +127,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             cuota: tax.cuota,
         }));
         
-        const total_iva = iva_details.reduce((acc, tax) => acc + tax.cuota, 0);
+        const total_iva = iva_details.reduce((acc, tax) => acc + (Number(tax.cuota) || 0), 0);
 
         const entidades: DocumentEntity[] = currentEntidades.map(e => ({
             id: e.id,
@@ -176,9 +176,9 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             datos_extra: safeJsonParse(doc.datos_extra),
             ingreso: ingreso,
             gasto: gasto,
-            base_imponible: doc.importe_sin_impuestos,
+            base_imponible: Number(doc.importe_sin_impuestos) || 0,
             iva: total_iva,
-            total: doc.importe_total,
+            total: Number(doc.importe_total) || 0,
             entidades: entidades,
             lineas: lineas,
             iva_details: iva_details,
