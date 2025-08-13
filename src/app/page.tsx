@@ -47,6 +47,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
     if (doc.incidencia) totalIncidents++;
     documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
 
+    // Correctly differentiate between sales (ingreso) and expenses (gasto)
     if (doc.ingreso > 0) {
       quarterlyData[quarter].sales += (doc.base_imponible || 0);
       totalSales += (doc.base_imponible || 0);
@@ -55,7 +56,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
 
     if (doc.gasto > 0) {
       quarterlyData[quarter].expenses += (doc.base_imponible || 0);
-      totalExpenses += (doc.base_imponible || 0);
+      totalExpenses += (doc.total || 0); // Use doc.total for expenses sum as requested
       (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (iva.cuota || 0));
       if (doc.proveedor && doc.proveedor !== 'N/A') {
         providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + (doc.gasto || 0);
