@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { IvaBadge } from "@/components/dashboard/iva-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search } from "lucide-react";
+import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,8 @@ interface DocumentViewProps {
     form: UseFormReturn<DocumentUpdatePayload>;
 }
 
+const ITEMS_PER_PAGE = 5;
+
 export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({ 
         control: form.control, 
@@ -73,6 +75,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
 
     const formValues = useWatch({ control: form.control });
     const [lineaSearchTerm, setLineaSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
 
     const filteredLineaFields = useMemo(() => {
         if (!lineaSearchTerm) {
@@ -82,7 +85,6 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         return lineaFields
             .map((field, index) => ({ field, originalIndex: index }))
             .filter(({ field }) => {
-                // Search through all string or number values of the field object
                 return Object.values(field).some(value => {
                     if (value === null || value === undefined) {
                         return false;
@@ -94,6 +96,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                 });
             });
     }, [lineaFields, lineaSearchTerm]);
+
+    const totalPages = Math.ceil(filteredLineaFields.length / ITEMS_PER_PAGE);
+
+    const paginatedLineaFields = useMemo(() => {
+        return filteredLineaFields.slice(
+            (currentPage - 1) * ITEMS_PER_PAGE,
+            currentPage * ITEMS_PER_PAGE
+        );
+    }, [filteredLineaFields, currentPage]);
+    
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [lineaSearchTerm]);
 
     const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false) => {
         return (
@@ -292,7 +307,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-4">
-                                {filteredLineaFields.map(({ field, originalIndex }) => {
+                                {paginatedLineaFields.map(({ field, originalIndex }) => {
                                     const currentLinea = formValues.lineas?.[originalIndex] || {};
                                     return (
                                         <div key={field.id} className={cn(
@@ -372,6 +387,31 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </div>
                                 )}
                             </div>
+                             {totalPages > 1 && (
+                                <div className="flex items-center justify-end space-x-2 pt-4">
+                                    <span className="text-sm text-muted-foreground">
+                                        Página {currentPage} de {totalPages}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Anterior
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Siguiente
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
@@ -632,14 +672,14 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(doc.base_imponible, doc.moneda)}
+                                                {formatCurrency(formValues.base_imponible, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
                                     <div className="flex justify-between font-medium items-center">
                                         <span className="text-muted-foreground">Total IVA</span>
                                         {isEditing ? (
-                                            <FormField
+                                             <FormField
                                                 control={form.control}
                                                 name='iva'
                                                 render={({ field }) => (
@@ -647,14 +687,14 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                         type="number" 
                                                         {...field} 
                                                         value={field.value || 0}
-                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
                                                         className="h-8 w-32 text-right font-mono"
                                                     />
                                                 )}
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(doc.iva, doc.moneda)}
+                                                {formatCurrency(formValues.iva, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
@@ -676,7 +716,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             />
                                         ) : (
                                             <span className="font-mono">
-                                                {formatCurrency(doc.total, doc.moneda)}
+                                                {formatCurrency(formValues.total, doc.moneda)}
                                             </span>
                                         )}
                                     </div>
@@ -689,5 +729,3 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 }
-
-    
