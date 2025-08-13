@@ -123,7 +123,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
-            tipo_documento: mapTipoDocumento(doc.tipo_documento), // Aplicar el mapeo aquí
+            tipo_documento: mapTipoDocumento(doc.tipo_documento),
             incidencia: !!doc.incidencia,
             fecha_emision: doc.fecha_emision,
             fecha_vencimiento: doc.fecha_vencimiento,
@@ -148,7 +148,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         };
     }));
     
-    // Ensure plain objects for serialization
+    // Ensure plain objects for serialization by converting to JSON and back.
+    // This is the definitive fix for the "Only plain objects" error in Next.js.
     return JSON.parse(JSON.stringify(documents));
 }
 
@@ -159,8 +160,7 @@ export async function getDocuments(): Promise<Document[]> {
         ORDER BY fecha_emision DESC
     `);
     
-    const documents = await mapDocumentPacketsToDocuments(documentRows);
-    return JSON.parse(JSON.stringify(documents));
+    return mapDocumentPacketsToDocuments(documentRows);
 }
 
 export async function getDocumentById(id: number): Promise<Document | null> {
@@ -175,8 +175,7 @@ export async function getDocumentById(id: number): Promise<Document | null> {
     }
 
     const documents = await mapDocumentPacketsToDocuments(documentRows);
-    const document = documents[0];
-    return JSON.parse(JSON.stringify(document));
+    return documents[0] || null;
 }
 
 export async function getIncidents(): Promise<Document[]> {
@@ -187,8 +186,7 @@ export async function getIncidents(): Promise<Document[]> {
         ORDER BY fecha_emision DESC
     `);
 
-    const documents = await mapDocumentPacketsToDocuments(documentRows);
-    return JSON.parse(JSON.stringify(documents));
+    return mapDocumentPacketsToDocuments(documentRows);
 }
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<OkPacket> {
