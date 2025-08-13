@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -146,7 +147,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                   ))}
                   <TableHead>
                      <div className="flex flex-col gap-2">
-                        <span>Acciones</span>
+                        <span className="sr-only">Acciones</span>
                         <div className="h-8"></div>
                      </div>
                   </TableHead>
@@ -187,7 +188,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                         </div>
                     </TableCell>
                     <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-2">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
