@@ -61,7 +61,7 @@ export default function ProductDetailPage() {
                         notFound();
                         return;
                     }
-
+ 
                     setProductInfo(productInfo);
                     setHistory(history);
 
