@@ -51,6 +51,8 @@ interface LineaPacket extends RowDataPacket {
     precio_neto: number;
     importe_linea: number;
     datos_extra: any | null;
+    documento_id: number;
+    fecha_emision: string; // Joined from documentos table
 }
 
 interface ImpuestoPacket extends RowDataPacket {
@@ -85,29 +87,24 @@ const safeJsonParse = (data: any): object | null => {
 
 
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
-    const documents = await Promise.all(documentRows.map(async (doc) => {
-        const [fileRows] = await db.query<ArchivoPacket[]>(
-            'SELECT id, tipo_archivo, nombre_archivo, ruta_archivo, hash_archivo, fecha_subida FROM archivos_documento WHERE documento_id = ?',
-            [doc.id]
-        );
+    if (!documentRows || documentRows.length === 0) {
+        return [];
+    }
+    const docIds = documentRows.map(doc => doc.id);
+    
+    const [fileRows] = await db.query<ArchivoPacket[]>('SELECT * FROM archivos_documento WHERE documento_id IN (?)', [docIds]);
+    const [entidadRows] = await db.query<EntidadPacket[]>("SELECT * FROM entidades_documento WHERE documento_id IN (?)", [docIds]);
+    const [lineaRows] = await db.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id IN (?)', [docIds]);
+    const [impuestoRows] = await db.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id IN (?)', [docIds]);
+
+    const documents = documentRows.map(doc => {
+        const currentFiles = fileRows.filter(f => f.documento_id === doc.id);
+        const currentEntidades = entidadRows.filter(e => e.documento_id === doc.id);
+        const currentLineas = lineaRows.filter(l => l.documento_id === doc.id);
+        const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
         
-        const [entidadRows] = await db.query<EntidadPacket[]>(
-            "SELECT id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra FROM entidades_documento WHERE documento_id = ?",
-            [doc.id]
-        );
-        
-        const [lineaRows] = await db.query<LineaPacket[]>(
-            'SELECT id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra FROM lineas_documento WHERE documento_id = ?',
-            [doc.id]
-        );
-        
-        const [impuestoRows] = await db.query<ImpuestoPacket[]>(
-            'SELECT id, tipo_impuesto, porcentaje, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
-            [doc.id]
-        );
-        
-        const proveedor = entidadRows.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
-        const cliente = entidadRows.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const proveedor = currentEntidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
+        const cliente = currentEntidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
 
         let ingreso = 0;
         let gasto = 0;
@@ -118,7 +115,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              ingreso = doc.importe_total;
         }
 
-        const iva_details: IvaDetail[] = impuestoRows.map(tax => ({
+        const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
             id: tax.id,
             tipo_impuesto: tax.tipo_impuesto,
             porcentaje: tax.porcentaje,
@@ -128,7 +125,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         
         const total_iva = iva_details.reduce((acc, tax) => acc + tax.cuota, 0);
 
-        const entidades: DocumentEntity[] = entidadRows.map(e => ({
+        const entidades: DocumentEntity[] = currentEntidades.map(e => ({
             id: e.id,
             rol: e.rol,
             nombre: e.nombre,
@@ -139,7 +136,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             datos_extra: safeJsonParse(e.datos_extra),
         }));
 
-        const lineas: DocumentLine[] = lineaRows.map(l => ({
+        const lineas: DocumentLine[] = currentLineas.map(l => ({
              id: l.id,
              codigo: l.codigo,
              descripcion: l.descripcion,
@@ -152,7 +149,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              datos_extra: safeJsonParse(l.datos_extra),
         }));
         
-        const archivos: DocumentFile[] = fileRows.map(f => ({
+        const archivos: DocumentFile[] = currentFiles.map(f => ({
             id: f.id,
             tipo_archivo: f.tipo_archivo,
             nombre_archivo: f.nombre_archivo,
@@ -185,10 +182,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_subida: doc.fecha_emision,
             proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
             cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
-            nombre_archivo: fileRows.length > 0 ? fileRows[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
+            nombre_archivo: currentFiles.length > 0 ? currentFiles[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
             contenido: doc.observaciones ?? "",
         };
-    }));
+    });
     
     // This is the definitive fix for the "Only plain objects" error in Next.js.
     // By re-parsing the stringified data, we remove any class instances or prototypes.
@@ -245,45 +242,28 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, incidencia, fecha_vencimiento, moneda, observaciones, id]
         );
 
-        // A more robust update: handle creations, updates. Deletions would need separate logic.
+        // Delete existing details to re-insert them, simplifying logic
+        await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
+        await connection.query('DELETE FROM lineas_documento WHERE documento_id = ?', [id]);
+        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
+
         for (const entidad of entidades) {
-            if (entidad.id) {
-                 await connection.query(
-                    'UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ? WHERE id = ?',
-                    [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, entidad.id]
-                 );
-            } else {
-                 await connection.query(
-                    'INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email]
-                );
-            }
+            await connection.query(
+                'INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]
+            );
         }
         for (const linea of lineas) {
-             if (linea.id) {
-                await connection.query(
-                    'UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ? WHERE id = ?',
-                    [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, linea.id]
-                );
-            } else {
-                 await connection.query(
-                    'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea]
-                );
-            }
+            await connection.query(
+                'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]
+            );
         }
         for (const iva of iva_details) {
-            if (iva.id) {
-                await connection.query(
-                    'UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?',
-                    [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]
-                );
-            } else {
-                 await connection.query(
-                    'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
-                    [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
-                );
-            }
+            await connection.query(
+                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
+                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
+            );
         }
 
         await connection.commit();
@@ -301,7 +281,7 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT DISTINCT nombre, identificador_fiscal
         FROM entidades_documento 
-        WHERE rol = 'proveedor' OR rol = 'emisor'
+        WHERE (rol = 'proveedor' OR rol = 'emisor') AND nombre IS NOT NULL AND nombre != ''
         ORDER BY nombre ASC
     `);
 
@@ -317,4 +297,43 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     }));
 
     return JSON.parse(JSON.stringify(providers));
+}
+
+export async function getDocumentsByProviderName(providerName: string): Promise<Document[]> {
+    const [documentRows] = await db.query<DocumentPacket[]>(`
+        SELECT d.*
+        FROM documentos d
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        WHERE ed.nombre = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        ORDER BY d.fecha_emision DESC
+    `, [providerName]);
+
+    return mapDocumentPacketsToDocuments(documentRows);
+}
+
+export async function getProductsByProviderName(providerName: string): Promise<DocumentLine[]> {
+    const [lineaRows] = await db.query<LineaPacket[]>(`
+        SELECT ld.*, d.fecha_emision
+        FROM lineas_documento ld
+        JOIN documentos d ON ld.documento_id = d.id
+        JOIN entidades_documento ed ON ld.documento_id = ed.documento_id
+        WHERE ed.nombre = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        ORDER BY d.fecha_emision DESC
+    `, [providerName]);
+
+    const products: DocumentLine[] = lineaRows.map(l => ({
+        id: l.id,
+        codigo: l.codigo,
+        descripcion: l.descripcion,
+        cantidad: l.cantidad,
+        unidad: l.unidad,
+        precio_unitario: l.precio_unitario,
+        descuento_porcentaje: l.descuento_porcentaje,
+        precio_neto: l.precio_neto,
+        importe_linea: l.importe_linea,
+        datos_extra: safeJsonParse(l.datos_extra),
+        fecha_emision: l.fecha_emision, // Add this field
+   }));
+
+    return JSON.parse(JSON.stringify(products));
 }

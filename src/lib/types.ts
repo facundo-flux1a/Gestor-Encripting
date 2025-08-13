@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export const IvaDetailSchema = z.object({
@@ -34,6 +35,7 @@ export const DocumentLineSchema = z.object({
     precio_neto: z.coerce.number(),
     importe_linea: z.coerce.number(),
     datos_extra: z.any().nullable(),
+    fecha_emision: z.string().optional(), // for product listings
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
