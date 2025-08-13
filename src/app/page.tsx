@@ -81,7 +81,7 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
     const documentStatusChartData = Object.entries(documentTypeCounts)
       .map(([name, value]) => ({ name, value }));
 
-    return { 
+    const result = { 
         financialChartData,
         providerChartData,
         documentStatusChartData,
@@ -92,6 +92,10 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
         totalProviders: providersCount,
         totalProducts: productsCount,
     };
+    
+    console.log('--- Processed Dashboard Data ---');
+    console.log(result);
+    return result;
 };
 
 const formatCurrency = (amount: number) => {
@@ -116,6 +120,12 @@ export default function Home() {
                     getUniqueProviders(),
                     getAllProducts()
                 ]);
+
+                console.log('--- Raw Data Fetched for Dashboard ---');
+                console.log('Documents:', docs);
+                console.log('Providers Count:', provsCount);
+                console.log('Products Count:', prodsCount);
+
                 setDocuments(docs);
                 setProvidersCount(provsCount);
                 setProductsCount(prodsCount);
@@ -188,5 +198,3 @@ export default function Home() {
     </MainLayout>
   );
 }
-
-    
