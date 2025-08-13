@@ -88,7 +88,7 @@ export default function ProductDetailPage() {
         
         const totalSpent = history.reduce((acc, item) => acc + (item.importe_linea || 0), 0);
         const totalQuantity = history.reduce((acc, item) => acc + (item.cantidad || 0), 0);
-        const averagePrice = history.reduce((acc, item) => acc + (item.precio_unitario || 0), 0) / history.length;
+        const averagePrice = totalQuantity > 0 ? totalSpent / totalQuantity : 0;
         
         return { averagePrice, totalSpent, totalQuantity };
 
@@ -127,9 +127,9 @@ export default function ProductDetailPage() {
                 </MainLayoutHeader>
                 
                 <section className="grid gap-4 md:grid-cols-3">
-                    <StatsCard title="Precio Promedio" value={formatCurrency(stats.averagePrice)} icon={Euro} />
+                    <StatsCard title="Precio Promedio Ponderado" value={formatCurrency(stats.averagePrice)} icon={Euro} />
                     <StatsCard title="Total Gastado" value={formatCurrency(stats.totalSpent)} icon={ShoppingCart} />
-                    <StatsCard title="Total Comprado" value={`${stats.totalQuantity} unidades`} icon={TrendingUp} />
+                    <StatsCard title="Total Comprado" value={`${stats.totalQuantity.toLocaleString('es-ES')} unidades`} icon={TrendingUp} />
                 </section>
 
                 <section>
