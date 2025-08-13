@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -37,7 +38,7 @@ export function IvaSummary({ data }: { data: ChartData[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resumen de IVA</CardTitle>
+        <CardTitle>Resumen de IVA Trimestral</CardTitle>
       </CardHeader>
       <CardContent className="pl-2">
         <ResponsiveContainer width="100%" height={350}>
@@ -66,3 +67,5 @@ export function IvaSummary({ data }: { data: ChartData[] }) {
     </Card>
   );
 }
+
+    

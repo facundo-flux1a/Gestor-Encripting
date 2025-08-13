@@ -1,13 +1,15 @@
+
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
-import { getDocuments } from "@/services/document-service";
+import { getDocuments, getUniqueProviders, getAllProducts } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
-import { IvaSummary } from "@/components/dashboard/iva-summary";
-import { type Document } from "@/lib/types";
+import { type Document, type DocumentEntity, type DocumentLine } from "@/lib/types";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { FileText, FileWarning, Euro } from "lucide-react";
+import { FileText, FileWarning, Euro, Users, Package } from "lucide-react";
 import { useEffect, useState } from "react";
+import { TotalsByProviderChart } from "@/components/dashboard/totals-by-provider-chart";
+import { DocumentStatusChart } from "@/components/dashboard/document-status-chart";
 
 // Helper to get the quarter from a date
 const getQuarter = (date: Date) => {
@@ -19,7 +21,7 @@ const getQuarter = (date: Date) => {
 };
 
 // Data processing
-const processDataForSummary = (documents: Document[]) => {
+const processDashboardData = (documents: Document[], providers: DocumentEntity[], products: DocumentLine[]) => {
     const quarterlyData: { [key: string]: { name: string, sales: number; expenses: number; ivaRepercutido: number; ivaSoportado: number } } = {
         '1': { name: 'T1', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
         '2': { name: 'T2', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
@@ -30,10 +32,11 @@ const processDataForSummary = (documents: Document[]) => {
     let totalSales = 0;
     let totalExpenses = 0;
     let totalIncidents = 0;
+    const providerExpenses: { [key: string]: number } = {};
+    const documentTypeCounts: { [key: string]: number } = {};
 
     documents.forEach(doc => {
         const date = new Date(doc.fecha_subida);
-        // Validate date before processing
         if (isNaN(date.getTime())) {
             console.warn(`Invalid date for document ${doc.id_documento}: ${doc.fecha_subida}`);
             return;
@@ -45,6 +48,9 @@ const processDataForSummary = (documents: Document[]) => {
             totalIncidents++;
         }
         
+        // Count document types
+        documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
+
         if (doc.ingreso > 0) {
             quarterlyData[quarter].sales += doc.base_imponible;
             totalSales += doc.base_imponible;
@@ -59,12 +65,33 @@ const processDataForSummary = (documents: Document[]) => {
             doc.iva_details.forEach(iva => {
                 quarterlyData[quarter].ivaSoportado += iva.cuota;
             });
+            if (doc.proveedor && doc.proveedor !== 'N/A') {
+                providerExpenses[doc.proveedor] = (providerExpenses[doc.proveedor] || 0) + doc.gasto;
+            }
         }
     });
 
-    const chartData = Object.values(quarterlyData);
+    const financialChartData = Object.values(quarterlyData);
+    
+    const providerChartData = Object.entries(providerExpenses)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5) // Top 5
+        .map(([name, total]) => ({ name, total }));
 
-    return { chartData, totalSales, totalExpenses, totalIncidents, totalDocuments: documents.length };
+    const documentStatusChartData = Object.entries(documentTypeCounts)
+      .map(([name, value]) => ({ name, value }));
+
+    return { 
+        financialChartData,
+        providerChartData,
+        documentStatusChartData,
+        totalSales,
+        totalExpenses,
+        totalIncidents, 
+        totalDocuments: documents.length,
+        totalProviders: providers.length,
+        totalProducts: products.length,
+    };
 };
 
 const formatCurrency = (amount: number) => {
@@ -76,16 +103,42 @@ const formatCurrency = (amount: number) => {
 
 export default function Home() {
     const [documents, setDocuments] = useState<Document[]>([]);
+    const [providers, setProviders] = useState<DocumentEntity[]>([]);
+    const [products, setProducts] = useState<DocumentLine[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        getDocuments().then(docs => {
-            setDocuments(docs);
-            setIsLoading(false);
-        });
+        async function loadData() {
+            setIsLoading(true);
+            try {
+                const [docs, provs, prods] = await Promise.all([
+                    getDocuments(),
+                    getUniqueProviders(),
+                    getAllProducts()
+                ]);
+                setDocuments(docs);
+                setProviders(provs);
+                setProducts(prods);
+            } catch (error) {
+                console.error("Failed to load dashboard data", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadData();
     }, []);
 
-  const { chartData, totalSales, totalExpenses, totalIncidents, totalDocuments } = processDataForSummary(documents);
+  const { 
+      financialChartData,
+      providerChartData,
+      documentStatusChartData,
+      totalSales, 
+      totalExpenses, 
+      totalIncidents, 
+      totalDocuments,
+      totalProviders,
+      totalProducts
+    } = processDashboardData(documents, providers, products);
 
   if (isLoading) {
       return (
@@ -105,28 +158,35 @@ export default function Home() {
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                     <p className="text-muted-foreground">
-                        Resumen financiero trimestral.
+                        Visión general de la actividad de su empresa.
                     </p>
                 </div>
             </div>
         </MainLayoutHeader>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <StatsCard title="Ingresos Totales" value={formatCurrency(totalSales)} icon={Euro} />
-            <StatsCard title="Gastos Totales" value={formatCurrency(totalExpenses)} icon={Euro} />
-            <StatsCard title="Total Documentos" value={totalDocuments.toString()} icon={FileText} />
-            <StatsCard title="Incidencias" value={totalIncidents.toString()} icon={FileWarning} />
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            <StatsCard title="Ingresos" value={formatCurrency(totalSales)} icon={Euro} description="Periodo actual" />
+            <StatsCard title="Gastos" value={formatCurrency(totalExpenses)} icon={Euro} description="Periodo actual" />
+            <StatsCard title="Documentos" value={totalDocuments.toString()} icon={FileText} description="Total histórico" />
+            <StatsCard title="Proveedores" value={totalProviders.toString()} icon={Users} description="Proveedores únicos" />
+            <StatsCard title="Productos" value={totalProducts.toString()} icon={Package} description="Productos únicos" />
+            <StatsCard title="Incidencias" value={totalIncidents.toString()} icon={FileWarning} description="Abiertas actualmente" />
         </div>
         
-        <div className="grid gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-                <FinancialSummary data={chartData} />
+        <div className="grid gap-8 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+                <FinancialSummary data={financialChartData} />
             </div>
-            <div>
-                <IvaSummary data={chartData} />
+            <div className="lg:col-span-2">
+                <DocumentStatusChart data={documentStatusChartData} />
+            </div>
+             <div className="lg:col-span-5">
+                <TotalsByProviderChart data={providerChartData} />
             </div>
         </div>
       </div>
     </MainLayout>
   );
 }
+
+    

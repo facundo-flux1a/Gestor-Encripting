@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import db from '@/lib/db';
@@ -311,6 +310,18 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     return JSON.parse(JSON.stringify(providers));
 }
 
+export async function getAllProducts(): Promise<DocumentLine[]> {
+    const [lineaRows] = await db.query<LineaPacket[]>(`
+        SELECT codigo, descripcion
+        FROM lineas_documento
+        WHERE codigo IS NOT NULL AND codigo != ''
+        GROUP BY codigo, descripcion
+    `);
+    
+    return JSON.parse(JSON.stringify(lineaRows));
+}
+
+
 // Get by fiscal Id, as name can be repeated or contain special chars
 export async function getDocumentsByProviderName(fiscalId: string): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
@@ -361,7 +372,7 @@ export async function getProductsByProviderName(fiscalId: string): Promise<Docum
                 ROW_NUMBER() OVER(PARTITION BY ld.codigo ORDER BY d.fecha_emision DESC) as rn
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
-            JOIN entidades_documento ed ON ld.documento_id = ed.documento_id
+            JOIN entidades_documento ed ON d.id = ed.documento_id
             WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
               AND ld.codigo IS NOT NULL AND ld.codigo != ''
         )
@@ -425,3 +436,5 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
 
     return JSON.parse(JSON.stringify({ productInfo, history }));
 }
+
+    
