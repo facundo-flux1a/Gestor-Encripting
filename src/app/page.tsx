@@ -21,7 +21,7 @@ const getQuarter = (date: Date) => {
 };
 
 // Data processing
-const processDashboardData = (documents: Document[], providers: DocumentEntity[], products: DocumentLine[]) => {
+const processDashboardData = (documents: Document[], providersCount: number, productsCount: number) => {
     const quarterlyData: { [key: string]: { name: string, sales: number; expenses: number; ivaRepercutido: number; ivaSoportado: number } } = {
         '1': { name: 'T1', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
         '2': { name: 'T2', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
@@ -36,9 +36,9 @@ const processDashboardData = (documents: Document[], providers: DocumentEntity[]
     const documentTypeCounts: { [key: string]: number } = {};
 
     documents.forEach(doc => {
-        const date = new Date(doc.fecha_subida);
+        const date = new Date(doc.fecha_emision);
         if (isNaN(date.getTime())) {
-            console.warn(`Invalid date for document ${doc.id_documento}: ${doc.fecha_subida}`);
+            console.warn(`Invalid date for document ${doc.id_documento}: ${doc.fecha_emision}`);
             return;
         }
 
@@ -89,8 +89,8 @@ const processDashboardData = (documents: Document[], providers: DocumentEntity[]
         totalExpenses,
         totalIncidents, 
         totalDocuments: documents.length,
-        totalProviders: providers.length,
-        totalProducts: products.length,
+        totalProviders: providersCount,
+        totalProducts: productsCount,
     };
 };
 
@@ -103,22 +103,22 @@ const formatCurrency = (amount: number) => {
 
 export default function Home() {
     const [documents, setDocuments] = useState<Document[]>([]);
-    const [providers, setProviders] = useState<DocumentEntity[]>([]);
-    const [products, setProducts] = useState<DocumentLine[]>([]);
+    const [providersCount, setProvidersCount] = useState(0);
+    const [productsCount, setProductsCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         async function loadData() {
             setIsLoading(true);
             try {
-                const [docs, provs, prods] = await Promise.all([
+                const [docs, provsCount, prodsCount] = await Promise.all([
                     getDocuments(),
                     getUniqueProviders(),
                     getAllProducts()
                 ]);
                 setDocuments(docs);
-                setProviders(provs);
-                setProducts(prods);
+                setProvidersCount(provsCount);
+                setProductsCount(prodsCount);
             } catch (error) {
                 console.error("Failed to load dashboard data", error);
             } finally {
@@ -138,7 +138,7 @@ export default function Home() {
       totalDocuments,
       totalProviders,
       totalProducts
-    } = processDashboardData(documents, providers, products);
+    } = processDashboardData(documents, providersCount, productsCount);
 
   if (isLoading) {
       return (

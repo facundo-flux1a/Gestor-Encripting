@@ -278,47 +278,25 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
-export async function getUniqueProviders(): Promise<DocumentEntity[]> {
-    const [providerRows] = await db.query<EntidadPacket[]>(`
-        WITH RankedProviders AS (
-            SELECT 
-                e.*,
-                ROW_NUMBER() OVER(PARTITION BY e.identificador_fiscal ORDER BY d.fecha_emision DESC) as rn
-            FROM entidades_documento e
-            JOIN documentos d ON e.documento_id = d.id
-            WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') 
-              AND e.nombre IS NOT NULL AND e.nombre != '' 
-              AND e.identificador_fiscal IS NOT NULL AND e.identificador_fiscal != ''
-        )
-        SELECT * 
-        FROM RankedProviders 
-        WHERE rn = 1
-        ORDER BY nombre ASC;
+export async function getUniqueProviders(): Promise<number> {
+    const [providerRows] = await db.query<RowDataPacket[]>(`
+       SELECT COUNT(DISTINCT identificador_fiscal) as count
+       FROM entidades_documento
+       WHERE (rol = 'proveedor' OR rol = 'emisor')
+         AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
     `);
 
-    const providers: DocumentEntity[] = providerRows.map(p => ({
-        id: p.id,
-        rol: p.rol,
-        nombre: p.nombre,
-        direccion: p.direccion,
-        identificador_fiscal: p.identificador_fiscal,
-        telefono: p.telefono,
-        email: p.email,
-        datos_extra: safeJsonParse(p.datos_extra),
-    }));
-
-    return JSON.parse(JSON.stringify(providers));
+    return providerRows[0].count || 0;
 }
 
-export async function getAllProducts(): Promise<DocumentLine[]> {
-    const [lineaRows] = await db.query<LineaPacket[]>(`
-        SELECT codigo, descripcion
+export async function getAllProducts(): Promise<number> {
+    const [lineaRows] = await db.query<RowDataPacket[]>(`
+        SELECT COUNT(DISTINCT codigo) as count
         FROM lineas_documento
         WHERE codigo IS NOT NULL AND codigo != ''
-        GROUP BY codigo, descripcion
     `);
     
-    return JSON.parse(JSON.stringify(lineaRows));
+    return lineaRows[0].count || 0;
 }
 
 
