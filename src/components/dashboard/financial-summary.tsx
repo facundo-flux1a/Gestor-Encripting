@@ -25,7 +25,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <div className="flex flex-col space-y-1">
             <span className="text-sm text-muted-foreground">{label}</span>
             <span className="font-bold" style={{ color: 'hsl(var(--chart-1))' }}>Ingresos: {formatCurrency(payload[0].value)}</span>
-            <span className="font-bold" style={{ color: 'hsl(var(--chart-3))' }}>Gastos: {formatCurrency(payload[1].value)}</span>
+            <span className="font-bold" style={{ color: 'hsl(var(--chart-2))' }}>Gastos: {formatCurrency(payload[1].value)}</span>
           </div>
         </div>
       </div>
@@ -63,7 +63,7 @@ export function FinancialSummary({ data }: { data: ChartData[] }) {
             <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomTooltip />} />
             <Legend iconType="circle" />
             <Bar dataKey="sales" name="Ventas / Ingresos" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expenses" name="Gastos" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="expenses" name="Gastos" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
