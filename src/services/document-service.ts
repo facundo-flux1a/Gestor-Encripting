@@ -647,15 +647,17 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             };
         }
         
-        const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
+       const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
             SELECT 
-                d.id, d.numero_documento, d.importe_total, d.importe_sin_impuestos,
-                ed.identificador_fiscal as provider_cif,
+                d.id,
+                d.numero_documento,
+                d.importe_total,
+                d.importe_sin_impuestos,
+                (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
                 (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
                 (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
                 (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota
             FROM documentos d
-            LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
             WHERE d.id IN (?)
         `, [docIds]);
 
@@ -706,7 +708,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             if (doc.sum_line_items !== null) {
                 if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
                     calculationErrors++;
-                    const description = `Error de cálculo en el subtotal. La suma de las líneas (${doc.sum_line_items.toFixed(2)}) no coincide con la base imponible del documento (${doc.importe_sin_impuestos.toFixed(2)}).`;
+                    const description = `Error de cálculo en el subtotal. La suma de las líneas (${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento (${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
                     const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el subtotal%']);
                     if (existing.length === 0) {
                         await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
@@ -766,3 +768,4 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
     
 
     
+
