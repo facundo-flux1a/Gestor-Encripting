@@ -11,7 +11,8 @@ import { DocumentStatusChart } from "@/components/dashboard/document-status-char
 import { TimeSeriesChart } from "@/components/dashboard/time-series-chart";
 import { InsightsWidget } from "@/components/dashboard/insights-widget";
 import type { Document } from "@/lib/types";
-import { Loader2 } from "lucide-react";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+
 
 // === Helpers ===
 const getQuarter = (date: Date) => {
@@ -134,13 +135,7 @@ export default function Home() {
   } = processDashboardData(documents, providersCount, productsCount);
 
   if (isLoading) {
-    return (
-      <MainLayout>
-        <div className="flex flex-1 items-center justify-center">
-           <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
