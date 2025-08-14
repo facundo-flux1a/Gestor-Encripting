@@ -2,7 +2,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Users, BadgePercent, ArrowRight, Building } from 'lucide-react';
+import { ShieldAlert, Users, Building } from 'lucide-react';
 import Link from 'next/link';
 
 type ProviderData = {
@@ -12,39 +12,35 @@ type ProviderData = {
 };
 
 type InsightsWidgetProps = {
-  variationPercent: number;
+  incidentRate: number;
   topProviders: ProviderData[];
 };
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
-export function InsightsWidget({ variationPercent, topProviders }: InsightsWidgetProps) {
-  const isPositive = variationPercent >= 0;
+export function InsightsWidget({ incidentRate, topProviders }: InsightsWidgetProps) {
+  const hasIncidents = incidentRate > 0;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Insights Rápidos</CardTitle>
-        <CardDescription>Análisis clave del periodo actual.</CardDescription>
+        <CardDescription>Análisis clave y puntos de atención.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-8 md:grid-cols-2">
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
-            <BadgePercent className="h-5 w-5" />
-            Variación de Gastos
+            <ShieldAlert className="h-5 w-5" />
+            Salud de los Documentos
           </h3>
           <div className="flex items-center gap-4">
-            {isPositive ? (
-              <TrendingUp className="h-10 w-10 text-destructive" />
-            ) : (
-              <TrendingDown className="h-10 w-10 text-green-500" />
-            )}
+             <ShieldAlert className={`h-10 w-10 ${hasIncidents ? 'text-amber-500' : 'text-green-500'}`} />
             <div>
-              <p className={`text-3xl font-bold ${isPositive ? 'text-destructive' : 'text-green-500'}`}>
-                {isPositive ? '+' : ''}{variationPercent}%
+              <p className={`text-3xl font-bold ${hasIncidents ? 'text-amber-500' : 'text-green-500'}`}>
+                {incidentRate.toFixed(1)}%
               </p>
-              <p className="text-sm text-muted-foreground">vs. periodo anterior</p>
+              <p className="text-sm text-muted-foreground">Tasa de incidencias actual</p>
             </div>
           </div>
         </div>

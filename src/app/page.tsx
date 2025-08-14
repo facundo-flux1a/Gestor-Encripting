@@ -74,6 +74,8 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
 
   const documentStatusChartData = Object.entries(documentTypeCounts)
     .map(([name, value]) => ({ name, value }));
+    
+  const incidentRate = documents.length > 0 ? (totalIncidents / documents.length) * 100 : 0;
 
   return {
     financialChartData,
@@ -84,7 +86,7 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
     totalDocuments: documents.length,
     totalProviders: providersCount,
     totalProducts: productsCount,
-    variationPercent: 40, // ejemplo estático
+    incidentRate,
     topProvidersByAmount: providerChartData,
   };
 };
@@ -126,7 +128,7 @@ export default function Home() {
     totalDocuments,
     totalProviders,
     totalProducts,
-    variationPercent,
+    incidentRate,
     topProvidersByAmount
   } = processDashboardData(documents, providersCount, productsCount);
 
@@ -166,7 +168,7 @@ export default function Home() {
               <DocumentStatusChart data={documentStatusChartData} />
             </div>
             <div className="col-span-1 lg:col-span-full">
-                <InsightsWidget variationPercent={variationPercent} topProviders={topProvidersByAmount} />
+                <InsightsWidget incidentRate={incidentRate} topProviders={topProvidersByAmount} />
             </div>
             <div className="col-span-1 lg:col-span-full">
                 <TimeSeriesChart data={financialChartData} />
@@ -177,5 +179,3 @@ export default function Home() {
     </MainLayout>
   );
 }
-
-    
