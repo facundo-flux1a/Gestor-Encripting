@@ -11,6 +11,40 @@ interface ExportButtonProps {
     filename: string;
 }
 
+const isDocumentData = (data: any[]): boolean => {
+    if (data.length === 0) return false;
+    const item = data[0];
+    return 'id_documento' in item && 'numero_factura' in item && 'iva_details' in item;
+}
+
+const flattenDocumentForExport = (doc: any) => {
+    const base = {
+        'Nº Factura': doc.numero_factura,
+        'Fecha Emisión': doc.fecha_emision ? new Date(doc.fecha_emision).toLocaleDateString('es-ES') : '',
+        'Proveedor': doc.proveedor,
+        'CIF': doc.cif,
+        'Tipo Documento': doc.tipo_documento,
+        'Total Base Imponible': doc.base_imponible,
+        'Total IVA': doc.iva,
+        'Total': doc.total,
+        'Moneda': doc.moneda,
+        'Observaciones': doc.observaciones,
+        'Incidencia': doc.incidencia ? 'Sí' : 'No',
+    };
+
+    const ivaPivoted: { [key: string]: number } = {};
+    if (doc.iva_details && Array.isArray(doc.iva_details)) {
+        doc.iva_details.forEach((iva: any) => {
+            const perc = iva.porcentaje;
+            ivaPivoted[`Base IVA ${perc}%`] = iva.base_imponible;
+            ivaPivoted[`Cuota IVA ${perc}%`] = iva.cuota;
+        });
+    }
+
+    return { ...base, ...ivaPivoted };
+};
+
+
 const flattenObject = (obj: any, parentKey = '', res: { [key: string]: any } = {}): { [key: string]: any } => {
     for (let key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -27,9 +61,9 @@ const flattenObject = (obj: any, parentKey = '', res: { [key: string]: any } = {
     return res;
 };
 
-const convertToCsv = (data: any[]): string => {
+const convertToCsv = (data: any[], isDocument: boolean): string => {
     if (data.length === 0) return '';
-    const flattenedData = data.map(row => flattenObject(row));
+    const flattenedData = isDocument ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
     const headers = Object.keys(flattenedData[0]);
     const csvRows = [
         headers.join(','),
@@ -38,8 +72,9 @@ const convertToCsv = (data: any[]): string => {
     return csvRows.join('\n');
 };
 
-const convertToTxt = (data: any[]): string => {
-    return data.map(item => JSON.stringify(flattenObject(item), null, 2)).join('\n\n' + '-'.repeat(80) + '\n\n');
+const convertToTxt = (data: any[], isDocument: boolean): string => {
+    const flattenedData = isDocument ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
+    return flattenedData.map(item => JSON.stringify(item, null, 2)).join('\n\n' + '-'.repeat(80) + '\n\n');
 };
 
 const downloadFile = (content: string, filename: string, mimeType: string) => {
@@ -59,11 +94,11 @@ export function ExportButton({ data, filename }: ExportButtonProps) {
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
         if (!data || data.length === 0) {
             console.warn("No data to export.");
-            // Optionally, show a toast notification to the user.
             return;
         }
 
-        const flattenedData = data.map(row => flattenObject(row));
+        const isDoc = isDocumentData(data);
+        const flattenedData = isDoc ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
 
         switch (format) {
             case 'excel':
@@ -73,11 +108,11 @@ export function ExportButton({ data, filename }: ExportButtonProps) {
                 XLSX.writeFile(workbook, `${filename}.xlsx`);
                 break;
             case 'csv':
-                const csvContent = convertToCsv(data);
+                const csvContent = convertToCsv(data, isDoc);
                 downloadFile(csvContent, `${filename}.csv`, 'text/csv;charset=utf-8;');
                 break;
             case 'txt':
-                const txtContent = convertToTxt(data);
+                const txtContent = convertToTxt(data, isDoc);
                 downloadFile(txtContent, `${filename}.txt`, 'text/plain;charset=utf-8;');
                 break;
         }
