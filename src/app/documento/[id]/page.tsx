@@ -17,6 +17,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ExportButton } from '@/components/dashboard/export-button';
 import { AnalyzeDocumentCard } from '@/components/incidents/analyze-document-card';
 import { DeleteConfirmationDialog } from '@/components/dashboard/delete-confirmation-dialog';
+import { FinancialDetailsCard } from '@/components/dashboard/financial-details-card';
+import { EntityCard } from '@/components/dashboard/entity-card';
 
 
 export default function DocumentoPage() {
@@ -169,6 +171,9 @@ export default function DocumentoPage() {
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
   const exportData = doc ? [doc] : []; // ExportButton expects an array
 
+  const emisor = doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
+  const receptor = doc.entidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+
   return (
     <MainLayout>
         <TooltipProvider>
@@ -235,6 +240,9 @@ export default function DocumentoPage() {
                            </div>
                            <div className="space-y-6">
                                <AnalyzeDocumentCard documentId={doc.id_documento} onAnalysisComplete={onAnalysisComplete} />
+                               {emisor && <EntityCard entity={emisor} title="Emisor / Proveedor" />}
+                               {receptor && <EntityCard entity={receptor} title="Receptor / Cliente" />}
+                               <FinancialDetailsCard doc={doc} isEditing={isEditing} form={form} />
                            </div>
                         </div>
                     </div>
