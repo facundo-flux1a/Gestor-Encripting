@@ -45,7 +45,7 @@ import type { SessionPayload } from '@/lib/types';
 function AppLogo() {
   const { state } = useSidebar();
   return (
-    <h1 className={cn("text-xl font-bold text-primary truncate", state === 'collapsed' && 'sr-only')}>GESTOR DOCUMENTAL</h1>
+    <h1 className={cn("text-lg font-bold text-primary truncate", state === 'collapsed' && 'sr-only')}>GESTOR DOCUMENTAL</h1>
   )
 }
 
