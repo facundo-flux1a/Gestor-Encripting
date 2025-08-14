@@ -17,8 +17,7 @@ import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect, KeyboardEvent } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { FinancialDetailsCard } from "./financial-details-card";
-import { EditableEntityCard } from './editable-entity-card';
+
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -68,19 +67,9 @@ interface DocumentViewProps {
 const ITEMS_PER_PAGE = 5;
 
 export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
-    const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({ 
-        control: form.control, 
-        name: "entidades" 
-    });
-    
-    const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({ 
-        control: form.control, 
-        name: "lineas" 
-    });
-    
-    const { fields: ivaFields, append: appendIva, remove: removeIva } = useFieldArray({ 
-        control: form.control, 
-        name: "iva_details" 
+    const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({
+        control: form.control,
+        name: "lineas"
     });
 
     const formValues = useWatch({ control: form.control });
@@ -93,19 +82,14 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'),
     [doc.entidades]);
 
+
     useEffect(() => {
         if (isEditing) {
-            if (entidadFields.length === 0 && doc.entidades?.length > 0) {
-                form.reset({ ...form.getValues(), entidades: doc.entidades });
-            }
             if (lineaFields.length === 0 && doc.lineas?.length > 0) {
                 form.reset({ ...form.getValues(), lineas: doc.lineas });
             }
-            if (ivaFields.length === 0 && doc.iva_details?.length > 0) {
-                form.reset({ ...form.getValues(), iva_details: doc.iva_details });
-            }
         }
-    }, [isEditing, doc.id_documento, doc.entidades, doc.lineas, doc.iva_details, form]);
+    }, [isEditing, doc.id_documento, doc.lineas, form]);
 
     const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'Enter' && currentLineaSearch.trim() !== '') {
@@ -278,19 +262,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         
                          <FormItem>
                              <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
-                             {doc.verificado ? (
-                                  <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                      <CheckCircle2 className="h-4 w-4" /> Verificado
-                                  </Badge>
-                             ) : (
-                                 <Badge variant="destructive" className="flex items-center gap-2">
+                             {doc.incidencia ? (
+                                <Badge variant="destructive" className="flex items-center gap-2">
                                      <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
                                  </Badge>
+                             ) : (
+                                 <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                      <CheckCircle2 className="h-4 w-4" /> Verificado
+                                  </Badge>
                              )}
                          </FormItem>
                     </div>
 
-                    {!doc.verificado && doc.incidencia_razon && (
+                    {doc.incidencia && doc.incidencia_razon && (
                         <Alert variant="destructive" className="mt-6">
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>Incidencia Detectada</AlertTitle>
@@ -301,26 +285,6 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     )}
                 </CardContent>
             </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {entidadFields.map((field, index) => (
-                    <EditableEntityCard 
-                        key={field.id}
-                        isEditing={isEditing}
-                        form={form}
-                        entityIndex={index}
-                        removeEntity={() => removeEntidad(index)}
-                    />
-                ))}
-            </div>
-
-            {isEditing && (
-                 <Button type="button" variant="outline" size="sm" onClick={() => appendEntidad({ rol: 'Otro', nombre: '', direccion: '', identificador_fiscal: '', telefono: '', email: '', datos_extra: null })}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Añadir Entidad
-                </Button>
-            )}
-
-            <FinancialDetailsCard doc={doc} isEditing={isEditing} form={form} />
 
             {/* Document Lines Card */}
              <Card>

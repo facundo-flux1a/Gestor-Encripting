@@ -17,6 +17,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ExportButton } from '@/components/dashboard/export-button';
 import { AnalyzeDocumentCard } from '@/components/incidents/analyze-document-card';
 import { DeleteConfirmationDialog } from '@/components/dashboard/delete-confirmation-dialog';
+import { EditableEntityCard } from '@/components/dashboard/editable-entity-card';
+import { useFieldArray } from 'react-hook-form';
+import { FinancialDetailsCard } from '@/components/dashboard/financial-details-card';
+import { PlusCircle } from 'lucide-react';
 
 
 export default function DocumentoPage() {
@@ -36,6 +40,11 @@ export default function DocumentoPage() {
       lineas: [],
       iva_details: [],
     }
+  });
+
+  const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({
+      control: form.control,
+      name: "entidades"
   });
 
   const fetchDocument = async (id: number) => {
@@ -75,7 +84,18 @@ export default function DocumentoPage() {
     }
 
     fetchDocument(id);
-  }, [params.id, key, form, toast]);
+  }, [params.id, key]);
+
+  useEffect(() => {
+    if (doc) {
+      form.reset({
+        ...doc,
+        fecha_emision: doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : '',
+        fecha_vencimiento: doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : '',
+        fecha_creacion: doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString().split('T')[0] : '',
+      });
+    }
+  }, [doc, form]);
 
   const onAnalysisComplete = () => {
      // Increment key to trigger re-fetch of document data
@@ -116,14 +136,6 @@ export default function DocumentoPage() {
       await updateDocument(doc.id_documento, payload);
       const updatedDoc = await getDocumentById(doc.id_documento);
       setDoc(updatedDoc);
-      if (updatedDoc) {
-        form.reset({
-          ...updatedDoc,
-          fecha_emision: updatedDoc.fecha_emision ? new Date(updatedDoc.fecha_emision).toISOString().split('T')[0] : '',
-          fecha_vencimiento: updatedDoc.fecha_vencimiento ? new Date(updatedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
-          fecha_creacion: updatedDoc.fecha_creacion ? new Date(updatedDoc.fecha_creacion).toISOString().split('T')[0] : '',
-        });
-      }
       toast({
         title: 'Éxito',
         description: 'Documento actualizado correctamente.',
@@ -236,6 +248,24 @@ export default function DocumentoPage() {
                            </div>
                            <div className="space-y-6">
                                <AnalyzeDocumentCard documentId={doc.id_documento} onAnalysisComplete={onAnalysisComplete} />
+                               
+                               {entidadFields.map((field, index) => (
+                                <EditableEntityCard
+                                    key={field.id}
+                                    isEditing={isEditing}
+                                    form={form}
+                                    entityIndex={index}
+                                    removeEntity={() => removeEntidad(index)}
+                                />
+                               ))}
+
+                                {isEditing && (
+                                    <Button type="button" variant="outline" size="sm" onClick={() => appendEntidad({ rol: 'Otro', nombre: '', direccion: '', identificador_fiscal: '', telefono: '', email: '', datos_extra: null })}>
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Añadir Entidad
+                                    </Button>
+                                )}
+                               
+                               <FinancialDetailsCard doc={doc} isEditing={isEditing} form={form} />
                            </div>
                         </div>
                     </div>
