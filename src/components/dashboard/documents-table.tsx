@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowUpDown, MoreHorizontal } from 'lucide-react';
+import { ArrowUpDown, MoreHorizontal, CheckCircle2, AlertCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type SortConfig = {
-  key: keyof Document | null;
+  key: keyof Document | 'estado' | null;
   direction: 'ascending' | 'descending';
 };
 
@@ -54,7 +54,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setFilters(prev => ({ ...prev, [column]: value }));
   };
 
-  const handleSort = (key: keyof Document) => {
+  const handleSort = (key: keyof Document | 'estado') => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -68,6 +68,10 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     Object.entries(filters).forEach(([key, value]) => {
       if (value) {
         filteredData = filteredData.filter(doc => {
+            if (key === 'estado') {
+                const estado = doc.incidencia ? 'pendiente' : 'verificado';
+                return estado.toLowerCase().includes(value.toLowerCase());
+            }
             const docValue = (doc as any)[key];
             if (typeof docValue === 'string') {
                 return docValue.toLowerCase().includes(value.toLowerCase());
@@ -86,8 +90,16 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
     if (sortConfig.key) {
       filteredData.sort((a, b) => {
-        const aValue = a[sortConfig.key!];
-        const bValue = b[sortConfig.key!];
+        let aValue: any;
+        let bValue: any;
+
+        if (sortConfig.key === 'estado') {
+            aValue = a.incidencia;
+            bValue = b.incidencia;
+        } else {
+            aValue = a[sortConfig.key as keyof Document];
+            bValue = b[sortConfig.key as keyof Document];
+        }
 
         if (aValue === null || aValue === undefined) return 1;
         if (bValue === null || bValue === undefined) return -1;
@@ -105,7 +117,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     return filteredData;
   }, [documents, filters, sortConfig]);
 
-  const columns: { key: keyof Document, label: string }[] = [
+  const columns: { key: keyof Document | 'estado', label: string }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
       { key: 'fecha_subida', label: 'Fecha' },
       { key: 'proveedor', label: 'Proveedor/Cliente' },
@@ -114,6 +126,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
       { key: 'base_imponible', label: 'Base' },
       { key: 'iva_details', label: 'IVA' },
       { key: 'total', label: 'Total' },
+      { key: 'estado', label: 'Estado' }
   ]
 
   return (
@@ -130,25 +143,27 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                       <div className="flex flex-col gap-2">
                         <Button
                           variant="ghost"
-                          onClick={() => handleSort(col.key as keyof Document)}
+                          onClick={() => handleSort(col.key)}
                           className="px-0 hover:bg-transparent -ml-0.5"
                         >
                           {col.label}
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
-                        <Input
-                          placeholder={`Buscar ${col.label}...`}
-                          value={filters[col.key] || ''}
-                          onChange={e => handleFilterChange(col.key, e.target.value)}
-                          className="h-8"
-                        />
+                        {col.key !== 'iva_details' && (
+                            <Input
+                            placeholder={`Buscar ${col.label}...`}
+                            value={filters[col.key] || ''}
+                            onChange={e => handleFilterChange(col.key, e.target.value)}
+                            className="h-8"
+                            />
+                        )}
                       </div>
                     </TableHead>
                   ))}
                   <TableHead>
                      <div className="flex flex-col gap-2">
                         <span className="sr-only">Acciones</span>
-                        <div className="h-8"></div>
+                        <div className="h-20"></div>
                      </div>
                   </TableHead>
                 </TableRow>
@@ -181,6 +196,17 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                         </div>
                     </TableCell>
                     <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
+                    <TableCell>
+                         {doc.incidencia ? (
+                             <Badge variant="destructive" className="flex items-center gap-2">
+                                 <AlertCircle className="h-4 w-4" /> Pendiente
+                             </Badge>
+                         ) : (
+                             <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                 <CheckCircle2 className="h-4 w-4" /> Verificado
+                             </Badge>
+                         )}
+                    </TableCell>
                     <TableCell className="px-2">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -213,3 +239,5 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     </>
   );
 }
+
+    

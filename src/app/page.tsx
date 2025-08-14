@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { DocumentStatusChart } from "@/components/dashboard/document-status-chart";
 import { TimeSeriesChart } from "@/components/dashboard/time-series-chart";
 import { InsightsWidget } from "@/components/dashboard/insights-widget";
+import type { Document } from "@/lib/types";
 
 // === Helpers ===
 const getQuarter = (date: Date) => {
@@ -24,7 +25,7 @@ const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
 // === Procesador de datos ===
-const processDashboardData = (documents: any[], providersCount: number, productsCount: number) => {
+const processDashboardData = (documents: Document[], providersCount: number, productsCount: number) => {
   const quarterlyData = {
     '1': { name: 'T1', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
     '2': { name: 'T2', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
@@ -90,7 +91,7 @@ const processDashboardData = (documents: any[], providersCount: number, products
 
 // === Página principal ===
 export default function Home() {
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [providersCount, setProvidersCount] = useState(0);
   const [productsCount, setProductsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -176,3 +177,5 @@ export default function Home() {
     </MainLayout>
   );
 }
+
+    

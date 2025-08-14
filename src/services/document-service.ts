@@ -9,7 +9,7 @@ import type { ProviderAnalyticsData } from '@/components/dashboard/provider-anal
 interface DocumentPacket extends RowDataPacket {
     id: number;
     tipo_documento: string;
-    incidencia: number; // MySQL BOOLEAN is 0 or 1
+    // incidencia has been removed from this table
     numero_documento: string;
     fecha_emision: string;
     fecha_vencimiento: string | null;
@@ -19,6 +19,9 @@ interface DocumentPacket extends RowDataPacket {
     observaciones: string | null;
     datos_extra: any | null;
     fecha_creacion: string;
+    // New fields from the view
+    total_incidencias?: number;
+    pendientes?: number;
 }
 
 interface ArchivoPacket extends RowDataPacket {
@@ -172,12 +175,16 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_subida: f.fecha_subida,
         }));
 
+        const totalIncidencias = doc.total_incidencias || 0;
+        const pendientes = doc.pendientes || 0;
+        const verificado = totalIncidencias > 0 && pendientes === 0;
 
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
             tipo_documento: mapTipoDocumento(doc.tipo_documento),
-            incidencia: !!doc.incidencia,
+            verificado: verificado,
+            incidencia: pendientes > 0, // Legacy support if needed, but verificado is better
             fecha_emision: doc.fecha_emision,
             fecha_vencimiento: doc.fecha_vencimiento,
             fecha_creacion: doc.fecha_creacion,
@@ -206,9 +213,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
 
 export async function getDocuments(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT *
-        FROM documentos
-        ORDER BY fecha_emision DESC
+        SELECT d.*, v.total_incidencias, v.pendientes
+        FROM documentos d
+        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
+        ORDER BY d.fecha_emision DESC
     `);
     
     return mapDocumentPacketsToDocuments(documentRows);
@@ -216,9 +224,10 @@ export async function getDocuments(): Promise<Document[]> {
 
 export async function getDocumentById(id: number): Promise<Document | null> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT *
-        FROM documentos
-        WHERE id = ?
+        SELECT d.*, v.total_incidencias, v.pendientes
+        FROM documentos d
+        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
+        WHERE d.id = ?
     `, [id]);
 
     if (documentRows.length === 0) {
@@ -231,10 +240,11 @@ export async function getDocumentById(id: number): Promise<Document | null> {
 
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT *
-        FROM documentos
-        WHERE incidencia = 1
-        ORDER BY fecha_emision DESC
+        SELECT d.*, v.total_incidencias, v.pendientes
+        FROM documentos d
+        JOIN v_resumen_incidencias v ON d.id = v.documento_id
+        WHERE v.pendientes > 0
+        ORDER BY d.fecha_emision DESC
     `);
 
     return mapDocumentPacketsToDocuments(documentRows);
@@ -245,13 +255,13 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     await connection.beginTransaction();
 
     try {
-        const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, incidencia, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
+        const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
         let dbTipoDocumento: string = tipo_documento;
 
         const [docResult] = await connection.query<OkPacket>(
-          'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, incidencia = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
-          [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, incidencia, fecha_vencimiento, moneda, observaciones, id]
+          'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
+          [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, fecha_vencimiento, moneda, observaciones, id]
         );
 
         // Update/Insert logic
@@ -377,9 +387,10 @@ export async function getAllProducts(): Promise<number> {
 // Get by fiscal Id, as name can be repeated or contain special chars
 export async function getDocumentsByProviderName(fiscalId: string): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*
+        SELECT d.*, v.total_incidencias, v.pendientes
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
+        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
         WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
         ORDER BY d.fecha_emision DESC
     `, [fiscalId]);
@@ -543,3 +554,5 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
         monthlySpend
     };
 }
+
+    

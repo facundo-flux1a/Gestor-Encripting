@@ -63,7 +63,8 @@ export type Document = {
   id_documento: number;
   numero_factura: string;
   tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
-  incidencia: boolean;
+  verificado: boolean;
+  incidencia: boolean; // Retained for logic but `verificado` is primary
   fecha_emision: string;
   fecha_vencimiento: string | null;
   fecha_creacion: string;
@@ -98,7 +99,6 @@ export const DocumentUpdateSchema = z.object({
   iva: z.coerce.number(),
   total: z.coerce.number(),
   tipo_documento: z.enum(['Factura', 'Nomina', 'Contrato', 'Alquiler', 'Otro']),
-  incidencia: z.boolean(),
   fecha_vencimiento: z.string().nullable(),
   moneda: z.string().length(3, "La moneda debe tener 3 caracteres."),
   observaciones: z.string().nullable(),
@@ -108,3 +108,5 @@ export const DocumentUpdateSchema = z.object({
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;
+
+    

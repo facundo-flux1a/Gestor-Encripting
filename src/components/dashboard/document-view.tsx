@@ -280,42 +280,20 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 
                                 {renderEditableField("moneda", "Moneda")}
                                 
-                                <FormField
-                                    control={form.control}
-                                    name="incidencia"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
-                                            <FormControl>
-                                                {isEditing ? (
-                                                    <div className="flex items-center space-x-2 pt-2">
-                                                        <Checkbox 
-                                                            checked={field.value ?? doc.incidencia} 
-                                                            onCheckedChange={field.onChange} 
-                                                            id="incidencia-check"
-                                                        />
-                                                        <label 
-                                                            htmlFor="incidencia-check" 
-                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                                        >
-                                                            Con Incidencia
-                                                        </label>
-                                                    </div>
-                                                ) : (
-                                                    (field.value ?? doc.incidencia) ? (
-                                                        <Badge variant="destructive" className="flex items-center gap-2">
-                                                            <AlertCircle className="h-4 w-4" /> Con Incidencia
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="secondary" className="flex items-center gap-2">
-                                                            <CheckCircle2 className="h-4 w-4" /> Verificado
-                                                        </Badge>
-                                                    )
-                                                )}
-                                            </FormControl>
-                                        </FormItem>
-                                    )}
-                                />
+                                 <FormItem>
+                                     <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
+                                     <FormControl>
+                                         {doc.incidencia ? (
+                                             <Badge variant="destructive" className="flex items-center gap-2">
+                                                 <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
+                                             </Badge>
+                                         ) : (
+                                             <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                                 <CheckCircle2 className="h-4 w-4" /> Verificado
+                                             </Badge>
+                                         )}
+                                     </FormControl>
+                                 </FormItem>
                             </div>
                         </CardContent>
                     </Card>
@@ -849,3 +827,5 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 } 
+
+    
