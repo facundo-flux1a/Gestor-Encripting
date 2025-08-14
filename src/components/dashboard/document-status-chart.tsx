@@ -9,7 +9,7 @@ type ChartData = {
   value: number;
 };
 
-const COLORS = ['hsl(var(--primary))', 'hsl(var(--vat-10))', 'hsl(var(--vat-4))', 'hsl(var(--vat-21))', 'hsl(var(--vat-other))'];
+const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export function DocumentStatusChart({ data }: { data: ChartData[] }) {
   return (
@@ -43,5 +43,3 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
     </Card>
   );
 }
-
-    
