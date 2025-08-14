@@ -104,6 +104,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
       filteredData = filteredData.filter(doc => {
         return (
             doc.numero_factura?.toLowerCase().includes(lowercasedFilter) ||
+            doc.tipo_documento?.toLowerCase().includes(lowercasedFilter) ||
             doc.proveedor?.toLowerCase().includes(lowercasedFilter) ||
             doc.cif?.toLowerCase().includes(lowercasedFilter) ||
             doc.observaciones?.toLowerCase().includes(lowercasedFilter)
@@ -163,6 +164,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
   const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean, incidentOnly?: boolean }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
+      { key: 'tipo_documento', label: 'Tipo' },
       { key: 'fecha_emision', label: 'Fecha' },
       { key: 'proveedor', label: 'Proveedor/Cliente' },
       { key: 'concepto', label: 'Concepto' },
@@ -261,6 +263,9 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     {filteredAndSortedDocuments.map((doc) => (
                       <TableRow key={doc.id_documento}>
                         <TableCell className="font-medium">{doc.numero_factura}</TableCell>
+                         <TableCell>
+                          <Badge variant="outline">{doc.tipo_documento}</Badge>
+                        </TableCell>
                         <TableCell>{new Date(doc.fecha_emision).toLocaleDateString('es-ES', { timeZone: 'UTC' })}</TableCell>
                         <TableCell>
                           <Tooltip>
@@ -307,15 +312,20 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                         </TableCell>
                         <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
                         <TableCell>
-                             {doc.verificado ? (
-                                 <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                     <CheckCircle2 className="h-4 w-4" /> Verificado
-                                 </Badge>
-                             ) : (
-                                 <Badge variant="destructive" className="flex items-center gap-2">
-                                     <AlertCircle className="h-4 w-4" /> Pendiente
-                                 </Badge>
-                             )}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex justify-center">
+                                        {doc.incidencia ? (
+                                            <AlertCircle className="h-5 w-5 text-destructive" />
+                                        ) : (
+                                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                        )}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{doc.incidencia ? 'Pendiente de Revisión' : 'Verificado'}</p>
+                                </TooltipContent>
+                            </Tooltip>
                         </TableCell>
                         <TableCell className="px-2">
                           <DropdownMenu>
