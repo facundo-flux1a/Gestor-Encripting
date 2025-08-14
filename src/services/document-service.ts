@@ -7,7 +7,7 @@ import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, Docume
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
-import type { IncidentAnalysisResult } from '@/ai/flows/analyze-incidents';
+import type { IncidentAnalysisResult } from '@/lib/types';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -198,7 +198,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             numero_factura: doc.numero_documento,
             tipo_documento: mapTipoDocumento(doc.tipo_documento),
             verificado: verificado,
-            incidencia: pendientes > 0, // Legacy support if needed, but verificado is better
+            incidencia: pendientes > 0,
             incidencia_razon: primeraIncidenciaPendiente?.descripcion ?? null,
             fecha_emision: doc.fecha_emision,
             fecha_vencimiento: doc.fecha_vencimiento,
@@ -576,7 +576,6 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
             SUM(CASE WHEN validado = 0 THEN 1 ELSE 0 END) as totalOpen,
             SUM(CASE WHEN validado = 1 THEN 1 ELSE 0 END) as totalValidated
         FROM incidencias_documento
-        WHERE incidencia = 1
     `);
 
     const [byProvider] = await db.query<RowDataPacket[]>(`
@@ -592,14 +591,14 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
     const [byType] = await db.query<RowDataPacket[]>(`
         SELECT 
             CASE 
-                WHEN LOCATE('duplicado', descripcion) > 0 THEN 'Duplicado'
-                WHEN LOCATE('cálculo', descripcion) > 0 THEN 'Error de Cálculo'
+                WHEN descripcion LIKE '%duplicado%' THEN 'Duplicado'
+                WHEN descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
                 ELSE 'Otro'
-            END as type,
+            END as name,
             COUNT(id) as count
         FROM incidencias_documento
         WHERE validado = 0
-        GROUP BY type
+        GROUP BY name
         ORDER BY count DESC;
     `);
     
@@ -607,8 +606,8 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
         totalOpen: summary[0].totalOpen || 0,
         totalValidated: summary[0].totalValidated || 0,
         byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
-        byType: byType.map(t => ({ name: t.type, count: t.count })),
-    }
+        byType: byType.map(t => ({ name: t.name, count: t.count })),
+    };
 }
 
 
@@ -622,7 +621,7 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
 
     try {
         const [allDocs] = await connection.query<DocumentPacket[]>(`
-             SELECT d.*, ed.nombre as provider_name, ed.identificador_fiscal as provider_cif
+             SELECT d.id, d.numero_documento, d.importe_total, ed.identificador_fiscal as provider_cif
              FROM documentos d
              LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
         `);
