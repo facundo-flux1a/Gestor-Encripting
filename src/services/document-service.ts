@@ -436,7 +436,7 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
     const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT *
         FROM entidades_documento
-        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR ed.rol = 'emisor')
+        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
         LIMIT 1
     `, [fiscalId]);
 
@@ -653,6 +653,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 d.id, d.numero_documento, d.importe_total, d.importe_sin_impuestos,
                 ed.identificador_fiscal as provider_cif,
                 (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
+                (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
                 (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota
             FROM documentos d
             LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
@@ -702,14 +703,30 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
         // Check for calculation errors
         for (const doc of validDocsForAnalysis) {
-            if (doc.sum_cuota !== null) { // Only check if there are taxes
+            
+            // Check 1: Sum of line items vs Base Amount
+            if (doc.sum_line_items !== null) {
+                if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
+                    calculationErrors++;
+                    const description = `Error de cálculo en el subtotal. La suma de las líneas (${doc.sum_line_items.toFixed(2)}) no coincide con la base imponible del documento (${doc.importe_sin_impuestos.toFixed(2)}).`;
+                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el subtotal%']);
+                    if (existing.length === 0) {
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        newIncidentsFound++;
+                    }
+                }
+            }
+
+
+            // Check 2: Base Amount + Taxes vs Total Amount
+            if (doc.sum_cuota !== null) { 
                  const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
                 if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
                     calculationErrors++;
-                    const description = `Error de cálculo detectado. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
-                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [id, 'Error de cálculo%']);
+                    const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el total%']);
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
                         newIncidentsFound++;
                     }
                 }
@@ -745,5 +762,7 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
     return analyzeDocuments([documentId]);
 }
 
+
+    
 
     
