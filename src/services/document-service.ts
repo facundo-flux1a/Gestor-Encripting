@@ -281,27 +281,22 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, fecha_vencimiento, moneda, observaciones, id]
         );
 
-        // Update/Insert logic
+        // This is a forced update, so we can delete existing related data and re-insert.
+        // It's simpler than trying to figure out what was added/removed/updated.
+        await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
+        await connection.query('DELETE FROM lineas_documento WHERE documento_id = ?', [id]);
+        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
+
+
+        // Re-insert all details from the payload
         for (const entidad of entidades) {
-            if (entidad.id) {
-                await connection.query('UPDATE entidades_documento SET rol = ?, nombre = ?, direccion = ?, identificador_fiscal = ?, telefono = ?, email = ?, datos_extra = ? WHERE id = ?', [entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra), entidad.id]);
-            } else {
-                await connection.query('INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]);
-            }
+            await connection.query('INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]);
         }
         for (const linea of lineas) {
-            if (linea.id) {
-                await connection.query('UPDATE lineas_documento SET codigo = ?, descripcion = ?, cantidad = ?, unidad = ?, precio_unitario = ?, descuento_porcentaje = ?, precio_neto = ?, importe_linea = ?, datos_extra = ? WHERE id = ?', [linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra), linea.id]);
-            } else {
-                await connection.query('INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]);
-            }
+             await connection.query('INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]);
         }
         for (const iva of iva_details) {
-             if (iva.id) {
-                await connection.query('UPDATE impuestos_documento SET tipo_impuesto = ?, porcentaje = ?, base_imponible = ?, cuota = ? WHERE id = ?', [iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.id]);
-            } else {
-                await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]);
-            }
+            await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]);
         }
 
         await connection.commit();
@@ -709,9 +704,9 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
                     calculationErrors++;
                     const description = `Error de cálculo detectado. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
-                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo%']);
+                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [id, 'Error de cálculo%']);
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
                         newIncidentsFound++;
                     }
                 }

@@ -35,17 +35,22 @@ export default function DocumentoPage() {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: {
-      entidades: [],
-      lineas: [],
-      iva_details: [],
-    }
+    defaultValues: {}
   });
 
   const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({
       control: form.control,
       name: "entidades"
   });
+
+  const resetFormWithDocData = (docData: Document) => {
+    form.reset({
+        ...docData,
+        fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
+        fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
+        fecha_creacion: docData.fecha_creacion ? new Date(docData.fecha_creacion).toISOString().split('T')[0] : '',
+    });
+  }
 
   const fetchDocument = async (id: number) => {
     try {
@@ -55,12 +60,7 @@ export default function DocumentoPage() {
         notFound();
       } else {
         setDoc(fetchedDoc);
-         form.reset({
-          ...fetchedDoc,
-          fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
-          fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
-          fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
-        });
+        resetFormWithDocData(fetchedDoc);
       }
     } catch (error) {
       console.error("Failed to fetch document", error);
@@ -86,16 +86,6 @@ export default function DocumentoPage() {
     fetchDocument(id);
   }, [params.id, key]);
 
-  useEffect(() => {
-    if (doc) {
-      form.reset({
-        ...doc,
-        fecha_emision: doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : '',
-        fecha_vencimiento: doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : '',
-        fecha_creacion: doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString().split('T')[0] : '',
-      });
-    }
-  }, [doc, form]);
 
   const onAnalysisComplete = () => {
      // Increment key to trigger re-fetch of document data
@@ -126,21 +116,18 @@ export default function DocumentoPage() {
     if (!doc) return;
     setIsSaving(true);
     try {
-      const mainEntity = data.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor' || e.rol === 'cliente' || e.rol === 'receptor');
-      const payload = {
-        ...data,
-        proveedor: mainEntity?.nombre || '',
-        cif: mainEntity?.identificador_fiscal || ''
-      };
+      const payload = { ...data };
 
       await updateDocument(doc.id_documento, payload);
-      const updatedDoc = await getDocumentById(doc.id_documento);
-      setDoc(updatedDoc);
+      
       toast({
         title: 'Éxito',
         description: 'Documento actualizado correctamente.',
       });
       setIsEditing(false);
+      // Re-fetch the document to show the latest data
+      setKey(prevKey => prevKey + 1);
+
     } catch (error) {
       console.error(error);
       toast({
@@ -155,12 +142,7 @@ export default function DocumentoPage() {
   
   const resetForm = () => {
       if (!doc) return;
-      form.reset({
-        ...doc,
-        fecha_emision: doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : '',
-        fecha_vencimiento: doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : '',
-        fecha_creacion: doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString().split('T')[0] : '',
-    });
+      resetFormWithDocData(doc);
   }
 
 
