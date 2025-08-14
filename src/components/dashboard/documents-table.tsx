@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -38,9 +39,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { type DateRange } from 'react-day-picker';
 import { addDays, format } from 'date-fns';
 import { Input } from '@/components/ui/input';
+import { usePathname } from 'next/navigation';
 
 type SortConfig = {
-  key: keyof Document | 'estado' | 'concepto' | 'impuestos' | null;
+  key: keyof Document | 'estado' | 'concepto' | 'impuestos' | 'incidencia_razon' | null;
   direction: 'ascending' | 'descending';
 };
 
@@ -61,6 +63,9 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_emision', direction: 'descending' });
+
+  const pathname = usePathname();
+  const isIncidentsPage = pathname === '/incidents';
 
   const handleSummarizeClick = (doc: Document) => {
     setSelectedDoc(doc);
@@ -130,6 +135,9 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
         } else if (sortConfig.key === 'impuestos') {
              aValue = a.iva;
              bValue = b.iva;
+        } else if (sortConfig.key === 'incidencia_razon') {
+            aValue = a.incidencia_razon;
+            bValue = b.incidencia_razon;
         } else {
             aValue = a[sortConfig.key as keyof Document];
             bValue = b[sortConfig.key as keyof Document];
@@ -151,16 +159,19 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     return filteredData;
   }, [documents, globalFilter, statusFilter, sortConfig, dateRange]);
 
-  const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean }[] = [
+  const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean, incidentOnly?: boolean }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
       { key: 'fecha_emision', label: 'Fecha' },
       { key: 'proveedor', label: 'Proveedor/Cliente' },
       { key: 'concepto', label: 'Concepto' },
+      { key: 'incidencia_razon', label: 'Razón Incidencia', incidentOnly: true },
       { key: 'base_imponible', label: 'Base', isNumeric: true },
       { key: 'impuestos', label: 'Impuestos', isNumeric: true },
       { key: 'total', label: 'Total', isNumeric: true },
       { key: 'estado', label: 'Estado' }
-  ]
+  ];
+
+  const visibleColumns = columns.filter(col => !col.incidentOnly || isIncidentsPage);
 
   const isFiltered = globalFilter || statusFilter || dateRange;
 
@@ -226,7 +237,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {columns.map(col => (
+                      {visibleColumns.map(col => (
                         <TableHead key={col.key} className={col.isNumeric ? 'text-right' : ''}>
                            <Button
                               variant="ghost"
@@ -269,6 +280,18 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                                 </TooltipContent>
                             </Tooltip>
                         </TableCell>
+                        {isIncidentsPage && (
+                             <TableCell>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                    <span className="truncate max-w-[250px] block text-destructive/80">{doc.incidencia_razon || 'N/A'}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                    <p className="max-w-xs">{doc.incidencia_razon}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TableCell>
+                        )}
                         <TableCell className="text-right">
                            {formatCurrency(doc.base_imponible)}
                         </TableCell>

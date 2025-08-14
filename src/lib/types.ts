@@ -65,6 +65,7 @@ export type Document = {
   tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
   verificado: boolean;
   incidencia: boolean; // Retained for logic but `verificado` is primary
+  incidencia_razon?: string | null;
   fecha_emision: string;
   fecha_vencimiento: string | null;
   fecha_creacion: string;

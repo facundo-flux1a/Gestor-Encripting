@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import db from '@/lib/db';
@@ -81,6 +82,13 @@ interface ProviderStatsPacket extends RowDataPacket {
     uniqueProducts: number;
 }
 
+interface IncidenciaPacket extends RowDataPacket {
+    id: number;
+    documento_id: number;
+    descripcion: string | null;
+    validado: boolean;
+}
+
 
 // Función para mapear los tipos de documento de la BD al tipo Document
 function mapTipoDocumento(dbTipo: string): 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro' {
@@ -115,12 +123,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const [entidadRows] = await db.query<EntidadPacket[]>("SELECT * FROM entidades_documento WHERE documento_id IN (?)", [docIds]);
     const [lineaRows] = await db.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id IN (?)', [docIds]);
     const [impuestoRows] = await db.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id IN (?)', [docIds]);
+    const [incidenciaRows] = await db.query<IncidenciaPacket[]>('SELECT * FROM incidencias_documento WHERE documento_id IN (?)', [docIds]);
 
     const documents = documentRows.map(doc => {
         const currentFiles = fileRows.filter(f => f.documento_id === doc.id);
         const currentEntidades = entidadRows.filter(e => e.documento_id === doc.id);
         const currentLineas = lineaRows.filter(l => l.documento_id === doc.id);
         const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
+        const currentIncidencias = incidenciaRows.filter(i => i.documento_id === doc.id);
         
         const proveedor = currentEntidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
         const cliente = currentEntidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
@@ -181,12 +191,15 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const pendientes = doc.pendientes || 0;
         const verificado = totalIncidencias > 0 && pendientes === 0;
 
+        const primeraIncidenciaPendiente = currentIncidencias.find(i => !i.validado);
+
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
             tipo_documento: mapTipoDocumento(doc.tipo_documento),
             verificado: verificado,
             incidencia: pendientes > 0, // Legacy support if needed, but verificado is better
+            incidencia_razon: primeraIncidenciaPendiente?.descripcion ?? null,
             fecha_emision: doc.fecha_emision,
             fecha_vencimiento: doc.fecha_vencimiento,
             fecha_creacion: doc.fecha_creacion,
