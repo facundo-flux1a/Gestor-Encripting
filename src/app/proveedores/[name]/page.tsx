@@ -115,7 +115,9 @@ export default function ProveedorDetailPage() {
                         {analyticsData ? (
                             <ProviderAnalytics data={analyticsData} />
                         ) : (
-                            <p>Cargando datos de analítica...</p>
+                           <div className="flex justify-center items-center py-16">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            </div>
                         )}
                     </TabsContent>
 

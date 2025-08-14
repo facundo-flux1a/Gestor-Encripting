@@ -4,7 +4,7 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
 import { ExportButton } from "@/components/dashboard/export-button";
@@ -40,8 +40,14 @@ export default function DocumentsPage() {
                 </div>
             </div>
         </MainLayoutHeader>
-        <div>
-            {isLoading ? <p>Cargando documentos...</p> : <DocumentsTable documents={documents} />}
+        <div className="mt-6">
+            {isLoading ? (
+                <div className="flex justify-center items-center py-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            ) : (
+                <DocumentsTable documents={documents} />
+            )}
         </div>
       </div>
     </MainLayout>

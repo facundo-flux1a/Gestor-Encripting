@@ -6,6 +6,7 @@ import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
 import { ExportButton } from "@/components/dashboard/export-button";
+import { Loader2 } from "lucide-react";
 
 export default function IncidentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -34,8 +35,14 @@ export default function IncidentsPage() {
                 </div>
             </div>
         </MainLayoutHeader>
-        <div>
-           {isLoading ? <p>Cargando incidencias...</p> : <DocumentsTable documents={documents} />}
+        <div className="mt-6">
+           {isLoading ? (
+            <div className="flex justify-center items-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+           ) : (
+            <DocumentsTable documents={documents} />
+           )}
         </div>
       </div>
     </MainLayout>
