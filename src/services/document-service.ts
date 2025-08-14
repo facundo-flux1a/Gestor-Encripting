@@ -2,7 +2,7 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile } from '@/lib/types';
+import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 
@@ -67,6 +67,15 @@ interface ImpuestoPacket extends RowDataPacket {
     cuota: number;
     documento_id: number;
 }
+
+interface ProviderStatsPacket extends RowDataPacket {
+    nombre: string;
+    identificador_fiscal: string;
+    totalSpent: number;
+    totalDocuments: number;
+    uniqueProducts: number;
+}
+
 
 // Función para mapear los tipos de documento de la BD al tipo Document
 function mapTipoDocumento(dbTipo: string): 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro' {
@@ -318,6 +327,37 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
         telefono: p.telefono,
         email: p.email,
         datos_extra: safeJsonParse(p.datos_extra),
+    }));
+
+    return JSON.parse(JSON.stringify(providers));
+}
+
+
+export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
+     const [providerRows] = await db.query<ProviderStatsPacket[]>(`
+        SELECT 
+            ed.nombre,
+            ed.identificador_fiscal,
+            SUM(d.importe_total) as totalSpent,
+            COUNT(DISTINCT d.id) as totalDocuments,
+            COUNT(DISTINCT ld.codigo) as uniqueProducts
+        FROM entidades_documento ed
+        JOIN documentos d ON ed.documento_id = d.id
+        LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
+        WHERE (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+          AND ed.identificador_fiscal IS NOT NULL 
+          AND ed.identificador_fiscal != ''
+        GROUP BY ed.identificador_fiscal, ed.nombre
+        ORDER BY totalSpent DESC
+    `);
+    
+    const providers: ProviderWithStats[] = providerRows.map(p => ({
+        nombre: p.nombre,
+        identificador_fiscal: p.identificador_fiscal,
+        totalSpent: Number(p.totalSpent),
+        totalDocuments: Number(p.totalDocuments),
+        uniqueProducts: Number(p.uniqueProducts),
+        rol: 'proveedor', // Default value
     }));
 
     return JSON.parse(JSON.stringify(providers));

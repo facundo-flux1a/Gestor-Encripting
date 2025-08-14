@@ -24,6 +24,14 @@ export const DocumentEntitySchema = z.object({
 });
 export type DocumentEntity = z.infer<typeof DocumentEntitySchema>;
 
+export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
+    totalSpent: z.number(),
+    totalDocuments: z.number(),
+    uniqueProducts: z.number(),
+});
+export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
+
+
 export const DocumentLineSchema = z.object({
     id: z.number().optional(),
     documento_id: z.number().optional(),
