@@ -296,7 +296,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
              await connection.query('INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]);
         }
         for (const iva of iva_details) {
-            await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]);
+            const totalConImpuesto = (Number(iva.base_imponible) || 0) + (Number(iva.cuota) || 0);
+            await connection.query(
+                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)', 
+                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
+            );
         }
 
         await connection.commit();
