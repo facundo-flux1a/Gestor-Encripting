@@ -5,6 +5,8 @@ import db from '@/lib/db';
 import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
+import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
+import type { IncidentAnalysisResult } from '@/ai/flows/analyze-incidents';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -555,4 +557,124 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
     };
 }
 
+export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
+    const [summary] = await db.query<RowDataPacket[]>(`
+        SELECT 
+            SUM(CASE WHEN validado = 0 THEN 1 ELSE 0 END) as totalOpen,
+            SUM(CASE WHEN validado = 1 THEN 1 ELSE 0 END) as totalValidated
+        FROM incidencias_documento
+        WHERE incidencia = 1
+    `);
+
+    const [byProvider] = await db.query<RowDataPacket[]>(`
+        SELECT e.nombre, COUNT(i.id) as count
+        FROM incidencias_documento i
+        JOIN entidades_documento e ON i.documento_id = e.documento_id
+        WHERE i.validado = 0 AND (e.rol = 'proveedor' OR e.rol = 'emisor')
+        GROUP BY e.nombre
+        ORDER BY count DESC
+        LIMIT 5;
+    `);
+
+    const [byType] = await db.query<RowDataPacket[]>(`
+        SELECT 
+            CASE 
+                WHEN LOCATE('duplicado', descripcion) > 0 THEN 'Duplicado'
+                WHEN LOCATE('cálculo', descripcion) > 0 THEN 'Error de Cálculo'
+                ELSE 'Otro'
+            END as type,
+            COUNT(id) as count
+        FROM incidencias_documento
+        WHERE validado = 0
+        GROUP BY type
+        ORDER BY count DESC;
+    `);
     
+    return {
+        totalOpen: summary[0].totalOpen || 0,
+        totalValidated: summary[0].totalValidated || 0,
+        byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
+        byType: byType.map(t => ({ name: t.type, count: t.count })),
+    }
+}
+
+
+export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    let newIncidentsFound = 0;
+    let duplicates = 0;
+    let calculationErrors = 0;
+
+    try {
+        const [allDocs] = await connection.query<DocumentPacket[]>(`
+             SELECT d.*, ed.nombre as provider_name, ed.identificador_fiscal as provider_cif
+             FROM documentos d
+             LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        `);
+
+        // Check for duplicates
+        const docMap = new Map<string, number[]>();
+        for (const doc of allDocs) {
+            if (doc.numero_documento && doc.provider_cif) {
+                const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+                if (!docMap.has(key)) {
+                    docMap.set(key, []);
+                }
+                docMap.get(key)!.push(doc.id);
+            }
+        }
+
+        for (const [key, ids] of docMap.entries()) {
+            if (ids.length > 1) {
+                duplicates += ids.length;
+                const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(0, 2).join(' - ')}. IDs: ${ids.join(', ')}`;
+                for (const id of ids) {
+                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [id, 'Documento duplicado%']);
+                    if (existing.length === 0) {
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
+                        newIncidentsFound++;
+                    }
+                }
+            }
+        }
+
+        // Check for calculation errors
+        const [docsWithTotals] = await connection.query<DocumentPacket[]>(`
+            SELECT d.id, d.importe_sin_impuestos, d.importe_total, SUM(i.cuota) as sum_cuota
+            FROM documentos d
+            LEFT JOIN impuestos_documento i ON d.id = i.documento_id
+            GROUP BY d.id, d.importe_sin_impuestos, d.importe_total
+        `);
+
+        for (const doc of docsWithTotals) {
+            const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
+            if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
+                calculationErrors++;
+                 const description = `Error de cálculo detectado. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+                const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo%']);
+                if (existing.length === 0) {
+                    await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                    newIncidentsFound++;
+                }
+            }
+        }
+
+        await connection.commit();
+
+        return {
+            newIncidentsFound,
+            duplicates,
+            calculationErrors,
+            message: `Análisis completo. Se encontraron ${newIncidentsFound} nuevas incidencias.`
+        };
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Error running document analysis:", error);
+        throw new Error('Falló el análisis de documentos en el servidor.');
+    } finally {
+        connection.release();
+    }
+}
