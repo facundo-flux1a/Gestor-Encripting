@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, KeyboardEvent } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Table,
@@ -57,14 +57,25 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   
-  const [filters, setFilters] = useState<string[]>([]);
-  const [currentSearch, setCurrentSearch] = useState('');
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [debouncedFilter, setDebouncedFilter] = useState('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_emision', direction: 'descending' });
 
   const pathname = usePathname();
   const isIncidentsPage = pathname === '/incidents';
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedFilter(globalFilter);
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [globalFilter]);
+
 
   const handleSummarizeClick = (doc: Document) => {
     setSelectedDoc(doc);
@@ -79,39 +90,25 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setSortConfig({ key, direction });
   };
   
-  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && currentSearch.trim() !== '') {
-      setFilters([...filters, currentSearch.trim()]);
-      setCurrentSearch('');
-    }
-  };
-
-  const removeFilter = (filterToRemove: string) => {
-    setFilters(filters.filter(f => f !== filterToRemove));
-  };
-  
   const clearFilters = () => {
-    setFilters([]);
-    setCurrentSearch('');
+    setGlobalFilter('');
     setDateRange(undefined);
   };
 
   const filteredAndSortedDocuments = useMemo(() => {
     let filteredData = [...documents];
 
-    // Global text filters
-    if (filters.length > 0) {
-        filteredData = filteredData.filter(doc => {
-            return filters.every(filter => {
-                const lowercasedFilter = filter.toLowerCase();
-                return (
-                    doc.numero_factura?.toLowerCase().includes(lowercasedFilter) ||
-                    doc.proveedor?.toLowerCase().includes(lowercasedFilter) ||
-                    doc.cif?.toLowerCase().includes(lowercasedFilter) ||
-                    doc.observaciones?.toLowerCase().includes(lowercasedFilter)
-                );
-            });
-        });
+    // Global text filter
+    if (debouncedFilter) {
+      const lowercasedFilter = debouncedFilter.toLowerCase();
+      filteredData = filteredData.filter(doc => {
+        return (
+            doc.numero_factura?.toLowerCase().includes(lowercasedFilter) ||
+            doc.proveedor?.toLowerCase().includes(lowercasedFilter) ||
+            doc.cif?.toLowerCase().includes(lowercasedFilter) ||
+            doc.observaciones?.toLowerCase().includes(lowercasedFilter)
+        );
+      });
     }
     
     // Date range filter
@@ -136,6 +133,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
             bValue = b.verificado;
         } else if (sortConfig.key === 'concepto') {
             aValue = a.observaciones;
+            bValue = b.observaciones;
         } else if (sortConfig.key === 'impuestos') {
              aValue = a.iva;
              bValue = b.iva;
@@ -161,7 +159,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     }
 
     return filteredData;
-  }, [documents, filters, sortConfig, dateRange]);
+  }, [documents, debouncedFilter, sortConfig, dateRange]);
 
   const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean, incidentOnly?: boolean }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
@@ -177,7 +175,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
   const visibleColumns = columns.filter(col => !col.incidentOnly || isIncidentsPage);
 
-  const isFiltered = filters.length > 0 || dateRange;
+  const isFiltered = debouncedFilter || dateRange;
 
   return (
     <>
@@ -187,10 +185,9 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                  <div className="relative w-full md:w-auto md:flex-grow md:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar y presionar Enter..."
-                        value={currentSearch}
-                        onChange={(e) => setCurrentSearch(e.target.value)}
-                        onKeyDown={handleSearchKeyDown}
+                        placeholder="Buscar por factura, proveedor, CIF..."
+                        value={globalFilter}
+                        onChange={(e) => setGlobalFilter(e.target.value)}
                         className="h-11 pl-10"
                     />
                 </div>
@@ -236,26 +233,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     )}
                 </div>
             </div>
-
-            {filters.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">Filtros aplicados:</span>
-                    {filters.map((filter) => (
-                        <Badge key={filter} variant="secondary" className="pl-2">
-                            {filter}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="ml-1 h-5 w-5 p-0"
-                                onClick={() => removeFilter(filter)}
-                            >
-                                <X className="h-3 w-3" />
-                                <span className="sr-only">Remover filtro</span>
-                            </Button>
-                        </Badge>
-                    ))}
-                </div>
-            )}
 
           <Card>
             <CardContent className="p-0">
