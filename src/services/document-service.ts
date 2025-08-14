@@ -745,3 +745,6 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
 export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
     return analyzeDocuments([documentId]);
 }
+
+
+    

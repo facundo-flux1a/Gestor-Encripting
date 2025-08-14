@@ -35,7 +35,11 @@ export default function DocumentoPage() {
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: {}
+    defaultValues: {
+      entidades: [],
+      lineas: [],
+      iva_details: []
+    }
   });
 
   const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({
@@ -48,7 +52,6 @@ export default function DocumentoPage() {
         ...docData,
         fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
         fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
-        fecha_creacion: docData.fecha_creacion ? new Date(docData.fecha_creacion).toISOString().split('T')[0] : '',
     });
   }
 
@@ -263,3 +266,5 @@ export default function DocumentoPage() {
     </MainLayout>
   );
 }
+
+    
