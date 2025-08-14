@@ -12,7 +12,6 @@ import {
   SidebarMenuButton,
   SidebarInset,
   SidebarFooter,
-  SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
 import {
@@ -118,8 +117,7 @@ function UserProfile({ session }: { session: SessionPayload | null }) {
 
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
     return (
-        <header className={cn("sticky top-0 z-10 flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6", className)}>
-            <SidebarTrigger className="flex md:hidden" />
+        <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
             <div className="hidden md:flex">
                 <SidebarToggle />
             </div>
@@ -182,7 +180,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
            <UserProfile session={session} />
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset>
+        <div className="w-full overflow-x-auto">
+            {children}
+        </div>
+      </SidebarInset>
     </SidebarProvider>
   );
 }
