@@ -1,9 +1,11 @@
+
 'use client';
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getIncidents } from "@/services/document-service";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
+import { ExportButton } from "@/components/dashboard/export-button";
 
 export default function IncidentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -26,6 +28,9 @@ export default function IncidentsPage() {
                     <p className="text-muted-foreground">
                         Documentos con incidencias pendientes de revisar.
                     </p>
+                </div>
+                 <div className="flex items-center space-x-2">
+                    <ExportButton data={documents} filename="incidencias" />
                 </div>
             </div>
         </MainLayoutHeader>

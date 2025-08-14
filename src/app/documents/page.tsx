@@ -1,3 +1,4 @@
+
 'use client';
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
+import { ExportButton } from "@/components/dashboard/export-button";
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -34,6 +36,7 @@ export default function DocumentsPage() {
                         <Upload className="mr-2" />
                         Subir Documento
                     </Button>
+                    <ExportButton data={documents} filename="todos-los-documentos" />
                 </div>
             </div>
         </MainLayoutHeader>

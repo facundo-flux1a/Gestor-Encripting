@@ -12,6 +12,7 @@ import { ProductCard } from "@/components/dashboard/product-card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProviderAnalytics, type ProviderAnalyticsData } from "@/components/dashboard/provider-analytics";
+import { ExportButton } from "@/components/dashboard/export-button";
 
 export default function ProveedorDetailPage() {
     const params = useParams();
@@ -119,7 +120,7 @@ export default function ProveedorDetailPage() {
                     </TabsContent>
 
                     <TabsContent value="products">
-                        <div className="flex justify-end items-center mb-4">
+                        <div className="flex justify-between items-center mb-4">
                             <div className="relative w-full max-w-sm">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                 <Input
@@ -129,6 +130,7 @@ export default function ProveedorDetailPage() {
                                     className="h-11 pl-10"
                                 />
                             </div>
+                            <ExportButton data={filteredProducts} filename={`productos_${provider.identificador_fiscal}`} />
                         </div>
                         {filteredProducts.length > 0 ? (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -154,6 +156,9 @@ export default function ProveedorDetailPage() {
                     </TabsContent>
                     
                     <TabsContent value="documents">
+                        <div className="flex justify-end items-center mb-4">
+                            <ExportButton data={documents} filename={`documentos_${provider.identificador_fiscal}`} />
+                        </div>
                         <DocumentsTable documents={documents} />
                     </TabsContent>
                 </Tabs>

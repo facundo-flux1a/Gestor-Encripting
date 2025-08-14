@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, X, Save, ExternalLink } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ExportButton } from '@/components/dashboard/export-button';
 
 
 export default function DocumentoPage() {
@@ -136,6 +137,7 @@ export default function DocumentoPage() {
   }
 
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
+  const exportData = doc ? [doc] : []; // ExportButton expects an array
 
   return (
     <MainLayout>
@@ -187,6 +189,7 @@ export default function DocumentoPage() {
                                     <Edit className="mr-2 h-4 w-4" />
                                     Editar
                                 </Button>
+                                <ExportButton data={exportData} filename={`documento_${doc.id_documento}`} />
                                 </>
                             )}
                             </div>
@@ -201,5 +204,3 @@ export default function DocumentoPage() {
     </MainLayout>
   );
 }
-
-    
