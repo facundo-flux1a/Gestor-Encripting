@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, KeyboardEvent } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { getDocumentById, updateDocument } from '@/services/document-service';

@@ -1,8 +1,7 @@
 
-
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, KeyboardEvent } from 'react';
 import Link from 'next/link';
 import {
   Table,
@@ -37,7 +36,7 @@ import { IvaBadge } from './iva-badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { type DateRange } from 'react-day-picker';
-import { addDays, format } from 'date-fns';
+import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { usePathname } from 'next/navigation';
 
@@ -58,8 +57,8 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   
-  const [globalFilter, setGlobalFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [filters, setFilters] = useState<string[]>([]);
+  const [currentSearch, setCurrentSearch] = useState('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_emision', direction: 'descending' });
@@ -80,25 +79,38 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setSortConfig({ key, direction });
   };
   
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && currentSearch.trim() !== '') {
+      setFilters([...filters, currentSearch.trim()]);
+      setCurrentSearch('');
+    }
+  };
+
+  const removeFilter = (filterToRemove: string) => {
+    setFilters(filters.filter(f => f !== filterToRemove));
+  };
+  
   const clearFilters = () => {
-    setGlobalFilter('');
-    setStatusFilter(null);
+    setFilters([]);
+    setCurrentSearch('');
     setDateRange(undefined);
   };
 
   const filteredAndSortedDocuments = useMemo(() => {
     let filteredData = [...documents];
 
-    // Global text filter
-    if (globalFilter) {
-        const lowercasedFilter = globalFilter.toLowerCase();
+    // Global text filters
+    if (filters.length > 0) {
         filteredData = filteredData.filter(doc => {
-            return (
-                doc.numero_factura?.toLowerCase().includes(lowercasedFilter) ||
-                doc.proveedor?.toLowerCase().includes(lowercasedFilter) ||
-                doc.cif?.toLowerCase().includes(lowercasedFilter) ||
-                doc.observaciones?.toLowerCase().includes(lowercasedFilter)
-            );
+            return filters.every(filter => {
+                const lowercasedFilter = filter.toLowerCase();
+                return (
+                    doc.numero_factura?.toLowerCase().includes(lowercasedFilter) ||
+                    doc.proveedor?.toLowerCase().includes(lowercasedFilter) ||
+                    doc.cif?.toLowerCase().includes(lowercasedFilter) ||
+                    doc.observaciones?.toLowerCase().includes(lowercasedFilter)
+                );
+            });
         });
     }
     
@@ -110,14 +122,6 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 return docDate >= dateRange.from! && docDate <= dateRange.to;
             }
             return docDate >= dateRange.from!;
-        });
-    }
-
-    // Status filter
-    if (statusFilter) {
-        filteredData = filteredData.filter(doc => {
-            const estado = doc.verificado ? 'verificado' : 'pendiente';
-            return estado === statusFilter;
         });
     }
 
@@ -157,7 +161,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     }
 
     return filteredData;
-  }, [documents, globalFilter, statusFilter, sortConfig, dateRange]);
+  }, [documents, filters, sortConfig, dateRange]);
 
   const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean, incidentOnly?: boolean }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
@@ -173,7 +177,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
   const visibleColumns = columns.filter(col => !col.incidentOnly || isIncidentsPage);
 
-  const isFiltered = globalFilter || statusFilter || dateRange;
+  const isFiltered = filters.length > 0 || dateRange;
 
   return (
     <>
@@ -183,9 +187,10 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                  <div className="relative w-full md:w-auto md:flex-grow md:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por factura, proveedor, CIF..."
-                        value={globalFilter}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
+                        placeholder="Buscar y presionar Enter..."
+                        value={currentSearch}
+                        onChange={(e) => setCurrentSearch(e.target.value)}
+                        onKeyDown={handleSearchKeyDown}
                         className="h-11 pl-10"
                     />
                 </div>
@@ -231,6 +236,27 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     )}
                 </div>
             </div>
+
+            {filters.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">Filtros aplicados:</span>
+                    {filters.map((filter) => (
+                        <Badge key={filter} variant="secondary" className="pl-2">
+                            {filter}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="ml-1 h-5 w-5 p-0"
+                                onClick={() => removeFilter(filter)}
+                            >
+                                <X className="h-3 w-3" />
+                                <span className="sr-only">Remover filtro</span>
+                            </Button>
+                        </Badge>
+                    ))}
+                </div>
+            )}
+
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">

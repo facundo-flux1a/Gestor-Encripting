@@ -2,18 +2,22 @@
 'use client';
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getProvidersWithStats } from "@/services/document-service";
-import { useEffect, useState } from "react";
+import { useEffect, useState, KeyboardEvent } from "react";
 import type { ProviderWithStats } from "@/lib/types";
 import { ProviderCard } from "@/components/dashboard/provider-card";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { ExportButton } from "@/components/dashboard/export-button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function ProveedoresPage() {
   const [allProviders, setAllProviders] = useState<ProviderWithStats[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<ProviderWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  const [filters, setFilters] = useState<string[]>([]);
+  const [currentSearch, setCurrentSearch] = useState('');
 
   useEffect(() => {
     getProvidersWithStats().then(provs => {
@@ -25,13 +29,34 @@ export default function ProveedoresPage() {
 
   useEffect(() => {
     if (!allProviders) return;
-    const lowercasedFilter = searchTerm.toLowerCase();
-    const filtered = allProviders.filter(provider =>
-      provider.nombre?.toLowerCase().includes(lowercasedFilter) ||
-      provider.identificador_fiscal?.toLowerCase().includes(lowercasedFilter)
-    );
+    
+    if (filters.length === 0) {
+      setFilteredProviders(allProviders);
+      return;
+    }
+    
+    const filtered = allProviders.filter(provider => {
+        return filters.every(filter => {
+            const lowercasedFilter = filter.toLowerCase();
+            return (
+                provider.nombre?.toLowerCase().includes(lowercasedFilter) ||
+                provider.identificador_fiscal?.toLowerCase().includes(lowercasedFilter)
+            );
+        });
+    });
     setFilteredProviders(filtered);
-  }, [searchTerm, allProviders]);
+  }, [filters, allProviders]);
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && currentSearch.trim() !== '') {
+      setFilters([...filters, currentSearch.trim()]);
+      setCurrentSearch('');
+    }
+  };
+
+  const removeFilter = (filterToRemove: string) => {
+    setFilters(filters.filter(f => f !== filterToRemove));
+  };
   
   return (
     <MainLayout>
@@ -49,15 +74,39 @@ export default function ProveedoresPage() {
                 </div>
             </div>
         </MainLayoutHeader>
-        <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-                placeholder="Buscar proveedor por nombre o CIF..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-12 pl-10 text-lg"
-            />
+        <div className="space-y-4">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar por nombre o CIF y presionar Enter..."
+                    value={currentSearch}
+                    onChange={(e) => setCurrentSearch(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    className="h-12 pl-10 text-lg"
+                />
+            </div>
+
+            {filters.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">Filtros aplicados:</span>
+                    {filters.map((filter) => (
+                        <Badge key={filter} variant="secondary" className="pl-2">
+                            {filter}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="ml-1 h-5 w-5 p-0"
+                                onClick={() => removeFilter(filter)}
+                            >
+                                <X className="h-3 w-3" />
+                                <span className="sr-only">Remover filtro</span>
+                            </Button>
+                        </Badge>
+                    ))}
+                </div>
+            )}
         </div>
+        
         <div>
             {isLoading ? (
                 <p>Cargando proveedores...</p>
@@ -73,7 +122,7 @@ export default function ProveedoresPage() {
                     <Search className="mx-auto h-12 w-12 text-gray-400" />
                     <h3 className="mt-2 text-sm font-medium">No se encontraron proveedores</h3>
                     <p className="mt-1 text-sm text-gray-500">
-                        {searchTerm ? "Prueba con otro término de búsqueda." : "No hay proveedores para mostrar."}
+                        {filters.length > 0 ? "Prueba con otro término o limpia los filtros." : "No hay proveedores para mostrar."}
                     </p>
                 </div>
               )

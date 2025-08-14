@@ -17,7 +17,7 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/comp
 import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, KeyboardEvent } from "react";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 
@@ -86,7 +86,9 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     });
 
     const formValues = useWatch({ control: form.control });
-    const [lineaSearchTerm, setLineaSearchTerm] = useState('');
+    
+    const [lineaFilters, setLineaFilters] = useState<string[]>([]);
+    const [currentLineaSearch, setCurrentLineaSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     
     const provider = useMemo(() => 
@@ -109,15 +111,27 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         }
     }, [isEditing, doc.id_documento, doc.entidades, doc.lineas, doc.iva_details, form]);
 
-    const filteredLineaFields = useMemo(() => {
-        if (!lineaSearchTerm) {
-            return lineaFields.map((field, index) => ({ field, originalIndex: index }));
+    const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter' && currentLineaSearch.trim() !== '') {
+            setLineaFilters([...lineaFilters, currentLineaSearch.trim()]);
+            setCurrentLineaSearch('');
         }
-        const lowercasedFilter = lineaSearchTerm.toLowerCase();
-        return lineaFields
-            .map((field, index) => ({ field, originalIndex: index }))
-            .filter(({ field }) => {
-                return Object.values(field).some(value => {
+    };
+
+    const removeFilter = (filterToRemove: string) => {
+        setLineaFilters(lineaFilters.filter(f => f !== filterToRemove));
+    };
+
+    const filteredLineaFields = useMemo(() => {
+        let fields = lineaFields.map((field, index) => ({ field, originalIndex: index }));
+        if (lineaFilters.length === 0) {
+            return fields;
+        }
+
+        return fields.filter(({ field }) => {
+            return lineaFilters.every(filter => {
+                const lowercasedFilter = filter.toLowerCase();
+                 return Object.values(field).some(value => {
                     if (value === null || value === undefined) {
                         return false;
                     }
@@ -126,8 +140,9 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     }
                     return false;
                 });
-            });
-    }, [lineaFields, lineaSearchTerm]);
+            })
+        });
+    }, [lineaFields, lineaFilters]);
 
     const totalPages = Math.ceil(filteredLineaFields.length / ITEMS_PER_PAGE);
 
@@ -140,7 +155,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [lineaSearchTerm]);
+    }, [lineaFilters]);
 
     const renderEditableField = (fieldName: string, label: string, isCurrency: boolean = false, placeholder?: string) => {
         return (
@@ -283,13 +298,13 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                  <FormItem>
                                      <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
                                      <FormControl>
-                                         {doc.incidencia ? (
+                                         {doc.verificado ? (
+                                              <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                                  <CheckCircle2 className="h-4 w-4" /> Verificado
+                                              </Badge>
+                                         ) : (
                                              <Badge variant="destructive" className="flex items-center gap-2">
                                                  <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
-                                             </Badge>
-                                         ) : (
-                                             <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                                 <CheckCircle2 className="h-4 w-4" /> Verificado
                                              </Badge>
                                          )}
                                      </FormControl>
@@ -309,9 +324,10 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 <div className="relative">
                                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input 
-                                        placeholder="Buscar líneas..."
-                                        value={lineaSearchTerm}
-                                        onChange={(e) => setLineaSearchTerm(e.target.value)}
+                                        placeholder="Buscar y presionar Enter..."
+                                        value={currentLineaSearch}
+                                        onChange={(e) => setCurrentLineaSearch(e.target.value)}
+                                        onKeyDown={handleSearchKeyDown}
                                         className="h-9 pl-8 w-40 lg:w-56"
                                     />
                                 </div>
@@ -338,6 +354,22 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                            </div>
                         </CardHeader>
                         <CardContent>
+                            {lineaFilters.length > 0 && (
+                                <div className="flex items-center gap-2 flex-wrap mb-4">
+                                    <span className="text-sm font-medium">Filtros:</span>
+                                    {lineaFilters.map((filter) => (
+                                        <Badge key={filter} variant="secondary" className="pl-2">
+                                            {filter}
+                                            <Button
+                                                variant="ghost" size="icon" className="ml-1 h-5 w-5 p-0"
+                                                onClick={() => removeFilter(filter)}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </Button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
                              <div className="space-y-4">
                                 {paginatedLineaFields.map(({ field, originalIndex }) => {
                                     const currentLinea = formValues.lineas?.[originalIndex] || field;
@@ -476,7 +508,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                         <Search className="mx-auto h-12 w-12 text-gray-400" />
                                         <h3 className="mt-2 text-sm font-medium">No se encontraron líneas</h3>
                                         <p className="mt-1 text-sm text-gray-500">
-                                            {lineaSearchTerm ? "Prueba con otro término de búsqueda." : "No hay líneas de documento."}
+                                            {lineaFilters.length > 0 ? "Prueba con otro término de búsqueda." : "No hay líneas de documento."}
                                         </p>
                                     </div>
                                 )}
@@ -827,5 +859,4 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 } 
-
     
