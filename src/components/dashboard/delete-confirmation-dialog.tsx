@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState } from 'react';
@@ -15,13 +16,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
 interface DeleteConfirmationDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   documentNumber: string;
+  isDeleting: boolean;
 }
 
 const CONFIRMATION_TEXT = "ELIMINAR";
@@ -30,7 +32,8 @@ export function DeleteConfirmationDialog({
   isOpen,
   onClose,
   onConfirm,
-  documentNumber
+  documentNumber,
+  isDeleting
 }: DeleteConfirmationDialogProps) {
   const [inputValue, setInputValue] = useState('');
 
@@ -62,15 +65,17 @@ export function DeleteConfirmationDialog({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={`Escribe "${CONFIRMATION_TEXT}" para confirmar`}
+            disabled={isDeleting}
           />
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel onClick={onClose} disabled={isDeleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            disabled={!isConfirmationTextMatching}
+            disabled={!isConfirmationTextMatching || isDeleting}
             className="bg-destructive hover:bg-destructive/90"
           >
+            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Eliminar Documento
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -14,7 +14,6 @@ import { redirect } from 'next/navigation';
 interface DocumentPacket extends RowDataPacket {
     id: number;
     tipo_documento: string;
-    // incidencia has been removed from this table
     numero_documento: string;
     fecha_emision: string;
     fecha_vencimiento: string | null;
@@ -24,7 +23,6 @@ interface DocumentPacket extends RowDataPacket {
     observaciones: string | null;
     datos_extra: any | null;
     fecha_creacion: string;
-    // New fields from the view
     total_incidencias?: number;
     pendientes?: number;
 }
@@ -189,8 +187,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_subida: f.fecha_subida,
         }));
 
-        const totalIncidencias = doc.total_incidencias || 0;
-        const pendientes = doc.pendientes || 0;
+        const totalIncidencias = currentIncidencias.length;
+        const pendientes = currentIncidencias.filter(i => !i.validado).length;
         const verificado = totalIncidencias > 0 && pendientes === 0;
 
         const primeraIncidenciaPendiente = currentIncidencias.find(i => !i.validado);
@@ -230,9 +228,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
 
 export async function getDocuments(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*, v.total_incidencias, v.pendientes
+        SELECT d.*
         FROM documentos d
-        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
         ORDER BY d.fecha_emision DESC
     `);
     
@@ -241,9 +238,8 @@ export async function getDocuments(): Promise<Document[]> {
 
 export async function getDocumentById(id: number): Promise<Document | null> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*, v.total_incidencias, v.pendientes
+        SELECT d.*
         FROM documentos d
-        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
         WHERE d.id = ?
     `, [id]);
 
@@ -257,10 +253,10 @@ export async function getDocumentById(id: number): Promise<Document | null> {
 
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*, v.total_incidencias, v.pendientes
+        SELECT DISTINCT d.* 
         FROM documentos d
-        JOIN v_resumen_incidencias v ON d.id = v.documento_id
-        WHERE v.pendientes > 0
+        JOIN incidencias_documento i ON d.id = i.documento_id
+        WHERE i.validado = 0
         ORDER BY d.fecha_emision DESC
     `);
 
@@ -281,14 +277,10 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, fecha_vencimiento, moneda, observaciones, id]
         );
 
-        // This is a forced update, so we can delete existing related data and re-insert.
-        // It's simpler than trying to figure out what was added/removed/updated.
         await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
         await connection.query('DELETE FROM lineas_documento WHERE documento_id = ?', [id]);
         await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
 
-
-        // Re-insert all details from the payload
         for (const entidad of entidades) {
             await connection.query('INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]);
         }
@@ -327,10 +319,18 @@ export async function deleteDocument(id: number): Promise<void> {
         throw new Error('No se pudo eliminar el documento.');
     } finally {
         connection.release();
-        // After deletion, redirect user to the documents list
         redirect('/documents');
     }
 }
+
+export async function validateDocumentIncidents(documentId: number): Promise<OkPacket> {
+    const [result] = await db.query<OkPacket>(
+        'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
+        ['system', documentId]
+    );
+    return result;
+}
+
 
 export async function getUniqueProvidersCount(): Promise<number> {
     const [providerRows] = await db.query<RowDataPacket[]>(`
@@ -421,10 +421,9 @@ export async function getAllProducts(): Promise<number> {
 // Get by fiscal Id, as name can be repeated or contain special chars
 export async function getDocumentsByProviderName(fiscalId: string): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*, v.total_incidencias, v.pendientes
+        SELECT d.*
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        LEFT JOIN v_resumen_incidencias v ON d.id = v.documento_id
         WHERE ed.identificador_fiscal = ? AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
         ORDER BY d.fecha_emision DESC
     `, [fiscalId]);
@@ -437,7 +436,7 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
     const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT *
         FROM entidades_documento
-        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
+        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR ed.rol = 'emisor')
         LIMIT 1
     `, [fiscalId]);
 

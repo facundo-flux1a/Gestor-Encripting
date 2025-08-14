@@ -1,9 +1,10 @@
 
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History } from "lucide-react";
+import { AlertCircle, CheckCircle2, ShieldCheck, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -208,6 +209,28 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         )
     }
     
+    const getStatusBadge = () => {
+        if (doc.incidencia) {
+            return (
+                <Badge variant="destructive" className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
+                </Badge>
+            );
+        }
+        if (doc.verificado) {
+            return (
+                 <Badge variant="secondary" className="flex items-center gap-2 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
+                    <ShieldCheck className="h-4 w-4" /> Validado
+                </Badge>
+            )
+        }
+        return (
+             <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                <CheckCircle2 className="h-4 w-4" /> Verificado
+            </Badge>
+        );
+    }
+    
     return (
         <>
             {/* General Information Card */}
@@ -262,15 +285,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         
                          <FormItem>
                              <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
-                             {doc.incidencia ? (
-                                <Badge variant="destructive" className="flex items-center gap-2">
-                                     <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
-                                 </Badge>
-                             ) : (
-                                 <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                      <CheckCircle2 className="h-4 w-4" /> Verificado
-                                  </Badge>
-                             )}
+                             {getStatusBadge()}
                          </FormItem>
                     </div>
 
@@ -516,3 +531,4 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 }
+

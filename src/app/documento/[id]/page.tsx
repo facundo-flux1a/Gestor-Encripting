@@ -1,17 +1,18 @@
 
+
 'use client';
 
 import { useEffect, useState, useMemo, KeyboardEvent } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
-import { getDocumentById, updateDocument, deleteDocument } from '@/services/document-service';
+import { getDocumentById, updateDocument, deleteDocument, validateDocumentIncidents } from '@/services/document-service';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save, ExternalLink, Trash2 } from 'lucide-react';
+import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
@@ -29,6 +30,8 @@ export default function DocumentoPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
   const [key, setKey] = useState(0); // Key to force re-render
@@ -91,19 +94,19 @@ export default function DocumentoPage() {
 
 
   const onAnalysisComplete = () => {
-     // Increment key to trigger re-fetch of document data
      setKey(prevKey => prevKey + 1);
   };
 
   const handleDelete = async () => {
     if (!doc) return;
+    setIsDeleting(true);
     try {
         await deleteDocument(doc.id_documento);
         toast({
             title: "Documento Eliminado",
             description: "El documento ha sido eliminado correctamente."
         });
-        // The service function will handle the redirect
+        // The service function handles the redirect
     } catch (error) {
         console.error("Failed to delete document", error);
         toast({
@@ -111,8 +114,32 @@ export default function DocumentoPage() {
             description: "No se pudo eliminar el documento.",
             variant: "destructive",
         });
+    } finally {
+        setIsDeleting(false);
     }
   };
+
+  const handleValidate = async () => {
+    if (!doc || !doc.incidencia) return;
+    setIsValidating(true);
+    try {
+        await validateDocumentIncidents(doc.id_documento);
+        toast({
+            title: "Incidencias Validadas",
+            description: "Las incidencias del documento han sido marcadas como resueltas."
+        });
+        setKey(prevKey => prevKey + 1); // Refresh data
+    } catch (error) {
+        console.error("Failed to validate incidents", error);
+        toast({
+            title: "Error",
+            description: "No se pudieron validar las incidencias.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsValidating(false);
+    }
+  }
 
 
   const onSubmit = async (data: DocumentUpdatePayload) => {
@@ -128,7 +155,6 @@ export default function DocumentoPage() {
         description: 'Documento actualizado correctamente.',
       });
       setIsEditing(false);
-      // Re-fetch the document to show the latest data
       setKey(prevKey => prevKey + 1);
 
     } catch (error) {
@@ -187,7 +213,7 @@ export default function DocumentoPage() {
                                         <X className="mr-2 h-4 w-4" />
                                         Cancelar
                                     </Button>
-                                    <Button type="submit" disabled={isSaving}>
+                                    <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
                                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                                         Guardar Cambios
                                     </Button>
@@ -212,12 +238,19 @@ export default function DocumentoPage() {
                                     )}
                                 </Tooltip>
                                 
+                                {doc.incidencia && (
+                                    <Button type="button" onClick={handleValidate} disabled={isValidating}>
+                                        {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                        Validar Incidencias
+                                    </Button>
+                                )}
+                                
                                 <Button type="button" onClick={() => setIsEditing(true)}>
                                     <Edit className="mr-2 h-4 w-4" />
                                     Editar
                                 </Button>
-                                <Button variant="destructive" type="button" onClick={() => setIsDeleteDialogOpen(true)}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
+                                <Button variant="destructive" type="button" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                                     Eliminar
                                 </Button>
                                 <ExportButton data={exportData} filename={`documento_${doc.id_documento}`} />
@@ -262,6 +295,7 @@ export default function DocumentoPage() {
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={handleDelete}
         documentNumber={doc.numero_factura}
+        isDeleting={isDeleting}
       />
     </MainLayout>
   );
