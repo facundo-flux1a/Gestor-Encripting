@@ -1,3 +1,4 @@
+
 'use server';
 
 import db from '@/lib/db';
@@ -623,7 +624,7 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
         totalOpen: Number(summary[0]?.totalOpen || 0),
         totalValidated: Number(summary[0]?.totalValidated || 0),
         byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
-        byType: byType.map(t => ({ name: t.name, count: p.count })),
+        byType: byType.map(t => ({ name: t.name, count: t.count })),
     };
 }
 
@@ -769,5 +770,7 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 
 
 
+
+    
 
     
