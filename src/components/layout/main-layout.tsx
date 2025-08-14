@@ -47,15 +47,7 @@ function AppLogo() {
   const { state } = useSidebar();
   return (
     <div className="flex items-center gap-2.5">
-       <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 256 256"
-          className="h-7 w-7 text-primary flex-shrink-0"
-          fill="currentColor"
-        >
-          <path d="M156,128a28,28,0,1,1-28-28A28.03,28.03,0,0,1,156,128ZM48,128a80,80,0,1,0,80-80A80.09,80.09,0,0,0,48,128Zm160,0A80.11,80.11,0,0,1,154.2,205.82,12,12,0,0,1,136,204.13V151.3a52,52,0,1,0-52-52H31.87A12,12,0,0,1,14.2,81.8a80.11,80.11,0,0,1,193.6,0,12,12,0,0,1-17.67,17.46H160A36,36,0,1,1,124,160h44.13a12,12,0,0,1,11.66,8.2A80.11,80.11,0,0,1,208,128Zm-80,44a44,44,0,1,0-44-44A44.05,44.05,0,0,0,128,172Z"/>
-        </svg>
-      <h1 className={cn("text-xl font-bold text-primary", state === 'collapsed' && 'hidden')}>FluxiDocs</h1>
+      <h1 className={cn("text-xl font-bold text-primary", state === 'collapsed' && 'hidden')}>GESTOR DOCUMENTAL</h1>
     </div>
   )
 }
