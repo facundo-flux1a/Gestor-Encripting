@@ -45,9 +45,7 @@ import type { SessionPayload } from '@/lib/types';
 function AppLogo() {
   const { state } = useSidebar();
   return (
-    <div className="flex items-center gap-2.5">
-      <h1 className={cn("text-xl font-bold text-primary", state === 'collapsed' && 'hidden')}>GESTOR DOCUMENTAL</h1>
-    </div>
+    <h1 className={cn("text-xl font-bold text-primary truncate", state === 'collapsed' && 'sr-only')}>GESTOR DOCUMENTAL</h1>
   )
 }
 
@@ -57,7 +55,7 @@ function SidebarToggle() {
         <Button 
             variant="ghost" 
             size="icon"
-            className="hidden size-8 p-1.5 md:flex"
+            className="size-8 p-1.5"
             onClick={toggleSidebar}
         >
           {state === 'expanded' ? <PanelLeftClose /> : <PanelRightClose />}
@@ -167,7 +165,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         tooltip={item.label}>
                         <Link href={item.href}>
                             <item.icon />
-                            {item.label}
+                            <span className="group-data-[collapsible=icon]:hidden">
+                                {item.label}
+                            </span>
                         </Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
