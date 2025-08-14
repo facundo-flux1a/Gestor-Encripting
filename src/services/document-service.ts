@@ -636,7 +636,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
     let newIncidentsFound = 0;
     let duplicates = 0;
     let calculationErrors = 0;
-    let incompleteErrors = 0;
 
     try {
         if (docIds.length === 0) {
@@ -664,7 +663,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         // Check for incomplete documents
         for (const doc of docsWithDetails) {
             if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
-                incompleteErrors++;
                 const description = `Datos incompletos o faltantes en el documento.`;
                 const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Datos incompletos%']);
                 if (existing.length === 0) {
@@ -726,7 +724,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                     const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
                     const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el total%']);
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
                         newIncidentsFound++;
                     }
                 }
@@ -762,6 +760,8 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
     return analyzeDocuments([documentId]);
 }
 
+
+    
 
     
 
