@@ -37,6 +37,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { type DateRange } from 'react-day-picker';
 import { addDays, format } from 'date-fns';
+import { Input } from '@/components/ui/input';
 
 type SortConfig = {
   key: keyof Document | 'estado' | 'concepto' | 'impuestos' | null;
@@ -328,4 +329,4 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     </>
   );
 }
-
+    
