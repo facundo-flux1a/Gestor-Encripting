@@ -125,3 +125,15 @@ export const SessionPayloadSchema = z.object({
     role: z.string(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
+
+export const UserSchema = z.object({
+    id: z.number(),
+    nombre: z.string(),
+    email: z.string().email(),
+    phone: z.string().nullable(),
+    password: z.string(), // In a real app, this would not be here.
+    activo: z.boolean(),
+    fecha_creacion: z.string(),
+    fecha_actualizacion: z.string(),
+});
+export type User = z.infer<typeof UserSchema>;

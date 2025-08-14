@@ -4,7 +4,9 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import type { SessionPayload } from '@/lib/types';
+import type { SessionPayload, User } from '@/lib/types';
+import db from '@/lib/db';
+import type { RowDataPacket } from 'mysql2';
 
 const secretKey = process.env.SESSION_SECRET || 'default_secret_key_for_development';
 const key = new TextEncoder().encode(secretKey);
@@ -32,30 +34,54 @@ export async function decrypt(input: string): Promise<any> {
 
 
 export async function login(formData: FormData) {
-    const email = formData.get('email');
-    const password = formData.get('password');
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
 
-    // For now, using hardcoded credentials as requested
-    if (email === 'admin@example.com' && password === 'admin') {
-        const userPayload: SessionPayload = {
-            userId: '1',
-            username: 'Admin User',
-            role: 'administrator'
-        };
+    if (!email || !password) {
+        redirect('/auth/login?error=InvalidCredentials');
+    }
 
-        // Create the session
-        const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-        const session = await encrypt({ user: userPayload, expires });
+    try {
+        const [rows] = await db.query<RowDataPacket[]>(
+            'SELECT * FROM usuarios WHERE email = ? AND activo = 1',
+            [email]
+        );
 
-        // Save the session in a cookie
-        cookies().set('session', session, { expires, httpOnly: true });
+        if (rows.length === 0) {
+            console.log('User not found or not active');
+            redirect('/auth/login?error=InvalidCredentials');
+            return;
+        }
 
-        // Redirect to dashboard
-        redirect('/dashboard');
-    } else {
-       // In a real app, you would handle the error, maybe redirect back with an error message
-       console.log('Invalid credentials');
-       redirect('/auth/login?error=InvalidCredentials');
+        const user = rows[0] as User;
+
+        // !! SECURITY WARNING !!
+        // This is comparing plain text passwords. In a real production environment,
+        // you MUST hash passwords during registration and compare the hash here.
+        // Example using a library like bcrypt: const passwordsMatch = await bcrypt.compare(password, user.password);
+        const passwordsMatch = password === user.password;
+
+        if (passwordsMatch) {
+            const userPayload: SessionPayload = {
+                userId: user.id.toString(),
+                username: user.nombre,
+                // In a real app, role should probably come from the database
+                role: 'administrator' 
+            };
+
+            const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+            const session = await encrypt({ user: userPayload, expires });
+
+            cookies().set('session', session, { expires, httpOnly: true });
+
+            redirect('/dashboard');
+        } else {
+            console.log('Invalid credentials');
+            redirect('/auth/login?error=InvalidCredentials');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        redirect('/auth/login?error=ServerError');
     }
 }
 
