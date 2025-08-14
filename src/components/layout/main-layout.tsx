@@ -118,9 +118,6 @@ function UserProfile({ session }: { session: SessionPayload | null }) {
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
     return (
         <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
-            <div className="hidden md:flex">
-                <SidebarToggle />
-            </div>
             {children}
         </header>
     )
@@ -158,6 +155,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <Sidebar collapsible="icon">
         <SidebarHeader className="flex items-center justify-between p-3">
             <AppLogo />
+            <SidebarToggle />
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
