@@ -109,4 +109,13 @@ export const DocumentUpdateSchema = z.object({
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;
 
+
+export const IncidentAnalysisResultSchema = z.object({
+  newIncidentsFound: z.number().describe('The number of new incidents created.'),
+  duplicates: z.number().describe('Number of duplicate documents found.'),
+  calculationErrors: z.number().describe('Number of documents with calculation errors.'),
+  message: z.string().describe('A summary message of the operation.'),
+});
+export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
+
     

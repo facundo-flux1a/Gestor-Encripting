@@ -1,24 +1,17 @@
+
 'use server';
 
 /**
  * @fileOverview An AI agent for analyzing documents to find inconsistencies.
  *
  * - analyzeDocumentsForIncidents - A function that triggers the analysis process.
- * - IncidentAnalysisResult - The return type for the analysis function.
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { runDocumentAnalysis } from '@/services/document-service';
-
-export const IncidentAnalysisResultSchema = z.object({
-  newIncidentsFound: z.number().describe('The number of new incidents created.'),
-  duplicates: z.number().describe('Number of duplicate documents found.'),
-  calculationErrors: z.number().describe('Number of documents with calculation errors.'),
-  message: z.string().describe('A summary message of the operation.'),
-});
-
-export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
+import type { IncidentAnalysisResult } from '@/lib/types';
+import { IncidentAnalysisResultSchema } from '@/lib/types';
 
 const analyzeDocumentsFlow = ai.defineFlow(
   {

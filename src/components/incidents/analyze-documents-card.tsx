@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Bot, Loader2, FileWarning, Search, BarChart } from 'lucide-react';
-import { analyzeDocumentsForIncidents, type IncidentAnalysisResult } from '@/ai/flows/analyze-incidents';
+import { analyzeDocumentsForIncidents } from '@/ai/flows/analyze-incidents';
+import type { IncidentAnalysisResult } from '@/lib/types';
 
 interface AnalyzeDocumentsCardProps {
     onAnalysisComplete: () => void;
