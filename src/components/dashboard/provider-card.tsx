@@ -37,7 +37,7 @@ export function ProviderCard({ provider }: ProviderCardProps) {
                     </CardHeader>
                     <CardContent>
                         <p className="text-sm text-muted-foreground">
-                            Ver documentos y productos del proveedor.
+                            Ver análisis, productos y documentos del proveedor.
                         </p>
                     </CardContent>
                 </div>

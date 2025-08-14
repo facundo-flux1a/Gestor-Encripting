@@ -4,14 +4,14 @@
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { useParams, notFound } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Building, FileText, Package, Search, BarChart3 } from "lucide-react";
-import { getDocumentsByProviderName, getProductsByProviderName, getProviderByFiscalId } from "@/services/document-service";
+import { Building, FileText, Package, Search, BarChart3, Loader2 } from "lucide-react";
+import { getDocumentsByProviderName, getProductsByProviderName, getProviderByFiscalId, getProviderAnalytics } from "@/services/document-service";
 import type { Document, DocumentLine, DocumentEntity } from "@/lib/types";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { ProductCard } from "@/components/dashboard/product-card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProviderAnalytics, type ProviderAnalyticsData } from "@/components/dashboard/provider-analytics";
 
 export default function ProveedorDetailPage() {
     const params = useParams();
@@ -19,6 +19,7 @@ export default function ProveedorDetailPage() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [allProducts, setAllProducts] = useState<DocumentLine[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<DocumentLine[]>([]);
+    const [analyticsData, setAnalyticsData] = useState<ProviderAnalyticsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -31,10 +32,11 @@ export default function ProveedorDetailPage() {
             async function fetchData() {
                 setIsLoading(true);
                 try {
-                    const [prov, docs, prods] = await Promise.all([
+                    const [prov, docs, prods, analytics] = await Promise.all([
                         getProviderByFiscalId(decodedFiscalId),
                         getDocumentsByProviderName(decodedFiscalId),
-                        getProductsByProviderName(decodedFiscalId)
+                        getProductsByProviderName(decodedFiscalId),
+                        getProviderAnalytics(decodedFiscalId)
                     ]);
                     
                     if (!prov) {
@@ -46,6 +48,7 @@ export default function ProveedorDetailPage() {
                     setDocuments(docs);
                     setAllProducts(prods);
                     setFilteredProducts(prods);
+                    setAnalyticsData(analytics);
 
                 } catch (error) {
                     console.error("Failed to fetch provider data", error);
@@ -73,7 +76,7 @@ export default function ProveedorDetailPage() {
         return (
              <MainLayout>
                 <div className="flex flex-1 items-center justify-center">
-                    <p>Cargando datos del proveedor...</p>
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
                 </div>
             </MainLayout>
         )
@@ -93,59 +96,67 @@ export default function ProveedorDetailPage() {
                                 <Building className="h-8 w-8 text-primary" />
                                 {provider.nombre}
                             </h2>
-                            <p className="text-muted-foreground">
-                                Resumen de documentos y productos del proveedor.
+                            <p className="text-muted-foreground font-mono">
+                                {provider.identificador_fiscal}
                             </p>
                         </div>
-                         <Button asChild>
-                            <Link href={`/proveedores/${fiscalId}/analitica`}>
-                                <BarChart3 className="mr-2 h-4 w-4" />
-                                Ver Analítica
-                            </Link>
-                        </Button>
                     </div>
                 </MainLayoutHeader>
 
-                <section>
-                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-                            <Package className="h-6 w-6" />
-                            Productos Registrados
-                        </h3>
-                        <div className="relative w-full max-w-sm">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar producto..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-11 pl-10"
-                            />
-                        </div>
-                    </div>
-                    {filteredProducts.length > 0 ? (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                           {filteredProducts.map((product) => (
-                               <ProductCard 
-                                    key={`${product.codigo}-${product.id}`} 
-                                    product={product} 
-                                    providerId={provider?.identificador_fiscal!} 
-                                />
-                           ))}
-                        </div>
-                    ) : (
-                        <p className="text-center text-muted-foreground py-8">
-                            {searchTerm ? "No se encontraron productos con ese criterio." : "No se encontraron productos para este proveedor."}
-                        </p>
-                    )}
-                </section>
+                <Tabs defaultValue="analytics" className="space-y-6">
+                    <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="analytics"><BarChart3 className="mr-2"/>Analítica</TabsTrigger>
+                        <TabsTrigger value="products"><Package className="mr-2"/>Productos ({filteredProducts.length})</TabsTrigger>
+                        <TabsTrigger value="documents"><FileText className="mr-2"/>Documentos ({documents.length})</TabsTrigger>
+                    </TabsList>
 
-                <section>
-                    <h3 className="text-2xl font-semibold tracking-tight mb-4 flex items-center gap-2">
-                        <FileText className="h-6 w-6" />
-                        Documentos Registrados
-                    </h3>
-                    <DocumentsTable documents={documents} />
-                </section>
+                    <TabsContent value="analytics">
+                        {analyticsData ? (
+                            <ProviderAnalytics data={analyticsData} />
+                        ) : (
+                            <p>Cargando datos de analítica...</p>
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="products">
+                        <div className="flex justify-end items-center mb-4">
+                            <div className="relative w-full max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                <Input
+                                    placeholder="Buscar producto por nombre o código..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="h-11 pl-10"
+                                />
+                            </div>
+                        </div>
+                        {filteredProducts.length > 0 ? (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                               {filteredProducts.map((product) => (
+                                   <ProductCard 
+                                        key={`${product.codigo}-${product.id}`} 
+                                        product={product} 
+                                        providerId={provider?.identificador_fiscal!} 
+                                    />
+                               ))}
+                            </div>
+                        ) : (
+                            <div className="text-center text-muted-foreground py-8">
+                                <Search className="mx-auto h-12 w-12 text-gray-400" />
+                                <h3 className="mt-2 text-sm font-medium">
+                                    {searchTerm ? "No se encontraron productos" : "No hay productos registrados"}
+                                </h3>
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {searchTerm ? "Prueba a buscar con otro término." : "Este proveedor aún no tiene productos asociados."}
+                                </p>
+                            </div>
+                        )}
+                    </TabsContent>
+                    
+                    <TabsContent value="documents">
+                        <DocumentsTable documents={documents} />
+                    </TabsContent>
+                </Tabs>
             </div>
         </MainLayout>
     );
