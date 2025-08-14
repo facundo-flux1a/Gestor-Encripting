@@ -16,7 +16,7 @@ export function EntityCard({ entity, title }: EntityCardProps) {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    {title.toLowerCase().includes('cliente') ? <User className="h-5 w-5" /> : <Building className="h-5 w-5" />}
+                    {title.toLowerCase().includes('cliente') || title.toLowerCase().includes('receptor') ? <User className="h-5 w-5" /> : <Building className="h-5 w-5" />}
                     {title}
                 </CardTitle>
             </CardHeader>

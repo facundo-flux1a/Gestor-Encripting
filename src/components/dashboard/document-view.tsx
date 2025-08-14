@@ -3,24 +3,22 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { IvaBadge } from "@/components/dashboard/iva-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertCircle, CheckCircle2, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { UseFormReturn } from "react-hook-form";
 import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect, KeyboardEvent } from "react";
-import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FinancialDetailsCard } from "./financial-details-card";
+import { EditableEntityCard } from './editable-entity-card';
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -44,7 +42,6 @@ const formatDate = (date: string | null | undefined) => {
     if (!date) return 'N/A';
     try {
         const d = new Date(date);
-        // Ensure date is treated as UTC to avoid timezone shifts
         const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
         return format(utcDate, 'dd/MM/yyyy');
     } catch {
@@ -96,10 +93,8 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'),
     [doc.entidades]);
 
-    // Inicializar los arrays cuando cambie el documento o se inicie la edición
     useEffect(() => {
         if (isEditing) {
-            // Solo resetear si los arrays están vacíos o si el documento cambió
             if (entidadFields.length === 0 && doc.entidades?.length > 0) {
                 form.reset({ ...form.getValues(), entidades: doc.entidades });
             }
@@ -228,12 +223,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             />
         )
     }
-
-    // Función para obtener el valor actual (del form o del documento original)
-    const getCurrentValue = (fieldName: string) => {
-        return formValues[fieldName as keyof DocumentUpdatePayload] ?? doc[fieldName as keyof Document];
-    };
-
+    
     return (
         <>
             {/* General Information Card */}
@@ -279,34 +269,24 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         {renderEditableDate("fecha_emision", "Fecha Emisión")}
                         {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
                         
-                        <FormField
-                            control={form.control}
-                            name="fecha_creacion"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-muted-foreground text-xs">Fecha Creación</FormLabel>
-                                    <FormControl>
-                                        <p className="text-sm font-medium">{formatDate(doc.fecha_creacion)}</p>
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
+                        <FormItem>
+                             <FormLabel className="text-muted-foreground text-xs">Fecha Creación</FormLabel>
+                             <p className="text-sm font-medium">{formatDate(doc.fecha_creacion)}</p>
+                        </FormItem>
                         
                         {renderEditableField("moneda", "Moneda")}
                         
                          <FormItem>
                              <FormLabel className="text-muted-foreground text-xs">Estado</FormLabel>
-                             <FormControl>
-                                 {doc.verificado ? (
-                                      <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                          <CheckCircle2 className="h-4 w-4" /> Verificado
-                                      </Badge>
-                                 ) : (
-                                     <Badge variant="destructive" className="flex items-center gap-2">
-                                         <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
-                                     </Badge>
-                                 )}
-                             </FormControl>
+                             {doc.verificado ? (
+                                  <Badge variant="secondary" className="flex items-center gap-2 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                      <CheckCircle2 className="h-4 w-4" /> Verificado
+                                  </Badge>
+                             ) : (
+                                 <Badge variant="destructive" className="flex items-center gap-2">
+                                     <AlertCircle className="h-4 w-4" /> Pendiente de Revisión
+                                 </Badge>
+                             )}
                          </FormItem>
                     </div>
 
@@ -319,9 +299,28 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                             </AlertDescription>
                         </Alert>
                     )}
-
                 </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {entidadFields.map((field, index) => (
+                    <EditableEntityCard 
+                        key={field.id}
+                        isEditing={isEditing}
+                        form={form}
+                        entityIndex={index}
+                        removeEntity={() => removeEntidad(index)}
+                    />
+                ))}
+            </div>
+
+            {isEditing && (
+                 <Button type="button" variant="outline" size="sm" onClick={() => appendEntidad({ rol: 'Otro', nombre: '', direccion: '', identificador_fiscal: '', telefono: '', email: '', datos_extra: null })}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Añadir Entidad
+                </Button>
+            )}
+
+            <FinancialDetailsCard doc={doc} isEditing={isEditing} form={form} />
 
             {/* Document Lines Card */}
              <Card>
@@ -389,7 +388,6 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     isEditing ? "bg-muted/30 border" : "border-b last:border-b-0"
                                 )}>
                                     {isEditing ? (
-                                        // EDITING VIEW
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <FormField control={form.control} name={`lineas.${originalIndex}.descripcion`} render={({field}) => (
                                                 <FormItem className="md:col-span-2">
@@ -484,7 +482,6 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                             </div>
                                         </div>
                                     ) : (
-                                        // READ-ONLY VIEW
                                         <div className="flex flex-col md:flex-row md:items-start gap-4">
                                             <Box className="h-8 w-8 text-primary flex-shrink-0 mt-1 hidden md:block" />
                                             <div className="flex-grow">
@@ -554,4 +551,4 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             </Card>
         </>
     );
-} 
+}
