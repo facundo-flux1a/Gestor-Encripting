@@ -6,7 +6,7 @@ import { useEffect, useState, KeyboardEvent } from "react";
 import type { ProviderWithStats } from "@/lib/types";
 import { ProviderCard } from "@/components/dashboard/provider-card";
 import { Input } from "@/components/ui/input";
-import { Search, X } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import { ExportButton } from "@/components/dashboard/export-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,16 +62,14 @@ export default function ProveedoresPage() {
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
         <MainLayoutHeader>
-            <div className="flex items-center justify-between space-y-2">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Proveedores</h2>
-                    <p className="text-muted-foreground">
-                        Explora todos tus proveedores y sus métricas clave.
-                    </p>
-                </div>
-                 <div className="flex items-center space-x-2">
-                    <ExportButton data={filteredProviders} filename="proveedores" />
-                </div>
+            <div className="flex-1">
+                <h2 className="text-3xl font-bold tracking-tight">Proveedores</h2>
+                <p className="text-muted-foreground">
+                    Explora todos tus proveedores y sus métricas clave.
+                </p>
+            </div>
+             <div className="flex items-center space-x-2">
+                <ExportButton data={filteredProviders} filename="proveedores" />
             </div>
         </MainLayoutHeader>
         <div className="space-y-4">
@@ -109,7 +107,9 @@ export default function ProveedoresPage() {
         
         <div>
             {isLoading ? (
-                <p>Cargando proveedores...</p>
+                <div className="flex justify-center items-center py-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
             ) : (
               filteredProviders.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

@@ -199,10 +199,11 @@ export default function DocumentoPage() {
                 <form onSubmit={form.handleSubmit(onSubmit)}>
                     <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
                         <MainLayoutHeader>
-                        <div className="flex items-center justify-between space-y-2">
-                            <h2 className="text-3xl font-bold tracking-tight">
-                                {isEditing ? 'Editando Documento' : 'Detalles del Documento'}
-                            </h2>
+                            <div className="flex-1">
+                                <h2 className="text-3xl font-bold tracking-tight">
+                                    {isEditing ? 'Editando Documento' : 'Detalles del Documento'}
+                                </h2>
+                            </div>
                             <div className="flex items-center space-x-2">
                             {isEditing ? (
                                 <>
@@ -257,7 +258,6 @@ export default function DocumentoPage() {
                                 </>
                             )}
                             </div>
-                        </div>
                         </MainLayoutHeader>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -300,5 +300,3 @@ export default function DocumentoPage() {
     </MainLayout>
   );
 }
-
-    

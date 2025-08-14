@@ -24,20 +24,18 @@ export default function DocumentsPage() {
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
         <MainLayoutHeader>
-            <div className="flex items-center justify-between space-y-2">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Todos los Documentos</h2>
-                    <p className="text-muted-foreground">
-                        Gestiona y revisa todos tus documentos.
-                    </p>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Button>
-                        <Upload className="mr-2" />
-                        Subir Documento
-                    </Button>
-                    <ExportButton data={documents} filename="todos-los-documentos" />
-                </div>
+            <div className="flex-1">
+                <h2 className="text-3xl font-bold tracking-tight">Todos los Documentos</h2>
+                <p className="text-muted-foreground">
+                    Gestiona y revisa todos tus documentos.
+                </p>
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button>
+                    <Upload className="mr-2" />
+                    Subir Documento
+                </Button>
+                <ExportButton data={documents} filename="todos-los-documentos" />
             </div>
         </MainLayoutHeader>
         <div className="mt-6">

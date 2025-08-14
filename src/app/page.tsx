@@ -1,7 +1,7 @@
 
 'use client';
 
-import { MainLayout } from "@/components/layout/main-layout";
+import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments, getUniqueProvidersCount, getAllProducts } from "@/services/document-service";
 import { FinancialSummary } from "@/components/dashboard/financial-summary";
 import { StatsCard } from "@/components/dashboard/stats-card";
@@ -11,6 +11,7 @@ import { DocumentStatusChart } from "@/components/dashboard/document-status-char
 import { TimeSeriesChart } from "@/components/dashboard/time-series-chart";
 import { InsightsWidget } from "@/components/dashboard/insights-widget";
 import type { Document } from "@/lib/types";
+import { Loader2 } from "lucide-react";
 
 // === Helpers ===
 const getQuarter = (date: Date) => {
@@ -136,7 +137,7 @@ export default function Home() {
     return (
       <MainLayout>
         <div className="flex flex-1 items-center justify-center">
-          <p>Cargando dashboard...</p>
+           <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
       </MainLayout>
     );
@@ -145,9 +146,10 @@ export default function Home() {
   return (
     <MainLayout>
       <div className="flex-1 space-y-4 p-8 pt-6">
-        <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        </div>
+        <MainLayoutHeader>
+            <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        </MainLayoutHeader>
+
         <div className="space-y-4">
           {/* KPIs */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">

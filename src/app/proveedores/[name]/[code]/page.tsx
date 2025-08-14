@@ -171,25 +171,23 @@ export default function ProductDetailPage() {
         <MainLayout>
             <div className="flex-1 space-y-8 p-4 pt-6 md:p-8">
                 <MainLayoutHeader>
-                    <div className="flex items-center justify-between space-y-2">
-                        <div>
-                             <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                                <Package className="h-8 w-8 text-primary" />
-                                {productInfo.descripcion}
-                            </h2>
-                            <p className="text-muted-foreground flex items-center gap-2 font-mono">
-                                <Tag className="h-4 w-4" />
-                                {productInfo.codigo}
-                            </p>
-                            {advancedStats.alerts.length > 0 && (
-                                <div className="flex items-center gap-2 mt-2">
-                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                    <span className="text-sm text-amber-600">
-                                        {advancedStats.alerts.length} alerta{advancedStats.alerts.length > 1 ? 's' : ''} activa{advancedStats.alerts.length > 1 ? 's' : ''}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
+                    <div className="flex-1">
+                         <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                            <Package className="h-8 w-8 text-primary" />
+                            {productInfo.descripcion}
+                        </h2>
+                        <p className="text-muted-foreground flex items-center gap-2 font-mono">
+                            <Tag className="h-4 w-4" />
+                            {productInfo.codigo}
+                        </p>
+                        {advancedStats.alerts.length > 0 && (
+                            <div className="flex items-center gap-2 mt-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                <span className="text-sm text-amber-600">
+                                    {advancedStats.alerts.length} alerta{advancedStats.alerts.length > 1 ? 's' : ''} activa{advancedStats.alerts.length > 1 ? 's' : ''}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </MainLayoutHeader>
 
@@ -519,5 +517,3 @@ export default function ProductDetailPage() {
         </MainLayout>
     );
 }
-
-    

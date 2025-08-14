@@ -119,4 +119,9 @@ export const IncidentAnalysisResultSchema = z.object({
 });
 export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
 
-    
+export const SessionPayloadSchema = z.object({
+    userId: z.string(),
+    username: z.string(),
+    role: z.string(),
+});
+export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
