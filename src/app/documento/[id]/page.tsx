@@ -4,18 +4,19 @@
 import { useEffect, useState, useMemo, KeyboardEvent } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
-import { getDocumentById, updateDocument } from '@/services/document-service';
+import { getDocumentById, updateDocument, deleteDocument } from '@/services/document-service';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save, ExternalLink } from 'lucide-react';
+import { Loader2, Edit, X, Save, ExternalLink, Trash2 } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
 import { AnalyzeDocumentCard } from '@/components/incidents/analyze-document-card';
+import { DeleteConfirmationDialog } from '@/components/dashboard/delete-confirmation-dialog';
 
 
 export default function DocumentoPage() {
@@ -24,6 +25,7 @@ export default function DocumentoPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
   const [key, setKey] = useState(0); // Key to force re-render
 
@@ -78,6 +80,25 @@ export default function DocumentoPage() {
   const onAnalysisComplete = () => {
      // Increment key to trigger re-fetch of document data
      setKey(prevKey => prevKey + 1);
+  };
+
+  const handleDelete = async () => {
+    if (!doc) return;
+    try {
+        await deleteDocument(doc.id_documento);
+        toast({
+            title: "Documento Eliminado",
+            description: "El documento ha sido eliminado correctamente."
+        });
+        // The service function will handle the redirect
+    } catch (error) {
+        console.error("Failed to delete document", error);
+        toast({
+            title: "Error",
+            description: "No se pudo eliminar el documento.",
+            variant: "destructive",
+        });
+    }
   };
 
 
@@ -198,6 +219,10 @@ export default function DocumentoPage() {
                                     <Edit className="mr-2 h-4 w-4" />
                                     Editar
                                 </Button>
+                                <Button variant="destructive" type="button" onClick={() => setIsDeleteDialogOpen(true)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Eliminar
+                                </Button>
                                 <ExportButton data={exportData} filename={`documento_${doc.id_documento}`} />
                                 </>
                             )}
@@ -216,6 +241,12 @@ export default function DocumentoPage() {
                 </form>
             </Form>
       </TooltipProvider>
+      <DeleteConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        documentNumber={doc.numero_factura}
+      />
     </MainLayout>
   );
 }

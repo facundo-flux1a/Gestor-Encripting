@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 import db from '@/lib/db';
@@ -9,6 +8,8 @@ import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
 import type { IncidentAnalysisResult } from '@/lib/types';
+import { redirect } from 'next/navigation';
+
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -314,6 +315,24 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
+
+export async function deleteDocument(id: number): Promise<void> {
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+    try {
+        await connection.query('DELETE FROM documentos WHERE id = ?', [id]);
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error("Error deleting document:", error);
+        throw new Error('No se pudo eliminar el documento.');
+    } finally {
+        connection.release();
+        // After deletion, redirect user to the documents list
+        redirect('/documents');
+    }
+}
+
 export async function getUniqueProvidersCount(): Promise<number> {
     const [providerRows] = await db.query<RowDataPacket[]>(`
        SELECT COUNT(DISTINCT identificador_fiscal) as count
@@ -594,6 +613,7 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
             CASE 
                 WHEN descripcion LIKE '%duplicado%' THEN 'Duplicado'
                 WHEN descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
+                WHEN descripcion LIKE '%incompletos%' THEN 'Datos Incompletos'
                 ELSE 'Otro'
             END as name,
             COUNT(id) as count
@@ -618,6 +638,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
     let newIncidentsFound = 0;
     let duplicates = 0;
     let calculationErrors = 0;
+    let incompleteErrors = 0;
 
     try {
         if (docIds.length === 0) {
@@ -628,24 +649,43 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 message: 'No se proporcionaron documentos para el análisis.'
             };
         }
-
-        const [allDocs] = await connection.query<DocumentPacket[]>(`
-             SELECT d.id, d.numero_documento, d.importe_total, ed.identificador_fiscal as provider_cif
-             FROM documentos d
-             LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-             WHERE d.id IN (?) AND d.numero_documento IS NOT NULL AND d.numero_documento != ''
+        
+        const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
+            SELECT 
+                d.id, d.numero_documento, d.importe_total, d.importe_sin_impuestos,
+                ed.identificador_fiscal as provider_cif,
+                (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
+                (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota
+            FROM documentos d
+            LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+            WHERE d.id IN (?)
         `, [docIds]);
+
+
+        // Check for incomplete documents
+        for (const doc of docsWithDetails) {
+            if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
+                incompleteErrors++;
+                const description = `Datos incompletos o faltantes en el documento.`;
+                const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Datos incompletos%']);
+                if (existing.length === 0) {
+                    await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                    newIncidentsFound++;
+                }
+            }
+        }
+        
+
+        const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
 
         // Check for duplicates
         const docMap = new Map<string, number[]>();
-        for (const doc of allDocs) {
-            if (doc.provider_cif && doc.importe_total) { // Ensure key parts are not null
-                const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
-                if (!docMap.has(key)) {
-                    docMap.set(key, []);
-                }
-                docMap.get(key)!.push(doc.id);
+        for (const doc of validDocsForAnalysis) {
+            const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+            if (!docMap.has(key)) {
+                docMap.set(key, []);
             }
+            docMap.get(key)!.push(doc.id);
         }
 
         for (const [key, ids] of docMap.entries()) {
@@ -663,24 +703,17 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         }
 
         // Check for calculation errors
-        const [docsWithTotals] = await connection.query<DocumentPacket[]>(`
-            SELECT d.id, d.importe_sin_impuestos, d.importe_total, SUM(i.cuota) as sum_cuota
-            FROM documentos d
-            LEFT JOIN impuestos_documento i ON d.id = i.documento_id
-            WHERE d.id IN (?)
-            GROUP BY d.id, d.importe_sin_impuestos, d.importe_total
-            HAVING SUM(i.cuota) IS NOT NULL
-        `, [docIds]);
-
-        for (const doc of docsWithTotals) {
-            const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
-            if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
-                calculationErrors++;
-                 const description = `Error de cálculo detectado. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
-                const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo%']);
-                if (existing.length === 0) {
-                    await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
-                    newIncidentsFound++;
+        for (const doc of validDocsForAnalysis) {
+            if (doc.sum_cuota !== null) { // Only check if there are taxes
+                 const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
+                if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
+                    calculationErrors++;
+                    const description = `Error de cálculo detectado. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo%']);
+                    if (existing.length === 0) {
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        newIncidentsFound++;
+                    }
                 }
             }
         }
