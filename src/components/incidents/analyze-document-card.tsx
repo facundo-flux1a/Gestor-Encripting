@@ -52,7 +52,7 @@ export function AnalyzeDocumentCard({ documentId, onAnalysisComplete }: AnalyzeD
     };
 
     return (
-        <Card className="h-full flex flex-col">
+        <Card className="flex flex-col">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Bot className="h-6 w-6 text-primary" />

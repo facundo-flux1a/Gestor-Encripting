@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect, KeyboardEvent } from "react";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
@@ -308,6 +309,17 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                              </FormControl>
                          </FormItem>
                     </div>
+
+                    {!doc.verificado && doc.incidencia_razon && (
+                        <Alert variant="destructive" className="mt-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Incidencia Detectada</AlertTitle>
+                            <AlertDescription>
+                                {doc.incidencia_razon}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
                 </CardContent>
             </Card>
 
