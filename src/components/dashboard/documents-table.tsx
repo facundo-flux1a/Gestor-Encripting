@@ -12,7 +12,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,22 +21,25 @@ import {
     CheckCircle2, 
     AlertCircle,
     Search, 
-    X
+    X,
+    CalendarIcon
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { IvaBadge } from './iva-badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { type DateRange } from 'react-day-picker';
+import { addDays, format } from 'date-fns';
 
 type SortConfig = {
-  key: keyof Document | 'estado' | 'concepto' | null;
+  key: keyof Document | 'estado' | 'concepto' | 'impuestos' | null;
   direction: 'ascending' | 'descending';
 };
 
@@ -55,6 +57,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   
   const [globalFilter, setGlobalFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fecha_emision', direction: 'descending' });
 
@@ -63,7 +66,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setIsSummarizeOpen(true);
   };
 
-  const handleSort = (key: keyof Document | 'estado' | 'concepto') => {
+  const handleSort = (key: SortConfig['key']) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -74,6 +77,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const clearFilters = () => {
     setGlobalFilter('');
     setStatusFilter(null);
+    setDateRange(undefined);
   };
 
   const filteredAndSortedDocuments = useMemo(() => {
@@ -89,6 +93,17 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 doc.cif?.toLowerCase().includes(lowercasedFilter) ||
                 doc.observaciones?.toLowerCase().includes(lowercasedFilter)
             );
+        });
+    }
+    
+    // Date range filter
+    if (dateRange?.from) {
+        filteredData = filteredData.filter(doc => {
+            const docDate = new Date(doc.fecha_emision);
+            if (dateRange.to) {
+                return docDate >= dateRange.from! && docDate <= dateRange.to;
+            }
+            return docDate >= dateRange.from!;
         });
     }
 
@@ -111,7 +126,9 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
             bValue = b.verificado;
         } else if (sortConfig.key === 'concepto') {
             aValue = a.observaciones;
-            bValue = b.observaciones;
+        } else if (sortConfig.key === 'impuestos') {
+             aValue = a.iva;
+             bValue = b.iva;
         } else {
             aValue = a[sortConfig.key as keyof Document];
             bValue = b[sortConfig.key as keyof Document];
@@ -131,64 +148,69 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     }
 
     return filteredData;
-  }, [documents, globalFilter, statusFilter, sortConfig]);
+  }, [documents, globalFilter, statusFilter, sortConfig, dateRange]);
 
-  const columns: { key: keyof Document | 'estado' | 'concepto', label: string, isNumeric?: boolean }[] = [
+  const columns: { key: SortConfig['key'], label: string, isNumeric?: boolean }[] = [
       { key: 'numero_factura', label: 'Nº Factura' },
       { key: 'fecha_emision', label: 'Fecha' },
       { key: 'proveedor', label: 'Proveedor/Cliente' },
       { key: 'concepto', label: 'Concepto' },
       { key: 'base_imponible', label: 'Base', isNumeric: true },
+      { key: 'impuestos', label: 'Impuestos', isNumeric: true },
       { key: 'total', label: 'Total', isNumeric: true },
       { key: 'estado', label: 'Estado' }
   ]
 
-  const isFiltered = globalFilter || statusFilter;
+  const isFiltered = globalFilter || statusFilter || dateRange;
 
   return (
     <>
     <TooltipProvider delayDuration={200}>
         <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-                <div className="relative w-full max-w-sm">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                 <div className="relative w-full md:w-auto md:flex-grow md:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por factura, proveedor, CIF, concepto..."
+                        placeholder="Buscar por factura, proveedor, CIF..."
                         value={globalFilter}
                         onChange={(e) => setGlobalFilter(e.target.value)}
                         className="h-11 pl-10"
                     />
                 </div>
-                <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-11">
-                                Estado: {statusFilter ? (statusFilter === 'verificado' ? 'Verificado' : 'Pendiente') : 'Todos'}
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Filtrar por estado</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuCheckboxItem
-                                checked={!statusFilter}
-                                onCheckedChange={() => setStatusFilter(null)}
-                            >
-                                Todos
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                                checked={statusFilter === 'verificado'}
-                                onCheckedChange={() => setStatusFilter('verificado')}
-                            >
-                                Verificado
-                            </DropdownMenuCheckboxItem>
-                             <DropdownMenuCheckboxItem
-                                checked={statusFilter === 'pendiente'}
-                                onCheckedChange={() => setStatusFilter('pendiente')}
-                            >
-                                Pendiente
-                            </DropdownMenuCheckboxItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button
+                            id="date"
+                            variant={"outline"}
+                            className="w-full md:w-auto justify-start text-left font-normal h-11"
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateRange?.from ? (
+                            dateRange.to ? (
+                                <>
+                                {format(dateRange.from, "LLL dd, y")} -{" "}
+                                {format(dateRange.to, "LLL dd, y")}
+                                </>
+                            ) : (
+                                format(dateRange.from, "LLL dd, y")
+                            )
+                            ) : (
+                            <span>Seleccionar fecha</span>
+                            )}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={dateRange?.from}
+                            selected={dateRange}
+                            onSelect={setDateRange}
+                            numberOfMonths={2}
+                        />
+                        </PopoverContent>
+                    </Popover>
                     {isFiltered && (
                         <Button variant="ghost" onClick={clearFilters} className="h-11">
                             <X className="mr-2 h-4 w-4" />
@@ -247,7 +269,14 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                             </Tooltip>
                         </TableCell>
                         <TableCell className="text-right">
-                            {formatCurrency(doc.base_imponible)}
+                           {formatCurrency(doc.base_imponible)}
+                        </TableCell>
+                         <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                                {doc.iva_details.map((iva, index) => (
+                                    <IvaBadge key={index} iva={iva} />
+                                ))}
+                            </div>
                         </TableCell>
                         <TableCell className="text-right font-bold">{formatCurrency(doc.total)}</TableCell>
                         <TableCell>
@@ -299,3 +328,4 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     </>
   );
 }
+

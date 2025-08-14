@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,7 @@ export function IvaBadge({ iva }: { iva: IvaDetail }) {
       <Tooltip>
         <TooltipTrigger asChild>
            <Badge className={cn("text-white", getVatColorClass(iva.porcentaje))}>
-             {formatCurrency(iva.cuota)}
+             {iva.porcentaje}%
            </Badge>
         </TooltipTrigger>
         <TooltipContent>
