@@ -299,4 +299,3 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     </>
   );
 }
-
