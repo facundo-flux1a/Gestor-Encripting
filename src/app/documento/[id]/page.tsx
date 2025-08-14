@@ -15,6 +15,7 @@ import { Loader2, Edit, X, Save, ExternalLink } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
+import { AnalyzeDocumentCard } from '@/components/incidents/analyze-document-card';
 
 
 export default function DocumentoPage() {
@@ -24,6 +25,7 @@ export default function DocumentoPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const [key, setKey] = useState(0); // Key to force re-render
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
@@ -34,6 +36,33 @@ export default function DocumentoPage() {
     }
   });
 
+  const fetchDocument = async (id: number) => {
+    try {
+      setIsLoading(true);
+      const fetchedDoc = await getDocumentById(id);
+      if (!fetchedDoc) {
+        notFound();
+      } else {
+        setDoc(fetchedDoc);
+         form.reset({
+          ...fetchedDoc,
+          fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
+          fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
+          fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch document", error);
+      toast({
+        title: "Error",
+        description: "No se pudo cargar el documento.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
     const idParam = params.id;
     const id = parseInt(Array.isArray(idParam) ? idParam[0] : idParam, 10);
@@ -43,34 +72,14 @@ export default function DocumentoPage() {
       return;
     }
 
-    async function fetchDocument() {
-      try {
-        setIsLoading(true);
-        const fetchedDoc = await getDocumentById(id);
-        if (!fetchedDoc) {
-          notFound();
-        } else {
-          setDoc(fetchedDoc);
-           form.reset({
-            ...fetchedDoc,
-            fecha_emision: fetchedDoc.fecha_emision ? new Date(fetchedDoc.fecha_emision).toISOString().split('T')[0] : '',
-            fecha_vencimiento: fetchedDoc.fecha_vencimiento ? new Date(fetchedDoc.fecha_vencimiento).toISOString().split('T')[0] : '',
-            fecha_creacion: fetchedDoc.fecha_creacion ? new Date(fetchedDoc.fecha_creacion).toISOString().split('T')[0] : '',
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch document", error);
-        toast({
-          title: "Error",
-          description: "No se pudo cargar el documento.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchDocument();
-  }, [params.id, form, toast]);
+    fetchDocument(id);
+  }, [params.id, key, form, toast]);
+
+  const onAnalysisComplete = () => {
+     // Increment key to trigger re-fetch of document data
+     setKey(prevKey => prevKey + 1);
+  };
+
 
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
@@ -195,8 +204,14 @@ export default function DocumentoPage() {
                             </div>
                         </div>
                         </MainLayoutHeader>
-                        
-                        <DocumentView doc={doc} isEditing={isEditing} form={form} />
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                           <div className="lg:col-span-2">
+                             <DocumentView doc={doc} isEditing={isEditing} form={form} />
+                           </div>
+                           <div className="space-y-6">
+                               <AnalyzeDocumentCard documentId={doc.id_documento} onAnalysisComplete={onAnalysisComplete} />
+                           </div>
+                        </div>
                     </div>
                 </form>
             </Form>

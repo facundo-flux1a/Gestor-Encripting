@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import db from '@/lib/db';
@@ -603,15 +604,14 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
     `);
     
     return {
-        totalOpen: summary[0].totalOpen || 0,
-        totalValidated: summary[0].totalValidated || 0,
+        totalOpen: summary[0]?.totalOpen || 0,
+        totalValidated: summary[0]?.totalValidated || 0,
         byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
         byType: byType.map(t => ({ name: t.name, count: t.count })),
     };
 }
 
-
-export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
+async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResult> {
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
@@ -620,16 +620,26 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
     let calculationErrors = 0;
 
     try {
+        if (docIds.length === 0) {
+            return {
+                newIncidentsFound: 0,
+                duplicates: 0,
+                calculationErrors: 0,
+                message: 'No se proporcionaron documentos para el análisis.'
+            };
+        }
+
         const [allDocs] = await connection.query<DocumentPacket[]>(`
              SELECT d.id, d.numero_documento, d.importe_total, ed.identificador_fiscal as provider_cif
              FROM documentos d
              LEFT JOIN entidades_documento ed ON d.id = ed.documento_id AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-        `);
+             WHERE d.id IN (?) AND d.numero_documento IS NOT NULL AND d.numero_documento != ''
+        `, [docIds]);
 
         // Check for duplicates
         const docMap = new Map<string, number[]>();
         for (const doc of allDocs) {
-            if (doc.numero_documento && doc.provider_cif) {
+            if (doc.provider_cif && doc.importe_total) { // Ensure key parts are not null
                 const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
                 if (!docMap.has(key)) {
                     docMap.set(key, []);
@@ -657,8 +667,10 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
             SELECT d.id, d.importe_sin_impuestos, d.importe_total, SUM(i.cuota) as sum_cuota
             FROM documentos d
             LEFT JOIN impuestos_documento i ON d.id = i.documento_id
+            WHERE d.id IN (?)
             GROUP BY d.id, d.importe_sin_impuestos, d.importe_total
-        `);
+            HAVING SUM(i.cuota) IS NOT NULL
+        `, [docIds]);
 
         for (const doc of docsWithTotals) {
             const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
@@ -689,4 +701,15 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
     } finally {
         connection.release();
     }
+}
+
+
+export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
+    const [allDocIds] = await db.query<RowDataPacket[]>('SELECT id FROM documentos');
+    const docIds = allDocIds.map(row => row.id);
+    return analyzeDocuments(docIds);
+}
+
+export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
+    return analyzeDocuments([documentId]);
 }
