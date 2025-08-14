@@ -171,14 +171,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     <TableCell>{doc.cif}</TableCell>
                     <TableCell>{doc.tipo_documento}</TableCell>
                     <TableCell className="text-right">
-                       <Tooltip>
-                        <TooltipTrigger asChild>
-                           <Badge className="bg-vat-base text-white">{formatCurrency(doc.base_imponible)}</Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Base Imponible</p>
-                        </TooltipContent>
-                      </Tooltip>
+                        {formatCurrency(doc.base_imponible)}
                     </TableCell>
                     <TableCell className="text-right">
                         <div className="flex flex-col items-end gap-1">
