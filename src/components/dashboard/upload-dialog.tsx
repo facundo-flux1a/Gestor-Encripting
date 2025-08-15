@@ -9,12 +9,12 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileUp, FileCheck, X } from 'lucide-react';
+import { Loader2, FileUp, FileCheck, X, FileText } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
+import { Progress } from '../ui/progress';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -23,73 +23,91 @@ interface UploadDocumentDialogProps {
 }
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const { toast } = useToast();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      setFile(acceptedFiles[0]);
-    }
+    setFiles(prevFiles => [...prevFiles, ...acceptedFiles]);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
-    multiple: false,
+    multiple: true,
   });
+  
+  const removeFile = (fileName: string) => {
+    setFiles(files.filter(file => file.name !== fileName));
+  };
+
 
   const handleUpload = async () => {
-    if (!file) {
+    if (files.length === 0) {
       toast({
         title: 'Error',
-        description: 'Por favor, selecciona un archivo PDF para subir.',
+        description: 'Por favor, selecciona al menos un archivo PDF para subir.',
         variant: 'destructive',
       });
       return;
     }
 
     setIsLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
+    setUploadProgress({ current: 0, total: files.length });
 
-    try {
-      const result = await uploadDocument(formData);
-      toast({
-        title: 'Éxito',
-        description: result.message,
-      });
-      onUploadSuccess();
-    } catch (error: any) {
-      toast({
-        title: 'Error al subir',
-        description: error.message || 'Ocurrió un problema al subir el archivo.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-      setFile(null); // Reset file after upload attempt
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress({ current: i + 1, total: files.length });
+        
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const result = await uploadDocument(formData);
+            toast({
+              title: `Éxito: ${file.name}`,
+              description: result.message,
+            });
+            onUploadSuccess(); // Refresh list after each successful upload
+        } catch (error: any) {
+            toast({
+              title: `Error al subir ${file.name}`,
+              description: error.message || 'Ocurrió un problema al subir el archivo.',
+              variant: 'destructive',
+            });
+        }
     }
+
+    setIsLoading(false);
+    setFiles([]); // Reset file list
+    setUploadProgress({ current: 0, total: 0 });
+    toast({
+        title: 'Proceso Finalizado',
+        description: 'Se ha completado la subida de todos los archivos seleccionados.',
+    });
+    setIsOpen(false);
   };
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      setFile(null);
+      setFiles([]);
       setIsLoading(false);
+      setUploadProgress({ current: 0, total: 0 });
     }
     setIsOpen(open);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
-          <DialogTitle>Subir Nuevo Documento</DialogTitle>
+          <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona un archivo PDF para enviarlo a tu flujo de trabajo de n8n.
+            Selecciona uno o más archivos PDF para enviarlos a tu flujo de trabajo. Se subirán de uno en uno.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <div className="py-4 space-y-4">
           <div
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
@@ -99,35 +117,48 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             <input {...getInputProps()} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
             {isDragActive ? (
-              <p>Suelta el archivo aquí...</p>
+              <p>Suelta los archivos aquí...</p>
             ) : (
-              <p className="text-center">Arrastra y suelta un PDF aquí, o haz clic para seleccionar</p>
+              <p className="text-center">Arrastra y suelta PDFs aquí, o haz clic para seleccionar</p>
             )}
           </div>
-          {file && (
-            <div className="mt-4 flex items-center justify-between p-2 bg-muted rounded-md">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileCheck className="h-5 w-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm font-medium truncate">{file.name}</span>
-              </div>
-              <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => setFile(null)}>
-                <X className="h-4 w-4" />
-              </Button>
+          {files.length > 0 && (
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                <h4 className="text-sm font-medium">Archivos seleccionados ({files.length}):</h4>
+                {files.map(file => (
+                     <div key={file.name} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="text-sm font-medium truncate">{file.name}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeFile(file.name)} disabled={isLoading}>
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                ))}
+            </div>
+          )}
+           {isLoading && (
+            <div className="space-y-2">
+                 <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="w-full" />
+                 <p className="text-sm text-center text-muted-foreground">
+                    Subiendo {uploadProgress.current} de {uploadProgress.total} archivos...
+                 </p>
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex-col-reverse sm:flex-row">
             <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading} className="w-full sm:w-auto">
               Cancelar
             </Button>
-          <Button onClick={handleUpload} disabled={!file || isLoading} className="w-full sm:w-auto">
+          <Button onClick={handleUpload} disabled={files.length === 0 || isLoading} className="w-full sm:w-auto">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Subiendo...
+                Procesando...
               </>
             ) : (
-              'Subir y Procesar'
+             `Subir ${files.length} Archivo${files.length > 1 ? 's' : ''}`
             )}
           </Button>
         </DialogFooter>
