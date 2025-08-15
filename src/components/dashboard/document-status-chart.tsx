@@ -1,53 +1,49 @@
 
 'use client';
 
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { FileText } from 'lucide-react';
 
 type ChartData = {
   name: string;
   value: number;
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="rounded-lg border bg-background p-2 shadow-sm">
-        <div className="grid grid-cols-1 gap-1">
-          <span className="text-sm font-bold text-muted-foreground">{label}</span>
-          <span className="font-bold" style={{ color: 'hsl(var(--chart-1))' }}>
-            Documentos: {payload[0].value}
-          </span>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
-
-
 export function DocumentStatusChart({ data }: { data: ChartData[] }) {
-  // Radar chart works best with at least 3 points
-  const chartData = data.length < 3 
-    ? [...data, ...Array(3 - data.length).fill({ name: '', value: 0 })]
-    : data;
+  const totalDocuments = data.reduce((acc, curr) => acc + curr.value, 0);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Distribución de Documentos</CardTitle>
-        <CardDescription>Cantidad de cada tipo de documento en el total.</CardDescription>
+        <CardDescription>
+          Cantidad de cada tipo de documento. Tienes un total de {totalDocuments} documentos.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-            <PolarGrid />
-            <PolarAngleAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-            <Radar name="Documentos" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.6} />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend iconType="circle" />
-          </RadarChart>
-        </ResponsiveContainer>
+        <div className="space-y-4">
+          {data.length > 0 ? (
+            data
+              .sort((a, b) => b.value - a.value)
+              .map(({ name, value }) => (
+                <div key={name} className="space-y-1">
+                  <div className="flex justify-between items-center text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                       <FileText className="h-4 w-4 text-muted-foreground" />
+                       <span>{name}</span>
+                    </div>
+                    <span className="font-bold">{value}</span>
+                  </div>
+                  <Progress value={(value / totalDocuments) * 100} />
+                </div>
+              ))
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No hay datos de documentos para mostrar.
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
