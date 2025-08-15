@@ -248,7 +248,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     <FormItem>
                                         <FormControl>
                                              <Input 
-                                                {...field}
+                                                {...field} 
                                                 placeholder="Tipo de Documento"
                                                 className="text-sm"
                                                 value={field.value ?? ''}
@@ -460,7 +460,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                 <p className="font-semibold text-base">{currentLinea.descripcion}</p>
                                                 <p className="text-sm text-muted-foreground font-mono">{currentLinea.codigo}</p>
                                                 <div className="flex items-center gap-4 mt-2 text-sm">
-                                                    <Badge variant="secondary">Cant: {currentLinea.cantidad}</Badge>
+                                                    <Badge variant="secondary">Cant: {Math.round(currentLinea.cantidad)}</Badge>
                                                     <Badge variant="outline" className="text-destructive border-destructive/50">Dto: {currentLinea.descuento_porcentaje || 0}%</Badge>
                                                     {provider && currentLinea.codigo && (
                                                         <Button size="sm" variant="link" asChild className="p-0 h-auto">
