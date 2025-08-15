@@ -239,36 +239,29 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     <CardTitle className="flex items-center gap-2">
                         <Info className="h-5 w-5" /> Información General
                     </CardTitle>
-                     <FormField
-                        control={form.control}
-                        name="tipo_documento"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                    {isEditing ? (
-                                        <Select 
-                                            onValueChange={field.onChange} 
-                                            value={field.value ?? doc.tipo_documento}
-                                        >
-                                            <SelectTrigger><SelectValue placeholder="Tipo de Documento" /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Factura">Factura</SelectItem>
-                                                <SelectItem value="Nomina">Nómina</SelectItem>
-                                                <SelectItem value="Contrato">Contrato</SelectItem>
-                                                <SelectItem value="Alquiler">Alquiler</SelectItem>
-                                                <SelectItem value="Otro">Otro</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    ) : (
-                                        <CardDescription>
-                                            {field.value ?? doc.tipo_documento}
-                                        </CardDescription>
-                                    )}
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
+                    <CardDescription>
+                         {isEditing ? (
+                            <FormField
+                                control={form.control}
+                                name="tipo_documento"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                             <Input 
+                                                {...field}
+                                                placeholder="Tipo de Documento"
+                                                className="text-sm"
+                                                value={field.value ?? ''}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        ) : (
+                           doc.tipo_documento
                         )}
-                    />
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid md:grid-cols-3 gap-6 text-sm">
@@ -531,4 +524,3 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
         </>
     );
 }
-

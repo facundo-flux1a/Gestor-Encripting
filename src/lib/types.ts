@@ -62,7 +62,7 @@ export type DocumentFile = z.infer<typeof DocumentFileSchema>;
 export type Document = {
   id_documento: number;
   numero_factura: string;
-  tipo_documento: 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
+  tipo_documento: string;
   verificado: boolean;
   incidencia: boolean; // Retained for logic but `verificado` is primary
   incidencia_razon?: string | null;
@@ -99,7 +99,7 @@ export const DocumentUpdateSchema = z.object({
   base_imponible: z.coerce.number(),
   iva: z.coerce.number(),
   total: z.coerce.number(),
-  tipo_documento: z.enum(['Factura', 'Nomina', 'Contrato', 'Alquiler', 'Otro']),
+  tipo_documento: z.string().min(1, "El tipo de documento es obligatorio."),
   fecha_vencimiento: z.string().nullable(),
   moneda: z.string().length(3, "La moneda debe tener 3 caracteres."),
   observaciones: z.string().nullable(),

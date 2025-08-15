@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import db from '@/lib/db';
@@ -88,15 +89,6 @@ interface IncidenciaPacket extends RowDataPacket {
     validado: boolean;
 }
 
-
-// Función para mapear los tipos de documento de la BD al tipo Document
-function mapTipoDocumento(dbTipo: string): 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro' {
-    const allowedTypes: ('Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro')[] = ['Factura', 'Nomina', 'Contrato', 'Alquiler', 'Otro'];
-    if (allowedTypes.includes(dbTipo as any)) {
-        return dbTipo as 'Factura' | 'Nomina' | 'Contrato' | 'Alquiler' | 'Otro';
-    }
-    return 'Otro';
-}
 
 // Helper function to safely parse JSON. Ensures the output is an object or null.
 const safeJsonParse = (data: any): object | null => {
@@ -195,7 +187,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         return {
             id_documento: doc.id,
             numero_factura: doc.numero_documento,
-            tipo_documento: mapTipoDocumento(doc.tipo_documento),
+            tipo_documento: doc.tipo_documento,
             verificado: verificado,
             incidencia: pendientes > 0,
             incidencia_razon: primeraIncidenciaPendiente?.descripcion ?? null,
