@@ -48,6 +48,8 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
             .map(item => ({
                 ...item,
                 fecha: formatDateForChart(item.fecha_emision),
+                precio_unitario: parseFloat(item.precio_unitario as any) || 0,
+                cantidad: parseFloat(item.cantidad as any) || 0
             }))
             .sort((a, b) => new Date(a.fecha_emision!).getTime() - new Date(b.fecha_emision!).getTime());
     }, [history]);
@@ -96,7 +98,7 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
                             <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                             <Tooltip content={<CustomTooltip />} />
                             <Legend iconType="circle" />
-                            <Line type="monotone" dataKey="cantidad" name="Cantidad" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                            <Line type="monotone" dataKey="cantidad" name="Cantidad" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </CardContent>
