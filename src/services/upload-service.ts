@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 
-const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/f33cb275-9740-4f98-bb37-909bb817e4de';
+const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf3';
 
 const UploadResponseSchema = z.object({
   success: z.boolean(),
