@@ -315,7 +315,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <div className="flex justify-center">
-                                        {doc.incidencia ? (
+                                        {!doc.verificado ? (
                                             <AlertCircle className="h-5 w-5 text-destructive" />
                                         ) : (
                                             <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -323,7 +323,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>{doc.incidencia ? 'Pendiente de Revisión' : 'Verificado'}</p>
+                                    <p>{!doc.verificado ? 'Pendiente de Revisión' : 'Validado'}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TableCell>

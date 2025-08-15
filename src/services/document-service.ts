@@ -178,10 +178,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_subida: f.fecha_subida,
         }));
 
-        const totalIncidencias = currentIncidencias.length;
         const pendientes = currentIncidencias.filter(i => !i.validado).length;
-        const verificado = totalIncidencias > 0 && pendientes === 0;
-
+        const verificado = pendientes === 0;
         const primeraIncidenciaPendiente = currentIncidencias.find(i => !i.validado);
 
         return {
@@ -717,7 +715,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                     const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
                     const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el total%']);
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
                         newIncidentsFound++;
                     }
                 }
