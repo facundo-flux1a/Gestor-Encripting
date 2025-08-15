@@ -90,14 +90,14 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
                 </CardHeader>
                 <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="fecha" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                             <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                             <Tooltip content={<CustomTooltip />} />
                             <Legend iconType="circle" />
-                            <Bar dataKey="cantidad" name="Cantidad" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                            <Line type="monotone" dataKey="cantidad" name="Cantidad" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                        </LineChart>
                     </ResponsiveContainer>
                 </CardContent>
             </Card>
