@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import pdf from 'pdf-parse';
+// Dynamic require will be used inside the function to avoid bundling issues.
 
 const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf3';
 
@@ -12,6 +12,7 @@ const UploadResponseSchema = z.object({
 });
 
 export async function uploadDocument(formData: FormData) {
+  const pdf = require('pdf-parse');
   const file = formData.get('file') as File;
 
   if (!file) {
