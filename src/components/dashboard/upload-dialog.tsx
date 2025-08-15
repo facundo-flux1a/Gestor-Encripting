@@ -13,7 +13,6 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileCheck, X } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
@@ -103,28 +102,26 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             {isDragActive ? (
               <p>Suelta el archivo aquí...</p>
             ) : (
-              <p>Arrastra y suelta un PDF aquí, o haz clic para seleccionar</p>
+              <p className="text-center">Arrastra y suelta un PDF aquí, o haz clic para seleccionar</p>
             )}
           </div>
           {file && (
             <div className="mt-4 flex items-center justify-between p-2 bg-muted rounded-md">
-              <div className="flex items-center gap-2">
-                <FileCheck className="h-5 w-5 text-green-500" />
+              <div className="flex items-center gap-2 min-w-0">
+                <FileCheck className="h-5 w-5 text-green-500 flex-shrink-0" />
                 <span className="text-sm font-medium truncate">{file.name}</span>
               </div>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setFile(null)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => setFile(null)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           )}
         </div>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" disabled={isLoading}>
+            <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading}>
               Cancelar
             </Button>
-          </DialogClose>
-          <Button onClick={handleUpload} disabled={!file || isLoading}>
+          <Button onClick={handleUpload} disabled={!file || isLoading} className="w-full sm:w-auto">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
