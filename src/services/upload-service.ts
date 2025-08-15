@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -31,15 +30,13 @@ export async function uploadDocument(formData: FormData) {
   const extractedText = pdfData.text;
 
   try {
+    const webhookFormData = new FormData();
+    webhookFormData.append('extractedText', extractedText);
+    webhookFormData.append('file', file);
+    
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-          fileName: file.name,
-          extractedText: extractedText
-      }),
+      body: webhookFormData,
     });
 
     if (!response.ok) {
