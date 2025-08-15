@@ -12,7 +12,7 @@ const UploadResponseSchema = z.object({
 });
 
 export async function uploadDocument(formData: FormData) {
-  const pdf = require('pdf-parse');
+  const pdf = require('pdf-parse/lib/pdf-parse.js');
   const file = formData.get('file') as File;
 
   if (!file) {
