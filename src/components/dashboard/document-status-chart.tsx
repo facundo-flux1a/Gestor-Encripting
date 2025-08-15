@@ -36,23 +36,31 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data}>
-             <XAxis
-              dataKey="name"
-              stroke="#888888"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-            />
-            <YAxis
+          <BarChart 
+            layout="vertical"
+            data={data}
+            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+          >
+            <XAxis
+              type="number"
               stroke="#888888"
               fontSize={12}
               tickLine={false}
               axisLine={false}
               allowDecimals={false}
             />
+            <YAxis
+              type="category"
+              dataKey="name"
+              stroke="#888888"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              width={100}
+              tickFormatter={value => value.length > 12 ? `${value.substring(0, 12)}...` : value}
+            />
             <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomTooltip />} />
-            <Bar dataKey="value" name="Documentos" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="value" name="Documentos" radius={[0, 4, 4, 0]}>
                 {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
