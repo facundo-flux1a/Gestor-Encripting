@@ -481,7 +481,7 @@ export default function ProductDetailPage() {
                                                     <TableCell>{formatDate(item.fecha_emision)}</TableCell>
                                                     <TableCell className="font-medium">{item.numero_documento}</TableCell>
                                                     <TableCell className="text-right">
-                                                        <Badge variant="secondary">{item.cantidad} {item.unidad}</Badge>
+                                                        <Badge variant="secondary">{Math.round(Number(item.cantidad))} {item.unidad}</Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
                                                     <TableCell className="text-right font-semibold">{formatCurrency(item.importe_linea)}</TableCell>
@@ -517,3 +517,4 @@ export default function ProductDetailPage() {
         </MainLayout>
     );
 }
+
