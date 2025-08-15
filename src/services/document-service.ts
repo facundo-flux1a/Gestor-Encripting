@@ -259,11 +259,9 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     try {
         const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
-        let dbTipoDocumento: string = tipo_documento;
-
         const [docResult] = await connection.query<OkPacket>(
           'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
-          [numero_factura, fecha_emision, base_imponible, total, dbTipoDocumento, fecha_vencimiento, moneda, observaciones, id]
+          [numero_factura, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, id]
         );
 
         await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
@@ -368,35 +366,42 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
 
 export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
      const [providerRows] = await db.query<ProviderStatsPacket[]>(`
-        WITH ProviderNames AS (
+        WITH NormalizedProviders AS (
             SELECT
-                identificador_fiscal,
-                nombre,
-                ROW_NUMBER() OVER(PARTITION BY identificador_fiscal ORDER BY COUNT(*) DESC, MAX(fecha_creacion) DESC) as rn
+                *,
+                -- Normalize CIF/NIF by removing common prefixes like 'ES'
+                REPLACE(UPPER(identificador_fiscal), 'ES-', '') AS normalized_fiscal_id
             FROM entidades_documento
             WHERE identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
               AND (rol = 'proveedor' OR rol = 'emisor')
-            GROUP BY identificador_fiscal, nombre
         ),
-        MostRecentNames AS (
-            SELECT identificador_fiscal, nombre
-            FROM ProviderNames
+        RankedNames AS (
+            SELECT
+                normalized_fiscal_id,
+                nombre,
+                identificador_fiscal,
+                -- Rank names and original fiscal IDs by frequency for each normalized ID
+                ROW_NUMBER() OVER(PARTITION BY normalized_fiscal_id ORDER BY COUNT(*) DESC, MAX(fecha_creacion) DESC) as rn
+            FROM NormalizedProviders
+            GROUP BY normalized_fiscal_id, nombre, identificador_fiscal
+        ),
+        PrimaryIdentifiers AS (
+            -- Select the most common name and original fiscal ID for each normalized ID
+            SELECT normalized_fiscal_id, nombre, identificador_fiscal
+            FROM RankedNames
             WHERE rn = 1
         )
         SELECT 
-            mrn.nombre,
-            ed.identificador_fiscal,
+            pi.nombre,
+            pi.identificador_fiscal, -- Show the most common original fiscal_id
             SUM(d.importe_total) as totalSpent,
             COUNT(DISTINCT d.id) as totalDocuments,
             COUNT(DISTINCT ld.codigo) as uniqueProducts
-        FROM entidades_documento ed
-        JOIN documentos d ON ed.documento_id = d.id
+        FROM NormalizedProviders np
+        JOIN documentos d ON np.documento_id = d.id
         LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
-        JOIN MostRecentNames mrn ON ed.identificador_fiscal = mrn.identificador_fiscal
-        WHERE (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-          AND ed.identificador_fiscal IS NOT NULL 
-          AND ed.identificador_fiscal != ''
-        GROUP BY ed.identificador_fiscal, mrn.nombre
+        JOIN PrimaryIdentifiers pi ON np.normalized_fiscal_id = pi.normalized_fiscal_id
+        GROUP BY pi.normalized_fiscal_id, pi.nombre, pi.identificador_fiscal
         ORDER BY totalSpent DESC;
     `);
     
