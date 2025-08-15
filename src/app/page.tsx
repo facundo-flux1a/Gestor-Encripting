@@ -23,6 +23,12 @@ const getQuarter = (date: Date): number => {
     return Math.floor(month / 3) + 1;
 };
 
+const normalizeDocType = (type: string | null | undefined): string => {
+    if (!type || type.trim() === '') return 'Otro';
+    const lower = type.trim().toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
 
 // === Procesador de datos ===
 const processDashboardData = (documents: Document[], providersCount: number, productsCount: number) => {
@@ -59,7 +65,9 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
     const quarter = getQuarter(date) - 1; // 0-3 for Q1-Q4
 
     if (doc.incidencia) totalIncidents++;
-    documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
+    
+    const normalizedDocType = normalizeDocType(doc.tipo_documento);
+    documentTypeCounts[normalizedDocType] = (documentTypeCounts[normalizedDocType] || 0) + 1;
     
     // Gastos
     if (doc.gasto > 0) {
