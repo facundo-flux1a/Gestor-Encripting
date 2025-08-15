@@ -9,7 +9,7 @@ type ChartData = {
   value: number;
 };
 
-const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--vat-other))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -49,7 +49,6 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
-                        innerRadius={70}
                         paddingAngle={5}
                         fill="hsl(var(--primary))"
                         labelLine={false}
