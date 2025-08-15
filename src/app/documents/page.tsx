@@ -8,18 +8,30 @@ import { Upload, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
 import { ExportButton } from "@/components/dashboard/export-button";
+import { UploadDocumentDialog } from "@/components/dashboard/upload-dialog";
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchDocuments = () => {
+    setIsLoading(true);
     getDocuments().then(docs => {
         setDocuments(docs);
         setIsLoading(false);
     });
+  }
+
+  useEffect(() => {
+    fetchDocuments();
   }, []);
   
+  const handleUploadSuccess = () => {
+    fetchDocuments(); // Re-fetch documents after successful upload
+    setIsUploadOpen(false);
+  }
+
   return (
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
@@ -31,7 +43,7 @@ export default function DocumentsPage() {
                 </p>
             </div>
             <div className="flex items-center space-x-2">
-                <Button>
+                <Button onClick={() => setIsUploadOpen(true)}>
                     <Upload className="mr-2" />
                     Subir Documento
                 </Button>
@@ -48,6 +60,11 @@ export default function DocumentsPage() {
             )}
         </div>
       </div>
+      <UploadDocumentDialog 
+        isOpen={isUploadOpen}
+        setIsOpen={setIsUploadOpen}
+        onUploadSuccess={handleUploadSuccess}
+      />
     </MainLayout>
   );
 }
