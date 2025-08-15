@@ -3,7 +3,7 @@
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { AlertTriangle, CheckCircle, FileText, Building, ListTodo } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar } from "recharts";
+import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 
 export type IncidentsAnalyticsData = {
     totalOpen: number;
@@ -12,7 +12,9 @@ export type IncidentsAnalyticsData = {
     byType: { name: string; count: number }[];
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+
+const CustomBarTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border bg-background p-2 shadow-sm">
@@ -62,7 +64,7 @@ export function IncidentsAnalytics({ data }: { data: IncidentsAnalyticsData }) {
                             <BarChart data={data.byProvider} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                 <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                                 <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                                <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomTooltip />} />
+                                <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomBarTooltip />} />
                                 <Bar dataKey="count" name="Incidencias" radius={[4, 4, 0, 0]} fill="hsl(var(--primary))" />
                             </BarChart>
                         </ResponsiveContainer>
@@ -82,13 +84,27 @@ export function IncidentsAnalytics({ data }: { data: IncidentsAnalyticsData }) {
                         <CardDescription>Distribución de incidencias según su naturaleza.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ResponsiveContainer width="100%" height={250}>
-                           <BarChart data={data.byType} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                                <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<CustomTooltip />} />
-                                <Bar dataKey="count" name="Incidencias" radius={[4, 4, 0, 0]} fill="hsl(var(--primary))" />
-                            </BarChart>
+                       <ResponsiveContainer width="100%" height={250}>
+                          <PieChart>
+                            <Pie
+                              data={data.byType}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              outerRadius={80}
+                              innerRadius={60}
+                              paddingAngle={5}
+                              fill="#8884d8"
+                              dataKey="count"
+                              nameKey="name"
+                            >
+                              {data.byType.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend iconType="circle" />
+                          </PieChart>
                         </ResponsiveContainer>
                         {data.byType.length === 0 && (
                             <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
