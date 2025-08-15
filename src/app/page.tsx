@@ -15,25 +15,21 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 
 
 // === Helpers ===
-const getQuarter = (date: Date) => {
-  const month = date.getUTCMonth();
-  if (month < 3) return 1;
-  if (month < 6) return 2;
-  if (month < 9) return 3;
-  return 4;
-};
-
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
 // === Procesador de datos ===
 const processDashboardData = (documents: Document[], providersCount: number, productsCount: number) => {
-  const quarterlyData = {
-    '1': { name: 'T1', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
-    '2': { name: 'T2', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
-    '3': { name: 'T3', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
-    '4': { name: 'T4', sales: 0, expenses: 0, ivaRepercutido: 0, ivaSoportado: 0 },
-  };
+    const monthlyData = Array.from({ length: 12 }, (_, i) => {
+        const monthName = new Date(0, i).toLocaleString('es-ES', { month: 'short' });
+        return {
+          name: monthName.charAt(0).toUpperCase() + monthName.slice(1).replace('.', ''),
+          sales: 0,
+          expenses: 0,
+          ivaRepercutido: 0,
+          ivaSoportado: 0,
+        };
+    });
 
   let totalSales = 0;
   let totalExpenses = 0;
@@ -45,7 +41,7 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
   documents.forEach(doc => {
     const date = new Date(doc.fecha_emision);
     if (isNaN(date.getTime())) return;
-    const quarter = getQuarter(date);
+    const month = date.getUTCMonth(); // 0-11 for Jan-Dec
 
     if (doc.incidencia) totalIncidents++;
     documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
@@ -55,11 +51,11 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
       const baseImponible = Number(doc.base_imponible) || 0;
       const total = Number(doc.total) || 0;
       
-      quarterlyData[quarter].expenses += baseImponible;
+      monthlyData[month].expenses += baseImponible;
       totalExpenses += total;
       totalBaseExpenses += baseImponible;
 
-      (doc.iva_details || []).forEach((iva: any) => quarterlyData[quarter].ivaSoportado += (Number(iva.cuota) || 0));
+      (doc.iva_details || []).forEach((iva: any) => monthlyData[month].ivaSoportado += (Number(iva.cuota) || 0));
       if (doc.proveedor && doc.proveedor !== 'N/A' && doc.cif) {
          if (!providerExpenses[doc.cif]) {
             providerExpenses[doc.cif] = { name: doc.proveedor, total: 0, fiscalId: doc.cif };
@@ -69,7 +65,7 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
     }
   });
 
-  const financialChartData = Object.values(quarterlyData);
+  const financialChartData = Object.values(monthlyData);
   const providerChartData = Object.values(providerExpenses)
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
