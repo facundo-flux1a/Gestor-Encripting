@@ -21,51 +21,44 @@ export async function uploadDocument(formData: FormData) {
       throw new Error('El archivo debe ser un PDF.');
   }
 
-  // Simulación de extracción de texto de un PDF
-  const randomInvoiceNumber = `INV-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-  const today = new Date();
-  const dueDate = new Date(today);
-  dueDate.setDate(today.getDate() + 30);
-
-  const formatDate = (date: Date) => date.toISOString().split('T')[0];
-
+  // Simulación de extracción de texto de un PDF basado en la imagen proporcionada
   const simulatedExtractedText = `
     TIPO_DOCUMENTO: Factura
-    NUMERO_FACTURA: ${randomInvoiceNumber}
-    FECHA_EMISION: ${formatDate(today)}
-    FECHA_VENCIMIENTO: ${formatDate(dueDate)}
+    NUMERO_FACTURA: 2024/FM-24603717
+    FECHA_EMISION: 2025-06-30
+    FECHA_VENCIMIENTO: 2025-07-28
     MONEDA: EUR
 
-    PROVEEDOR_NOMBRE: ACME Corp S.L.
-    PROVEEDOR_DIRECCION: C/ Falsa 123, Polígono Industrial, 28080 Madrid, España
-    PROVEEDOR_CIF: B12345678
-    PROVEEDOR_TELEFONO: +34 912 345 678
-    PROVEEDOR_EMAIL: facturacion@acmecorp.example.com
+    PROVEEDOR_NOMBRE: HECMED
+    PROVEEDOR_DIRECCION: Polanx, Valencia, España
+    PROVEEDOR_CIF: B4691566
+    PROVEEDOR_TELEFONO: 961340715
+    PROVEEDOR_EMAIL: hecmed@example.com
 
-    CLIENTE_NOMBRE: Mi Empresa de Proyectos S.A.
-    CLIENTE_DIRECCION: Av. Principal 45, Planta 2, 08001 Barcelona, España
-    CLIENTE_CIF: A87654321
-    CLIENTE_TELEFONO: +34 934 567 890
-    CLIENTE_EMAIL: administracion@miempresa.example.com
+    CLIENTE_NOMBRE: ESPAIS DE DUNES, S.L.
+    CLIENTE_DIRECCION: C/SANT JOAN, 14, 40133 - MELIANA
+    CLIENTE_CIF: ESB97376321
+    
+    OBSERVACIONES: FORMA DE PAGO: 28 dias - C-RECIBO_OK. Comercial: VICKY.
 
     LINEAS:
-    - [COD: SW-001, DESC: Licencia Anual de Software 'FluxiApp', CANT: 2, UNIDAD: ud, P_UNIT: 450.00, DTO: 10%, IMPORTE: 810.00]
-    - [COD: HW-005, DESC: Servidor Dedicado Modelo T-800, CANT: 1, UNIDAD: ud, P_UNIT: 1200.00, DTO: 0%, IMPORTE: 1200.00]
-    - [COD: SRV-002, DESC: Horas de Soporte Técnico (Bolsa de 20h), CANT: 20, UNIDAD: hora, P_UNIT: 65.00, DTO: 0%, IMPORTE: 1300.00]
-    - [COD: CNS-001, DESC: Consultoría y Análisis de Datos (Q3), CANT: 1, UNIDAD: servicio, P_UNIT: 750.00, DTO: 5%, IMPORTE: 712.50]
+    - [COD: 37986, DESC: CORNE XXL 16 U., CANT: 1.00, UNIDAD: Cajas, P_UNIT: 31.61, DTO: 10, IMPORTE: 28.45]
+    - [COD: 37413, DESC: B/J 400ML STRAWBERRY CHEESECAKE, CANT: 1.00, UNIDAD: Cajas, P_UNIT: 59.44, DTO: 10, IMPORTE: 53.50]
+    - [COD: 53943, DESC: FILIPINOS SANDWICH XXL, CANT: 1.00, UNIDAD: Cajas, P_UNIT: 37.38, DTO: 10, IMPORTE: 33.64]
+    - [COD: 45104, DESC: CALIPPO LIMA LIMON 24 U, CANT: 2.00, UNIDAD: Cajas, P_UNIT: 30.45, DTO: 10, IMPORTE: 54.81]
+    - [COD: 45101, DESC: CALIPPO FRESA 24 U, CANT: 1.00, UNIDAD: Cajas, P_UNIT: 30.45, DTO: 10, IMPORTE: 27.41]
+    - [COD: 43281, DESC: CHOCN BALL 20 U. (negriton), CANT: 1.00, UNIDAD: Cajas, P_UNIT: 40.83, DTO: 10, IMPORTE: 36.75]
+    - [COD: 52637, DESC: DRACULA 40 UD, CANT: 1.00, UNIDAD: Cajas, P_UNIT: 31.75, DTO: 10, IMPORTE: 28.58]
+    - [COD: 70480, DESC: FRIGO PIE 25U, CANT: 1.00, UNIDAD: Cajas, P_UNIT: 41.68, DTO: 10, IMPORTE: 37.51]
     
-    BASE_IMPONIBLE: 4022.50
+    BASE_IMPONIBLE: 976.14
     
     IMPUESTOS:
-    - [TIPO: IVA, PORC: 21, BASE: 3310.00, CUOTA: 695.10]
-    - [TIPO: IVA, PORC: 10, BASE: 712.50, CUOTA: 71.25]
-    - [TIPO: RE, PORC: 5.2, BASE: 2010.00, CUOTA: 104.52]
+    - [TIPO: IVA, PORC: 10, BASE: 976.14, CUOTA: 97.61]
+    - [TIPO: RE, PORC: 1.4, BASE: 976.14, CUOTA: 0.00]
 
-    TOTAL_IMPUESTOS: 870.87
-    TOTAL: 4893.37
-
-    OBSERVACIONES: El pago debe realizarse mediante transferencia bancaria a la cuenta ES80 0049 1234 5678 9012 3456.
-    DATOS_EXTRA: {"numero_pedido": "PO-2024-789", "centro_coste": "I+D"}
+    TOTAL_IMPUESTOS: 97.61
+    TOTAL: 1073.75
   `;
 
 
