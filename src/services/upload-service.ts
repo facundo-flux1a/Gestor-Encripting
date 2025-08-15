@@ -21,15 +21,43 @@ export async function uploadDocument(formData: FormData) {
       throw new Error('El archivo debe ser un PDF.');
   }
 
-  const fileData = await file.arrayBuffer();
+  // Simulación de extracción de texto de un PDF
+  const simulatedExtractedText = `
+    FACTURA
+    Número de Factura: INV-2024-001
+    Fecha de Emisión: 2024-07-30
+    Fecha de Vencimiento: 2024-08-30
+
+    Proveedor:
+    ACME Corp
+    C/ Falsa 123, 28080 Madrid
+    CIF: B12345678
+
+    Cliente:
+    Mi Empresa S.L.
+    Av. Principal 45, 08001 Barcelona
+    CIF: A87654321
+
+    Líneas de la factura:
+    - Descripción: Licencia Software Anual, Cantidad: 1, P.Unitario: 500.00, Total: 500.00
+    - Descripción: Horas de Soporte, Cantidad: 10, P.Unitario: 75.00, Total: 750.00
+
+    Base Imponible: 1250.00 EUR
+    IVA (21%): 262.50 EUR
+    Total: 1512.50 EUR
+  `;
+
 
   try {
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: {
-        // The 'Content-Type' header is automatically set by fetch with FormData
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify({
+          fileName: file.name,
+          extractedText: simulatedExtractedText
+      }),
     });
 
     if (!response.ok) {
