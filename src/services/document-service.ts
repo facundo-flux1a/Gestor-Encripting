@@ -368,8 +368,23 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
 
 export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
      const [providerRows] = await db.query<ProviderStatsPacket[]>(`
+        WITH ProviderNames AS (
+            SELECT
+                identificador_fiscal,
+                nombre,
+                ROW_NUMBER() OVER(PARTITION BY identificador_fiscal ORDER BY COUNT(*) DESC, MAX(fecha_creacion) DESC) as rn
+            FROM entidades_documento
+            WHERE identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
+              AND (rol = 'proveedor' OR rol = 'emisor')
+            GROUP BY identificador_fiscal, nombre
+        ),
+        MostRecentNames AS (
+            SELECT identificador_fiscal, nombre
+            FROM ProviderNames
+            WHERE rn = 1
+        )
         SELECT 
-            ed.nombre,
+            mrn.nombre,
             ed.identificador_fiscal,
             SUM(d.importe_total) as totalSpent,
             COUNT(DISTINCT d.id) as totalDocuments,
@@ -377,11 +392,12 @@ export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
         FROM entidades_documento ed
         JOIN documentos d ON ed.documento_id = d.id
         LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
+        JOIN MostRecentNames mrn ON ed.identificador_fiscal = mrn.identificador_fiscal
         WHERE (ed.rol = 'proveedor' OR ed.rol = 'emisor')
           AND ed.identificador_fiscal IS NOT NULL 
           AND ed.identificador_fiscal != ''
-        GROUP BY ed.identificador_fiscal, ed.nombre
-        ORDER BY totalSpent DESC
+        GROUP BY ed.identificador_fiscal, mrn.nombre
+        ORDER BY totalSpent DESC;
     `);
     
     const providers: ProviderWithStats[] = providerRows.map(p => ({
