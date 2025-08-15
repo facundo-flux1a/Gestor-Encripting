@@ -21,7 +21,7 @@ export async function uploadDocument(formData: FormData) {
       throw new Error('El archivo debe ser un PDF.');
   }
 
-  // Simulación de extracción de texto de un PDF basado en la imagen proporcionada
+  // Simulación de extracción de texto COMPLETA del PDF proporcionado
   const simulatedExtractedText = `
     TIPO_DOCUMENTO: Factura
     NUMERO_FACTURA: 2024/FM-24603717
