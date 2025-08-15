@@ -29,7 +29,6 @@ export default function DocumentsPage() {
   
   const handleUploadSuccess = () => {
     fetchDocuments(); // Re-fetch documents after successful upload
-    setIsUploadOpen(false);
   }
 
   return (

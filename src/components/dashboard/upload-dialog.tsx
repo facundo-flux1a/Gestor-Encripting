@@ -69,7 +69,6 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
               title: `Éxito: ${file.name}`,
               description: result.message,
             });
-            onUploadSuccess(); // Refresh list after each successful upload
         } catch (error: any) {
             toast({
               title: `Error al subir ${file.name}`,
@@ -80,12 +79,13 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     }
 
     setIsLoading(false);
-    setFiles([]); // Reset file list
+    setFiles([]); 
     setUploadProgress({ current: 0, total: 0 });
     toast({
         title: 'Proceso Finalizado',
         description: 'Se ha completado la subida de todos los archivos seleccionados.',
     });
+    onUploadSuccess();
     setIsOpen(false);
   };
 
