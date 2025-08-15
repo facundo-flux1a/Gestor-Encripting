@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -49,6 +48,7 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
+                        innerRadius={60}
                         paddingAngle={5}
                         fill="hsl(var(--primary))"
                         labelLine={false}
