@@ -18,6 +18,12 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
+const getQuarter = (date: Date): number => {
+    const month = date.getUTCMonth();
+    return Math.floor(month / 3) + 1;
+};
+
+
 // === Procesador de datos ===
 const processDashboardData = (documents: Document[], providersCount: number, productsCount: number) => {
     const monthlyData = Array.from({ length: 12 }, (_, i) => {
@@ -30,6 +36,13 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
           ivaSoportado: 0,
         };
     });
+    
+    const quarterlyData = [
+        { name: 'T1', sales: 0, expenses: 0 },
+        { name: 'T2', sales: 0, expenses: 0 },
+        { name: 'T3', sales: 0, expenses: 0 },
+        { name: 'T4', sales: 0, expenses: 0 },
+    ];
 
   let totalSales = 0;
   let totalExpenses = 0;
@@ -41,7 +54,9 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
   documents.forEach(doc => {
     const date = new Date(doc.fecha_emision);
     if (isNaN(date.getTime())) return;
+    
     const month = date.getUTCMonth(); // 0-11 for Jan-Dec
+    const quarter = getQuarter(date) - 1; // 0-3 for Q1-Q4
 
     if (doc.incidencia) totalIncidents++;
     documentTypeCounts[doc.tipo_documento] = (documentTypeCounts[doc.tipo_documento] || 0) + 1;
@@ -51,11 +66,16 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
       const baseImponible = Number(doc.base_imponible) || 0;
       const total = Number(doc.total) || 0;
       
+      // Populate monthly data
       monthlyData[month].expenses += baseImponible;
+      (doc.iva_details || []).forEach((iva: any) => monthlyData[month].ivaSoportado += (Number(iva.cuota) || 0));
+
+      // Populate quarterly data
+      quarterlyData[quarter].expenses += baseImponible;
+
       totalExpenses += total;
       totalBaseExpenses += baseImponible;
 
-      (doc.iva_details || []).forEach((iva: any) => monthlyData[month].ivaSoportado += (Number(iva.cuota) || 0));
       if (doc.proveedor && doc.proveedor !== 'N/A' && doc.cif) {
          if (!providerExpenses[doc.cif]) {
             providerExpenses[doc.cif] = { name: doc.proveedor, total: 0, fiscalId: doc.cif };
@@ -65,7 +85,9 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
     }
   });
 
-  const financialChartData = Object.values(monthlyData);
+  const timeSeriesChartData = Object.values(monthlyData);
+  const financialSummaryChartData = Object.values(quarterlyData);
+
   const providerChartData = Object.values(providerExpenses)
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
@@ -76,7 +98,8 @@ const processDashboardData = (documents: Document[], providersCount: number, pro
   const incidentRate = documents.length > 0 ? (totalIncidents / documents.length) * 100 : 0;
 
   return {
-    financialChartData,
+    timeSeriesChartData,
+    financialSummaryChartData,
     documentStatusChartData,
     totalExpenses,
     totalBaseExpenses,
@@ -118,7 +141,8 @@ export default function Home() {
   }, []);
 
   const {
-    financialChartData,
+    timeSeriesChartData,
+    financialSummaryChartData,
     documentStatusChartData,
     totalExpenses,
     totalBaseExpenses,
@@ -155,7 +179,7 @@ export default function Home() {
           {/* Gráficas */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
             <div className="col-span-1 lg:col-span-4">
-              <FinancialSummary data={financialChartData} />
+              <FinancialSummary data={financialSummaryChartData} />
             </div>
             <div className="col-span-1 lg:col-span-3">
               <DocumentStatusChart data={documentStatusChartData} />
@@ -164,7 +188,7 @@ export default function Home() {
                 <InsightsWidget incidentRate={incidentRate} topProviders={topProvidersByAmount} />
             </div>
             <div className="col-span-1 lg:col-span-full">
-                <TimeSeriesChart data={financialChartData} />
+                <TimeSeriesChart data={timeSeriesChartData} />
             </div>
           </div>
         </div>
