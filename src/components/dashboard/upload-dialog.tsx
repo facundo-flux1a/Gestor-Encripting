@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -118,7 +117,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
           )}
         </div>
         <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading}>
+            <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading} className="w-full sm:w-auto">
               Cancelar
             </Button>
           <Button onClick={handleUpload} disabled={!file || isLoading} className="w-full sm:w-auto">
