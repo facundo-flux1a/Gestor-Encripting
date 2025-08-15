@@ -2,7 +2,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 type ChartData = {
   name: string;
@@ -21,54 +21,7 @@ const CustomTooltip = ({ active, payload }: any) => {
       </div>
     );
   }
-
   return null;
-};
-
-const CustomizedContent = (props: any) => {
-    const { root, depth, x, y, width, height, index, name, value } = props;
-    
-    // Only render text if the box is large enough
-    const isVisible = width > 50 && height > 25;
-
-    return (
-        <g>
-            <rect
-                x={x}
-                y={y}
-                width={width}
-                height={height}
-                style={{
-                    fill: COLORS[index % COLORS.length],
-                    stroke: 'hsl(var(--background))',
-                    strokeWidth: 2,
-                    strokeOpacity: 1,
-                }}
-            />
-            {isVisible && (
-                <text
-                    x={x + width / 2}
-                    y={y + height / 2}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="fill-primary-foreground text-sm font-medium"
-                >
-                    {name}
-                </text>
-            )}
-             {isVisible && (
-                 <text
-                    x={x + width / 2}
-                    y={y + height / 2 + 16}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="fill-primary-foreground/70 text-xs"
-                >
-                    {value}
-                </text>
-            )}
-        </g>
-    );
 };
 
 
@@ -80,22 +33,32 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
       <CardHeader>
         <CardTitle>Distribución de Documentos</CardTitle>
         <CardDescription>
-          Mosaico proporcional de cada tipo de documento. Total: {totalDocuments}.
+          Proporción de cada tipo de documento. Total: {totalDocuments}.
         </CardDescription>
       </CardHeader>
       <CardContent className="pl-0 pr-0 pb-0">
          {data.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <Treemap
-                data={data}
-                dataKey="value"
-                ratio={4 / 3}
-                stroke="#fff"
-                fill="hsl(var(--primary))"
-                content={<CustomizedContent />}
-              >
-                <Tooltip content={<CustomTooltip />} />
-              </Treemap>
+                <PieChart>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend iconType="circle" />
+                    <Pie
+                        data={data}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        innerRadius={70}
+                        paddingAngle={5}
+                        fill="hsl(var(--primary))"
+                        labelLine={false}
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                    </Pie>
+                </PieChart>
             </ResponsiveContainer>
          ) : (
             <div className="flex h-[300px] w-full items-center justify-center text-muted-foreground">
