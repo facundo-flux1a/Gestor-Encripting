@@ -1,54 +1,48 @@
 
 'use server';
 
-import { pbkdf2, timingSafeEqual } from 'jose';
+import { pbkdf2Sync, timingSafeEqual, randomBytes } from 'node:crypto';
 
-// This should be a securely stored secret, loaded from environment variables.
-const secretKey = new TextEncoder().encode(process.env.PASSWORD_HASH_SECRET || 'a-very-strong-and-long-secret-for-hashing-passwords-!@#$');
-
-// We use PBKDF2 from jose which is a standard, secure key derivation function.
+// We use PBKDF2 from Node's native crypto module, which is standard and secure.
 export async function hashPassword(password: string): Promise<string> {
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const derivedKey = await pbkdf2(
-        new TextEncoder().encode(password), 
+    const salt = randomBytes(16);
+    const derivedKey = pbkdf2Sync(
+        password, 
         salt, 
-        {
-            iterations: 250000,
-            hash: 'sha256'
-        }
+        250000, // Iterations
+        64,     // Key length
+        'sha512'// Algorithm
     );
     
     // We store the salt with the hash, separated by a period.
-    const toBase64 = (buff: ArrayBuffer) => Buffer.from(buff).toString('base64');
-    return `${toBase64(salt)}.${toBase64(derivedKey)}`;
+    return `${salt.toString('hex')}.${derivedKey.toString('hex')}`;
 }
 
 export async function comparePassword(password: string, hash: string): Promise<boolean> {
     if (!password || !hash || !hash.includes('.')) {
         return false;
     }
-
-    if (hash === 'google_sso_user') {
-        return false;
-    }
-
+    
     try {
-        const [saltB64, derivedKeyB64] = hash.split('.');
-        const fromBase64 = (str: string) => Buffer.from(str, 'base64');
-        const salt = fromBase64(saltB64);
-        const derivedKey = fromBase64(derivedKeyB64);
+        const [saltHex, derivedKeyHex] = hash.split('.');
+        const salt = Buffer.from(saltHex, 'hex');
+        const derivedKey = Buffer.from(derivedKeyHex, 'hex');
 
-        const inputKey = await pbkdf2(
-            new TextEncoder().encode(password), 
+        const inputKey = pbkdf2Sync(
+            password, 
             salt, 
-            {
-                iterations: 250000,
-                hash: 'sha256'
-            }
+            250000, 
+            64, 
+            'sha512'
         );
 
         // Constant-time comparison to protect against timing attacks.
-        return await timingSafeEqual(derivedKey, inputKey);
+        if (derivedKey.length !== inputKey.length) {
+            return false;
+        }
+        
+        return timingSafeEqual(derivedKey, inputKey);
+
     } catch (error) {
         console.error("Error comparing password:", error);
         return false;

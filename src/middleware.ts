@@ -28,10 +28,10 @@ export async function middleware(request: NextRequest) {
      }
   }
   
-  if (!isProtectedRoute && !sessionCookie && path !== '/auth/login') {
-     // If not logged in and not on login page, redirect to login
-     // This handles cases like trying to access non-existent public pages
-     return NextResponse.redirect(new URL('/auth/login', request.nextUrl));
+  // Allow access to public routes if not logged in.
+  // The case of a logged-in user trying to access /auth/login is handled above.
+  if (!isProtectedRoute) {
+    return NextResponse.next();
   }
   
   return NextResponse.next();
