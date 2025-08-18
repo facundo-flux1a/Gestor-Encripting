@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login, loginWithGoogle } from "@/services/auth-service";
+import { login } from "@/services/auth-service";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Separator } from "@/components/ui/separator";
 import { useState } from 'react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 function Logo() {
     return (
@@ -49,7 +51,17 @@ export default function LoginPage() {
     const handleGoogleLogin = async () => {
         setIsGoogleLoading(true);
         try {
-            await loginWithGoogle();
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            if (user) {
+                const formData = new FormData();
+                formData.append('email', user.email!);
+                formData.append('displayName', user.displayName || 'Anonymous');
+                formData.append('isGoogle', 'true');
+                await login(formData);
+            }
         } catch (error: any) {
              console.error('Google login failed', error);
         } finally {
@@ -139,4 +151,3 @@ export default function LoginPage() {
         </main>
     );
 }
-

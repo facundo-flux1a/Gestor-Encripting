@@ -57,11 +57,12 @@ export async function loginWithGoogle() {
             await login(formData);
         }
     } catch (error: any) {
-        console.error('Google Sign-In error:', error);
-        // Let the client handle the error display
-        throw new Error(error.message || "Failed to login with Google");
+         console.error('Google login failed', error);
+         // Let the client-side form handle the error display
+         throw error;
     }
 }
+
 
 export async function login(formData: FormData) {
     const email = formData.get('email') as string;
@@ -120,9 +121,10 @@ export async function login(formData: FormData) {
 export async function logout() {
   // Destroy the session
   cookies().set('session', '', { expires: new Date(0) });
-  await auth.signOut().catch(console.error); // Catch potential errors on signout
+  // The client-side part of logout (Firebase) should be handled on the client
   redirect('/auth/login');
 }
+
 
 export async function getSession(): Promise<SessionPayload | null> {
   const sessionCookie = cookies().get('session')?.value;
