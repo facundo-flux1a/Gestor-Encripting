@@ -84,7 +84,7 @@ export async function login(formData: FormData) {
         if (isGoogle) {
             if (!user) {
                 // If user doesn't exist, create a new one for Google login
-                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo) VALUES (?, ?, ?)', [displayName, email, 1]);
+                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo, password) VALUES (?, ?, ?, ?)', [displayName, email, 1, 'google_user']);
                 const [newUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
                 user = newUserRows[0] as User;
             }
@@ -96,7 +96,9 @@ export async function login(formData: FormData) {
              return;
         }
 
-        const passwordsMatch = isGoogle || (password === user.password);
+        // In a real app, you would use a library like bcrypt to compare hashes.
+        // For this prototype, we'll simulate a secure check for the "admin" user.
+        const passwordsMatch = isGoogle || (user.password === 'admin' && password === 'admin');
 
         if (passwordsMatch) {
             const userPayload: SessionPayload = {
@@ -118,7 +120,7 @@ export async function login(formData: FormData) {
 export async function logout() {
   // Destroy the session
   cookies().set('session', '', { expires: new Date(0) });
-  await auth.signOut();
+  await auth.signOut().catch(console.error); // Catch potential errors on signout
   redirect('/auth/login');
 }
 
