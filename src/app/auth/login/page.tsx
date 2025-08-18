@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -100,7 +99,6 @@ export default function LoginPage() {
                                     type="email"
                                     placeholder="m@example.com"
                                     required
-                                    defaultValue="admin@example.com"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -110,7 +108,6 @@ export default function LoginPage() {
                                     name="password" 
                                     type="password" 
                                     required 
-                                    defaultValue="admin"
                                 />
                             </div>
 
