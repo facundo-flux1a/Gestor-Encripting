@@ -46,7 +46,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, GripVertical } from 'lucide-react';
+import { ChevronDown, GripVertical, ArrowUpDown } from 'lucide-react';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -65,17 +65,18 @@ const DraggableTableHeader = <TData, TValue>({
     id: header.column.id,
   });
 
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     width: header.getSize(),
+    position: 'relative',
   };
 
   return (
     <TableHead
       ref={setNodeRef}
       style={style}
-      className="relative p-2"
+      className="p-2"
     >
       <div className="flex items-center gap-1">
         <Button
@@ -85,12 +86,19 @@ const DraggableTableHeader = <TData, TValue>({
             {...listeners}
             className="cursor-grab p-1 h-auto"
             >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
         </Button>
-        {flexRender(header.column.columnDef.header, header.getContext())}
+         <Button
+            variant="ghost"
+            onClick={() => header.column.toggleSorting(header.column.getIsSorted() === 'asc')}
+            className='p-1 h-auto font-medium'
+        >
+            {flexRender(header.column.columnDef.header, header.getContext())}
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+        </Button>
       </div>
        {header.column.getCanFilter() ? (
-            <div className='mt-1'>
+            <div className='mt-1 px-1'>
                 <Filter column={header.column} table={table} />
             </div>
         ) : null}
@@ -102,13 +110,10 @@ const DraggableTableHeader = <TData, TValue>({
 // Filter component
 function Filter<TData, TValue>({
   column,
-  table,
 }: {
   column: Column<TData, TValue>;
   table: ReactTable<TData>;
 }) {
-  const firstValue = table.getPreFilteredRowModel().flatRows[0]?.getValue(column.id);
-
   return (
     <Input
         type="text"
@@ -129,7 +134,7 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnOrder, setColumnOrder] = React.useState<string[]>(
-    columns.map((c) => c.id!).filter(Boolean)
+    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
   );
 
   const table = useReactTable({
@@ -266,4 +271,3 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
-

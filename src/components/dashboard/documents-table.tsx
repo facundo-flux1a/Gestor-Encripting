@@ -5,8 +5,7 @@ import Link from 'next/link';
 import {
   MoreHorizontal, 
   CheckCircle2, 
-  AlertCircle,
-  ArrowUpDown
+  AlertCircle
 } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
 
@@ -35,21 +34,6 @@ const formatCurrency = (amount: number | null) => {
   }).format(amount);
 };
 
-// Custom header for sorting
-const SortingHeader = ({ column, title }: { column: any, title: string }) => {
-    return (
-        <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className='p-1 h-auto'
-        >
-            {title}
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-        </Button>
-    )
-}
-
-
 export function DocumentsTable({ documents }: { documents: Document[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
@@ -65,23 +49,23 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
   const columns: ColumnDef<Document>[] = [
     {
         accessorKey: 'numero_factura',
-        header: ({ column }) => <SortingHeader column={column} title="Nº Factura" />,
+        header: 'Nº Factura',
         cell: ({ row }) => <div className="font-medium">{row.getValue('numero_factura')}</div>,
         enableHiding: false,
     },
     {
         accessorKey: 'tipo_documento',
-        header: ({ column }) => <SortingHeader column={column} title="Tipo" />,
+        header: 'Tipo',
         cell: ({ row }) => <Badge variant="outline">{row.getValue('tipo_documento')}</Badge>
     },
     {
         accessorKey: 'fecha_emision',
-        header: ({ column }) => <SortingHeader column={column} title="Fecha" />,
+        header: 'Fecha',
         cell: ({ row }) => new Date(row.getValue('fecha_emision')).toLocaleDateString('es-ES', { timeZone: 'UTC' })
     },
     {
         accessorKey: 'proveedor',
-        header: ({ column }) => <SortingHeader column={column} title="Proveedor" />,
+        header: 'Proveedor',
         cell: ({ row }) => {
             const doc = row.original;
             return (
@@ -99,8 +83,8 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     },
     ...(isIncidentsPage ? [{
         accessorKey: 'incidencia_razon',
-        header: ({ column }) => <SortingHeader column={column} title="Razón Incidencia" />,
-        cell: ({ row }) => {
+        header: 'Razón Incidencia',
+        cell: ({ row }: { row: any }) => {
              const reason = row.getValue('incidencia_razon') as string;
              return (
                  <Tooltip>
@@ -113,15 +97,15 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                 </Tooltip>
              )
         }
-    }] : []),
+    }] as ColumnDef<Document>[] : []),
     {
         accessorKey: 'base_imponible',
-        header: ({ column }) => <div className='text-right w-full'><SortingHeader column={column} title="Base" /></div>,
+        header: () => <div className='text-right'>Base</div>,
         cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('base_imponible'))}</div>
     },
     {
         accessorKey: 'iva_details',
-        header: 'Impuestos',
+        header: () => <div className='text-right'>Impuestos</div>,
         cell: ({ row }) => {
             const ivaDetails = row.getValue('iva_details') as any[];
             return (
@@ -137,12 +121,12 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     },
     {
         accessorKey: 'total',
-        header: ({ column }) => <div className='text-right w-full'><SortingHeader column={column} title="Total" /></div>,
+        header: () => <div className='text-right'>Total</div>,
         cell: ({ row }) => <div className="text-right font-bold">{formatCurrency(row.getValue('total'))}</div>
     },
     {
         accessorKey: 'verificado',
-        header: ({ column }) => <div className='text-center w-full'><SortingHeader column={column} title="Estado" /></div>,
+        header: () => <div className='text-center'>Estado</div>,
         cell: ({ row }) => {
             const isVerified = row.getValue('verificado');
              return (

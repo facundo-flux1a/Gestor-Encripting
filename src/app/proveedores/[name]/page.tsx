@@ -203,10 +203,9 @@ export default function ProveedorDetailPage() {
                     </TabsContent>
                     
                     <TabsContent value="documents">
-                        <div className="flex justify-end items-center mb-4">
-                            <ExportButton data={documents} filename={`documentos_${provider.identificador_fiscal}`} />
+                        <div className="space-y-4">
+                            <DocumentsTable documents={documents} />
                         </div>
-                        <DocumentsTable documents={documents} />
                     </TabsContent>
                 </Tabs>
             </div>
