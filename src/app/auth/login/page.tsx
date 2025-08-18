@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { login } from "@/services/auth-service";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Separator } from "@/components/ui/separator";
 import { useState } from 'react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -73,6 +73,8 @@ export default function LoginPage() {
         setIsLoading(true);
         const formData = new FormData(event.currentTarget);
         await login(formData);
+        // If login is successful, the service redirects. If not, it redirects back with an error.
+        // We set loading to false here in case the redirect doesn't happen due to an unhandled client-side error.
         setIsLoading(false);
     }
 

@@ -37,7 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils";
-import { logout } from '@/services/auth-service';
+import { logout, getSession } from '@/services/auth-service';
 import type { SessionPayload } from '@/lib/types';
 
 
@@ -67,7 +67,6 @@ function SidebarToggle() {
 function UserProfile({ session }: { session: SessionPayload | null }) {
     const handleLogout = async () => {
         await logout();
-        window.location.href = '/auth/login';
     };
 
     if (!session?.username) {
@@ -129,11 +128,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     async function fetchSession() {
         try {
-            const res = await fetch('/api/session');
-            if(res.ok) {
-                const data = await res.json();
-                setSession(data.session);
-            }
+            const currentSession = await getSession();
+            setSession(currentSession);
         } catch(e) {
             console.error("Could not fetch session", e)
         }
@@ -142,7 +138,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   }, [])
   
   const navItems = [
-      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/documents', label: 'Documentos', icon: FileText },
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
@@ -163,7 +159,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton 
                         asChild 
-                        isActive={item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)} 
+                        isActive={item.href === '/' ? pathname === '/dashboard' : pathname.startsWith(item.href)} 
                         tooltip={item.label}>
                         <Link href={item.href}>
                             <item.icon />
