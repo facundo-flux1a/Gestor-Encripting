@@ -30,13 +30,19 @@ export default function ProveedoresPage() {
   useEffect(() => {
     if (!allProviders) return;
     
-    if (filters.length === 0) {
+    if (filters.length === 0 && currentSearch.trim() === '') {
       setFilteredProviders(allProviders);
       return;
     }
     
+    const combinedFilters = [...filters, currentSearch.trim()].filter(Boolean);
+    if(combinedFilters.length === 0) {
+        setFilteredProviders(allProviders);
+        return;
+    }
+
     const filtered = allProviders.filter(provider => {
-        return filters.every(filter => {
+        return combinedFilters.every(filter => {
             const lowercasedFilter = filter.toLowerCase();
             return (
                 provider.nombre?.toLowerCase().includes(lowercasedFilter) ||
@@ -45,11 +51,11 @@ export default function ProveedoresPage() {
         });
     });
     setFilteredProviders(filtered);
-  }, [filters, allProviders]);
+  }, [filters, currentSearch, allProviders]);
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && currentSearch.trim() !== '') {
-      setFilters([...filters, currentSearch.trim()]);
+      setFilters(prev => [...prev, currentSearch.trim()]);
       setCurrentSearch('');
     }
   };
@@ -76,33 +82,12 @@ export default function ProveedoresPage() {
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
-                    placeholder="Buscar por nombre o CIF y presionar Enter..."
+                    placeholder="Buscar por nombre o CIF..."
                     value={currentSearch}
                     onChange={(e) => setCurrentSearch(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
                     className="h-12 pl-10 text-lg"
                 />
             </div>
-
-            {filters.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">Filtros aplicados:</span>
-                    {filters.map((filter) => (
-                        <Badge key={filter} variant="secondary" className="pl-2">
-                            {filter}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="ml-1 h-5 w-5 p-0"
-                                onClick={() => removeFilter(filter)}
-                            >
-                                <X className="h-3 w-3" />
-                                <span className="sr-only">Remover filtro</span>
-                            </Button>
-                        </Badge>
-                    ))}
-                </div>
-            )}
         </div>
         
         <div>
@@ -122,7 +107,7 @@ export default function ProveedoresPage() {
                     <Search className="mx-auto h-12 w-12 text-gray-400" />
                     <h3 className="mt-2 text-sm font-medium">No se encontraron proveedores</h3>
                     <p className="mt-1 text-sm text-gray-500">
-                        {filters.length > 0 ? "Prueba con otro término o limpia los filtros." : "No hay proveedores para mostrar."}
+                        {currentSearch.length > 0 ? "Prueba con otro término de búsqueda." : "No hay proveedores para mostrar."}
                     </p>
                 </div>
               )

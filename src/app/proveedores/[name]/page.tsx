@@ -25,7 +25,6 @@ export default function ProveedorDetailPage() {
     const [analyticsData, setAnalyticsData] = useState<ProviderAnalyticsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
-    const [filters, setFilters] = useState<string[]>([]);
     const [currentSearch, setCurrentSearch] = useState('');
 
     const fiscalId = params.name as string;
@@ -68,33 +67,20 @@ export default function ProveedorDetailPage() {
     }, [fiscalId]);
     
     useEffect(() => {
-        if (filters.length === 0) {
+        if (currentSearch.trim() === '') {
             setFilteredProducts(allProducts);
             return;
         }
 
         const filtered = allProducts.filter(product => {
-            return filters.every(filter => {
-                const lowercasedFilter = filter.toLowerCase();
-                return (
-                    product.descripcion?.toLowerCase().includes(lowercasedFilter) ||
-                    product.codigo?.toLowerCase().includes(lowercasedFilter)
-                );
-            });
+            const lowercasedFilter = currentSearch.toLowerCase();
+            return (
+                product.descripcion?.toLowerCase().includes(lowercasedFilter) ||
+                product.codigo?.toLowerCase().includes(lowercasedFilter)
+            );
         });
         setFilteredProducts(filtered);
-    }, [filters, allProducts]);
-
-    const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === 'Enter' && currentSearch.trim() !== '') {
-            setFilters([...filters, currentSearch.trim()]);
-            setCurrentSearch('');
-        }
-    };
-
-    const removeFilter = (filterToRemove: string) => {
-        setFilters(filters.filter(f => f !== filterToRemove));
-    };
+    }, [currentSearch, allProducts]);
 
 
     if (isLoading) {
@@ -149,34 +135,14 @@ export default function ProveedorDetailPage() {
                                 <div className="relative w-full max-w-sm">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input
-                                        placeholder="Buscar y presionar Enter..."
+                                        placeholder="Buscar producto..."
                                         value={currentSearch}
                                         onChange={(e) => setCurrentSearch(e.target.value)}
-                                        onKeyDown={handleSearchKeyDown}
                                         className="h-11 pl-10"
                                     />
                                 </div>
                                 <ExportButton data={filteredProducts} filename={`productos_${provider.identificador_fiscal}`} />
                             </div>
-                             {filters.length > 0 && (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-sm font-medium">Filtros aplicados:</span>
-                                    {filters.map((filter) => (
-                                        <Badge key={filter} variant="secondary" className="pl-2">
-                                            {filter}
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="ml-1 h-5 w-5 p-0"
-                                                onClick={() => removeFilter(filter)}
-                                            >
-                                                <X className="h-3 w-3" />
-                                                <span className="sr-only">Remover filtro</span>
-                                            </Button>
-                                        </Badge>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
                         {filteredProducts.length > 0 ? (
@@ -193,10 +159,10 @@ export default function ProveedorDetailPage() {
                             <div className="text-center text-muted-foreground py-8">
                                 <Search className="mx-auto h-12 w-12 text-gray-400" />
                                 <h3 className="mt-2 text-sm font-medium">
-                                    {filters.length > 0 ? "No se encontraron productos" : "No hay productos registrados"}
+                                    {currentSearch ? "No se encontraron productos" : "No hay productos registrados"}
                                 </h3>
                                 <p className="mt-1 text-sm text-gray-500">
-                                    {filters.length > 0 ? "Prueba a buscar con otro término o limpia los filtros." : "Este proveedor aún no tiene productos asociados."}
+                                    {currentSearch ? "Prueba a buscar con otro término." : "Este proveedor aún no tiene productos asociados."}
                                 </p>
                             </div>
                         )}

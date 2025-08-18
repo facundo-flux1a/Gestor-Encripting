@@ -48,21 +48,25 @@ const createIvaColumns = (ivaTypes: number[]): ColumnDef<Document>[] => {
     ivaTypes.forEach(type => {
         // Base Imponible column
         columns.push({
+            id: `base_${type}`,
             accessorKey: `base_${type}`,
             header: `Base ${type}%`,
             cell: ({ row }) => {
                 const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
                 return <div className="text-right">{formatCurrency(ivaDetail?.base_imponible)}</div>
-            }
+            },
+            enableColumnFilter: false,
         });
         // Cuota column
         columns.push({
+            id: `cuota_${type}`,
             accessorKey: `cuota_${type}`,
             header: `Cuota ${type}%`,
             cell: ({ row }) => {
                 const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
                 return <div className="text-right">{formatCurrency(ivaDetail?.cuota)}</div>
-            }
+            },
+             enableColumnFilter: false,
         });
     });
     return columns;
@@ -146,17 +150,20 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     {
         accessorKey: 'base_imponible',
         header: () => <div className='text-right'>Total Base</div>,
-        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('base_imponible'))}</div>
+        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('base_imponible'))}</div>,
+         enableColumnFilter: false,
     },
     {
         accessorKey: 'iva',
         header: () => <div className='text-right'>Total IVA</div>,
-        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('iva'))}</div>
+        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('iva'))}</div>,
+        enableColumnFilter: false,
     },
     {
         accessorKey: 'total',
         header: () => <div className='text-right font-bold'>Total</div>,
-        cell: ({ row }) => <div className="text-right font-bold">{formatCurrency(row.getValue('total'))}</div>
+        cell: ({ row }) => <div className="text-right font-bold">{formatCurrency(row.getValue('total'))}</div>,
+        enableColumnFilter: false,
     },
      {
         accessorKey: 'observaciones',
