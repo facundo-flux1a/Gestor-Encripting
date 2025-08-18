@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { SignJWT, jwtVerify } from 'jose';
@@ -42,33 +43,22 @@ async function createSession(userPayload: SessionPayload) {
 }
 
 export async function loginWithGoogle() {
+    'use client';
     try {
         const provider = new GoogleAuthProvider();
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
 
         if (user) {
-            let [dbUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [user.email]);
-            let dbUser = dbUserRows[0] as User;
-
-            if (!dbUser) {
-                // If user doesn't exist, create a new one
-                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo) VALUES (?, ?, ?)', [user.displayName, user.email, 1]);
-                [dbUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
-                dbUser = dbUserRows[0] as User;
-            }
-
-            const userPayload: SessionPayload = {
-                userId: dbUser.id.toString(),
-                username: dbUser.nombre,
-                role: 'administrator' // Assign a default role
-            };
-            
-            await createSession(userPayload);
+            const formData = new FormData();
+            formData.append('email', user.email!);
+            formData.append('displayName', user.displayName || 'Anonymous');
+            formData.append('isGoogle', 'true');
+            await login(formData);
         }
     } catch (error: any) {
         console.error('Google Sign-In error:', error);
-        // Do not redirect here, let the client handle the error display
+        // Let the client handle the error display
         throw new Error(error.message || "Failed to login with Google");
     }
 }
@@ -76,8 +66,10 @@ export async function loginWithGoogle() {
 export async function login(formData: FormData) {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+    const isGoogle = formData.get('isGoogle') === 'true';
+    const displayName = formData.get('displayName') as string;
 
-    if (!email || !password) {
+    if (!email || (!password && !isGoogle)) {
         redirect('/auth/login?error=InvalidCredentials');
     }
 
@@ -87,18 +79,24 @@ export async function login(formData: FormData) {
             [email]
         );
 
-        if (rows.length === 0) {
-            console.log('User not found or not active');
-            redirect('/auth/login?error=InvalidCredentials');
-            return;
+        let user: User | null = rows.length > 0 ? (rows[0] as User) : null;
+        
+        if (isGoogle) {
+            if (!user) {
+                // If user doesn't exist, create a new one for Google login
+                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo) VALUES (?, ?, ?)', [displayName, email, 1]);
+                const [newUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
+                user = newUserRows[0] as User;
+            }
         }
 
-        const user = rows[0] as User;
+        if (!user) {
+             console.log('User not found or not active');
+             redirect('/auth/login?error=InvalidCredentials');
+             return;
+        }
 
-        // !! SECURITY WARNING !!
-        // This is comparing plain text passwords. In a real production environment,
-        // you MUST hash passwords during registration and compare the hash here.
-        const passwordsMatch = password === user.password;
+        const passwordsMatch = isGoogle || (password === user.password);
 
         if (passwordsMatch) {
             const userPayload: SessionPayload = {
