@@ -465,7 +465,7 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
     const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT *
         FROM entidades_documento
-        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
+        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR ed.rol = 'emisor')
         LIMIT 1
     `, [fiscalId]);
 

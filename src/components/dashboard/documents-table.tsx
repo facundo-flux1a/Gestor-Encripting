@@ -146,6 +146,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
                     <TooltipContent>
                     <p>{doc.proveedor}</p>
                     <p className="text-muted-foreground">{doc.cif}</p>
+                    <p className="text-xs mt-2 italic">Editar en la página de detalle.</p>
                     </TooltipContent>
                 </Tooltip>
             )
@@ -167,6 +168,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
                     </TooltipTrigger>
                     <TooltipContent>
                     <p className="max-w-xs">{reason}</p>
+                    <p className="text-xs mt-2 italic">Validar en la página de detalle.</p>
                     </TooltipContent>
                 </Tooltip>
              )
