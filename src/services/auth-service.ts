@@ -61,7 +61,7 @@ export async function login(formData: FormData) {
             [email, password]
         );
 
-        let user: User | null = rows.length > 0 ? (rows[0] as User) : null;
+        let user: User | null = rows.length === 1 ? (rows[0] as User) : null;
 
         if (user) {
             const userPayload: SessionPayload = {
@@ -71,7 +71,7 @@ export async function login(formData: FormData) {
             };
             await createSession(userPayload);
         } else {
-            console.log('Invalid credentials');
+            console.log('Invalid credentials for email:', email);
             redirect('/auth/login?error=InvalidCredentials');
         }
     } catch (error) {
@@ -94,3 +94,4 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!decrypted?.user) return null;
   return decrypted.user;
 }
+
