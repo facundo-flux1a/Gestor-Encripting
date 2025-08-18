@@ -105,7 +105,7 @@ const DraggableTableHeader = <TData, TValue>({
             <div
                 className="flex items-center"
                 onClick={(e) => {
-                    e.stopPropagation(); // Prevent column selection when sorting
+                    e.stopPropagation();
                     header.column.toggleSorting(header.column.getIsSorted() === 'asc')
                 }}
             >
@@ -163,15 +163,31 @@ export function DataTable<TData, TValue>({
       setSelectedColumnId
     }
   });
+  
+   const handleFilterChange = (value: string) => {
+    setFilterInput(value);
+    if (selectedColumnId) {
+        table.getColumn(selectedColumnId)?.setFilterValue(value);
+    } else {
+        setGlobalFilter(value);
+    }
+  };
+
+  const handleSetPermanentFilter = () => {
+     if (filterInput.trim() === '') return;
+     if (selectedColumnId) {
+        // This will add or update the filter for the selected column
+        table.getColumn(selectedColumnId)?.setFilterValue(filterInput);
+     } else {
+        // We handle global filter separately
+        setGlobalFilter(filterInput);
+     }
+     setFilterInput(''); // Clear input after setting permanent filter
+  };
 
   const handleFilterKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && filterInput.trim() !== '') {
-        if (selectedColumnId) {
-            table.getColumn(selectedColumnId)?.setFilterValue(filterInput);
-        } else {
-            setGlobalFilter(filterInput);
-        }
-        setFilterInput('');
+    if (event.key === 'Enter') {
+        handleSetPermanentFilter();
     }
   };
 
@@ -195,6 +211,12 @@ export function DataTable<TData, TValue>({
     if(selectedColumnId) {
         setGlobalFilter('');
     }
+    // Also clear the live input when switching selection
+    setFilterInput('');
+    // And clear any "live" filtering on the table
+    if(table.getState().globalFilter) setGlobalFilter('');
+    table.resetColumnFilters();
+
   }, [selectedColumnId]);
 
 
@@ -235,11 +257,11 @@ export function DataTable<TData, TValue>({
                         id="datatable-search-input"
                         placeholder={
                             selectedColumnId 
-                            ? `Buscar y presionar Enter...`
-                            : 'Buscar en todas las columnas y presionar Enter...'
+                            ? `Buscar...`
+                            : 'Buscar en todas las columnas...'
                         }
                         value={filterInput}
-                        onChange={(e) => setFilterInput(e.target.value)}
+                        onChange={(e) => handleFilterChange(e.target.value)}
                         onKeyDown={handleFilterKeyDown}
                         className="h-10 pl-10 w-full max-w-sm"
                     />
