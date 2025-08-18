@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils';
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  hiddenColumns?: string[];
 }
 
 // Draggable Header Cell Component
@@ -122,6 +123,7 @@ const DraggableTableHeader = <TData, TValue>({
 export function DataTable<TData, TValue>({
   columns,
   data,
+  hiddenColumns = []
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -133,6 +135,14 @@ export function DataTable<TData, TValue>({
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [selectedColumnId, setSelectedColumnId] = React.useState<string | null>(null);
   const [filterInput, setFilterInput] = React.useState('');
+
+  React.useEffect(() => {
+    const initialVisibility: VisibilityState = {};
+    hiddenColumns.forEach(col => {
+      initialVisibility[col] = false;
+    });
+    setColumnVisibility(initialVisibility);
+  }, [hiddenColumns]);
 
 
   const table = useReactTable({
@@ -172,26 +182,13 @@ export function DataTable<TData, TValue>({
   };
 
   const handleSetPermanentFilter = () => {
-     if (filterInput.trim() === '') return;
-     // This function is now responsible for "committing" the filter from the input
-     // into the columnFilters state. The live filtering is already happening onChange.
-     // So, we just need to update the permanent filters state.
-     
-     const newFilters = table.getState().columnFilters;
-     
-     if (selectedColumnId) {
-        const existingFilterIndex = newFilters.findIndex(f => f.id === selectedColumnId);
-        if (existingFilterIndex > -1) {
-            newFilters[existingFilterIndex].value = filterInput;
-        } else {
-            newFilters.push({ id: selectedColumnId, value: filterInput });
-        }
-        setColumnFilters(newFilters);
-     } else {
-         setGlobalFilter(filterInput); // Committing global filter
-     }
+    if (filterInput.trim() === '' || !selectedColumnId) return;
 
-     setFilterInput(''); // Clear input after setting permanent filter
+    setColumnFilters(prev => {
+        const newFilters = prev.filter(f => f.id !== selectedColumnId);
+        return [...newFilters, { id: selectedColumnId, value: filterInput }];
+    });
+    setFilterInput('');
   };
 
   const handleFilterKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -204,28 +201,31 @@ export function DataTable<TData, TValue>({
     if (columnId === 'global') {
         setGlobalFilter('');
     } else {
-       table.getColumn(columnId)?.setFilterValue(undefined);
+        setColumnFilters(prev => prev.filter(f => f.id !== columnId));
     }
   }
   
   const getHeaderName = (columnId: string) => {
-    const col = columns.find(c => (c as any).accessorKey === columnId || c.id === columnId);
-    if (typeof col?.header === 'string') return col.header;
+    const col = table.getColumn(columnId);
+    const header = col?.columnDef.header;
+    if (typeof header === 'string') return header;
+    if (typeof header === 'function') {
+        // This is a simplification; might not work for complex header render functions
+        return col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
     const readableId = columnId.includes('_') ? columnId.replace(/_/g, ' ') : columnId;
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
 
   React.useEffect(() => {
-    // When a column is selected, clear the global filter and vice versa
+    setFilterInput('');
     if(selectedColumnId) {
         setGlobalFilter('');
+    } else {
+        // When deselecting, reset individual column filters
+        // but keep the ones in columnFilters state
+        table.resetColumnFilters(true);
     }
-    // Also clear the live input when switching selection
-    setFilterInput('');
-    // And clear any "live" filtering on the table
-    if(table.getState().globalFilter) setGlobalFilter('');
-    table.resetColumnFilters();
-
   }, [selectedColumnId]);
 
 
@@ -309,9 +309,7 @@ export function DataTable<TData, TValue>({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
             {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                const header = typeof column.columnDef.header === 'string' 
-                    ? column.columnDef.header 
-                    : (column.id.includes('_') ? column.id.replace(/_/g, ' ') : column.id);
+                const header = getHeaderName(column.id);
 
                 return (
                 <DropdownMenuCheckboxItem

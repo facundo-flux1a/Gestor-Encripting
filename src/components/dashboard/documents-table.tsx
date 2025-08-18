@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { MoreHorizontal, CheckCircle2, AlertCircle } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { type Document, type IvaDetail } from '@/lib/types';
+import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import {
   DropdownMenu,
@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { IvaBadge } from './iva-badge';
 import { DataTable } from '@/components/ui/data-table';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
@@ -44,35 +43,25 @@ const formatDate = (date: string | null | undefined) => {
 
 // Helper to create pivoted IVA columns
 const createIvaColumns = (ivaTypes: number[]): ColumnDef<Document>[] => {
-    const columns: ColumnDef<Document>[] = [];
-    ivaTypes.forEach(type => {
-        // Base Imponible column
-        columns.push({
+    return ivaTypes.flatMap(type => [
+        {
             id: `base_${type}`,
-            accessorKey: `base_${type}`,
+            accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.base_imponible,
             header: `Base ${type}%`,
-            cell: ({ row }) => {
-                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
-                return <div className="text-right">{formatCurrency(ivaDetail?.base_imponible)}</div>
-            },
+            cell: ({ getValue }) => <div className="text-right">{formatCurrency(getValue() as number)}</div>,
             enableColumnFilter: false,
-        });
-        // Cuota column
-        columns.push({
+        },
+        {
             id: `cuota_${type}`,
-            accessorKey: `cuota_${type}`,
-            header: `Cuota ${type}%`,
-            cell: ({ row }) => {
-                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
-                return <div className="text-right">{formatCurrency(ivaDetail?.cuota)}</div>
-            },
-             enableColumnFilter: false,
-        });
-    });
-    return columns;
+            accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.cuota,
+            header: `IVA ${type}%`,
+            cell: ({ getValue }) => <div className="text-right">{formatCurrency(getValue() as number)}</div>,
+            enableColumnFilter: false,
+        }
+    ]);
 };
 
-export function DocumentsTable({ documents }: { documents: Document[] }) {
+export function DocumentsTable({ documents, hiddenColumns }: { documents: Document[], hiddenColumns?: string[] }) {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   
@@ -84,7 +73,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setIsSummarizeOpen(true);
   };
   
-  const ivaColumns = createIvaColumns([21, 10, 4]);
+  const ivaColumns = createIvaColumns([21, 10, 4, 0]);
 
   const columns: ColumnDef<Document>[] = [
     {
@@ -184,7 +173,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
         accessorKey: 'verificado',
         header: () => <div className='text-center'>Estado</div>,
         cell: ({ row }) => {
-            const isVerified = row.getValue('verificado');
+            const isVerified = row.original.verificado;
              return (
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -203,7 +192,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
              )
         },
         filterFn: (row, id, value) => {
-            const isVerified = row.getValue(id);
+            const isVerified = row.original.verificado;
             if (value === 'validado') return isVerified === true;
             if (value === 'pendiente') return isVerified === false;
             return true;
@@ -242,7 +231,7 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
 
   return (
     <TooltipProvider delayDuration={200}>
-        <DataTable columns={columns} data={documents} />
+        <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} />
         <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
     </TooltipProvider>
   );

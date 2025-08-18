@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
+import type { Document } from '@/lib/types';
 
 interface ExportButtonProps {
     data: any[];
@@ -17,29 +18,31 @@ const isDocumentData = (data: any[]): boolean => {
     return 'id_documento' in item && 'numero_factura' in item && 'iva_details' in item;
 }
 
-const flattenDocumentForExport = (doc: any) => {
+const flattenDocumentForExport = (doc: Document) => {
     const base = {
         'Nº Factura': doc.numero_factura,
+        'Tipo Documento': doc.tipo_documento,
         'Fecha Emisión': doc.fecha_emision ? new Date(doc.fecha_emision).toLocaleDateString('es-ES') : '',
+        'Fecha Vencimiento': doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toLocaleDateString('es-ES') : '',
         'Proveedor': doc.proveedor,
         'CIF': doc.cif,
-        'Tipo Documento': doc.tipo_documento,
         'Total Base Imponible': doc.base_imponible,
         'Total IVA': doc.iva,
         'Total': doc.total,
         'Moneda': doc.moneda,
         'Observaciones': doc.observaciones,
-        'Incidencia': doc.incidencia ? 'Sí' : 'No',
+        'Estado': doc.verificado ? 'Validado' : 'Pendiente',
+        'Incidencia Razón': doc.incidencia_razon,
     };
 
-    const ivaPivoted: { [key: string]: number } = {};
-    if (doc.iva_details && Array.isArray(doc.iva_details)) {
-        doc.iva_details.forEach((iva: any) => {
-            const perc = iva.porcentaje;
-            ivaPivoted[`Base IVA ${perc}%`] = iva.base_imponible;
-            ivaPivoted[`Cuota IVA ${perc}%`] = iva.cuota;
-        });
-    }
+    const ivaPivoted: { [key: string]: number | undefined } = {};
+    const ivaTypes = [21, 10, 4, 0]; 
+    
+    ivaTypes.forEach(type => {
+        const ivaDetail = doc.iva_details.find(i => i.porcentaje === type);
+        ivaPivoted[`Base IVA ${type}%`] = ivaDetail?.base_imponible;
+        ivaPivoted[`Cuota IVA ${type}%`] = ivaDetail?.cuota;
+    });
 
     return { ...base, ...ivaPivoted };
 };
@@ -63,17 +66,26 @@ const flattenObject = (obj: any, parentKey = '', res: { [key: string]: any } = {
 
 const convertToCsv = (data: any[], isDocument: boolean): string => {
     if (data.length === 0) return '';
-    const flattenedData = isDocument ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
+    const flattenedData = isDocument ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
+    
+    if (flattenedData.length === 0) return '';
+
     const headers = Object.keys(flattenedData[0]);
     const csvRows = [
         headers.join(','),
-        ...flattenedData.map(row => headers.map(header => JSON.stringify(row[header])).join(','))
+        ...flattenedData.map(row => 
+            headers.map(header => {
+                const value = row[header as keyof typeof row];
+                const stringValue = value === null || value === undefined ? '' : String(value);
+                return JSON.stringify(stringValue);
+            }).join(',')
+        )
     ];
     return csvRows.join('\n');
 };
 
 const convertToTxt = (data: any[], isDocument: boolean): string => {
-    const flattenedData = isDocument ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
+    const flattenedData = isDocument ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
     return flattenedData.map(item => JSON.stringify(item, null, 2)).join('\n\n' + '-'.repeat(80) + '\n\n');
 };
 
@@ -98,7 +110,7 @@ export function ExportButton({ data, filename }: ExportButtonProps) {
         }
 
         const isDoc = isDocumentData(data);
-        const flattenedData = isDoc ? data.map(flattenDocumentForExport) : data.map(row => flattenObject(row));
+        const flattenedData = isDoc ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
 
         switch (format) {
             case 'excel':
