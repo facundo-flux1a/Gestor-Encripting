@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation';
 import type { SessionPayload, User } from '@/lib/types';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
-import { comparePassword } from './password-service';
 import { SignJWT, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
@@ -51,39 +50,20 @@ async function createSession(userPayload: SessionPayload) {
 export async function login(formData: FormData) {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    const isGoogle = formData.get('isGoogle') === 'true';
-    const displayName = formData.get('displayName') as string;
 
-    if (!email || (!password && !isGoogle)) {
+    if (!email || !password) {
         redirect('/auth/login?error=InvalidCredentials');
     }
 
     try {
         const [rows] = await db.query<RowDataPacket[]>(
-            'SELECT * FROM usuarios WHERE email = ? AND activo = 1',
-            [email]
+            'SELECT * FROM usuarios WHERE email = ? AND password = ? AND activo = 1',
+            [email, password]
         );
 
         let user: User | null = rows.length > 0 ? (rows[0] as User) : null;
-        
-        if (isGoogle) {
-            if (!user) {
-                // For Google Sign-In, we create a user with a non-usable password hash.
-                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo, password) VALUES (?, ?, ?, ?)', [displayName, email, 1, 'google_sso_user']);
-                const [newUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
-                user = newUserRows[0] as User;
-            }
-        }
 
-        if (!user) {
-             console.log('User not found or not active');
-             redirect('/auth/login?error=InvalidCredentials');
-             return;
-        }
-
-        const passwordsMatch = isGoogle || await comparePassword(password, user.password);
-
-        if (passwordsMatch) {
+        if (user) {
             const userPayload: SessionPayload = {
                 userId: user.id.toString(),
                 username: user.nombre,
