@@ -118,22 +118,3 @@ export const IncidentAnalysisResultSchema = z.object({
   message: z.string().describe('A summary message of the operation.'),
 });
 export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
-
-export const SessionPayloadSchema = z.object({
-    userId: z.string(),
-    username: z.string(),
-    role: z.string(),
-});
-export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
-
-export const UserSchema = z.object({
-    id: z.number(),
-    nombre: z.string(),
-    email: z.string().email(),
-    phone: z.string().nullable(),
-    password: z.string(), // In a real app, this would not be here.
-    activo: z.boolean(),
-    fecha_creacion: z.string(),
-    fecha_actualizacion: z.string(),
-});
-export type User = z.infer<typeof UserSchema>;

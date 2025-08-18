@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
@@ -19,20 +20,20 @@ export default function SettingsPage() {
                 <div className="grid gap-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Perfil</CardTitle>
+                            <CardTitle>Perfil de Empresa</CardTitle>
                             <CardDescription>
-                                Actualiza la información de tu cuenta.
+                                Actualiza la información de tu empresa.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                              <form className="space-y-4 max-w-lg">
                                 <div className="space-y-2">
-                                    <Label htmlFor="username">Nombre de Usuario</Label>
-                                    <Input id="username" defaultValue="Admin User" />
+                                    <Label htmlFor="companyName">Nombre de la Empresa</Label>
+                                    <Input id="companyName" defaultValue="Mi Empresa S.L." />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input id="email" type="email" defaultValue="admin@example.com" disabled />
+                                    <Label htmlFor="email">Email de Contacto</Label>
+                                    <Input id="email" type="email" defaultValue="contacto@miempresa.com" />
                                 </div>
                                 <Button type="submit">Guardar Cambios</Button>
                             </form>
@@ -41,26 +42,14 @@ export default function SettingsPage() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Seguridad</CardTitle>
+                            <CardTitle>Notificaciones</CardTitle>
                             <CardDescription>
-                                Gestiona tu contraseña.
+                                Gestiona tus preferencias de notificación.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <form className="space-y-4 max-w-lg">
-                                <div className="space-y-2">
-                                    <Label htmlFor="current-password">Contraseña Actual</Label>
-                                    <Input id="current-password" type="password" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="new-password">Nueva Contraseña</Label>
-                                    <Input id="new-password" type="password" />
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label htmlFor="confirm-password">Confirmar Nueva Contraseña</Label>
-                                    <Input id="confirm-password" type="password" />
-                                </div>
-                                <Button type="submit">Cambiar Contraseña</Button>
+                               <p>Configuración de notificaciones no disponible.</p>
                             </form>
                         </CardContent>
                     </Card>
