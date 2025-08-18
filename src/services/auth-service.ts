@@ -8,8 +8,7 @@ import { redirect } from 'next/navigation';
 import type { SessionPayload, User } from '@/lib/types';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { comparePassword } from './password-service';
 
 const secretKey = process.env.SESSION_SECRET || 'default_secret_key_for_development';
 const key = new TextEncoder().encode(secretKey);
@@ -42,28 +41,6 @@ async function createSession(userPayload: SessionPayload) {
     redirect('/dashboard');
 }
 
-export async function loginWithGoogle() {
-    'use client';
-    try {
-        const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-
-        if (user) {
-            const formData = new FormData();
-            formData.append('email', user.email!);
-            formData.append('displayName', user.displayName || 'Anonymous');
-            formData.append('isGoogle', 'true');
-            await login(formData);
-        }
-    } catch (error: any) {
-         console.error('Google login failed', error);
-         // Let the client-side form handle the error display
-         throw error;
-    }
-}
-
-
 export async function login(formData: FormData) {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
@@ -84,8 +61,9 @@ export async function login(formData: FormData) {
         
         if (isGoogle) {
             if (!user) {
-                // If user doesn't exist, create a new one for Google login
-                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo, password) VALUES (?, ?, ?, ?)', [displayName, email, 1, 'google_user']);
+                // For Google Sign-In, we create a user without a password hash.
+                // It's important they can't log in via email/password.
+                const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo, password) VALUES (?, ?, ?, ?)', [displayName, email, 1, 'google_sso_user']);
                 const [newUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
                 user = newUserRows[0] as User;
             }
@@ -97,9 +75,7 @@ export async function login(formData: FormData) {
              return;
         }
 
-        // In a real app, you would use a library like bcrypt to compare hashes.
-        // For this prototype, we'll simulate a secure check for the "admin" user.
-        const passwordsMatch = isGoogle || (user.password === 'admin' && password === 'admin');
+        const passwordsMatch = isGoogle || await comparePassword(password, user.password);
 
         if (passwordsMatch) {
             const userPayload: SessionPayload = {
