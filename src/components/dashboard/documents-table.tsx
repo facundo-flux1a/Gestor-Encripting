@@ -16,8 +16,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { EditableCell } from './editable-cell';
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
     if (amount === null || amount === undefined || isNaN(amount)) return 'N/A';
@@ -42,29 +43,34 @@ const formatDate = (date: string | null | undefined) => {
 }
 
 // Helper to create pivoted IVA columns
-const createIvaColumns = (ivaTypes: number[]): ColumnDef<Document>[] => {
+const createIvaColumns = (ivaTypes: number[], onUpdate: (id: number, field: string, value: any) => void): ColumnDef<Document>[] => {
     return ivaTypes.flatMap(type => [
         {
             id: `base_${type}`,
             accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.base_imponible,
             header: `Base ${type}%`,
-            cell: ({ getValue }) => <div className="text-right">{formatCurrency(getValue() as number)}</div>,
+            cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.iva_details.find(i => i.porcentaje === type)?.base_imponible)}</div>,
             enableColumnFilter: false,
         },
         {
             id: `cuota_${type}`,
             accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.cuota,
             header: `IVA ${type}%`,
-            cell: ({ getValue }) => <div className="text-right">{formatCurrency(getValue() as number)}</div>,
+            cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.iva_details.find(i => i.porcentaje === type)?.cuota)}</div>,
             enableColumnFilter: false,
         }
     ]);
 };
 
 export function DocumentsTable({ documents, hiddenColumns }: { documents: Document[], hiddenColumns?: string[] }) {
+  const [tableData, setTableData] = useState(documents);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   
+  useEffect(() => {
+    setTableData(documents);
+  }, [documents]);
+
   const pathname = usePathname();
   const isIncidentsPage = pathname === '/incidents';
 
@@ -73,13 +79,28 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     setIsSummarizeOpen(true);
   };
   
-  const ivaColumns = createIvaColumns([21, 10, 4, 0]);
+  const handleUpdate = (docId: number, field: string, value: any) => {
+    setTableData(prevData =>
+      prevData.map(doc =>
+        doc.id_documento === docId ? { ...doc, [field]: value } : doc
+      )
+    );
+  };
+
+  const ivaColumns = createIvaColumns([21, 10, 4, 0], handleUpdate);
 
   const columns: ColumnDef<Document>[] = [
     {
         accessorKey: 'numero_factura',
         header: 'Nº Factura',
-        cell: ({ row }) => <div className="font-medium">{row.getValue('numero_factura')}</div>,
+        cell: ({ row }) => (
+            <EditableCell
+                initialValue={row.getValue('numero_factura')}
+                docId={row.original.id_documento}
+                fieldName="numero_documento"
+                onUpdate={handleUpdate}
+            />
+        )
     },
     {
         accessorKey: 'tipo_documento',
@@ -89,12 +110,28 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'fecha_emision',
         header: 'Fecha Emisión',
-        cell: ({ row }) => formatDate(row.getValue('fecha_emision'))
+        cell: ({ row }) => (
+             <EditableCell
+                initialValue={row.getValue('fecha_emision')}
+                docId={row.original.id_documento}
+                fieldName="fecha_emision"
+                onUpdate={handleUpdate}
+                inputType="date"
+            />
+        )
     },
      {
         accessorKey: 'fecha_vencimiento',
         header: 'Fecha Vencimiento',
-        cell: ({ row }) => formatDate(row.getValue('fecha_vencimiento'))
+        cell: ({ row }) => (
+             <EditableCell
+                initialValue={row.getValue('fecha_vencimiento')}
+                docId={row.original.id_documento}
+                fieldName="fecha_vencimiento"
+                onUpdate={handleUpdate}
+                inputType="date"
+            />
+        )
     },
     {
         accessorKey: 'proveedor',
@@ -139,8 +176,18 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'base_imponible',
         header: () => <div className='text-right'>Total Base</div>,
-        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('base_imponible'))}</div>,
-         enableColumnFilter: false,
+        cell: ({ row }) => (
+            <div className="text-right">
+                <EditableCell
+                    initialValue={row.getValue('base_imponible')}
+                    docId={row.original.id_documento}
+                    fieldName="importe_sin_impuestos"
+                    onUpdate={handleUpdate}
+                    inputType="number"
+                    isCurrency
+                />
+            </div>
+        )
     },
     {
         accessorKey: 'iva',
@@ -151,23 +198,30 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'total',
         header: () => <div className='text-right font-bold'>Total</div>,
-        cell: ({ row }) => <div className="text-right font-bold">{formatCurrency(row.getValue('total'))}</div>,
-        enableColumnFilter: false,
+        cell: ({ row }) => (
+            <div className="text-right font-bold">
+                 <EditableCell
+                    initialValue={row.getValue('total')}
+                    docId={row.original.id_documento}
+                    fieldName="importe_total"
+                    onUpdate={handleUpdate}
+                    inputType="number"
+                    isCurrency
+                />
+            </div>
+        )
     },
      {
         accessorKey: 'observaciones',
         header: 'Observaciones',
-        cell: ({ row }) => {
-            const obs = row.getValue('observaciones') as string;
-            return (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <span className="truncate max-w-[150px] block">{obs || ''}</span>
-                    </TooltipTrigger>
-                    {obs && <TooltipContent><p className="max-w-xs">{obs}</p></TooltipContent>}
-                </Tooltip>
-            )
-        }
+        cell: ({ row }) => (
+            <EditableCell
+                initialValue={row.getValue('observaciones')}
+                docId={row.original.id_documento}
+                fieldName="observaciones"
+                onUpdate={handleUpdate}
+            />
+        )
     },
     {
         accessorKey: 'verificado',
@@ -231,7 +285,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
 
   return (
     <TooltipProvider delayDuration={200}>
-        <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} />
+        <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} />
         <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
     </TooltipProvider>
   );

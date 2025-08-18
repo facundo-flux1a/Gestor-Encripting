@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import db from '@/lib/db';
@@ -291,6 +292,24 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     } finally {
         connection.release();
     }
+}
+
+export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<OkPacket> {
+    const validFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones'];
+    if (!validFields.includes(fieldName)) {
+        throw new Error(`El campo '${fieldName}' no es editable.`);
+    }
+
+    const [result] = await db.query<OkPacket>(
+        `UPDATE documentos SET ${fieldName} = ? WHERE id = ?`,
+        [value, id]
+    );
+
+    if (result.affectedRows === 0) {
+        throw new Error('No se encontró el documento o no se realizaron cambios.');
+    }
+
+    return result;
 }
 
 
