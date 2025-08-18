@@ -70,6 +70,8 @@ export default function DocumentsPage() {
     ? 'Gestiona y revisa todos tus documentos.'
     : `Viendo todos los documentos de tipo "${docTypeFilter}".`;
 
+  const hiddenColumns = docTypeFilter === 'todos' ? [] : ['tipo_documento'];
+
   return (
     <MainLayout>
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
@@ -114,7 +116,7 @@ export default function DocumentsPage() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
-                <DocumentsTable documents={filteredDocuments} hiddenColumns={['tipo_documento']} />
+                <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} />
             )}
         </div>
       </div>
