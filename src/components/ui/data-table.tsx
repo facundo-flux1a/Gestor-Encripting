@@ -76,7 +76,7 @@ const DraggableTableHeader = <TData, TValue>({
     <TableHead
       ref={setNodeRef}
       style={style}
-      className="p-2"
+      className="p-2 whitespace-nowrap"
     >
       <div className="flex items-center gap-1">
         <Button
@@ -91,7 +91,7 @@ const DraggableTableHeader = <TData, TValue>({
          <Button
             variant="ghost"
             onClick={() => header.column.toggleSorting(header.column.getIsSorted() === 'asc')}
-            className='p-1 h-auto font-medium'
+            className='p-1 h-auto font-bold text-xs'
         >
             {flexRender(header.column.columnDef.header, header.getContext())}
             <ArrowUpDown className="ml-2 h-3 w-3" />
@@ -176,27 +176,34 @@ export function DataTable<TData, TValue>({
   return (
     <div className="space-y-4">
       {/* Column Visibility */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="ml-auto">
-            Columnas <ChevronDown className="ml-2 h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-            return (
-              <DropdownMenuCheckboxItem
-                key={column.id}
-                className="capitalize"
-                checked={column.getIsVisible()}
-                onCheckedChange={(value) => column.toggleVisibility(!!value)}
-              >
-                {typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id}
-              </DropdownMenuCheckboxItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex justify-end">
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="ml-auto">
+                Columnas <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+            {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                const header = typeof column.columnDef.header === 'string' 
+                    ? column.columnDef.header 
+                    : (column.id.includes('_') ? column.id.replace('_', ' ') : column.id);
+
+                return (
+                <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                    {header}
+                </DropdownMenuCheckboxItem>
+                );
+            })}
+            </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
 
       {/* Table */}
        <DndContext
@@ -226,7 +233,7 @@ export function DataTable<TData, TValue>({
                     table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
                         {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
+                        <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap">
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
                         ))}

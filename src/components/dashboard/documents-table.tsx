@@ -2,15 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  MoreHorizontal, 
-  CheckCircle2, 
-  AlertCircle
-} from 'lucide-react';
+import { MoreHorizontal, CheckCircle2, AlertCircle } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
-
 import { Button } from '@/components/ui/button';
-import { type Document } from '@/lib/types';
+import { type Document, type IvaDetail } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import {
   DropdownMenu,
@@ -25,13 +20,52 @@ import { DataTable } from '@/components/ui/data-table';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 
+const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
+    if (amount === null || amount === undefined || isNaN(amount)) return 'N/A';
+    return new Intl.NumberFormat('es-ES', {
+        style: 'currency',
+        currency,
+    }).format(amount);
+};
 
-const formatCurrency = (amount: number | null) => {
-    if (amount === null || amount === undefined) return 'N/A';
-  return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-  }).format(amount);
+const formatDate = (date: string | null | undefined) => {
+    if (!date) return 'N/A';
+    try {
+        const d = new Date(date);
+        // Ensure date is treated as UTC to avoid timezone shifts
+        const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
+        return new Intl.DateTimeFormat('es-ES', {
+            year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(utcDate);
+    } catch {
+        return 'Fecha inválida';
+    }
+}
+
+// Helper to create pivoted IVA columns
+const createIvaColumns = (ivaTypes: number[]): ColumnDef<Document>[] => {
+    const columns: ColumnDef<Document>[] = [];
+    ivaTypes.forEach(type => {
+        // Base Imponible column
+        columns.push({
+            accessorKey: `base_${type}`,
+            header: `Base ${type}%`,
+            cell: ({ row }) => {
+                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
+                return <div className="text-right">{formatCurrency(ivaDetail?.base_imponible)}</div>
+            }
+        });
+        // Cuota column
+        columns.push({
+            accessorKey: `cuota_${type}`,
+            header: `Cuota ${type}%`,
+            cell: ({ row }) => {
+                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === type);
+                return <div className="text-right">{formatCurrency(ivaDetail?.cuota)}</div>
+            }
+        });
+    });
+    return columns;
 };
 
 export function DocumentsTable({ documents }: { documents: Document[] }) {
@@ -46,12 +80,13 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     setIsSummarizeOpen(true);
   };
   
+  const ivaColumns = createIvaColumns([21, 10, 4]);
+
   const columns: ColumnDef<Document>[] = [
     {
         accessorKey: 'numero_factura',
         header: 'Nº Factura',
         cell: ({ row }) => <div className="font-medium">{row.getValue('numero_factura')}</div>,
-        enableHiding: false,
     },
     {
         accessorKey: 'tipo_documento',
@@ -60,8 +95,13 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
     },
     {
         accessorKey: 'fecha_emision',
-        header: 'Fecha',
-        cell: ({ row }) => new Date(row.getValue('fecha_emision')).toLocaleDateString('es-ES', { timeZone: 'UTC' })
+        header: 'Fecha Emisión',
+        cell: ({ row }) => formatDate(row.getValue('fecha_emision'))
+    },
+     {
+        accessorKey: 'fecha_vencimiento',
+        header: 'Fecha Vencimiento',
+        cell: ({ row }) => formatDate(row.getValue('fecha_vencimiento'))
     },
     {
         accessorKey: 'proveedor',
@@ -81,6 +121,10 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
             )
         }
     },
+    {
+        accessorKey: 'cif',
+        header: 'CIF',
+    },
     ...(isIncidentsPage ? [{
         accessorKey: 'incidencia_razon',
         header: 'Razón Incidencia',
@@ -98,31 +142,36 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
              )
         }
     }] as ColumnDef<Document>[] : []),
+    ...ivaColumns,
     {
         accessorKey: 'base_imponible',
-        header: () => <div className='text-right'>Base</div>,
+        header: () => <div className='text-right'>Total Base</div>,
         cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('base_imponible'))}</div>
     },
     {
-        accessorKey: 'iva_details',
-        header: () => <div className='text-right'>Impuestos</div>,
-        cell: ({ row }) => {
-            const ivaDetails = row.getValue('iva_details') as any[];
-            return (
-                 <div className="flex items-center justify-end gap-1">
-                    {ivaDetails.map((iva, index) => (
-                        <IvaBadge key={index} iva={iva} />
-                    ))}
-                </div>
-            )
-        },
-        enableSorting: false,
-        enableColumnFilter: false,
+        accessorKey: 'iva',
+        header: () => <div className='text-right'>Total IVA</div>,
+        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('iva'))}</div>
     },
     {
         accessorKey: 'total',
-        header: () => <div className='text-right'>Total</div>,
+        header: () => <div className='text-right font-bold'>Total</div>,
         cell: ({ row }) => <div className="text-right font-bold">{formatCurrency(row.getValue('total'))}</div>
+    },
+     {
+        accessorKey: 'observaciones',
+        header: 'Observaciones',
+        cell: ({ row }) => {
+            const obs = row.getValue('observaciones') as string;
+            return (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="truncate max-w-[150px] block">{obs || ''}</span>
+                    </TooltipTrigger>
+                    {obs && <TooltipContent><p className="max-w-xs">{obs}</p></TooltipContent>}
+                </Tooltip>
+            )
+        }
     },
     {
         accessorKey: 'verificado',
@@ -180,16 +229,13 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
         },
         enableSorting: false,
         enableColumnFilter: false,
+        enableHiding: false,
     }
   ];
-  
-  // Filter out the incidents column if not on the incidents page
-  const visibleColumns = isIncidentsPage ? columns : columns.filter(c => c.accessorKey !== 'incidencia_razon');
-
 
   return (
     <TooltipProvider delayDuration={200}>
-        <DataTable columns={visibleColumns} data={documents} />
+        <DataTable columns={columns} data={documents} />
         <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
     </TooltipProvider>
   );
