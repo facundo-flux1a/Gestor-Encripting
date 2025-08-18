@@ -19,6 +19,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const normalizeDocType = (type: string | null | undefined): string => {
+    if (!type || type.trim() === '') return 'Otro';
+    const lower = type.trim().toLowerCase();
+    
+    if (lower.includes('factura')) {
+        return 'Factura';
+    }
+    
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+};
+
+
 export default function DocumentsPage() {
   const [allDocuments, setAllDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,15 +54,15 @@ export default function DocumentsPage() {
   }
 
   const documentTypes = useMemo(() => {
-    const types = new Set(allDocuments.map(doc => doc.tipo_documento).filter(Boolean));
-    return ['todos', ...Array.from(types)];
+    const types = new Set(allDocuments.map(doc => normalizeDocType(doc.tipo_documento)));
+    return ['todos', ...Array.from(types)].sort();
   }, [allDocuments]);
 
   const filteredDocuments = useMemo(() => {
     if (docTypeFilter === 'todos') {
       return allDocuments;
     }
-    return allDocuments.filter(doc => doc.tipo_documento === docTypeFilter);
+    return allDocuments.filter(doc => normalizeDocType(doc.tipo_documento) === docTypeFilter);
   }, [allDocuments, docTypeFilter]);
   
   const pageTitle = docTypeFilter === 'todos' ? 'Todos los Documentos' : `Documentos: ${docTypeFilter}`;
