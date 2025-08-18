@@ -49,15 +49,35 @@ const createIvaColumns = (ivaTypes: number[], onUpdate: (id: number, field: stri
             id: `base_${type}`,
             accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.base_imponible,
             header: `Base ${type}%`,
-            cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.iva_details.find(i => i.porcentaje === type)?.base_imponible)}</div>,
-            enableColumnFilter: false,
+            cell: ({ row }) => (
+                <div className="text-right">
+                    <EditableCell
+                        initialValue={row.original.iva_details.find(i => i.porcentaje === type)?.base_imponible}
+                        docId={row.original.id_documento}
+                        fieldName={`iva_base_${type}`}
+                        onUpdate={onUpdate}
+                        inputType="number"
+                        isCurrency
+                    />
+                </div>
+            ),
         },
         {
             id: `cuota_${type}`,
             accessorFn: (row) => row.iva_details.find(i => i.porcentaje === type)?.cuota,
             header: `IVA ${type}%`,
-            cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.iva_details.find(i => i.porcentaje === type)?.cuota)}</div>,
-            enableColumnFilter: false,
+            cell: ({ row }) => (
+                <div className="text-right">
+                     <EditableCell
+                        initialValue={row.original.iva_details.find(i => i.porcentaje === type)?.cuota}
+                        docId={row.original.id_documento}
+                        fieldName={`iva_cuota_${type}`}
+                        onUpdate={onUpdate}
+                        inputType="number"
+                        isCurrency
+                    />
+                </div>
+            ),
         }
     ]);
 };
@@ -105,7 +125,14 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'tipo_documento',
         header: 'Tipo',
-        cell: ({ row }) => <Badge variant="outline">{row.getValue('tipo_documento')}</Badge>
+        cell: ({ row }) => (
+            <EditableCell
+                initialValue={row.getValue('tipo_documento')}
+                docId={row.original.id_documento}
+                fieldName="tipo_documento"
+                onUpdate={handleUpdate}
+            />
+        )
     },
     {
         accessorKey: 'fecha_emision',
@@ -136,43 +163,38 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'proveedor',
         header: 'Proveedor',
-        cell: ({ row }) => {
-            const doc = row.original;
-            return (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                    <span className="truncate max-w-[200px] block">{doc.proveedor}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                    <p>{doc.proveedor}</p>
-                    <p className="text-muted-foreground">{doc.cif}</p>
-                    <p className="text-xs mt-2 italic">Editar en la página de detalle.</p>
-                    </TooltipContent>
-                </Tooltip>
-            )
-        }
+        cell: ({ row }) => (
+            <EditableCell
+                initialValue={row.getValue('proveedor')}
+                docId={row.original.id_documento}
+                fieldName="proveedor_nombre"
+                onUpdate={handleUpdate}
+            />
+        )
     },
     {
         accessorKey: 'cif',
         header: 'CIF',
+        cell: ({ row }) => (
+            <EditableCell
+                initialValue={row.getValue('cif')}
+                docId={row.original.id_documento}
+                fieldName="proveedor_cif"
+                onUpdate={handleUpdate}
+            />
+        )
     },
     ...(isIncidentsPage ? [{
         accessorKey: 'incidencia_razon',
         header: 'Razón Incidencia',
-        cell: ({ row }: { row: any }) => {
-             const reason = row.getValue('incidencia_razon') as string;
-             return (
-                 <Tooltip>
-                    <TooltipTrigger asChild>
-                    <span className="truncate max-w-[250px] block text-destructive/80">{reason || 'N/A'}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                    <p className="max-w-xs">{reason}</p>
-                    <p className="text-xs mt-2 italic">Validar en la página de detalle.</p>
-                    </TooltipContent>
-                </Tooltip>
-             )
-        }
+        cell: ({ row }: { row: any }) => (
+             <EditableCell
+                initialValue={row.getValue('incidencia_razon')}
+                docId={row.original.id_documento}
+                fieldName="incidencia_razon"
+                onUpdate={handleUpdate}
+            />
+        )
     }] as ColumnDef<Document>[] : []),
     ...ivaColumns,
     {

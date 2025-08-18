@@ -295,21 +295,55 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 }
 
 export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<OkPacket> {
-    const validFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones'];
-    if (!validFields.includes(fieldName)) {
-        throw new Error(`El campo '${fieldName}' no es editable.`);
+    // Direct fields in 'documentos' table
+    const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones', 'tipo_documento'];
+    
+    if (directDocumentFields.includes(fieldName)) {
+        const [result] = await db.query<OkPacket>(`UPDATE documentos SET ?? = ? WHERE id = ?`, [fieldName, value, id]);
+        if (result.affectedRows === 0) throw new Error('No se encontró el documento o no se realizaron cambios.');
+        return result;
     }
 
-    const [result] = await db.query<OkPacket>(
-        `UPDATE documentos SET ${fieldName} = ? WHERE id = ?`,
-        [value, id]
-    );
-
-    if (result.affectedRows === 0) {
-        throw new Error('No se encontró el documento o no se realizaron cambios.');
+    // Fields related to the provider in 'entidades_documento' table
+    if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
+        const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
+        const [result] = await db.query<OkPacket>(
+            `UPDATE entidades_documento SET ?? = ? WHERE documento_id = ? AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1`,
+            [fieldToUpdate, value, id]
+        );
+        if (result.affectedRows === 0) throw new Error('No se encontró el proveedor para este documento.');
+        return result;
     }
 
-    return result;
+    // Field related to 'incidencias_documento' table
+    if (fieldName === 'incidencia_razon') {
+         // This will update the first open incident found. A more complex logic might be needed for multiple incidents.
+        const [result] = await db.query<OkPacket>(
+            `UPDATE incidencias_documento SET descripcion = ? WHERE documento_id = ? AND validado = 0 LIMIT 1`,
+            [value, id]
+        );
+        // It's okay if no rows are affected, it might mean there are no open incidents to update.
+        return result;
+    }
+    
+     // Fields related to 'impuestos_documento' table
+    if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
+        const parts = fieldName.split('_');
+        const type = parts[1]; // 'base' or 'cuota'
+        const percentage = parts[2];
+        const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
+        
+        const [result] = await db.query<OkPacket>(
+            `UPDATE impuestos_documento SET ?? = ? WHERE documento_id = ? AND porcentaje = ? LIMIT 1`,
+            [fieldToUpdate, value, id, percentage]
+        );
+        if (result.affectedRows === 0) throw new Error(`No se encontró un impuesto del ${percentage}% para este documento.`);
+        return result;
+    }
+
+
+    // If the field name is not recognized, throw an error.
+    throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
 }
 
 
