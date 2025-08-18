@@ -75,11 +75,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
   const navItems = [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/documents', label: 'Documentos', icon: FileText },
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
   ];
+
+  const isActive = (href: string) => {
+    if (href === '/') {
+        return pathname === '/';
+    }
+    return pathname.startsWith(href);
+  }
+
 
   return (
     <SidebarProvider>
@@ -96,7 +104,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton 
                         asChild 
-                        isActive={pathname.startsWith(item.href)} 
+                        isActive={isActive(item.href)} 
                         tooltip={item.label}>
                         <Link href={item.href}>
                             <item.icon />
