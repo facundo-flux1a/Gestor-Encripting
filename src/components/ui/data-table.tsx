@@ -50,6 +50,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, GripVertical, ArrowUpDown, X, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -82,31 +84,38 @@ const DraggableTableHeader = <TData, TValue>({
     <TableHead
       ref={setNodeRef}
       style={style}
-      className={`p-2 whitespace-nowrap group relative ${isSelected ? 'bg-primary/10' : ''}`}
-      onClick={() => setSelectedColumnId(header.column.id === selectedColumnId ? null : header.column.id)}
+      className={cn("p-0 whitespace-nowrap group relative", isSelected && 'bg-primary/10')}
     >
-      <div className="flex items-center gap-1">
-        <Button
-            variant="ghost"
-            size="sm"
-            {...attributes}
-            {...listeners}
-            className="cursor-grab p-1 h-auto"
+      <Button 
+        variant="ghost" 
+        className="w-full h-full justify-start p-2"
+        onClick={() => setSelectedColumnId(header.column.id === selectedColumnId ? null : header.column.id)}
+      >
+        <div className="flex items-center gap-1 w-full">
+            <Button
+                variant="ghost"
+                size="sm"
+                {...attributes}
+                {...listeners}
+                onClick={(e) => e.stopPropagation()} // Prevent column selection when dragging
+                className="cursor-grab p-1 h-auto"
+                >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <div
+                className="flex items-center"
+                onClick={(e) => {
+                    e.stopPropagation(); // Prevent column selection when sorting
+                    header.column.toggleSorting(header.column.getIsSorted() === 'asc')
+                }}
             >
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </Button>
-         <Button
-            variant="ghost"
-            onClick={(e) => {
-                e.stopPropagation(); // prevent column selection when sorting
-                header.column.toggleSorting(header.column.getIsSorted() === 'asc')
-            }}
-            className={`p-1 h-auto font-bold text-xs`}
-        >
-            {flexRender(header.column.columnDef.header, header.getContext())}
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-        </Button>
-      </div>
+                <span className="font-bold text-xs">
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                </span>
+                <ArrowUpDown className="ml-2 h-3 w-3" />
+            </div>
+        </div>
+      </Button>
       {isSelected && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>}
     </TableHead>
   );
