@@ -1,32 +1,37 @@
 
-
 'use server';
 
-import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { SessionPayload, User } from '@/lib/types';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { comparePassword } from './password-service';
+import { SignJWT, jwtVerify } from 'jose';
+import type { JWTPayload } from 'jose';
 
 const secretKey = process.env.SESSION_SECRET || 'default_secret_key_for_development';
 const key = new TextEncoder().encode(secretKey);
 
-export async function encrypt(payload: any) {
-  return await new SignJWT(payload)
+export interface SessionJWTPayload extends JWTPayload {
+    user: any;
+    expires: Date;
+}
+
+export async function encrypt(payload: SessionJWTPayload): Promise<string> {
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h') // Token expires in 1 hour
     .sign(key);
 }
 
-export async function decrypt(input: string): Promise<any> {
+export async function decrypt(input: string): Promise<SessionJWTPayload | null> {
     try {
         const { payload } = await jwtVerify(input, key, {
             algorithms: ['HS256'],
         });
-        return payload;
+        return payload as SessionJWTPayload;
     } catch (error) {
         // This will be caught for expired tokens or invalid signatures
         console.log('Failed to verify session:', error);
@@ -34,9 +39,11 @@ export async function decrypt(input: string): Promise<any> {
     }
 }
 
+
 async function createSession(userPayload: SessionPayload) {
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    const session = await encrypt({ user: userPayload, expires });
+    const sessionPayload: SessionJWTPayload = { user: userPayload, expires };
+    const session = await encrypt(sessionPayload);
     cookies().set('session', session, { expires, httpOnly: true });
     redirect('/dashboard');
 }
@@ -61,8 +68,7 @@ export async function login(formData: FormData) {
         
         if (isGoogle) {
             if (!user) {
-                // For Google Sign-In, we create a user without a password hash.
-                // It's important they can't log in via email/password.
+                // For Google Sign-In, we create a user with a non-usable password hash.
                 const [insertResult] = await db.query<any>('INSERT INTO usuarios (nombre, email, activo, password) VALUES (?, ?, ?, ?)', [displayName, email, 1, 'google_sso_user']);
                 const [newUserRows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [insertResult.insertId]);
                 user = newUserRows[0] as User;
@@ -97,7 +103,6 @@ export async function login(formData: FormData) {
 export async function logout() {
   // Destroy the session
   cookies().set('session', '', { expires: new Date(0) });
-  // The client-side part of logout (Firebase) should be handled on the client
   redirect('/auth/login');
 }
 
