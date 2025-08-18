@@ -86,36 +86,34 @@ const DraggableTableHeader = <TData, TValue>({
       style={style}
       className={cn("p-0 whitespace-nowrap group relative", isSelected && 'bg-primary/10')}
     >
-      <Button 
-        variant="ghost" 
-        className="w-full h-full justify-start p-2"
-        onClick={() => setSelectedColumnId(header.column.id === selectedColumnId ? null : header.column.id)}
-      >
-        <div className="flex items-center gap-1 w-full">
+       <div className="flex items-center h-full">
             <Button
                 variant="ghost"
                 size="sm"
                 {...attributes}
                 {...listeners}
-                onClick={(e) => e.stopPropagation()} // Prevent column selection when dragging
-                className="cursor-grab p-1 h-auto"
+                className="cursor-grab p-2 h-full"
                 >
                 <GripVertical className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <div
-                className="flex items-center"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    header.column.toggleSorting(header.column.getIsSorted() === 'asc')
-                }}
-            >
-                <span className="font-bold text-xs">
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                </span>
-                <ArrowUpDown className="ml-2 h-3 w-3" />
-            </div>
-        </div>
-      </Button>
+             <button
+                className="flex items-center text-left w-full h-full px-2 py-3"
+                onClick={() => setSelectedColumnId(header.column.id === selectedColumnId ? null : header.column.id)}
+             >
+                <div
+                    className="flex items-center"
+                     onClick={(e) => {
+                        e.stopPropagation();
+                        header.column.toggleSorting(header.column.getIsSorted() === 'asc')
+                    }}
+                >
+                    <span className="font-bold text-xs">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                    </span>
+                    <ArrowUpDown className="ml-2 h-3 w-3" />
+                </div>
+            </button>
+       </div>
       {isSelected && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>}
     </TableHead>
   );
@@ -175,13 +173,24 @@ export function DataTable<TData, TValue>({
 
   const handleSetPermanentFilter = () => {
      if (filterInput.trim() === '') return;
+     // This function is now responsible for "committing" the filter from the input
+     // into the columnFilters state. The live filtering is already happening onChange.
+     // So, we just need to update the permanent filters state.
+     
+     const newFilters = table.getState().columnFilters;
+     
      if (selectedColumnId) {
-        // This will add or update the filter for the selected column
-        table.getColumn(selectedColumnId)?.setFilterValue(filterInput);
+        const existingFilterIndex = newFilters.findIndex(f => f.id === selectedColumnId);
+        if (existingFilterIndex > -1) {
+            newFilters[existingFilterIndex].value = filterInput;
+        } else {
+            newFilters.push({ id: selectedColumnId, value: filterInput });
+        }
+        setColumnFilters(newFilters);
      } else {
-        // We handle global filter separately
-        setGlobalFilter(filterInput);
+         setGlobalFilter(filterInput); // Committing global filter
      }
+
      setFilterInput(''); // Clear input after setting permanent filter
   };
 
