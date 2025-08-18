@@ -254,7 +254,7 @@ export function DataTable<TData, TValue>({
             {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
                 const header = typeof column.columnDef.header === 'string' 
                     ? column.columnDef.header 
-                    : (column.id.includes('_') ? column.id.replace('_', ' ') : columnId);
+                    : (column.id.includes('_') ? column.id.replace('_', ' ') : column.id);
 
                 return (
                 <DropdownMenuCheckboxItem
