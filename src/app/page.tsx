@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,10 +9,10 @@ import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { DocumentStatusChart } from '@/components/dashboard/document-status-chart';
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
-import { getDashboardAnalytics } from '@/services/dashboard-service';
+import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { FileText, Users, AlertTriangle, Package, Euro, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import type { DashboardAnalytics } from '@/services/dashboard-service';
+
 
 export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);

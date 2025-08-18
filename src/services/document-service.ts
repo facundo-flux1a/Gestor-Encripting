@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 import db from '@/lib/db';
@@ -88,6 +87,27 @@ interface IncidenciaPacket extends RowDataPacket {
     documento_id: number;
     descripcion: string | null;
     validado: boolean;
+}
+
+export interface DashboardAnalytics {
+  kpis: {
+    totalIngresos: number;
+    totalGastos: number;
+    totalFacturasIngreso: number;
+    totalFacturasGasto: number;
+    incidenciasAbiertas: number;
+    totalProveedores: number;
+    totalProductos: number;
+    incidentRate: number;
+  };
+  quarterlySummary: {
+    [key: string]: { ingresos: number; gastos: number };
+  };
+  documentDistribution: { name: string; value: number }[];
+  ivaSummary: {
+    [key: string]: { repercutido: number; soportado: number };
+  };
+  topProviders: { name: string; total: number; fiscalId: string }[];
 }
 
 
@@ -826,6 +846,87 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 }
 
 
+export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
+  const [kpiRows] = await db.query<RowDataPacket[]>(`
+    SELECT
+      (SELECT SUM(d.importe_total) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'cliente' OR e.rol = 'receptor') as totalIngresos,
+      (SELECT SUM(d.importe_total) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'proveedor' OR e.rol = 'emisor') as totalGastos,
+      (SELECT COUNT(d.id) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'cliente' OR e.rol = 'receptor') as totalFacturasIngreso,
+      (SELECT COUNT(d.id) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'proveedor' OR e.rol = 'emisor') as totalFacturasGasto,
+      (SELECT COUNT(*) FROM incidencias_documento WHERE validado = 0) as incidenciasAbiertas,
+      (SELECT COUNT(DISTINCT identificador_fiscal) FROM entidades_documento WHERE (rol = 'proveedor' OR rol = 'emisor') AND identificador_fiscal IS NOT NULL AND identificador_fiscal != '') as totalProveedores,
+      (SELECT COUNT(DISTINCT codigo) FROM lineas_documento WHERE codigo IS NOT NULL AND codigo != '') as totalProductos,
+      (SELECT COUNT(*) FROM documentos) as totalDocs
+  `);
+  const kpis = kpiRows[0];
+  const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
+
+  const [quarterlyRows] = await db.query<RowDataPacket[]>(`
+    SELECT
+      CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
+      SUM(CASE WHEN e.rol = 'cliente' OR e.rol = 'receptor' THEN d.importe_total ELSE 0 END) as ingresos,
+      SUM(CASE WHEN e.rol = 'proveedor' OR e.rol = 'emisor' THEN d.importe_total ELSE 0 END) as gastos
+    FROM documentos d
+    JOIN entidades_documento e ON d.id = e.documento_id
+    WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
+    GROUP BY quarter
+  `);
+
+  const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
+  quarterlyRows.forEach(r => {
+    quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: r.ingresos, gastos: r.gastos };
+  });
+
+  const [distributionRows] = await db.query<RowDataPacket[]>(`
+    SELECT tipo_documento as name, COUNT(*) as value
+    FROM documentos
+    GROUP BY tipo_documento
+    ORDER BY value DESC
+  `);
+
+  const [ivaRows] = await db.query<RowDataPacket[]>(`
+    SELECT
+      CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
+      SUM(CASE WHEN e.rol = 'cliente' OR e.rol = 'receptor' THEN i.cuota ELSE 0 END) as repercutido,
+      SUM(CASE WHEN e.rol = 'proveedor' OR e.rol = 'emisor' THEN i.cuota ELSE 0 END) as soportado
+    FROM documentos d
+    JOIN impuestos_documento i ON d.id = i.documento_id
+    JOIN entidades_documento e ON d.id = e.documento_id
+    WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
+    GROUP BY quarter
+  `);
+  const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
+  ivaRows.forEach(r => {
+    ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: r.repercutido, soportado: r.soportado };
+  });
+
+  const [topProvidersRows] = await db.query<RowDataPacket[]>(`
+    SELECT e.nombre, e.identificador_fiscal, SUM(d.importe_total) as total
+    FROM documentos d
+    JOIN entidades_documento e ON d.id = e.documento_id
+    WHERE e.rol = 'proveedor' OR e.rol = 'emisor'
+    GROUP BY e.nombre, e.identificador_fiscal
+    ORDER BY total DESC
+    LIMIT 5
+  `);
+
+  return JSON.parse(JSON.stringify({
+    kpis: {
+      totalIngresos: Number(kpis.totalIngresos || 0),
+      totalGastos: Number(kpis.totalGastos || 0),
+      totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
+      totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
+      incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
+      totalProveedores: Number(kpis.totalProveedores || 0),
+      totalProductos: Number(kpis.totalProductos || 0),
+      incidentRate: Number(incidentRate || 0),
+    },
+    quarterlySummary,
+    documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
+    ivaSummary,
+    topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
+  }));
+}
     
 
     
@@ -840,3 +941,4 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
     
 
     
+
