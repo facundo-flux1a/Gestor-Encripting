@@ -40,8 +40,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from './theme-toggle';
 
-// Main Logo and Toggle Button
+
 function AppLogo() {
   const { state } = useSidebar();
   return (
@@ -114,7 +115,7 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
                 setUser({
                     id: session.userId,
                     email: session.email,
-                    nombre: session.email, // Use email as name for now
+                    nombre: session.email, 
                 });
             }
         });
@@ -123,6 +124,7 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
     return (
         <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
             <div className="flex-1">{children}</div>
+            <ThemeToggle />
             <UserProfile user={user} />
         </header>
     )
