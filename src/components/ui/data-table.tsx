@@ -78,31 +78,32 @@ const DraggableTableHeader = <TData, TValue>({
     position: 'relative',
   };
   
-  const { setSelectedColumnId, selectedColumnId } = (table.options.meta as any);
-  const isSelected = selectedColumnId === header.column.id;
+  const isSelectColumn = header.column.id === 'select';
+
 
   return (
     <TableHead
       ref={setNodeRef}
       style={style}
-      className={cn("p-0 whitespace-nowrap group relative", isSelected && 'bg-primary/10')}
+      className={cn("p-0 whitespace-nowrap group relative")}
     >
-       <div className="flex items-center h-full">
-            <Button
-                variant="ghost"
-                size="sm"
-                {...attributes}
-                {...listeners}
-                className="cursor-grab p-2 h-full"
-                >
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </Button>
-             <button
-                className="flex items-center text-left w-full h-full px-2 py-3"
-                onClick={() => setSelectedColumnId(header.column.id === selectedColumnId ? null : header.column.id)}
-             >
+        {isSelectColumn ? (
+             <div className="flex items-center justify-center h-full px-4">
+                 {flexRender(header.column.columnDef.header, header.getContext())}
+             </div>
+        ) : (
+            <div className="flex items-center h-full">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab p-2 h-full"
+                    >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
                 <div
-                    className="flex items-center"
+                    className="flex items-center cursor-pointer text-left w-full h-full px-2 py-3"
                      onClick={(e) => {
                         e.stopPropagation();
                         header.column.toggleSorting(header.column.getIsSorted() === 'asc')
@@ -113,9 +114,8 @@ const DraggableTableHeader = <TData, TValue>({
                     </span>
                     <ArrowUpDown className="ml-2 h-3 w-3" />
                 </div>
-            </button>
-       </div>
-      {isSelected && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>}
+            </div>
+       )}
     </TableHead>
   );
 };
@@ -133,8 +133,8 @@ export function DataTable<TData, TValue>({
   );
 
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [selectedColumnId, setSelectedColumnId] = React.useState<string | null>(null);
-  const [filterInput, setFilterInput] = React.useState('');
+  const [filterInputs, setFilterInputs] = React.useState<Record<string, string>>({});
+
 
   React.useEffect(() => {
     const initialVisibility: VisibilityState = {};
@@ -166,67 +166,21 @@ export function DataTable<TData, TValue>({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    meta: {
-      selectedColumnId,
-      setSelectedColumnId
-    }
   });
   
-   const handleFilterChange = (value: string) => {
-    setFilterInput(value);
-    if (selectedColumnId) {
-        table.getColumn(selectedColumnId)?.setFilterValue(value);
-    } else {
-        setGlobalFilter(value);
-    }
+  const handleFilterChange = (columnId: string, value: string) => {
+    setFilterInputs(prev => ({...prev, [columnId]: value}));
+    table.getColumn(columnId)?.setFilterValue(value);
   };
-
-  const handleSetPermanentFilter = () => {
-    if (filterInput.trim() === '' || !selectedColumnId) return;
-
-    setColumnFilters(prev => {
-        const newFilters = prev.filter(f => f.id !== selectedColumnId);
-        return [...newFilters, { id: selectedColumnId, value: filterInput }];
-    });
-    setFilterInput('');
-  };
-
-  const handleFilterKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-        handleSetPermanentFilter();
-    }
-  };
-
-  const removeFilter = (columnId: string) => {
-    if (columnId === 'global') {
-        setGlobalFilter('');
-    } else {
-        setColumnFilters(prev => prev.filter(f => f.id !== columnId));
-    }
-  }
   
   const getHeaderName = (columnId: string) => {
     const col = table.getColumn(columnId);
-    const header = col?.columnDef.header;
+    if (!col) return columnId;
+    const header = col.columnDef.header;
     if (typeof header === 'string') return header;
-    if (typeof header === 'function') {
-        // This is a simplification; might not work for complex header render functions
-        return col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    }
-    const readableId = columnId.includes('_') ? columnId.replace(/_/g, ' ') : columnId;
+    const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
-
-  React.useEffect(() => {
-    setFilterInput('');
-    if(selectedColumnId) {
-        setGlobalFilter('');
-    } else {
-        // When deselecting, reset individual column filters
-        // but keep the ones in columnFilters state
-        table.resetColumnFilters(true);
-    }
-  }, [selectedColumnId]);
 
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -246,60 +200,20 @@ export function DataTable<TData, TValue>({
     useSensor(KeyboardSensor, {})
   );
   
-  const activeFilters = columnFilters.filter(f => f.value);
-  const hasGlobalFilter = globalFilter.trim() !== '';
-
   return (
     <div className="space-y-4">
       {/* Controls: Filter input and column visibility */}
       <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
         <div className="flex-1 w-full sm:w-auto">
-            <div className="space-y-1">
-                 {selectedColumnId && (
-                    <Label htmlFor="datatable-search-input" className="text-xs text-muted-foreground">
-                        Filtrando en: <span className="font-bold text-primary">{getHeaderName(selectedColumnId)}</span>
-                    </Label>
-                )}
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        id="datatable-search-input"
-                        placeholder={
-                            selectedColumnId 
-                            ? `Buscar...`
-                            : 'Buscar en todas las columnas...'
-                        }
-                        value={filterInput}
-                        onChange={(e) => handleFilterChange(e.target.value)}
-                        onKeyDown={handleFilterKeyDown}
-                        className="h-10 pl-10 w-full max-w-sm"
-                    />
-                </div>
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder='Buscar en todas las columnas...'
+                    value={globalFilter ?? ''}
+                    onChange={(event) => setGlobalFilter(event.target.value)}
+                    className="h-10 pl-10 w-full max-w-sm"
+                />
             </div>
-            {(activeFilters.length > 0 || hasGlobalFilter) && (
-                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-sm font-medium">Filtros Activos:</span>
-                    {hasGlobalFilter && (
-                         <Badge variant="secondary" className="pl-2">
-                           Global: "{globalFilter}"
-                            <Button variant="ghost" size="icon" className="ml-1 h-5 w-5 p-0" onClick={() => removeFilter('global')}>
-                                <X className="h-3 w-3" /><span className="sr-only">Remover</span>
-                            </Button>
-                        </Badge>
-                    )}
-                    {activeFilters.map(({ id, value }) => (
-                        <Badge key={id} variant="secondary" className="pl-2">
-                           {getHeaderName(id)}: "{value as string}"
-                            <Button variant="ghost" size="icon" className="ml-1 h-5 w-5 p-0" onClick={() => removeFilter(id)}>
-                                <X className="h-3 w-3" /><span className="sr-only">Remover</span>
-                            </Button>
-                        </Badge>
-                    ))}
-                    <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => { table.resetColumnFilters(); setGlobalFilter(''); }}>
-                        Limpiar todo
-                    </Button>
-                 </div>
-            )}
         </div>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
