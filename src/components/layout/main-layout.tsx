@@ -127,14 +127,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         </Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
-                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Soporte">
-                        <Link href="#">
-                            <LifeBuoy />
-                             <span className="group-data-[collapsible=icon]:hidden">Soporte</span>
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
            </SidebarMenu>
         </SidebarFooter>
       </Sidebar>

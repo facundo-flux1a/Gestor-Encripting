@@ -39,20 +39,6 @@ export default function SettingsPage() {
                             </form>
                         </CardContent>
                     </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Notificaciones</CardTitle>
-                            <CardDescription>
-                                Gestiona tus preferencias de notificación.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <form className="space-y-4 max-w-lg">
-                               <p>Configuración de notificaciones no disponible.</p>
-                            </form>
-                        </CardContent>
-                    </Card>
                 </div>
             </div>
         </MainLayout>
