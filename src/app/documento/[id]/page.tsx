@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck } from 'lucide-react';
+import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck, Eye } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
@@ -22,6 +22,7 @@ import { EditableEntityCard } from '@/components/dashboard/editable-entity-card'
 import { useFieldArray } from 'react-hook-form';
 import { FinancialDetailsCard } from '@/components/dashboard/financial-details-card';
 import { PlusCircle } from 'lucide-react';
+import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
 
 
 export default function DocumentoPage() {
@@ -33,6 +34,7 @@ export default function DocumentoPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
   const [key, setKey] = useState(0); // Key to force re-render
 
@@ -224,11 +226,9 @@ export default function DocumentoPage() {
                                  <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div tabIndex={0}> 
-                                            <Button variant="outline" asChild={!!documentUrl} disabled={!documentUrl}>
-                                                <a href={documentUrl || undefined} target="_blank" rel="noopener noreferrer">
-                                                    <ExternalLink className="mr-2 h-4 w-4" />
-                                                    Ver Documento
-                                                </a>
+                                            <Button variant="outline" onClick={() => setIsPreviewOpen(true)} disabled={!documentUrl}>
+                                                <Eye className="mr-2 h-4 w-4" />
+                                                Ver Documento
                                             </Button>
                                         </div>
                                     </TooltipTrigger>
@@ -296,6 +296,12 @@ export default function DocumentoPage() {
         onConfirm={handleDelete}
         documentNumber={doc.numero_factura}
         isDeleting={isDeleting}
+      />
+      <DocumentPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        documentUrl={documentUrl ?? null}
+        documentName={doc.archivos?.[0]?.nombre_archivo || `documento_${doc.id_documento}.pdf`}
       />
     </MainLayout>
   );
