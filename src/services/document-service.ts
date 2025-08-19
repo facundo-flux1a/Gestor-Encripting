@@ -910,7 +910,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     LIMIT 5
   `);
 
-  return JSON.parse(JSON.stringify({
+  return {
     kpis: {
       totalIngresos: Number(kpis.totalIngresos || 0),
       totalGastos: Number(kpis.totalGastos || 0),
@@ -925,7 +925,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
     ivaSummary,
     topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
-  }));
+  };
 }
     
 
@@ -941,4 +941,5 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     
 
     
+
 
