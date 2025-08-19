@@ -44,7 +44,8 @@ const formatDate = (date: string | null | undefined) => {
 }
 
 const getColumns = (
-    onUpdate: (docId: number, field: string, value: any) => void
+    onUpdate: (docId: number, field: string, value: any) => void,
+    onSummarize: (doc: Document) => void
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
      {
@@ -69,7 +70,7 @@ const getColumns = (
     {
       accessorKey: 'id_documento',
       header: 'Nº Orden',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('id_documento')} fieldName="id_documento" onUpdate={onUpdate} inputType='number' />
+      cell: ({ row }) => <div>{row.getValue('id_documento')}</div>
     },
     {
       accessorKey: 'fecha_emision',
@@ -137,6 +138,30 @@ const getColumns = (
       header: 'Total',
       cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="importe_total" onUpdate={onUpdate} isCurrency />
     },
+    {
+      id: 'actions',
+      cell: ({ row }) => {
+        const doc = row.original;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Abrir menú</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={`/documento/${doc.id_documento}`}>Ver detalles</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSummarize(doc)}>
+                Resumir con IA
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    },
   ];
 
   return columns;
@@ -145,6 +170,8 @@ const getColumns = (
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean }) {
   const [tableData, setTableData] = useState(documents);
   const { toast } = useToast();
+  const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
+  const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
 
    useEffect(() => {
     setTableData(documents);
@@ -162,14 +189,23 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     });
   }, []);
 
-  const columns = useMemo(() => getColumns(handleUpdate), [handleUpdate]);
+  const handleSummarize = (doc: Document) => {
+    setSelectedDocForSummary(doc);
+    setIsSummarizeOpen(true);
+  };
+
+  const columns = useMemo(() => getColumns(handleUpdate, handleSummarize), [handleUpdate]);
 
   return (
+    <>
     <TooltipProvider>
       <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} />
     </TooltipProvider>
+    <SummarizeDialog 
+        doc={selectedDocForSummary}
+        isOpen={isSummarizeOpen}
+        setIsOpen={setIsSummarizeOpen}
+      />
+    </>
   );
 }
-
-
-
