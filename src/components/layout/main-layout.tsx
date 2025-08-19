@@ -22,7 +22,6 @@ import {
   Settings,
   PanelLeftClose,
   PanelRightClose,
-  User as UserIcon,
   LogOut,
 } from "lucide-react";
 import Link from 'next/link';
@@ -194,3 +193,5 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    
