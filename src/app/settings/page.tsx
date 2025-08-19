@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
@@ -22,20 +21,20 @@ export default function SettingsPage() {
                         <CardHeader>
                             <CardTitle>Perfil de Empresa</CardTitle>
                             <CardDescription>
-                                Actualiza la información de tu empresa.
+                                Actualiza la información de tu empresa. Esta información es solo para visualización.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                              <form className="space-y-4 max-w-lg">
                                 <div className="space-y-2">
                                     <Label htmlFor="companyName">Nombre de la Empresa</Label>
-                                    <Input id="companyName" defaultValue="Mi Empresa S.L." />
+                                    <Input id="companyName" defaultValue="Mi Empresa S.L." disabled />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email de Contacto</Label>
-                                    <Input id="email" type="email" defaultValue="contacto@miempresa.com" />
+                                    <Input id="email" type="email" defaultValue="contacto@miempresa.com" disabled />
                                 </div>
-                                <Button type="submit">Guardar Cambios</Button>
+                                <Button type="submit" disabled>Guardar Cambios</Button>
                             </form>
                         </CardContent>
                     </Card>

@@ -21,12 +21,25 @@ import {
   AlertCircle,
   Settings,
   PanelLeftClose,
-  PanelRightClose
+  PanelRightClose,
+  User as UserIcon,
+  LogOut,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getSession, logout } from '@/services/auth-service';
+import { type User } from '@/lib/types';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Main Logo and Toggle Button
 function AppLogo() {
@@ -46,7 +59,6 @@ function AppLogo() {
   )
 }
 
-
 function SidebarToggle() {
     const { state, toggleSidebar } = useSidebar();
     return (
@@ -61,20 +73,74 @@ function SidebarToggle() {
     )
 }
 
+function UserProfile({ user }: { user: User | null }) {
+    if (!user) return null;
+
+    const initials = user.nombre ? user.nombre.charAt(0).toUpperCase() : '?';
+
+    const handleLogout = async () => {
+        await logout();
+    };
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2">
+                    <Avatar className="h-8 w-8">
+                        <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="text-left">
+                        <p className="text-sm font-medium">{user.nombre}</p>
+                    </div>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                    <Link href="/settings">
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Ajustes</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Cerrar Sesión</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
+    const [user, setUser] = React.useState<User | null>(null);
+
+    React.useEffect(() => {
+        getSession().then(session => {
+            if (session) {
+                setUser({
+                    id: session.userId,
+                    email: session.email,
+                    nombre: session.email, // Use email as name for now
+                });
+            }
+        });
+    }, []);
+
     return (
         <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
-            {children}
+            <div className="flex-1">{children}</div>
+            <UserProfile user={user} />
         </header>
     )
 }
-
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
   const navItems = [
-      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/documents', label: 'Documentos', icon: FileText },
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
@@ -86,7 +152,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
     return pathname.startsWith(href);
   }
-
 
   return (
     <SidebarProvider>
@@ -119,7 +184,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
            <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Ajustes">
+                    <SidebarMenuButton asChild tooltip="Ajustes" isActive={isActive('/settings')}>
                         <Link href="/settings">
                             <Settings />
                              <span className="group-data-[collapsible=icon]:hidden">Ajustes</span>

@@ -2,6 +2,20 @@
 
 import { z } from 'zod';
 
+export const UserSchema = z.object({
+  id: z.number(),
+  nombre: z.string(),
+  email: z.string(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const SessionPayloadSchema = z.object({
+  userId: z.number(),
+  email: z.string(),
+  expires: z.date(),
+});
+export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
+
 export const IvaDetailSchema = z.object({
   id: z.number().optional(),
   tipo_impuesto: z.string(),
