@@ -6,8 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { logout } from "@/services/auth-service";
+import { LogOut } from "lucide-react";
 
 export default function SettingsPage() {
+    const handleLogout = async () => {
+        await logout();
+    };
 
     return (
         <MainLayout>
@@ -36,6 +41,21 @@ export default function SettingsPage() {
                                 </div>
                                 <Button type="submit" disabled>Guardar Cambios</Button>
                             </form>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Seguridad</CardTitle>
+                            <CardDescription>
+                                Gestiona tu sesión actual.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Button variant="destructive" onClick={handleLogout}>
+                                <LogOut className="mr-2 h-4 w-4" />
+                                Cerrar Sesión
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>
