@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -73,12 +74,16 @@ export function EditableCell({
 
     setIsLoading(true);
     try {
-      await updateDocumentField(docId, fieldName, value);
-      onUpdate(docId, fieldName, value);
-      toast({
-        title: 'Campo Actualizado',
-        description: `El campo se ha guardado correctamente.`,
-      });
+      const result = await updateDocumentField(docId, fieldName, value);
+      if (result.success) {
+        onUpdate(docId, fieldName, value);
+        toast({
+            title: 'Campo Actualizado',
+            description: `El campo se ha guardado correctamente.`,
+        });
+      } else {
+        throw new Error('La actualización falló en el servidor.');
+      }
     } catch (error: any) {
       console.error('Failed to update field:', error);
       setValue(initialValue); // Revert value on error
@@ -144,4 +149,5 @@ export function EditableCell({
     </div>
   );
 }
+
 

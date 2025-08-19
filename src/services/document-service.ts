@@ -273,14 +273,14 @@ export async function getIncidents(): Promise<Document[]> {
     return mapDocumentPacketsToDocuments(documentRows);
 }
 
-export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<OkPacket> {
+export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
     try {
         const { numero_factura, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
-        const [docResult] = await connection.query<OkPacket>(
+        await connection.query<OkPacket>(
           'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
           [numero_factura, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, id]
         );
@@ -304,7 +304,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         }
 
         await connection.commit();
-        return docResult;
+        return { success: true };
     } catch (error) {
         await connection.rollback();
         console.error("Error updating document:", error);
@@ -314,14 +314,14 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
-export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<OkPacket> {
+export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
     // Direct fields in 'documentos' table
     const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones', 'tipo_documento'];
     
     if (directDocumentFields.includes(fieldName)) {
         const [result] = await db.query<OkPacket>(`UPDATE documentos SET ?? = ? WHERE id = ?`, [fieldName, value, id]);
         if (result.affectedRows === 0) throw new Error('No se encontró el documento o no se realizaron cambios.');
-        return result;
+        return { success: true };
     }
 
     // Fields related to the provider in 'entidades_documento' table
@@ -332,18 +332,18 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
             [fieldToUpdate, value, id]
         );
         if (result.affectedRows === 0) throw new Error('No se encontró el proveedor para este documento.');
-        return result;
+        return { success: true };
     }
 
     // Field related to 'incidencias_documento' table
     if (fieldName === 'incidencia_razon') {
          // This will update the first open incident found. A more complex logic might be needed for multiple incidents.
-        const [result] = await db.query<OkPacket>(
+        await db.query<OkPacket>(
             `UPDATE incidencias_documento SET descripcion = ? WHERE documento_id = ? AND validado = 0 LIMIT 1`,
             [value, id]
         );
         // It's okay if no rows are affected, it might mean there are no open incidents to update.
-        return result;
+        return { success: true };
     }
     
      // Fields related to 'impuestos_documento' table
@@ -358,7 +358,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
             [fieldToUpdate, value, id, percentage]
         );
         if (result.affectedRows === 0) throw new Error(`No se encontró un impuesto del ${percentage}% para este documento.`);
-        return result;
+        return { success: true };
     }
 
 
@@ -383,12 +383,12 @@ export async function deleteDocument(id: number): Promise<void> {
     }
 }
 
-export async function validateDocumentIncidents(documentId: number): Promise<OkPacket> {
-    const [result] = await db.query<OkPacket>(
+export async function validateDocumentIncidents(documentId: number): Promise<{success: boolean}> {
+    await db.query<OkPacket>(
         'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
         ['system', documentId]
     );
-    return result;
+    return { success: true };
 }
 
 
