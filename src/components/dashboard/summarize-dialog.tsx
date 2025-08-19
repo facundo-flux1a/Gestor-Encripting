@@ -22,12 +22,15 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
   const [error, setError] = useState<string | null>(null);
 
   const handleSummarize = async () => {
-    if (!doc) return;
+    if (!doc || !doc.archivos?.[0]?.ruta_archivo) {
+      setError("No hay un archivo asociado a este documento para resumir.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     setSummaryResult(null);
     try {
-      const result = await summarizeDocument({ documentText: doc.contenido });
+      const result = await summarizeDocument({ documentUrl: doc.archivos[0].ruta_archivo });
       setSummaryResult(result);
     } catch (e) {
       setError('An error occurred while generating the summary.');
@@ -52,16 +55,18 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
         <DialogHeader>
           <DialogTitle>AI Document Summary</DialogTitle>
           <DialogDescription>
-            Generate a concise summary of the document using AI.
+            Genera un resumen conciso del documento PDF adjunto usando IA.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="space-y-2">
-            <h4 className="font-semibold">Original Content</h4>
-            <p className="text-sm text-muted-foreground max-h-40 overflow-y-auto rounded-md border p-2">
-              {doc?.contenido}
-            </p>
-          </div>
+          {doc?.archivos?.[0]?.nombre_archivo && (
+            <div className="space-y-2">
+              <h4 className="font-semibold">Archivo a resumir</h4>
+              <p className="text-sm text-muted-foreground rounded-md border p-2">
+                {doc.archivos[0].nombre_archivo}
+              </p>
+            </div>
+          )}
 
           {isLoading && (
             <div className="flex items-center justify-center p-8">
@@ -78,10 +83,10 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
 
           {summaryResult && (
             <div className="space-y-2">
-              <h4 className="font-semibold">Summary</h4>
+              <h4 className="font-semibold">Resumen</h4>
               <div className="rounded-md border p-4 space-y-3">
                  <Badge variant={summaryResult.canSummarize ? "secondary" : "destructive"}>
-                  {summaryResult.canSummarize ? "Summarizable" : "Not Summarizable"}
+                  {summaryResult.canSummarize ? "Resumible" : "No Resumible"}
                 </Badge>
                 <p className="text-sm text-foreground">{summaryResult.summary}</p>
               </div>
@@ -89,9 +94,9 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
           )}
         </div>
         <DialogFooter>
-          <Button onClick={handleSummarize} disabled={isLoading}>
+          <Button onClick={handleSummarize} disabled={isLoading || !doc?.archivos?.[0]?.ruta_archivo}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            Generate Summary
+            Generar Resumen
           </Button>
         </DialogFooter>
       </DialogContent>

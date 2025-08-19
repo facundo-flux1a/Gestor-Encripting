@@ -13,7 +13,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SummarizeDocumentInputSchema = z.object({
-  documentText: z.string().describe('The text content of the document to summarize.'),
+  documentUrl: z.string().describe('The URL of the document to summarize.'),
 });
 export type SummarizeDocumentInput = z.infer<typeof SummarizeDocumentInputSchema>;
 
@@ -32,7 +32,7 @@ const summarizeDocumentPrompt = ai.definePrompt({
   input: {schema: SummarizeDocumentInputSchema},
   output: {schema: z.object({ summary: z.string() }) }, // Output only the summary from the model
   system: `You are an AI assistant tasked with summarizing documents. Provide a concise summary.`,
-  prompt: `Document: {{{documentText}}}`,
+  prompt: `Document: {{media url=documentUrl}}`,
 });
 
 const summarizeDocumentFlow = ai.defineFlow(
@@ -42,12 +42,12 @@ const summarizeDocumentFlow = ai.defineFlow(
     outputSchema: SummarizeDocumentOutputSchema,
   },
   async (input) => {
-    // Perform the check directly in the flow
-    const canSummarize = input.documentText.length > 100;
+    // Basic check for a valid URL pattern
+    const canSummarize = input.documentUrl.startsWith('http');
 
     if (!canSummarize) {
       return {
-        summary: 'Este documento es demasiado corto para ser resumido de forma significativa.',
+        summary: 'La URL del documento proporcionada no es válida.',
         canSummarize: false,
       };
     }
