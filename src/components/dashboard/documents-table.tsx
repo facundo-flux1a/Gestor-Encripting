@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { updateDocumentField } from '@/services/document-service';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '../ui/checkbox';
@@ -170,4 +170,6 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </TooltipProvider>
   );
 }
+
+
 
