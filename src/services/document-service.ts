@@ -347,21 +347,40 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         return { success: true };
     }
     
-     // Fields related to 'impuestos_documento' table
     if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
         const parts = fieldName.split('_');
         const type = parts[1]; // 'base' or 'cuota'
         const percentage = parts[2];
         const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
         
-        const [result] = await db.query<OkPacket>(
-            `UPDATE impuestos_documento SET ?? = ? WHERE documento_id = ? AND porcentaje = ? LIMIT 1`,
-            [fieldToUpdate, value, id, percentage]
-        );
-        if (result.affectedRows === 0) throw new Error(`No se encontró un impuesto del ${percentage}% para este documento.`);
+        const [existing] = await db.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ?', [id, percentage]);
+
+        if (existing.length > 0) {
+            // Update existing record
+            const taxRecordId = existing[0].id;
+            await db.query<OkPacket>(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, taxRecordId]);
+        } else {
+            // Insert new record
+            const newIvaDetail: Partial<IvaDetail> = {
+                tipo_impuesto: 'IVA', // Default value
+                porcentaje: Number(percentage),
+                base_imponible: 0,
+                cuota: 0,
+            };
+
+            if (type === 'base') {
+                newIvaDetail.base_imponible = Number(value);
+            } else {
+                newIvaDetail.cuota = Number(value);
+            }
+            
+            await db.query<OkPacket>(
+                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
+                [id, newIvaDetail.tipo_impuesto, newIvaDetail.porcentaje, newIvaDetail.base_imponible, newIvaDetail.cuota]
+            );
+        }
         return { success: true };
     }
-
 
     // If the field name is not recognized, throw an error.
     throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
