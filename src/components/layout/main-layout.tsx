@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -184,6 +185,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     </SidebarMenuButton>
                 </SidebarMenuItem>
            </SidebarMenu>
+            <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">
+                <a href="https://flux1a.com.ar" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground">
+                    <img src="https://dashboard.flux1a.com.ar/_next/image?url=%2Flogo-simple.png&w=1920&q=75" alt="Flux1a Logo" className="h-6 w-6" />
+                    <span className="group-data-[collapsible=icon]:hidden">
+                        Powered by Flux1a
+                    </span>
+                </a>
+            </div>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
