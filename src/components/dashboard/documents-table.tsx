@@ -45,7 +45,8 @@ const formatDate = (date: string | null | undefined) => {
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any) => void,
-    onSummarize: (doc: Document) => void
+    onSummarize: (doc: Document) => void,
+    uniqueVatRates: number[]
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
      {
@@ -102,22 +103,24 @@ const getColumns = (
       header: 'Tipo Gasto',
       cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} />
     },
-    ...[21, 10, 4].map(rate => ({
-        id: `base_${rate}`,
-        header: `Base ${rate}%`,
-        cell: ({ row }: { row: Row<Document> }) => {
-            const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
-            return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency />
+    ...uniqueVatRates.flatMap(rate => ([
+        {
+            id: `base_${rate}`,
+            header: `Base ${rate}%`,
+            cell: ({ row }: { row: Row<Document> }) => {
+                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency />
+            }
+        },
+        {
+            id: `iva_${rate}`,
+            header: `IVA ${rate}%`,
+            cell: ({ row }: { row: Row<Document> }) => {
+                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency />
+            }
         }
-    })),
-    ...[21, 10, 4].map(rate => ({
-        id: `iva_${rate}`,
-        header: `IVA ${rate}%`,
-        cell: ({ row }: { row: Row<Document> }) => {
-            const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
-            return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency />
-        }
-    })),
+    ])),
      {
       accessorKey: 'retencion',
       header: 'Retención',
@@ -188,13 +191,24 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
         });
     });
   }, []);
+  
+  const uniqueVatRates = useMemo(() => {
+    const rates = new Set<number>();
+    documents.forEach(doc => {
+        doc.iva_details.forEach(detail => {
+            rates.add(detail.porcentaje);
+        });
+    });
+    return Array.from(rates).sort((a,b) => b - a); // Sort descending
+  }, [documents]);
+
 
   const handleSummarize = (doc: Document) => {
     setSelectedDocForSummary(doc);
     setIsSummarizeOpen(true);
   };
 
-  const columns = useMemo(() => getColumns(handleUpdate, handleSummarize), [handleUpdate]);
+  const columns = useMemo(() => getColumns(handleUpdate, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
 
   return (
     <>
