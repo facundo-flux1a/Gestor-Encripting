@@ -9,14 +9,14 @@ import { z } from 'zod';
 import { MessageData, Part } from 'genkit';
 import { documentTools } from '@/ai/tools/document-tools';
 
-export const ChatInputSchema = z.object({
+const ChatInputSchema = z.object({
   history: z.array(z.custom<MessageData>()),
   message: z.string(),
 });
-export type ChatInput = z.infer<typeof ChatInputSchema>;
+type ChatInput = z.infer<typeof ChatInputSchema>;
 
-export const ChatOutputSchema = z.custom<Part>();
-export type ChatOutput = z.infer<typeof ChatOutputSchema>;
+const ChatOutputSchema = z.custom<Part>();
+type ChatOutput = z.infer<typeof ChatOutputSchema>;
 
 const systemPrompt = `Eres un asistente experto en el análisis de datos de facturas y documentos de una empresa. Tu objetivo es responder a las preguntas del usuario de la forma más precisa y concisa posible, utilizando las herramientas a tu disposición.
 

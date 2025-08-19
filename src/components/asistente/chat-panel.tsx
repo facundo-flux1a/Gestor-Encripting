@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useFormState } from 'react-dom';
 import type { MessageData } from 'genkit';
 import { chat } from '@/ai/flows/chat-agent';
 import { ChatInput } from './chat-input';
