@@ -1,5 +1,3 @@
-'use server';
-
 /**
  * @fileOverview Defines Genkit tools for accessing document and provider data.
  */
