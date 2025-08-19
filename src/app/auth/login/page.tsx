@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Chrome } from 'lucide-react';
-import React from 'react';
+import React, { Suspense } from 'react';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -31,22 +31,34 @@ function GoogleLoginButton() {
   );
 }
 
+function LoginError() {
+    const searchParams = useSearchParams();
+    const error = searchParams.get('error');
+
+    const getErrorMessage = (errorCode: string | null) => {
+        switch (errorCode) {
+            case 'invalid_credentials':
+                return 'El correo electrónico o la contraseña son incorrectos.';
+            case 'server_error':
+                return 'Ha ocurrido un error en el servidor. Por favor, inténtalo de nuevo más tarde.';
+            default:
+                return null;
+        }
+    };
+    const errorMessage = getErrorMessage(error);
+
+    if (!errorMessage) return null;
+
+    return (
+        <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error de Autenticación</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+    )
+}
+
 export default function LoginPage() {
-  const searchParams = useSearchParams();
-  const error = searchParams.get('error');
-
-  const getErrorMessage = (errorCode: string | null) => {
-    switch (errorCode) {
-      case 'invalid_credentials':
-        return 'El correo electrónico o la contraseña son incorrectos.';
-      case 'server_error':
-        return 'Ha ocurrido un error en el servidor. Por favor, inténtalo de nuevo más tarde.';
-      default:
-        return null;
-    }
-  };
-
-  const errorMessage = getErrorMessage(error);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
@@ -57,13 +69,9 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form action={login} className="space-y-4">
-            {errorMessage && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error de Autenticación</AlertTitle>
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-            )}
+            <Suspense fallback={null}>
+                <LoginError />
+            </Suspense>
             <div className="space-y-2">
               <Label htmlFor="email">Correo Electrónico</Label>
               <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
