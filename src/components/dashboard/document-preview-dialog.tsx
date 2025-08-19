@@ -23,6 +23,8 @@ export function DocumentPreviewDialog({ isOpen, onClose, documentUrl, documentNa
   if (!documentUrl) {
     return null;
   }
+  
+  const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(documentUrl)}&embedded=true`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -31,19 +33,18 @@ export function DocumentPreviewDialog({ isOpen, onClose, documentUrl, documentNa
           <DialogTitle className="truncate pr-8">Previsualización: {documentName}</DialogTitle>
         </DialogHeader>
         <div className="flex-grow rounded-md overflow-hidden px-6 pb-6">
-          <object
-            data={documentUrl}
-            type="application/pdf"
+          <iframe
+            src={googleDocsViewerUrl}
             className="w-full h-full border rounded-md"
             aria-label={`Preview of ${documentName}`}
           >
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground bg-muted/50 rounded-md p-4">
+             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground bg-muted/50 rounded-md p-4">
                 <p className="font-semibold">La previsualización no está disponible.</p>
                 <p className="text-sm mt-2">
                     Tu navegador no puede mostrar este PDF. Puedes descargarlo o abrirlo en una nueva pestaña.
                 </p>
             </div>
-          </object>
+          </iframe>
         </div>
         <DialogFooter className="p-6 pt-2 sm:justify-between flex-wrap gap-2 border-t bg-background rounded-b-lg">
           <DialogClose asChild>
