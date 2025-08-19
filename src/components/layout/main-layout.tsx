@@ -133,7 +133,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   
   const navItems = [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/asistente', label: 'Asistente IA', icon: Bot },
       { href: '/documents', label: 'Documentos', icon: FileText },
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
