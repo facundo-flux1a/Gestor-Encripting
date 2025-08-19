@@ -14,28 +14,26 @@ import {z} from 'genkit';
 import { DocumentEntitySchema, DocumentLineSchema, IvaDetailSchema } from '@/lib/types';
 
 
-const DocumentSummaryDataSchema = z.object({
-  id_documento: z.number(),
-  numero_factura: z.string(),
-  tipo_documento: z.string(),
-  fecha_emision: z.string(),
-  fecha_vencimiento: z.string().nullable(),
-  moneda: z.string(),
-  base_imponible: z.number(),
-  iva: z.number(),
-  total: z.number(),
-  entidades: z.array(DocumentEntitySchema),
-  lineas: z.array(DocumentLineSchema),
-  iva_details: z.array(IvaDetailSchema),
-  archivos: z.array(z.object({
-    ruta_archivo: z.string().nullable(),
-  })),
-});
-
-
 const SummarizeDocumentInputSchema = z.object({
-  document: DocumentSummaryDataSchema,
+  document: z.object({
+      id_documento: z.number(),
+      numero_factura: z.string(),
+      tipo_documento: z.string(),
+      fecha_emision: z.string(),
+      fecha_vencimiento: z.string().nullable(),
+      moneda: z.string(),
+      base_imponible: z.number(),
+      iva: z.number(),
+      total: z.number(),
+      entidades: z.array(DocumentEntitySchema),
+      lineas: z.array(DocumentLineSchema),
+      iva_details: z.array(IvaDetailSchema),
+      archivos: z.array(z.object({
+        ruta_archivo: z.string().nullable(),
+      })),
+  })
 });
+
 export type SummarizeDocumentInput = z.infer<typeof SummarizeDocumentInputSchema>;
 
 const SummarizeDocumentOutputSchema = z.object({
