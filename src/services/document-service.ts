@@ -519,7 +519,7 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
     const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT *
         FROM entidades_documento
-        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR ed.rol = 'emisor')
+        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
         LIMIT 1
     `, [fiscalId]);
 
@@ -660,7 +660,7 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
         .map(([month, total]) => ({ month, total }))
         .sort((a, b) => a.month.localeCompare(b.month));
 
-    return {
+    const analyticsData = {
         provider,
         totalSpent,
         totalDocuments,
@@ -669,6 +669,8 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
         topProductsBySpend,
         monthlySpend
     };
+
+    return JSON.parse(JSON.stringify(analyticsData));
 }
 
 export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
@@ -704,12 +706,14 @@ export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
         ORDER BY count DESC;
     `);
     
-    return {
+    const analyticsData = {
         totalOpen: Number(summary[0]?.totalOpen || 0),
         totalValidated: Number(summary[0]?.totalValidated || 0),
         byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
         byType: byType.map(t => ({ name: t.name, count: t.count })),
     };
+
+    return JSON.parse(JSON.stringify(analyticsData));
 }
 
 async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResult> {
@@ -910,7 +914,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     LIMIT 5
   `);
 
-  return {
+  const analyticsData = {
     kpis: {
       totalIngresos: Number(kpis.totalIngresos || 0),
       totalGastos: Number(kpis.totalGastos || 0),
@@ -926,6 +930,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     ivaSummary,
     topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
   };
+
+  return JSON.parse(JSON.stringify(analyticsData));
 }
     
 
@@ -943,3 +949,6 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     
 
 
+
+
+    
