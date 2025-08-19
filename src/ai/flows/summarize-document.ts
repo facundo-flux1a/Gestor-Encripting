@@ -11,15 +11,35 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { DocumentEntitySchema, DocumentLineSchema, IvaDetailSchema } from '@/lib/types';
+
+
+const DocumentSummaryDataSchema = z.object({
+  id_documento: z.number(),
+  numero_factura: z.string(),
+  tipo_documento: z.string(),
+  fecha_emision: z.string(),
+  fecha_vencimiento: z.string().nullable(),
+  moneda: z.string(),
+  base_imponible: z.number(),
+  iva: z.number(),
+  total: z.number(),
+  entidades: z.array(DocumentEntitySchema),
+  lineas: z.array(DocumentLineSchema),
+  iva_details: z.array(IvaDetailSchema),
+  archivos: z.array(z.object({
+    ruta_archivo: z.string().nullable(),
+  })),
+});
+
 
 const SummarizeDocumentInputSchema = z.object({
-  documentUrl: z.string().describe('The URL of the document to summarize.'),
+  document: DocumentSummaryDataSchema,
 });
 export type SummarizeDocumentInput = z.infer<typeof SummarizeDocumentInputSchema>;
 
 const SummarizeDocumentOutputSchema = z.object({
   summary: z.string().describe('A concise summary of the document.'),
-  canSummarize: z.boolean().describe('Whether the document is suitable for summarization.'),
 });
 export type SummarizeDocumentOutput = z.infer<typeof SummarizeDocumentOutputSchema>;
 
@@ -30,9 +50,26 @@ export async function summarizeDocument(input: SummarizeDocumentInput): Promise<
 const summarizeDocumentPrompt = ai.definePrompt({
   name: 'summarizeDocumentPrompt',
   input: {schema: SummarizeDocumentInputSchema},
-  output: {schema: z.object({ summary: z.string() }) }, // Output only the summary from the model
-  system: `You are an AI assistant tasked with summarizing documents. Provide a concise summary.`,
-  prompt: `Document: {{media url=documentUrl}}`,
+  output: {schema: SummarizeDocumentOutputSchema },
+  system: `Eres un asistente financiero experto. Tu tarea es resumir el siguiente documento JSON. 
+  Proporciona un resumen conciso y claro en español.
+  El resumen debe incluir:
+  - Quién emite el documento (Emisor/Proveedor).
+  - Quién recibe el documento (Receptor/Cliente).
+  - El importe total.
+  - La fecha de emisión y la fecha de vencimiento.
+  Utiliza el PDF adjunto solo como referencia si es necesario.`,
+  prompt: `
+    Documento (JSON):
+    \`\`\`json
+    {{{json document}}}
+    \`\`\`
+    
+    {{#if document.archivos.0.ruta_archivo}}
+    Documento (PDF de referencia):
+    {{media url=document.archivos.0.ruta_archivo}}
+    {{/if}}
+  `,
 });
 
 const summarizeDocumentFlow = ai.defineFlow(
@@ -42,16 +79,7 @@ const summarizeDocumentFlow = ai.defineFlow(
     outputSchema: SummarizeDocumentOutputSchema,
   },
   async (input) => {
-    // Basic check for a valid URL pattern
-    const canSummarize = input.documentUrl.startsWith('http');
-
-    if (!canSummarize) {
-      return {
-        summary: 'La URL del documento proporcionada no es válida.',
-        canSummarize: false,
-      };
-    }
-
+    
     const {output} = await summarizeDocumentPrompt(input, {
       config: {
         safetySettings: [
@@ -81,7 +109,6 @@ const summarizeDocumentFlow = ai.defineFlow(
     
     return {
       summary: output.summary,
-      canSummarize: true,
     };
   }
 );

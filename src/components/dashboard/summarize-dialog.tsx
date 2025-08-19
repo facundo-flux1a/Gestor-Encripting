@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import {
 import { summarizeDocument, type SummarizeDocumentOutput } from '@/ai/flows/summarize-document';
 import { type Document } from '@/lib/types';
 import { Loader2, Sparkles } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | null; isOpen: boolean; setIsOpen: (open: boolean) => void }) {
@@ -22,18 +22,18 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
   const [error, setError] = useState<string | null>(null);
 
   const handleSummarize = async () => {
-    if (!doc || !doc.archivos?.[0]?.ruta_archivo) {
-      setError("No hay un archivo asociado a este documento para resumir.");
+    if (!doc) {
+      setError("No hay un documento para resumir.");
       return;
     }
     setIsLoading(true);
     setError(null);
     setSummaryResult(null);
     try {
-      const result = await summarizeDocument({ documentUrl: doc.archivos[0].ruta_archivo });
+      const result = await summarizeDocument({ document: doc });
       setSummaryResult(result);
     } catch (e) {
-      setError('An error occurred while generating the summary.');
+      setError('Ha ocurrido un error al generar el resumen.');
       console.error(e);
     } finally {
       setIsLoading(false);
@@ -53,17 +53,17 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[625px]">
         <DialogHeader>
-          <DialogTitle>AI Document Summary</DialogTitle>
+          <DialogTitle>Resumen del Documento con IA</DialogTitle>
           <DialogDescription>
-            Genera un resumen conciso del documento PDF adjunto usando IA.
+            Genera un resumen conciso de los datos del documento usando IA.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {doc?.archivos?.[0]?.nombre_archivo && (
+          {doc && (
             <div className="space-y-2">
-              <h4 className="font-semibold">Archivo a resumir</h4>
+              <h4 className="font-semibold">Documento a resumir</h4>
               <p className="text-sm text-muted-foreground rounded-md border p-2">
-                {doc.archivos[0].nombre_archivo}
+                {doc.tipo_documento}: {doc.numero_factura}
               </p>
             </div>
           )}
@@ -85,16 +85,13 @@ export function SummarizeDialog({ doc, isOpen, setIsOpen }: { doc: Document | nu
             <div className="space-y-2">
               <h4 className="font-semibold">Resumen</h4>
               <div className="rounded-md border p-4 space-y-3">
-                 <Badge variant={summaryResult.canSummarize ? "secondary" : "destructive"}>
-                  {summaryResult.canSummarize ? "Resumible" : "No Resumible"}
-                </Badge>
-                <p className="text-sm text-foreground">{summaryResult.summary}</p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{summaryResult.summary}</p>
               </div>
             </div>
           )}
         </div>
         <DialogFooter>
-          <Button onClick={handleSummarize} disabled={isLoading || !doc?.archivos?.[0]?.ruta_archivo}>
+          <Button onClick={handleSummarize} disabled={isLoading || !doc}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Generar Resumen
           </Button>
