@@ -67,16 +67,17 @@ export function EditableCell({
   const handleBlur = async () => {
     setIsEditing(false);
     
-    // Don't save if the value hasn't changed
-    if (value === initialValue) {
+    const processedValue = inputType === 'number' ? parseFloat(value) : value;
+
+    if (processedValue === initialValue) {
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await updateDocumentField(docId, fieldName, value);
+      const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
-        onUpdate(docId, fieldName, value);
+        onUpdate(docId, fieldName, processedValue);
         toast({
             title: 'Campo Actualizado',
             description: `El campo se ha guardado correctamente.`,
@@ -149,5 +150,7 @@ export function EditableCell({
     </div>
   );
 }
+
+
 
 

@@ -315,76 +315,70 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
-export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
-    // Direct fields in 'documentos' table
-    const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones', 'tipo_documento'];
-    
-    if (directDocumentFields.includes(fieldName)) {
-        const [result] = await db.query<OkPacket>(`UPDATE documentos SET ?? = ? WHERE id = ?`, [fieldName, value, id]);
-        if (result.affectedRows === 0) throw new Error('No se encontró el documento o no se realizaron cambios.');
-        return { success: true };
-    }
+async function recalculateDocumentTotals(docId: number, connection: any) {
+    const [taxes] = await connection.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id = ?', [docId]);
+    const [lines] = await connection.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id = ?', [docId]);
 
-    // Fields related to the provider in 'entidades_documento' table
-    if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
-        const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
-        const [result] = await db.query<OkPacket>(
-            `UPDATE entidades_documento SET ?? = ? WHERE documento_id = ? AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1`,
-            [fieldToUpdate, value, id]
-        );
-        if (result.affectedRows === 0) throw new Error('No se encontró el proveedor para este documento.');
-        return { success: true };
-    }
+    const totalIva = taxes.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+    const baseImponible = lines.reduce((sum, line) => sum + (Number(line.importe_linea) || 0), 0);
+    const total = baseImponible + totalIva;
 
-    // Field related to 'incidencias_documento' table
-    if (fieldName === 'incidencia_razon') {
-         // This will update the first open incident found. A more complex logic might be needed for multiple incidents.
-        await db.query<OkPacket>(
-            `UPDATE incidencias_documento SET descripcion = ? WHERE documento_id = ? AND validado = 0 LIMIT 1`,
-            [value, id]
-        );
-        // It's okay if no rows are affected, it might mean there are no open incidents to update.
-        return { success: true };
-    }
-    
-    if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
-        const parts = fieldName.split('_');
-        const type = parts[1]; // 'base' or 'cuota'
-        const percentage = parts[2];
-        const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
-        
-        const [existing] = await db.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ?', [id, percentage]);
-
-        if (existing.length > 0) {
-            // Update existing record
-            const taxRecordId = existing[0].id;
-            await db.query<OkPacket>(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, taxRecordId]);
-        } else {
-            // Insert new record
-            const newIvaDetail: Partial<IvaDetail> = {
-                tipo_impuesto: 'IVA', // Default value
-                porcentaje: Number(percentage),
-                base_imponible: 0,
-                cuota: 0,
-            };
-
-            if (type === 'base') {
-                newIvaDetail.base_imponible = Number(value);
-            } else {
-                newIvaDetail.cuota = Number(value);
-            }
-            
-            await db.query<OkPacket>(
-                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)',
-                [id, newIvaDetail.tipo_impuesto, newIvaDetail.porcentaje, newIvaDetail.base_imponible, newIvaDetail.cuota]
-            );
-        }
-        return { success: true };
-    }
-
-    // If the field name is not recognized, throw an error.
-    throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
+    await connection.query(
+        'UPDATE documentos SET importe_sin_impuestos = ?, iva = ?, importe_total = ? WHERE id = ?',
+        [baseImponible, totalIva, total, docId]
+    );
 }
+
+export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones', 'tipo_documento'];
+        
+        if (directDocumentFields.includes(fieldName)) {
+            await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [fieldName, value, id]);
+        } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
+            const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
+            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
+
+            if (existing.length > 0) {
+                await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+            } else {
+                await connection.query('INSERT INTO entidades_documento (documento_id, rol, ??) VALUES (?, ?, ?)', [fieldToUpdate, id, 'proveedor', value]);
+            }
+        } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
+            const parts = fieldName.split('_');
+            const type = parts[1]; // 'base' or 'cuota'
+            const percentage = parseInt(parts[2], 10);
+            const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
+            
+            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ?', [id, percentage]);
+
+            if (existing.length > 0) {
+                await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+            } else {
+                const base = type === 'base' ? value : 0;
+                const cuota = type === 'cuota' ? value : 0;
+                await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'IVA', percentage, base, cuota]);
+            }
+            await recalculateDocumentTotals(id, connection);
+
+        } else {
+            throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
+        }
+
+        await connection.commit();
+        return { success: true };
+    } catch (error) {
+        await connection.rollback();
+        console.error('Failed to update field:', error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 
 
 export async function deleteDocument(id: number): Promise<void> {
@@ -1001,4 +995,5 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     
 
     
+
 
