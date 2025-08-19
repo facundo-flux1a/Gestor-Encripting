@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -26,26 +27,11 @@ export async function summarizeDocument(input: SummarizeDocumentInput): Promise<
   return summarizeDocumentFlow(input);
 }
 
-const canSummarizeTool = ai.defineTool({
-  name: 'canSummarizeTool',
-  description: 'Determines if a document can be meaningfully summarized.',
-  inputSchema: z.object({
-    documentText: z.string().describe('The text content of the document.'),
-  }),
-  outputSchema: z.boolean(),
-  async resolve(input) {
-    // Implement logic to determine if the document can be summarized.
-    // This could be based on length, content type, etc.
-    return input.documentText.length > 100; // Example: only summarize if the document is longer than 100 characters
-  },
-});
-
 const summarizeDocumentPrompt = ai.definePrompt({
   name: 'summarizeDocumentPrompt',
   input: {schema: SummarizeDocumentInputSchema},
-  output: {schema: SummarizeDocumentOutputSchema},
-  tools: [canSummarizeTool],
-  system: `You are an AI assistant tasked with summarizing documents. Before summarizing, use the canSummarizeTool tool to check if the document is suitable for summarization. If it is, provide a concise summary. If the document is not summarizable, explain why.`,
+  output: {schema: z.object({ summary: z.string() }) }, // Output only the summary from the model
+  system: `You are an AI assistant tasked with summarizing documents. Provide a concise summary.`,
   prompt: `Document: {{{documentText}}}`,
 });
 
@@ -55,12 +41,13 @@ const summarizeDocumentFlow = ai.defineFlow(
     inputSchema: SummarizeDocumentInputSchema,
     outputSchema: SummarizeDocumentOutputSchema,
   },
-  async input => {
-    const canSummarize = await canSummarizeTool(input);
+  async (input) => {
+    // Perform the check directly in the flow
+    const canSummarize = input.documentText.length > 100;
 
     if (!canSummarize) {
       return {
-        summary: 'This document is not suitable for summarization.',
+        summary: 'Este documento es demasiado corto para ser resumido de forma significativa.',
         canSummarize: false,
       };
     }
@@ -87,8 +74,13 @@ const summarizeDocumentFlow = ai.defineFlow(
         ],
       },
     });
+
+    if (!output) {
+        throw new Error("The AI model did not return a summary.");
+    }
+    
     return {
-      summary: output!.summary,
+      summary: output.summary,
       canSummarize: true,
     };
   }
