@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import Link from 'next/link';
@@ -216,8 +217,18 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
     {
         accessorKey: 'iva',
         header: () => <div className='text-right'>Total IVA</div>,
-        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('iva'))}</div>,
-        enableColumnFilter: false,
+        cell: ({ row }) => (
+             <div className="text-right">
+                 <EditableCell
+                    initialValue={row.getValue('iva')}
+                    docId={row.original.id_documento}
+                    fieldName="iva"
+                    onUpdate={handleUpdate}
+                    inputType="number"
+                    isCurrency
+                 />
+            </div>
+        )
     },
     {
         accessorKey: 'total',

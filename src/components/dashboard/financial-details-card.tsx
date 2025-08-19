@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,4 +107,3 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
         </Card>
     );
 }
-

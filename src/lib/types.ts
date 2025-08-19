@@ -78,7 +78,7 @@ export type Document = {
   numero_factura: string;
   tipo_documento: string;
   verificado: boolean;
-  incidencia: boolean; // Retained for logic but `verificado` is primary
+  incidencia: boolean; 
   incidencia_razon?: string | null;
   fecha_emision: string;
   fecha_vencimiento: string | null;
@@ -111,7 +111,6 @@ export const DocumentUpdateSchema = z.object({
   proveedor: z.string().min(1, "El proveedor es obligatorio.").optional(),
   cif: z.string().min(1, "El CIF es obligatorio.").optional(),
   base_imponible: z.coerce.number(),
-  iva: z.coerce.number(),
   total: z.coerce.number(),
   tipo_documento: z.string().min(1, "El tipo de documento es obligatorio."),
   fecha_vencimiento: z.string().nullable(),

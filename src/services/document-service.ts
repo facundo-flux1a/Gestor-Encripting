@@ -23,8 +23,6 @@ interface DocumentPacket extends RowDataPacket {
     observaciones: string | null;
     datos_extra: any | null;
     fecha_creacion: string;
-    total_incidencias?: number;
-    pendientes?: number;
 }
 
 interface ArchivoPacket extends RowDataPacket {
