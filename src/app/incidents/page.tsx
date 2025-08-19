@@ -73,7 +73,7 @@ export default function IncidentsPage() {
                         <h3 className="text-2xl font-semibold tracking-tight">Documentos con Incidencias Pendientes</h3>
                         <ExportButton data={documents} filename="incidencias" />
                     </div>
-                    <DocumentsTable documents={documents} />
+                    <DocumentsTable documents={documents} isIncidentsPage={true} />
                 </div>
             </div>
         )}

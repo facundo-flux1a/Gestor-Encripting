@@ -17,7 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { EditableCell } from './editable-cell';
 
@@ -44,7 +44,8 @@ const formatDate = (date: string | null | undefined) => {
 }
 
 // Helper to create pivoted IVA columns
-const createIvaColumns = (ivaTypes: number[], onUpdate: (id: number, field: string, value: any) => void): ColumnDef<Document>[] => {
+const createIvaColumns = (onUpdate: (id: number, field: string, value: any) => void): ColumnDef<Document>[] => {
+    const ivaTypes = [21, 10, 4, 0];
     return ivaTypes.flatMap(type => [
         {
             id: `base_${type}`,
@@ -83,134 +84,39 @@ const createIvaColumns = (ivaTypes: number[], onUpdate: (id: number, field: stri
     ]);
 };
 
-export function DocumentsTable({ documents, hiddenColumns }: { documents: Document[], hiddenColumns?: string[] }) {
-  const [tableData, setTableData] = useState(documents);
-  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
-  const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
-  
-  useEffect(() => {
-    setTableData(documents);
-  }, [documents]);
-
-  const pathname = usePathname();
-  const isIncidentsPage = pathname === '/incidents';
-
-  const handleSummarizeClick = (doc: Document) => {
-    setSelectedDoc(doc);
-    setIsSummarizeOpen(true);
-  };
-  
-  const handleUpdate = (docId: number, field: string, value: any) => {
-    setTableData(prevData =>
-      prevData.map(doc =>
-        doc.id_documento === docId ? { ...doc, [field]: value } : doc
-      )
-    );
-  };
-
-  const ivaColumns = createIvaColumns([21, 10, 4, 0], handleUpdate);
-
-  const columns: ColumnDef<Document>[] = [
+const getBaseColumns = (onUpdate: (id: number, field: string, value: any) => void): ColumnDef<Document>[] => [
     {
         accessorKey: 'numero_factura',
         header: 'Nº Factura',
-        cell: ({ row }) => (
-            <EditableCell
-                initialValue={row.getValue('numero_factura')}
-                docId={row.original.id_documento}
-                fieldName="numero_documento"
-                onUpdate={handleUpdate}
-            />
-        )
     },
     {
         accessorKey: 'tipo_documento',
         header: 'Tipo',
-        cell: ({ row }) => (
-            <EditableCell
-                initialValue={row.getValue('tipo_documento')}
-                docId={row.original.id_documento}
-                fieldName="tipo_documento"
-                onUpdate={handleUpdate}
-            />
-        )
     },
     {
         accessorKey: 'fecha_emision',
         header: 'Fecha Emisión',
-        cell: ({ row }) => (
-             <EditableCell
-                initialValue={row.getValue('fecha_emision')}
-                docId={row.original.id_documento}
-                fieldName="fecha_emision"
-                onUpdate={handleUpdate}
-                inputType="date"
-            />
-        )
+        cell: ({ row }) => formatDate(row.getValue('fecha_emision'))
     },
      {
         accessorKey: 'fecha_vencimiento',
         header: 'Fecha Vencimiento',
-        cell: ({ row }) => (
-             <EditableCell
-                initialValue={row.getValue('fecha_vencimiento')}
-                docId={row.original.id_documento}
-                fieldName="fecha_vencimiento"
-                onUpdate={handleUpdate}
-                inputType="date"
-            />
-        )
+        cell: ({ row }) => formatDate(row.getValue('fecha_vencimiento'))
     },
     {
         accessorKey: 'proveedor',
         header: 'Proveedor',
-        cell: ({ row }) => (
-            <EditableCell
-                initialValue={row.getValue('proveedor')}
-                docId={row.original.id_documento}
-                fieldName="proveedor_nombre"
-                onUpdate={handleUpdate}
-            />
-        )
     },
     {
         accessorKey: 'cif',
         header: 'CIF',
-        cell: ({ row }) => (
-            <EditableCell
-                initialValue={row.getValue('cif')}
-                docId={row.original.id_documento}
-                fieldName="proveedor_cif"
-                onUpdate={handleUpdate}
-            />
-        )
     },
-    ...(isIncidentsPage ? [{
-        accessorKey: 'incidencia_razon',
-        header: 'Razón Incidencia',
-        cell: ({ row }: { row: any }) => (
-             <EditableCell
-                initialValue={row.getValue('incidencia_razon')}
-                docId={row.original.id_documento}
-                fieldName="incidencia_razon"
-                onUpdate={handleUpdate}
-            />
-        )
-    }] as ColumnDef<Document>[] : []),
-    ...ivaColumns,
     {
         accessorKey: 'base_imponible',
         header: () => <div className='text-right'>Total Base</div>,
         cell: ({ row }) => (
             <div className="text-right">
-                <EditableCell
-                    initialValue={row.getValue('base_imponible')}
-                    docId={row.original.id_documento}
-                    fieldName="importe_sin_impuestos"
-                    onUpdate={handleUpdate}
-                    inputType="number"
-                    isCurrency
-                />
+                {formatCurrency(row.getValue('base_imponible'), row.original.moneda)}
             </div>
         )
     },
@@ -219,14 +125,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
         header: () => <div className='text-right'>Total IVA</div>,
         cell: ({ row }) => (
              <div className="text-right">
-                 <EditableCell
-                    initialValue={row.getValue('iva')}
-                    docId={row.original.id_documento}
-                    fieldName="iva"
-                    onUpdate={handleUpdate}
-                    inputType="number"
-                    isCurrency
-                 />
+                {formatCurrency(row.getValue('iva'), row.original.moneda)}
             </div>
         )
     },
@@ -235,14 +134,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
         header: () => <div className='text-right font-bold'>Total</div>,
         cell: ({ row }) => (
             <div className="text-right font-bold">
-                 <EditableCell
-                    initialValue={row.getValue('total')}
-                    docId={row.original.id_documento}
-                    fieldName="importe_total"
-                    onUpdate={handleUpdate}
-                    inputType="number"
-                    isCurrency
-                />
+                {formatCurrency(row.getValue('total'), row.original.moneda)}
             </div>
         )
     },
@@ -254,7 +146,7 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
                 initialValue={row.getValue('observaciones')}
                 docId={row.original.id_documento}
                 fieldName="observaciones"
-                onUpdate={handleUpdate}
+                onUpdate={onUpdate}
             />
         )
     },
@@ -287,39 +179,85 @@ export function DocumentsTable({ documents, hiddenColumns }: { documents: Docume
             return true;
         }
     },
-    {
-        id: 'actions',
-        cell: ({ row }) => {
-            const doc = row.original
-            return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                        <Link href={`/documento/${doc.id_documento}`}>
-                            Ver más detalles
-                        </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSummarizeClick(doc)}>
-                        Resumir con IA
-                    </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )
-        },
-        enableSorting: false,
-        enableColumnFilter: false,
-        enableHiding: false,
-    }
-  ];
+];
+
+export function DocumentsTable({ documents, hiddenColumns, isIncidentsPage = false }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean }) {
+  const [tableData, setTableData] = useState(documents);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
+  
+  useEffect(() => {
+    setTableData(documents);
+  }, [documents]);
+
+  const handleSummarizeClick = (doc: Document) => {
+    setSelectedDoc(doc);
+    setIsSummarizeOpen(true);
+  };
+  
+  const handleUpdate = (docId: number, field: string, value: any) => {
+    setTableData(prevData =>
+      prevData.map(doc =>
+        doc.id_documento === docId ? { ...doc, [field]: value } : doc
+      )
+    );
+  };
+
+  const columns = useMemo(() => {
+      const baseColumns = getBaseColumns(handleUpdate);
+      const ivaColumns = createIvaColumns(handleUpdate);
+      const incidentReasonColumn: ColumnDef<Document> = {
+            accessorKey: 'incidencia_razon',
+            header: 'Razón Incidencia',
+      };
+      
+      const actionsColumn: ColumnDef<Document> = {
+          id: 'actions',
+          cell: ({ row }) => {
+              const doc = row.original
+              return (
+                  <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                          <Link href={`/documento/${doc.id_documento}`}>
+                              Ver más detalles
+                          </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSummarizeClick(doc)}>
+                          Resumir con IA
+                      </DropdownMenuItem>
+                      </DropdownMenuContent>
+                  </DropdownMenu>
+              )
+          },
+          enableSorting: false,
+          enableColumnFilter: false,
+          enableHiding: false,
+      };
+
+      let assembledColumns = [...baseColumns];
+      if (isIncidentsPage) {
+          const providerIndex = assembledColumns.findIndex(c => c.accessorKey === 'proveedor');
+          if (providerIndex !== -1) {
+              assembledColumns.splice(providerIndex + 1, 0, incidentReasonColumn);
+          } else {
+              assembledColumns.push(incidentReasonColumn);
+          }
+      }
+      assembledColumns.splice(assembledColumns.findIndex(c => c.accessorKey === 'cif') + 1, 0, ...ivaColumns);
+      assembledColumns.push(actionsColumn);
+      
+      return assembledColumns;
+  }, [isIncidentsPage]);
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
         <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} />
         <SummarizeDialog doc={selectedDoc} isOpen={isSummarizeOpen} setIsOpen={setIsSummarizeOpen} />
     </TooltipProvider>
