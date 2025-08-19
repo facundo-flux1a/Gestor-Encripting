@@ -142,17 +142,21 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
         const currentIncidencias = incidenciaRows.filter(i => i.documento_id === doc.id);
         
-        const proveedor = currentEntidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor');
-        const cliente = currentEntidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
+        const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
+
+        // If there's a receptor/cliente, it's an issued document (income)
+        const emitida = !!receptor;
 
         let ingreso = 0;
         let gasto = 0;
         
-        if (proveedor) {
-             gasto = Number(doc.importe_total) || 0;
-        } else if (cliente) {
-             ingreso = Number(doc.importe_total) || 0;
+        if (emitida) {
+            ingreso = Number(doc.importe_total) || 0;
+        } else {
+            gasto = Number(doc.importe_total) || 0;
         }
+
 
         const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
             id: tax.id,
@@ -224,8 +228,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             iva_details: iva_details,
             archivos: archivos,
             fecha_subida: doc.fecha_emision, 
-            proveedor: proveedor?.nombre || cliente?.nombre || 'N/A',
-            cif: proveedor?.identificador_fiscal || cliente?.identificador_fiscal || 'N/A',
+            proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
+            cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
             nombre_archivo: currentFiles.length > 0 ? currentFiles[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
             contenido: doc.observaciones ?? "",
         };
@@ -849,14 +853,24 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 
 
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
-  const [kpiRows] = await db.query<RowDataPacket[]>(`
+    const [kpiRows] = await db.query<RowDataPacket[]>(`
+    WITH DocTypes AS (
+        SELECT 
+            d.id,
+            d.importe_total,
+            -- A document is considered 'issued' (income) if it has a cliente/receptor
+            MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) as is_issued
+        FROM documentos d
+        JOIN entidades_documento e ON d.id = e.documento_id
+        GROUP BY d.id
+    )
     SELECT
-      (SELECT SUM(d.importe_total) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'cliente' OR e.rol = 'receptor') as totalIngresos,
-      (SELECT SUM(d.importe_total) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'proveedor' OR e.rol = 'emisor') as totalGastos,
-      (SELECT COUNT(d.id) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'cliente' OR e.rol = 'receptor') as totalFacturasIngreso,
-      (SELECT COUNT(d.id) FROM documentos d JOIN entidades_documento e ON d.id = e.documento_id WHERE e.rol = 'proveedor' OR e.rol = 'emisor') as totalFacturasGasto,
+      (SELECT SUM(importe_total) FROM DocTypes WHERE is_issued = 1) as totalIngresos,
+      (SELECT SUM(importe_total) FROM DocTypes WHERE is_issued = 0) as totalGastos,
+      (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 1) as totalFacturasIngreso,
+      (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
       (SELECT COUNT(*) FROM incidencias_documento WHERE validado = 0) as incidenciasAbiertas,
-      (SELECT COUNT(DISTINCT identificador_fiscal) FROM entidades_documento WHERE (rol = 'proveedor' OR rol = 'emisor') AND identificador_fiscal IS NOT NULL AND identificador_fiscal != '') as totalProveedores,
+      (SELECT COUNT(DISTINCT identificador_fiscal) FROM entidades_documento WHERE rol IN ('proveedor', 'emisor') AND identificador_fiscal IS NOT NULL AND identificador_fiscal != '') as totalProveedores,
       (SELECT COUNT(DISTINCT codigo) FROM lineas_documento WHERE codigo IS NOT NULL AND codigo != '') as totalProductos,
       (SELECT COUNT(*) FROM documentos) as totalDocs
   `);
@@ -866,8 +880,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   const [quarterlyRows] = await db.query<RowDataPacket[]>(`
     SELECT
       CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-      SUM(CASE WHEN e.rol = 'cliente' OR e.rol = 'receptor' THEN d.importe_total ELSE 0 END) as ingresos,
-      SUM(CASE WHEN e.rol = 'proveedor' OR e.rol = 'emisor' THEN d.importe_total ELSE 0 END) as gastos
+      SUM(CASE WHEN e.rol IN ('cliente', 'receptor') THEN d.importe_total ELSE 0 END) as ingresos,
+      SUM(CASE WHEN e.rol IN ('proveedor', 'emisor') THEN d.importe_total ELSE 0 END) as gastos
     FROM documentos d
     JOIN entidades_documento e ON d.id = e.documento_id
     WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
@@ -889,8 +903,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   const [ivaRows] = await db.query<RowDataPacket[]>(`
     SELECT
       CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-      SUM(CASE WHEN e.rol = 'cliente' OR e.rol = 'receptor' THEN i.cuota ELSE 0 END) as repercutido,
-      SUM(CASE WHEN e.rol = 'proveedor' OR e.rol = 'emisor' THEN i.cuota ELSE 0 END) as soportado
+      SUM(CASE WHEN e.rol IN ('cliente', 'receptor') THEN i.cuota ELSE 0 END) as repercutido,
+      SUM(CASE WHEN e.rol IN ('proveedor', 'emisor') THEN i.cuota ELSE 0 END) as soportado
     FROM documentos d
     JOIN impuestos_documento i ON d.id = i.documento_id
     JOIN entidades_documento e ON d.id = e.documento_id
