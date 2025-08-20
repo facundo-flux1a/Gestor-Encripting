@@ -134,7 +134,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
         transform: CSS.Transform.toString(transform),
         transition,
         position: 'relative',
-        zIndex: 1,
+        zIndex: transform ? 1 : 0,
     };
 
     return (
@@ -244,7 +244,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-       if (typeof active.id === 'string' && active.id.startsWith('col-')) {
+       if (typeof active.id === 'string' && table.getHeader(active.id)) {
           setColumnOrder((items) => {
             const oldIndex = items.indexOf(active.id as string);
             const newIndex = items.indexOf(over!.id as string);
@@ -255,7 +255,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                 const oldIndex = items.findIndex(item => item.id_documento === active.id);
                 const newIndex = items.findIndex(item => item.id_documento === over.id);
                 return arrayMove(items, oldIndex, newIndex);
-            })
+            });
        }
     }
   };
@@ -318,7 +318,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
         >
         <div className="rounded-md border overflow-auto">
             <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+                <TableHeader className="sticky top-0 z-0 bg-background/80 backdrop-blur-sm">
                 {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow key={headerGroup.id}>
                     <TableHead className="w-12 sticky left-0 bg-muted/50"></TableHead>
@@ -334,7 +334,8 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                 ))}
                 </TableHeader>
                 <TableBody>
-                  <SortableContext items={dataState.map(d => d.id_documento)} strategy={verticalListSortingStrategy}>
+                  <SortableContext items={dataState.map(d => d.id_documento)} strategy={verticalListSortingStrategy}
+                  modifiers={[restrictToVerticalAxis]}>
                     {rows.length > 0 ? (
                         rows.map((row) => (
                            <DraggableTableRow key={row.original.id_documento} row={row} />
