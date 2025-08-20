@@ -115,7 +115,7 @@ const DraggableTableHeader = <TData, TValue>({
 
 
 // Draggable Table Row Component
-const DraggableTableRow = <TData,>({
+const DraggableTableRow = <TData extends { id_documento: number }>({
     row,
 }: {
     row: Row<TData>,
@@ -127,7 +127,7 @@ const DraggableTableRow = <TData,>({
         transform,
         transition,
     } = useSortable({
-        id: row.original.id,
+        id: row.original.id_documento,
     });
     
     const style: React.CSSProperties = {
@@ -164,7 +164,7 @@ const DraggableTableRow = <TData,>({
 };
 
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends { id_documento: number }, TValue>({
   columns,
   data,
   hiddenColumns = []
@@ -244,7 +244,7 @@ export function DataTable<TData, TValue>({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-       if (active.id.toString().startsWith('col-')) {
+       if (typeof active.id === 'string' && active.id.startsWith('col-')) {
           setColumnOrder((items) => {
             const oldIndex = items.indexOf(active.id as string);
             const newIndex = items.indexOf(over!.id as string);
@@ -379,4 +379,3 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
-
