@@ -3,7 +3,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MoreHorizontal, CheckCircle2, AlertCircle, FileText, BrainCircuit } from 'lucide-react';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, type IvaDetail } from '@/lib/types';
@@ -13,7 +13,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -199,6 +207,8 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
             rates.add(detail.porcentaje);
         });
     });
+    // Let's add some default rates to ensure the columns are always there
+    [0, 4, 10, 21].forEach(rate => rates.add(rate));
     return Array.from(rates).sort((a,b) => b - a); // Sort descending
   }, [documents]);
 
@@ -209,11 +219,42 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   };
 
   const columns = useMemo(() => getColumns(handleUpdate, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
+  
+  const renderRow = (row: Row<Document>) => {
+    const doc = row.original;
+    return (
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <TableRow
+                    data-state={row.getIsSelected() && 'selected'}
+                    className="bg-background even:bg-muted/50 hover:bg-muted/75"
+                >
+                    {row.getVisibleCells().map(cell => (
+                        <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                    ))}
+                </TableRow>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                <ContextMenuItem asChild>
+                    <Link href={`/documento/${doc.id_documento}`} className="flex items-center">
+                        <FileText className="mr-2 h-4 w-4" /> Ver detalles
+                    </Link>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => handleSummarize(doc)}>
+                    <BrainCircuit className="mr-2 h-4 w-4" /> Resumir con IA
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
+    );
+};
+
 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} />
+      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} renderRow={renderRow}/>
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}
