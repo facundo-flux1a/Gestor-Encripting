@@ -3,55 +3,30 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, CheckCircle2, AlertCircle, FileText, BrainCircuit } from 'lucide-react';
+import { MoreHorizontal, FileText, BrainCircuit } from 'lucide-react';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { flexRender } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { type Document, type IvaDetail } from '@/lib/types';
+import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-  ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { updateDocumentField } from '@/services/document-service';
-import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
 import { TableCell, TableRow } from '../ui/table';
-
-const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
-    if (amount === null || amount === undefined || isNaN(amount)) return 'N/A';
-    return new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency,
-    }).format(amount);
-};
-
-const formatDate = (date: string | null | undefined) => {
-    if (!date) return 'N/A';
-    try {
-        const d = new Date(date);
-        const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
-        return new Intl.DateTimeFormat('es-ES', {
-            year: 'numeric', month: '2-digit', day: '2-digit'
-        }).format(utcDate);
-    } catch {
-        return 'Fecha inválida';
-    }
-}
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any) => void,
@@ -182,7 +157,6 @@ const getColumns = (
 
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean }) {
   const [tableData, setTableData] = useState(documents);
-  const { toast } = useToast();
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
 
@@ -194,7 +168,6 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     setTableData(prevData => {
         return prevData.map(doc => {
             if (doc.id_documento === docId) {
-                // This is a simplified update. For nested fields like IVA, a more complex logic would be needed.
                 return { ...doc, [field as keyof Document]: value };
             }
             return doc;
@@ -209,9 +182,8 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
             rates.add(detail.porcentaje);
         });
     });
-    // Let's add some default rates to ensure the columns are always there
     [0, 4, 10, 21].forEach(rate => rates.add(rate));
-    return Array.from(rates).sort((a,b) => b - a); // Sort descending
+    return Array.from(rates).sort((a,b) => b - a); 
   }, [documents]);
 
 
@@ -225,7 +197,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   const renderRow = (row: Row<Document>) => {
     const doc = row.original;
     return (
-        <ContextMenu>
+        <ContextMenu key={row.original.id_documento}>
             <ContextMenuTrigger asChild>
                 <TableRow
                     data-state={row.getIsSelected() && 'selected'}
