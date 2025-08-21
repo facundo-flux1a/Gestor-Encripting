@@ -15,6 +15,27 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileCheck, X, FileText } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
+import * as pdfjs from 'pdfjs-dist';
+
+// Configure the worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+async function extractTextFromPdf(file: File): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    let fullText = '';
+  
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => ('str' in item ? item.str : '')).join(' ');
+      fullText += pageText + '\n\n';
+    }
+  
+    return fullText;
+}
+
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -59,10 +80,13 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         const file = files[i];
         setUploadProgress({ current: i + 1, total: files.length });
         
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
+            const textContent = await extractTextFromPdf(file);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('text', textContent);
+
             const result = await uploadDocument(formData);
             
             toast({

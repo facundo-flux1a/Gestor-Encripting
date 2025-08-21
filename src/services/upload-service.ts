@@ -12,8 +12,8 @@ const UploadResponseSchema = z.object({
 
 export async function uploadDocument(formData: FormData) {
 
-  if (!formData.has('file')) {
-    throw new Error('No se ha proporcionado ningún archivo para procesar.');
+  if (!formData.has('file') || !formData.has('text')) {
+    throw new Error('No se ha proporcionado el archivo o el contenido de texto.');
   }
 
   try {
