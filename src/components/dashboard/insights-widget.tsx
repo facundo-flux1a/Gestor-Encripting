@@ -52,7 +52,7 @@ export function InsightsWidget({ incidentRate, topProviders }: InsightsWidgetPro
             <div className="space-y-3">
                 {topProviders.map((provider, index) => (
                     <Link 
-                        key={provider.fiscalId} 
+                        key={`${provider.fiscalId}-${index}`} 
                         href={`/proveedores/${encodeURIComponent(provider.fiscalId)}`}
                         className="group"
                     >
