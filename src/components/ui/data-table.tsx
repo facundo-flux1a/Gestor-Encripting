@@ -71,6 +71,7 @@ const DraggableTableHeader = <TData, TValue>({
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
+    disabled: header.column.id === 'select'
   });
 
   const style: React.CSSProperties = {
@@ -95,7 +96,7 @@ const DraggableTableHeader = <TData, TValue>({
                     size="sm"
                     {...attributes}
                     {...listeners}
-                    className="cursor-grab p-2 h-full touch-none" // touch-none is important for mobile drag
+                    className="cursor-grab p-2 h-full touch-none"
                     >
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -104,7 +105,7 @@ const DraggableTableHeader = <TData, TValue>({
                 className={cn(
                     "flex items-center text-left w-full h-full px-2 py-3",
                     header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
-                    isSelectColumn ? "justify-center" : ""
+                    isSelectColumn ? "justify-start pl-4" : ""
                 )}
                  onClick={header.column.getToggleSortingHandler()}
             >
@@ -146,6 +147,9 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
         zIndex: isDragging ? 1 : 0,
     };
 
+    const firstCell = row.getVisibleCells()[0];
+    const otherCells = row.getVisibleCells().slice(1);
+
     return (
         <TableRow
             ref={setNodeRef}
@@ -153,18 +157,24 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
             data-state={row.getIsSelected() && 'selected'}
             className="bg-background even:bg-muted/50 hover:bg-muted/75"
         >
-             <TableCell className="w-12 sticky left-0 bg-inherit z-10">
-                <Button
+            {/* First cell with drag handle */}
+            <TableCell style={{ width: firstCell.column.getSize() }} className="whitespace-nowrap sticky left-0 bg-inherit z-10 flex items-center gap-2">
+                 <Button
                     variant="ghost"
                     size="icon"
                     {...attributes}
                     {...listeners}
-                    className="cursor-grab p-2 h-8 w-8 touch-none"
+                    className="cursor-grab p-2 h-8 w-8 touch-none flex-shrink-0"
                 >
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
+                <div className="flex-grow">
+                    {flexRender(firstCell.column.columnDef.cell, firstCell.getContext())}
+                </div>
             </TableCell>
-            {row.getVisibleCells().map(cell => (
+
+            {/* Other cells */}
+            {otherCells.map(cell => (
                 <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
@@ -289,60 +299,64 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const rows = table.getRowModel().rows;
   
   return (
-    <div className="space-y-4">
-    {/* Controls: Filter input and column visibility */}
-    <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
-        <div className="flex-1 w-full sm:w-auto">
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder='Buscar en todas las columnas...'
-                    value={globalFilter ?? ''}
-                    onChange={(event) => setGlobalFilter(event.target.value)}
-                    className="h-10 pl-10 w-full max-w-sm"
-                />
+    <DndContext
+        collisionDetection={closestCenter}
+        onDragEnd={(event) => {
+            const { active } = event;
+            if (active.id.toString().startsWith('column-')) {
+                handleColumnDragEnd(event);
+            } else if (active.id.toString().startsWith('row-')) {
+                handleRowDragEnd(event);
+            }
+        }}
+        sensors={sensors}
+    >
+        <div className="space-y-4">
+        {/* Controls: Filter input and column visibility */}
+        <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
+            <div className="flex-1 w-full sm:w-auto">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder='Buscar en todas las columnas...'
+                        value={globalFilter ?? ''}
+                        onChange={(event) => setGlobalFilter(event.target.value)}
+                        className="h-10 pl-10 w-full max-w-sm"
+                    />
+                </div>
             </div>
-        </div>
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
-                Columnas <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-            {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                const header = getHeaderName(column.id);
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="ml-auto">
+                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                    const header = getHeaderName(column.id);
 
-                return (
-                <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                >
-                    {header}
-                </DropdownMenuCheckboxItem>
-                );
-            })}
-            </DropdownMenuContent>
-        </DropdownMenu>
-    </div>
-
-
-    {/* Table */}
-    <div className="rounded-md border overflow-auto">
-        <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
-                {table.getHeaderGroups().map((headerGroup) => (
-                    <DndContext
-                        key={headerGroup.id}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleColumnDragEnd}
-                        sensors={sensors}
-                        modifiers={[restrictToHorizontalAxis]}
+                    return (
+                    <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
                     >
-                        <TableRow>
-                            <TableHead className="w-12 sticky left-0 bg-muted/50 z-10"></TableHead>
+                        {header}
+                    </DropdownMenuCheckboxItem>
+                    );
+                })}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+
+
+        {/* Table */}
+        <div className="rounded-md border overflow-auto">
+            <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                        <TableRow key={headerGroup.id}>
                             <SortableContext
                                 items={columnOrder.map(id => `column-${id}`)}
                                 strategy={horizontalListSortingStrategy}
@@ -352,15 +366,8 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                                 ))}
                             </SortableContext>
                         </TableRow>
-                    </DndContext>
-                ))}
-            </TableHeader>
-            <DndContext
-                collisionDetection={closestCenter}
-                onDragEnd={handleRowDragEnd}
-                sensors={sensors}
-                modifiers={[restrictToVerticalAxis]}
-            >
+                    ))}
+                </TableHeader>
                 <TableBody>
                     <SortableContext 
                         items={dataState.map(d => `row-${d.id_documento}`)} 
@@ -379,35 +386,35 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                     )}
                     </SortableContext>
                 </TableBody>
-            </DndContext>
-        </Table>
-    </div>
+            </Table>
+        </div>
 
-    {/* Pagination */}
-    <div className="flex items-center justify-between">
-        <div className="flex-1 text-sm text-muted-foreground">
-        {table.getFilteredSelectedRowModel().rows.length} de{" "}
-        {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
+        {/* Pagination */}
+        <div className="flex items-center justify-between">
+            <div className="flex-1 text-sm text-muted-foreground">
+            {table.getFilteredSelectedRowModel().rows.length} de{" "}
+            {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                >
+                    Anterior
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                >
+                    Siguiente
+                </Button>
+            </div>
         </div>
-        <div className="flex items-center space-x-2">
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-            >
-                Anterior
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-            >
-                Siguiente
-            </Button>
         </div>
-    </div>
-    </div>
+    </DndContext>
   );
 }
