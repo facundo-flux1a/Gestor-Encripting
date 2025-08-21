@@ -1,4 +1,3 @@
-
 'use server';
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -12,60 +11,71 @@ const UploadResponseSchema = z.object({
 });
 
 const WebhookResponseSchema = z.object({
-    filePath: z.string().min(1, "La ruta del archivo no puede estar vacía."),
+  path: z.string().min(1, "La ruta del archivo del webhook no puede estar vacía."),
 });
 
 const s3Client = new S3Client({
-  region: "auto",
+  region: "us-east-1",
   endpoint: process.env.MINIO_ENDPOINT!,
   credentials: {
     accessKeyId: process.env.MINIO_ACCESS_KEY!,
     secretAccessKey: process.env.MINIO_SECRET_KEY!,
   },
-  forcePathStyle: true, 
+  forcePathStyle: true,
 });
 
 async function uploadFileToS3(file: File, fileKey: string): Promise<string> {
+  try {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const params = {
-        Bucket: process.env.MINIO_BUCKET_NAME!,
-        Key: fileKey,
-        Body: buffer,
-        ContentType: file.type,
-        ACL: 'public-read' as const,
+      Bucket: process.env.MINIO_BUCKET_NAME!,
+      Key: fileKey,
+      Body: buffer,
+      ContentType: file.type,
+      ACL: 'public-read' as const,
     };
 
     const command = new PutObjectCommand(params);
     await s3Client.send(command);
 
+    console.log(`Archivo subido correctamente a: ${fileKey}`);
     return fileKey;
+  } catch (err: any) {
+    console.error('Error subiendo archivo a S3:', err);
+    throw new Error(`Error al subir archivo al bucket: ${err.message || err}`);
+  }
 }
 
 export async function uploadDocument(formData: FormData) {
   const file = formData.get('file') as File;
+  const text = formData.get('text') as string;
 
-  if (!file) {
-    throw new Error('No se ha proporcionado el archivo.');
+  if (!file || !text) {
+    throw new Error('No se ha proporcionado el archivo o el texto extraído.');
   }
 
   try {
-    // Step 1: Call the webhook to get the designated file path
-    const initialWebhookPayload = {
-      action: 'get_path',
-      originalName: file.name,
-      contentType: file.type,
-      size: file.size,
+    // 1. Enviar el texto extraído al webhook para obtener la ruta de guardado
+    const webhookPayload = {
+      text,
     };
 
     const pathResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(initialWebhookPayload),
+      body: JSON.stringify(webhookPayload),
     });
 
     if (!pathResponse.ok) {
-        throw new Error(`Error al obtener la ruta del archivo: ${pathResponse.statusText}`);
+        let errorBody = 'Respuesta no válida desde el servidor de webhook.';
+        try {
+            const body = await pathResponse.json();
+            errorBody = body.message || JSON.stringify(body);
+        } catch (e) {
+            errorBody = pathResponse.statusText;
+        }
+        throw new Error(`Error del webhook al obtener la ruta: ${pathResponse.status} - ${errorBody}`);
     }
 
     const pathResult = await pathResponse.json();
@@ -74,43 +84,15 @@ export async function uploadDocument(formData: FormData) {
     if (!parsedPath.success) {
       throw new Error(`Respuesta inválida del webhook para la ruta: ${parsedPath.error.toString()}`);
     }
-    
-    const fileKey = parsedPath.data.filePath;
 
-    // Step 2: Upload the file to the received S3 path
+    const fileKey = parsedPath.data.path;
+
+    // 2. Subir archivo al bucket S3/MinIO con la ruta obtenida
     await uploadFileToS3(file, fileKey);
-
-    // Step 3: Call the webhook again to notify of successful upload and trigger processing
-    const finalWebhookPayload = {
-      action: 'process_file',
-      fileKey: fileKey,
-      originalName: file.name,
-      contentType: file.type,
-      size: file.size,
-    };
-
-    const processResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(finalWebhookPayload),
-    });
-
-    if (!processResponse.ok) {
-        let errorBody = 'Respuesta no válida desde el servidor de webhook.';
-        try {
-            const body = await processResponse.json();
-            errorBody = body.message || JSON.stringify(body);
-        } catch (e) {
-            errorBody = processResponse.statusText;
-        }
-        throw new Error(`Error del webhook de procesamiento: ${processResponse.status} - ${errorBody}`);
-    }
-
-    const result = await processResponse.json();
 
     return UploadResponseSchema.parse({
       success: true,
-      message: result.message || 'Documento subido y procesado correctamente.',
+      message: 'Documento subido y en cola para procesamiento.',
     });
 
   } catch (error: any) {
