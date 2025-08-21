@@ -17,10 +17,10 @@ const WebhookResponseSchema = z.object({
 
 const s3Client = new S3Client({
   region: "us-east-1",
-  endpoint: process.env.MINIO_ENDPOINT!,
+  endpoint: "http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000",
   credentials: {
-    accessKeyId: process.env.MINIO_ACCESS_KEY!,
-    secretAccessKey: process.env.MINIO_SECRET_KEY!,
+    accessKeyId: "minioadmin",
+    secretAccessKey: "b3ndrlfdlvaeoke6",
   },
   forcePathStyle: true,
 });
@@ -30,7 +30,7 @@ async function uploadFileToS3(file: File, fileKey: string): Promise<string> {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const params = {
-      Bucket: process.env.MINIO_BUCKET_NAME!,
+      Bucket: "gestor-documental",
       Key: fileKey,
       Body: buffer,
       ContentType: file.type,
