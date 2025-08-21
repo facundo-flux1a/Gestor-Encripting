@@ -15,7 +15,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileCheck, X, FileText } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
-import pdfParse from 'pdf-parse/lib/pdf-parse';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -56,19 +55,15 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setIsLoading(true);
     setUploadProgress({ current: 0, total: files.length });
 
-    // This is required for pdf-parse to work in the browser
-    window.Buffer = window.Buffer || require('buffer').Buffer;
-
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setUploadProgress({ current: i + 1, total: files.length });
         
+        const formData = new FormData();
+        formData.append('file', file);
+
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const data = await pdfParse(buffer);
-            
-            const result = await uploadDocument(data.text);
+            const result = await uploadDocument(formData);
             
             toast({
               title: `Éxito: ${file.name}`,
@@ -109,7 +104,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos PDF. Se extraerá su texto y se enviará para su procesamiento.
+            Selecciona uno o más archivos PDF. Se analizarán para procesar su contenido.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">

@@ -10,19 +10,16 @@ const UploadResponseSchema = z.object({
   message: z.string(),
 });
 
-export async function uploadDocument(text: string) {
+export async function uploadDocument(formData: FormData) {
 
-  if (!text || typeof text !== 'string') {
-    throw new Error('No se ha proporcionado ningún texto para procesar.');
+  if (!formData.has('file')) {
+    throw new Error('No se ha proporcionado ningún archivo para procesar.');
   }
 
   try {
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: text }),
+      body: formData,
     });
 
     if (!response.ok) {
@@ -40,11 +37,11 @@ export async function uploadDocument(text: string) {
 
     return UploadResponseSchema.parse({
       success: true,
-      message: result.message || 'Texto del documento enviado para procesar.',
+      message: result.message || 'Documento enviado para procesar.',
     });
 
   } catch (error: any) {
-    console.error('Failed to upload document text to n8n:', error);
+    console.error('Failed to upload document to n8n:', error);
     throw new Error(error.message || 'No se pudo conectar con el servicio de automatización.');
   }
 }
