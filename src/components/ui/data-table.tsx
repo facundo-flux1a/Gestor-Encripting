@@ -17,6 +17,7 @@ import {
   getFacetedUniqueValues,
   Table as ReactTable,
   Row,
+  Header
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -63,14 +64,14 @@ interface DataTableProps<TData, TValue> {
 const DraggableTableHeader = <TData, TValue>({
   header,
 }: {
-  header: any;
+  header: Header<TData, TValue>;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: header.column.id,
   });
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform), // Use Translate for dnd-kit v10+
     transition,
     width: header.getSize(),
     position: 'relative',
@@ -82,7 +83,7 @@ const DraggableTableHeader = <TData, TValue>({
     <TableHead
       ref={setNodeRef}
       style={style}
-      className={cn("p-0 whitespace-nowrap group relative bg-muted/50")}
+      className={cn("p-0 whitespace-nowrap group relative bg-muted/50 z-0")} // Set z-index lower than sidebar
     >
         <div className="flex items-center h-full">
             {!isSelectColumn && (
@@ -99,14 +100,17 @@ const DraggableTableHeader = <TData, TValue>({
             <div
                 className={cn(
                     "flex items-center text-left w-full h-full px-2 py-3",
-                    isSelectColumn ? "justify-center" : "cursor-pointer"
+                    header.column.getCanSort() ? 'cursor-pointer select-none' : '',
+                    isSelectColumn ? "justify-center" : ""
                 )}
                  onClick={header.column.getToggleSortingHandler()}
             >
                 <span className="font-bold text-xs">
                     {flexRender(header.column.columnDef.header, header.getContext())}
                 </span>
-                {!isSelectColumn && <ArrowUpDown className="ml-2 h-3 w-3" />}
+                {header.column.getCanSort() && !isSelectColumn && (
+                    <ArrowUpDown className="ml-2 h-3 w-3" />
+                )}
             </div>
         </div>
     </TableHead>
@@ -131,7 +135,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
     });
     
     const style: React.CSSProperties = {
-        transform: CSS.Transform.toString(transform),
+        transform: CSS.Translate.toString(transform),
         transition,
         position: 'relative',
         zIndex: transform ? 1 : 0,
@@ -142,8 +146,9 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
             ref={setNodeRef}
             style={style}
             data-state={row.getIsSelected() && 'selected'}
+            className="bg-background"
         >
-            <TableCell className="w-12 sticky left-0 bg-background/95">
+            <TableCell className="w-12 sticky left-0 bg-background/95 z-10">
                 <Button
                     variant="ghost"
                     size="icon"
@@ -240,23 +245,26 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
-
-  const handleDragEnd = (event: DragEndEvent) => {
+  
+  const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-       if (typeof active.id === 'string' && typeof over.id === 'string' && table.getHeader(active.id)) {
-          setColumnOrder((items) => {
+        setColumnOrder((items) => {
             const oldIndex = items.indexOf(active.id as string);
             const newIndex = items.indexOf(over!.id as string);
             return arrayMove(items, oldIndex, newIndex);
-          });
-       } else if (typeof active.id === 'number' && typeof over.id === 'number') {
-            setDataState((items) => {
-                const oldIndex = items.findIndex(item => item.id_documento === active.id);
-                const newIndex = items.findIndex(item => item.id_documento === over.id);
-                return arrayMove(items, oldIndex, newIndex);
-            });
-       }
+        });
+    }
+  };
+  
+   const handleRowDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active && over && active.id !== over.id) {
+       setDataState((items) => {
+            const oldIndex = items.findIndex(item => item.id_documento === active.id);
+            const newIndex = items.findIndex(item => item.id_documento === over.id);
+            return arrayMove(items, oldIndex, newIndex);
+        });
     }
   };
 
@@ -311,55 +319,65 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
 
 
       {/* Table */}
-       <DndContext
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-            sensors={sensors}
-            modifiers={[restrictToVerticalAxis]}
-        >
+       
         <div className="rounded-md border overflow-auto">
             <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
                 {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                    <TableHead className="w-12 sticky left-0 bg-muted/50"></TableHead>
-                    <SortableContext
-                        items={columnOrder}
-                        strategy={horizontalListSortingStrategy}
+                    <DndContext
+                        key={headerGroup.id}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleColumnDragEnd}
+                        sensors={sensors}
+                        modifiers={[restrictToHorizontalAxis]}
                     >
-                        {headerGroup.headers.map((header) => (
-                         <DraggableTableHeader key={header.id} header={header} />
-                        ))}
-                    </SortableContext>
-                    </TableRow>
+                        <TableRow key={headerGroup.id}>
+                            <TableHead className="w-12 sticky left-0 bg-muted/50 z-10"></TableHead>
+                            <SortableContext
+                                items={columnOrder}
+                                strategy={horizontalListSortingStrategy}
+                            >
+                                {headerGroup.headers.map((header) => (
+                                 <DraggableTableHeader key={header.id} header={header} />
+                                ))}
+                            </SortableContext>
+                        </TableRow>
+                    </DndContext>
                 ))}
                 </TableHeader>
-                <TableBody>
-                  <SortableContext 
-                    items={dataState.map(d => d.id_documento)} 
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {rows.length > 0 ? (
-                        rows.map((row) => (
-                           <DraggableTableRow key={row.original.id_documento} row={row} />
-                        ))
-                    ) : (
-                        <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center">
-                            No hay resultados.
-                        </TableCell>
-                        </TableRow>
-                    )}
-                  </SortableContext>
-                </TableBody>
+                <DndContext
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleRowDragEnd}
+                    sensors={sensors}
+                    modifiers={[restrictToVerticalAxis]}
+                >
+                    <TableBody>
+                      <SortableContext 
+                        items={dataState.map(d => d.id_documento)} 
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {rows.length > 0 ? (
+                            rows.map((row) => (
+                               <DraggableTableRow key={row.original.id_documento} row={row} />
+                            ))
+                        ) : (
+                            <TableRow>
+                            <TableCell colSpan={columns.length + 1} className="h-24 text-center">
+                                No hay resultados.
+                            </TableCell>
+                            </TableRow>
+                        )}
+                      </SortableContext>
+                    </TableBody>
+                </DndContext>
             </Table>
         </div>
-      </DndContext>
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
         <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} fila(s).
+          {table.getFilteredSelectedRowModel().rows.length} de{" "}
+          {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
         </div>
         <div className="flex items-center space-x-2">
             <Button
