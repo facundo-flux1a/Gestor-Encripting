@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { MoreHorizontal, CheckCircle2, AlertCircle, FileText, BrainCircuit } from 'lucide-react';
 import type { ColumnDef, Row } from '@tanstack/react-table';
+import { flexRender } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, type IvaDetail } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
@@ -29,6 +30,7 @@ import { updateDocumentField } from '@/services/document-service';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
+import { TableCell, TableRow } from '../ui/table';
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
     if (amount === null || amount === undefined || isNaN(amount)) return 'N/A';
