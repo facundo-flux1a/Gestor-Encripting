@@ -30,6 +30,7 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
+  DragOverlay,
 } from '@dnd-kit/core';
 import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { arrayMove, SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -68,15 +69,15 @@ const DraggableTableHeader = <TData, TValue>({
 }: {
   header: Header<TData, TValue>;
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
   });
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
-    transition,
+    transition: 'width 250ms ease-in-out',
     width: header.getSize(),
-    position: 'relative',
+    opacity: isDragging ? 0.5 : 1,
   };
   
   const isSelectColumn = header.column.id === 'select';
@@ -94,7 +95,7 @@ const DraggableTableHeader = <TData, TValue>({
                     size="sm"
                     {...attributes}
                     {...listeners}
-                    className="cursor-grab p-2 h-full"
+                    className="cursor-grab p-2 h-full touch-none" // touch-none is important for mobile drag
                     >
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -102,7 +103,7 @@ const DraggableTableHeader = <TData, TValue>({
             <div
                 className={cn(
                     "flex items-center text-left w-full h-full px-2 py-3",
-                    header.column.getCanSort() ? 'cursor-pointer select-none' : '',
+                    header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
                     isSelectColumn ? "justify-center" : ""
                 )}
                  onClick={header.column.getToggleSortingHandler()}
@@ -132,6 +133,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
         setNodeRef,
         transform,
         transition,
+        isDragging,
     } = useSortable({
         id: `row-${row.original.id_documento}`,
     });
@@ -139,7 +141,9 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
     const style: React.CSSProperties = {
         transform: CSS.Translate.toString(transform),
         transition,
+        opacity: isDragging ? 0.5 : 1,
         position: 'relative',
+        zIndex: isDragging ? 1 : 0,
     };
 
     return (
@@ -155,7 +159,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
                     size="icon"
                     {...attributes}
                     {...listeners}
-                    className="cursor-grab p-2 h-8 w-8"
+                    className="cursor-grab p-2 h-8 w-8 touch-none"
                 >
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -186,11 +190,9 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     setDataState(data);
   }, [data]);
   
-  const defaultColumnOrder = React.useMemo(() => 
-    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean),
-    [columns]
+  const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
+    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
   );
-  const [columnOrder, setColumnOrder] = React.useState<string[]>(defaultColumnOrder);
 
 
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -248,34 +250,40 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
   
-  const handleDragEnd = (event: DragEndEvent, type: 'column' | 'row') => {
+  const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-        if (type === 'column') {
-            const oldId = active.id.toString().replace('column-', '');
-            const newId = over.id.toString().replace('column-', '');
-            setColumnOrder((items) => {
-                const oldIndex = items.indexOf(oldId);
-                const newIndex = items.indexOf(newId);
+        const oldId = active.id.toString().replace('column-', '');
+        const newId = over.id.toString().replace('column-', '');
+        setColumnOrder((items) => {
+            const oldIndex = items.indexOf(oldId);
+            const newIndex = items.indexOf(newId);
+            return arrayMove(items, oldIndex, newIndex);
+        });
+    }
+  };
+
+  const handleRowDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active && over && active.id !== over.id) {
+        const oldId = Number(active.id.toString().replace('row-', ''));
+        const newId = Number(over.id.toString().replace('row-', ''));
+        setDataState((items) => {
+            const oldIndex = items.findIndex(item => item.id_documento === oldId);
+            const newIndex = items.findIndex(item => item.id_documento === newId);
+            if (oldIndex !== -1 && newIndex !== -1) {
                 return arrayMove(items, oldIndex, newIndex);
-            });
-        } else if (type === 'row') {
-            const oldId = Number(active.id.toString().replace('row-', ''));
-            const newId = Number(over.id.toString().replace('row-', ''));
-            setDataState((items) => {
-                const oldIndex = items.findIndex(item => item.id_documento === oldId);
-                const newIndex = items.findIndex(item => item.id_documento === newId);
-                return arrayMove(items, oldIndex, newIndex);
-            });
-        }
+            }
+            return items;
+        });
     }
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, {})
+    useSensor(PointerSensor),
+    useSensor(MouseSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor)
   );
   
   const rows = table.getRowModel().rows;
@@ -324,16 +332,17 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     {/* Table */}
     <div className="rounded-md border overflow-auto">
         <Table>
-            <DndContext
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => handleDragEnd(e, 'column')}
-                sensors={sensors}
-                modifiers={[restrictToHorizontalAxis]}
-            >
-                <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
-                    {table.getHeaderGroups().map((headerGroup) => (
-                        <TableRow key={headerGroup.id}>
-                             <TableHead className="w-12 sticky left-0 bg-muted/50 z-10"></TableHead>
+            <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+                {table.getHeaderGroups().map((headerGroup) => (
+                    <DndContext
+                        key={headerGroup.id}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleColumnDragEnd}
+                        sensors={sensors}
+                        modifiers={[restrictToHorizontalAxis]}
+                    >
+                        <TableRow>
+                            <TableHead className="w-12 sticky left-0 bg-muted/50 z-10"></TableHead>
                             <SortableContext
                                 items={columnOrder.map(id => `column-${id}`)}
                                 strategy={horizontalListSortingStrategy}
@@ -343,19 +352,19 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                                 ))}
                             </SortableContext>
                         </TableRow>
-                    ))}
-                </TableHeader>
-            </DndContext>
-             <DndContext
+                    </DndContext>
+                ))}
+            </TableHeader>
+            <DndContext
                 collisionDetection={closestCenter}
-                onDragEnd={(e) => handleDragEnd(e, 'row')}
+                onDragEnd={handleRowDragEnd}
                 sensors={sensors}
                 modifiers={[restrictToVerticalAxis]}
             >
                 <TableBody>
                     <SortableContext 
-                    items={dataState.map(d => `row-${d.id_documento}`)} 
-                    strategy={verticalListSortingStrategy}
+                        items={dataState.map(d => `row-${d.id_documento}`)} 
+                        strategy={verticalListSortingStrategy}
                     >
                     {rows.length > 0 ? (
                         rows.map((row) => (
