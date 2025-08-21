@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileCheck, X, FileText } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
+import pdfParse from 'pdf-parse/lib/pdf-parse';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -42,7 +43,6 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setFiles(files.filter(file => file.name !== fileName));
   };
 
-
   const handleUpload = async () => {
     if (files.length === 0) {
       toast({
@@ -56,15 +56,20 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setIsLoading(true);
     setUploadProgress({ current: 0, total: files.length });
 
+    // This is required for pdf-parse to work in the browser
+    window.Buffer = window.Buffer || require('buffer').Buffer;
+
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setUploadProgress({ current: i + 1, total: files.length });
         
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const result = await uploadDocument(formData);
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const data = await pdfParse(buffer);
+            
+            const result = await uploadDocument(data.text);
+            
             toast({
               title: `Éxito: ${file.name}`,
               description: result.message,
@@ -72,7 +77,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         } catch (error: any) {
             toast({
               title: `Error al subir ${file.name}`,
-              description: error.message || 'Ocurrió un problema al subir el archivo.',
+              description: error.message || 'Ocurrió un problema al procesar o subir el archivo.',
               variant: 'destructive',
             });
         }
@@ -104,7 +109,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos PDF para enviarlos a tu flujo de trabajo. Se subirán de uno en uno.
+            Selecciona uno o más archivos PDF. Se extraerá su texto y se enviará para su procesamiento.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
@@ -142,7 +147,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             <div className="space-y-2">
                  <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="w-full" />
                  <p className="text-sm text-center text-muted-foreground">
-                    Subiendo {uploadProgress.current} de {uploadProgress.total} archivos...
+                    Procesando {uploadProgress.current} de {uploadProgress.total} archivos...
                  </p>
             </div>
           )}
