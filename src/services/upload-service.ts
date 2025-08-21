@@ -1,3 +1,4 @@
+
 'use server';
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -51,19 +52,24 @@ export async function uploadDocument(formData: FormData) {
   const file = formData.get('file') as File;
   const text = formData.get('text') as string;
 
-  if (!file || !text) {
-    throw new Error('No se ha proporcionado el archivo o el texto extraído.');
+  if (!file) {
+    throw new Error('No se ha proporcionado el archivo.');
+  }
+  if (!text) {
+      throw new Error('No se ha proporcionado el texto extraído del documento.');
   }
 
   try {
     // 1. Enviar el texto extraído al webhook para obtener la ruta de guardado
     const webhookPayload = {
-      text,
+      text: text,
     };
 
     const pathResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
       body: JSON.stringify(webhookPayload),
     });
 
