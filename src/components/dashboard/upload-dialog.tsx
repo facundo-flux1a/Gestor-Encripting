@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
-import { Progress } from '../ui/progress';
 import { extractTextFromPdf } from '@/utils/pdf-worker-setup';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -41,6 +40,8 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   const { toast } = useToast();
 
   useEffect(() => {
+    // We just need to set the worker source. The actual setup is now in the utility file.
+    // This ensures pdf.js knows where to find its worker script.
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
     setIsWorkerReady(true);
   }, []);
@@ -84,14 +85,14 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     try {
       // Step 1: Extract text if it's a PDF
       if (file.type === 'application/pdf') {
-        updateFileStatus(file.name, 'extracting');
+        updateFileStatus(file.name, 'extracting', 'Extrayendo texto...');
         extractedText = await extractTextFromPdf(file);
       } else {
         extractedText = `Archivo no-PDF: ${file.name}, Tamaño: ${file.size} bytes.`;
       }
       
       // Step 2: Upload
-      updateFileStatus(file.name, 'uploading');
+      updateFileStatus(file.name, 'uploading', 'Enviando a n8n y subiendo...');
       const formData = new FormData();
       formData.append('file', file);
       formData.append('text', extractedText);
@@ -128,11 +129,13 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
     if (successCount > 0) {
       onUploadSuccess();
-      // Reset only on full success or leave files with errors? Let's clear all.
-      setTimeout(() => {
-        setUploadableFiles([]);
+    }
+    // Clear all files after processing is done to allow for a new batch
+    setUploadableFiles([]);
+    if (successCount === uploadableFiles.length) {
+       setTimeout(() => {
         setIsOpen(false);
-      }, 1500);
+      }, 1000);
     }
   };
 
