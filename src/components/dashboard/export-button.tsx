@@ -7,8 +7,7 @@ import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import type { Table as TanstackTable, Cell } from '@tanstack/react-table';
-import { flexRender } from '@tanstack/react-table';
+import { flexRender, type Table as TanstackTable, type Cell, type Column } from '@tanstack/react-table';
 
 
 interface ExportButtonProps {
@@ -16,46 +15,62 @@ interface ExportButtonProps {
     filename: string;
 }
 
-const getCellString = (cell: Cell<any, unknown>) => {
-    const value = cell.getValue();
+const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
+    return new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits, maximumFractionDigits: 2 }).format(amount);
+}
 
+
+const getCellString = (cell: Cell<any, unknown>): string => {
+    const value = cell.getValue();
+    const columnId = cell.column.id;
+
+    // Handle dynamic VAT columns specifically
+    if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
+        const rate = parseFloat(columnId.split('_')[1]);
+        const ivaDetail = cell.row.original.iva_details?.find((i: any) => i.porcentaje === rate);
+        if (columnId.startsWith('base_')) {
+            return formatCurrency(ivaDetail?.base_imponible ?? 0);
+        }
+        if (columnId.startsWith('iva_')) {
+            return formatCurrency(ivaDetail?.cuota ?? 0);
+        }
+    }
+    
+    // Original logic for other cells
     if (value instanceof Date) {
         return value.toLocaleDateString('es-ES');
     }
     if (typeof value === 'boolean') {
         return value ? 'Sí' : 'No';
     }
-     if (typeof value === 'number') {
-        const columnId = cell.column.id.toLowerCase();
-        if (columnId.includes('total') || columnId.includes('base') || columnId.includes('iva') || columnId.includes('precio') || columnId.includes('importe')) {
-             return new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-        }
-        return value.toString();
+    if (typeof value === 'number') {
+        const isCurrency = columnId.toLowerCase().includes('total') || columnId.toLowerCase().includes('precio') || columnId.toLowerCase().includes('importe');
+        return isCurrency ? formatCurrency(value) : value.toString();
     }
-    if(value === null || value === undefined) {
+    if (value === null || value === undefined) {
         return '';
     }
-    
-    // For complex cells (like our EditableCell), we might need to look at the rendered content.
-    // This is a simple fallback. A more robust solution might need a custom `meta` prop on columns.
+
+    // Fallback for complex components by accessing initialValue if possible
     const rendered = flexRender(cell.column.columnDef.cell, cell.getContext());
-    if (typeof rendered === 'string' || typeof rendered === 'number') {
-        return String(rendered);
+    if (React.isValidElement(rendered) && rendered.props.initialValue !== undefined) {
+        const initialValue = rendered.props.initialValue;
+        if(typeof initialValue === 'number' && rendered.props.isCurrency) {
+            return formatCurrency(initialValue);
+        }
+        return String(initialValue);
     }
     
     return String(value ?? '');
 }
 
-const getHeaderName = (table: TanstackTable<any>, columnId: string): string => {
-     const col = table.getColumn(columnId);
-    if (!col) return columnId;
-
+const getHeaderName = (col: Column<any, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
 
     if (headerDef) {
        const context = {
-         table,
+         table: null, // table instance is not strictly needed for rendering the header string
          header: { column: col } as any,
        };
        const renderedHeader = flexRender(headerDef, context);
@@ -64,18 +79,20 @@ const getHeaderName = (table: TanstackTable<any>, columnId: string): string => {
           return renderedHeader.props.children;
        }
     }
-    return columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 
 export function ExportButton({ table, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        const headers = table.getVisibleFlatColumns().map(column => getHeaderName(table, column.id));
+        const visibleColumns = table.getVisibleFlatColumns();
+        const headers = visibleColumns.map(column => getHeaderName(column));
+        
         const rows = table.getRowModel().rows.map(row => {
             const rowData: { [key: string]: any } = {};
             row.getVisibleCells().forEach(cell => {
-                 const header = getHeaderName(table, cell.column.id);
+                 const header = getHeaderName(cell.column);
                  rowData[header] = getCellString(cell);
             });
             return rowData;
@@ -87,28 +104,26 @@ export function ExportButton({ table, filename }: ExportButtonProps) {
             return;
         }
 
-        switch (format) {
-            case 'excel':
-                const worksheet = XLSX.utils.json_to_sheet(rows);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
-                XLSX.writeFile(workbook, `${filename}.xlsx`);
-                break;
-            case 'csv': {
-                const csvContent = [
-                    headers.join(','),
-                    ...rows.map(row => headers.map(header => JSON.stringify(row[header] ?? '')).join(','))
-                ].join('\n');
-                downloadFile(csvContent, `${filename}.csv`, 'text/csv;charset=utf-8;');
-                break;
-            }
-            case 'txt': {
-                 const txtContent = rows.map(row => 
-                    headers.map(header => `${header}: ${row[header] ?? ''}`).join('\n')
-                 ).join('\n\n' + '-'.repeat(40) + '\n\n');
-                downloadFile(txtContent, `${filename}.txt`, 'text/plain;charset=utf-8;');
-                break;
-            }
+        const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+
+        if (format === 'excel') {
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+            return;
+        }
+
+        // For CSV and TXT, we need to convert the sheet to the desired format
+        let fileContent = '';
+        const sheetAsCsv = XLSX.utils.sheet_to_csv(worksheet);
+
+        if (format === 'csv') {
+            fileContent = sheetAsCsv;
+            downloadFile(fileContent, `${filename}.csv`, 'text/csv;charset=utf-8;');
+        } else if (format === 'txt') {
+            const rowsAsTxt = sheetAsCsv.split('\n').map(row => row.split(',').join('\t')).join('\n');
+            fileContent = rowsAsTxt;
+            downloadFile(fileContent, `${filename}.txt`, 'text/plain;charset=utf-8;');
         }
     };
     
@@ -128,7 +143,7 @@ export function ExportButton({ table, filename }: ExportButtonProps) {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button>
+                <Button variant="outline">
                     <Download className="mr-2 h-4 w-4" />
                     Exportar
                 </Button>
