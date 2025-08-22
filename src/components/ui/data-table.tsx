@@ -19,7 +19,8 @@ import {
   type Table as ReactTable,
   type Row,
   type Header as TableHeaderType,
-  type RowData
+  type RowData,
+  type Column
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -107,7 +108,7 @@ const DraggableTableHeader = <TData, TValue>({
                 className={cn(
                     "flex items-center text-left w-full h-full px-2 py-3",
                     header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
-                    isSelectColumn ? "justify-start pl-4" : ""
+                    isSelectColumn ? "justify-start" : ""
                 )}
                  onClick={header.column.getToggleSortingHandler()}
             >
@@ -254,10 +255,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     }
   });
 
-  const getHeaderName = (columnId: string) => {
-    const col = table.getColumn(columnId);
-    if (!col) return columnId;
-
+  const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
 
@@ -268,15 +266,21 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
        };
        const renderedHeader = flexRender(headerDef, context as any);
        if (typeof renderedHeader === 'string') return renderedHeader;
-       // Attempt to extract from simple components
-       if (React.isValidElement(renderedHeader) && typeof renderedHeader.props.children === 'string') {
-          return renderedHeader.props.children;
-       }
+        if (React.isValidElement(renderedHeader)) {
+            const children = React.Children.toArray(renderedHeader.props.children);
+            const textChild = children.find(child => typeof child === 'string' || (typeof child === 'object' && child?.type === 'span'));
+             if(textChild && typeof textChild === 'object' && textChild.props.children) {
+                 return textChild.props.children;
+            }
+             if(typeof textChild === 'string') {
+                return textChild;
+            }
+        }
     }
 
-    const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
-}
+  }
   
   const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -330,7 +334,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                     {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                        const headerName = getHeaderName(column.id);
+                        const headerName = getHeaderName(column);
 
                         return (
                         <DropdownMenuCheckboxItem

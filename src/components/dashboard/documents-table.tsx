@@ -27,7 +27,6 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
 import { TableCell, TableRow } from '../ui/table';
-import { ExportButton } from './export-button';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any) => void,
@@ -36,7 +35,7 @@ const getColumns = (
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
      {
-        accessorKey: 'id_documento',
+        id: 'select',
         header: ({ table }) => (
             <div className="flex items-center gap-2">
                 <Checkbox
@@ -55,7 +54,7 @@ const getColumns = (
                     aria-label="Select row"
                     onClick={(e) => e.stopPropagation()}
                 />
-                <span>{row.getValue('id_documento')}</span>
+                <span>{row.original.id_documento}</span>
             </div>
         ),
         enableHiding: false,
@@ -184,6 +183,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
             rates.add(detail.porcentaje);
         });
     });
+    // Ensure standard rates are always present for column stability, even if empty.
     [0, 4, 10, 21].forEach(rate => rates.add(rate));
     return Array.from(rates).sort((a,b) => b - a); 
   }, [documents]);
