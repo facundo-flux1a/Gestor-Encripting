@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import {
   Dialog,
@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
-import { extractTextFromPdf } from '@/utils/pdf-worker-setup';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -23,26 +22,23 @@ interface UploadDocumentDialogProps {
   onUploadSuccess: () => void;
 }
 
-type FileStatus = 'pending' | 'extracting' | 'uploading' | 'success' | 'error';
+type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
 
 interface UploadableFile {
     file: File;
     status: FileStatus;
-    progress: number;
     message?: string;
 }
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
   const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isWorkerReady, setIsWorkerReady] = useState(true); // Assume ready, handled by utility
   const { toast } = useToast();
 
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
       file,
       status: 'pending',
-      progress: 0,
     }));
     setUploadableFiles(prev => [...prev, ...newFiles]);
 
@@ -72,23 +68,11 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   
   const processFile = async (uploadableFile: UploadableFile): Promise<boolean> => {
     const { file } = uploadableFile;
-    let extractedText = '';
-
     try {
-      // Step 1: Extract text
-      if (file.type === 'application/pdf') {
-        updateFileStatus(file.name, 'extracting', 'Extrayendo texto...');
-        extractedText = await extractTextFromPdf(file);
-      } else {
-        extractedText = `Archivo no-PDF: ${file.name}, Tamaño: ${file.size} bytes.`;
-      }
+      updateFileStatus(file.name, 'uploading', 'Subiendo archivo...');
       
-      // Step 2: Upload
-      updateFileStatus(file.name, 'uploading', 'Enviando a n8n y subiendo...');
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('text', extractedText);
-      formData.append('fileName', file.name);
 
       const result = await uploadDocument(formData);
       
@@ -142,7 +126,6 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   const getStatusIcon = (status: FileStatus) => {
       switch (status) {
           case 'pending': return <FileText className="h-5 w-5 text-muted-foreground" />;
-          case 'extracting':
           case 'uploading': return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
           case 'success': return <CheckCircle className="h-5 w-5 text-green-500" />;
           case 'error': return <AlertCircle className="h-5 w-5 text-destructive" />;
@@ -155,7 +138,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos. El texto de los PDFs se extraerá y enviará para su procesamiento.
+            Selecciona uno o más archivos para subir. Serán procesados por el sistema.
           </DialogDescription>
         </DialogHeader>
         
@@ -164,17 +147,14 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
               isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            } ${isProcessing || !isWorkerReady ? 'pointer-events-none opacity-50' : ''}`}
+            } ${isProcessing ? 'pointer-events-none opacity-50' : ''}`}
           >
-            <input {...getInputProps()} disabled={isProcessing || !isWorkerReady} />
+            <input {...getInputProps()} disabled={isProcessing} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
             {isDragActive ? (
               <p>Suelta los archivos aquí...</p>
             ) : (
               <p className="text-center">Arrastra y suelta archivos aquí, o haz clic para seleccionar</p>
-            )}
-             {!isWorkerReady && (
-              <p className="text-xs text-orange-500 mt-2">Inicializando procesador de PDF...</p>
             )}
           </div>
           
@@ -215,7 +195,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
           </DialogClose>
           <Button 
             onClick={handleUpload} 
-            disabled={uploadableFiles.length === 0 || isProcessing || !isWorkerReady} 
+            disabled={uploadableFiles.length === 0 || isProcessing} 
           >
             {isProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -4,65 +4,49 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-// Define el schema de la respuesta que tu función debería devolver al frontend.
 const UploadResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   url: z.string().optional(),
-  path: z.string().optional(),
-});
-
-// Schema para validar la respuesta del webhook de n8n
-const WebhookResponseSchema = z.object({
-  path: z.string(),
 });
 
 /**
- * Gestiona la subida de un documento.
- * 1. Envía el texto extraído al webhook de n8n
- * 2. Recibe la ruta donde guardar el archivo
- * 3. Sube el archivo al bucket S3/MinIO con permisos públicos
+ * Gestiona la subida de un documento a S3 y notifica a un webhook.
+ * 1. Genera un nombre de archivo único con timestamp.
+ * 2. Sube el archivo al bucket S3/MinIO con permisos públicos.
+ * 3. Envía la URL pública del archivo al webhook de n8n.
  *
- * @param formData El FormData que contiene el archivo ('file'), el texto ('text') y el nombre ('fileName').
- * @returns Una promesa que se resuelve con un objeto que indica el éxito, mensaje y URL pública.
+ * @param formData El FormData que contiene el archivo ('file').
+ * @returns Una promesa que se resuelve con un objeto indicando el éxito y el mensaje.
  */
 export async function uploadDocument(formData: FormData): Promise<z.infer<typeof UploadResponseSchema>> {
   const file = formData.get('file') as File | null;
-  const text = formData.get('text') as string | null;
-  const fileName = formData.get('fileName') as string | null;
 
-  if (!file || !text || !fileName) {
-    throw new Error('Argumentos inválidos. Se requiere archivo, texto y nombre de archivo.');
+  if (!file) {
+    throw new Error('No se ha proporcionado ningún archivo.');
   }
+  const originalFileName = file.name;
 
   // 1. Validar variables de entorno críticas ANTES de empezar.
-  const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
+  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf3';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!N8N_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
-    throw new Error('Configuración del servidor incompleta. Faltan variables de entorno para la subida de archivos.');
+    console.error('Missing environment variables for upload service.');
+    throw new Error('Configuración del servidor incompleta. Contacte al administrador.');
   }
 
   try {
-    // 2. Enviar el texto extraído al webhook de n8n
-    console.log(`[${fileName}] Enviando texto a n8n...`);
-    const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
+    // 2. Generar el nombre y la ruta del archivo con timestamp.
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
+    const fileNameWithoutExt = originalFileName.includes('.') ? originalFileName.substring(0, originalFileName.lastIndexOf('.')) : originalFileName;
+    const fileExtension = originalFileName.includes('.') ? originalFileName.substring(originalFileName.lastIndexOf('.')) : '';
+    
+    const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExtension}`;
+    const filePath = `archivos/${uniqueFileName}`;
 
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      throw new Error(`Error en webhook n8n (${webhookResponse.status}): ${errorText}`);
-    }
-
-    const webhookData = await webhookResponse.json();
-    const validatedResponse = WebhookResponseSchema.parse(webhookData);
-    const filePath = validatedResponse.path;
-    console.log(`[${fileName}] Ruta recibida de n8n: ${filePath}`);
-
-    // 3. Subir el archivo original a MinIO/S3 en la ruta obtenida
+    // 3. Subir el archivo original a MinIO/S3.
     const s3Client = new S3Client({
       region: process.env.MINIO_REGION || "us-east-1",
       endpoint: MINIO_ENDPOINT,
@@ -70,12 +54,12 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
         accessKeyId: MINIO_ACCESS_KEY,
         secretAccessKey: MINIO_SECRET_KEY,
       },
-      forcePathStyle: true,
+      forcePathStyle: true, // Crucial para MinIO
     });
 
     const fileBuffer = await file.arrayBuffer();
     
-    console.log(`[${fileName}] Subiendo a MinIO en ruta: ${filePath}`);
+    console.log(`[${originalFileName}] Subiendo a MinIO en ruta: ${filePath}`);
     await s3Client.send(new PutObjectCommand({
       Bucket: MINIO_BUCKET_NAME,
       Key: filePath,
@@ -85,18 +69,35 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
     }));
     
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
-    console.log(`[${fileName}] Subida completada. URL pública: ${publicUrl}`);
+    console.log(`[${originalFileName}] Subida completada. URL pública: ${publicUrl}`);
+
+    // 4. Enviar la URL al webhook de n8n.
+    console.log(`[${originalFileName}] Notificando al webhook de n8n...`);
+    const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: publicUrl }), // Enviamos la URL en la propiedad 'text'
+    });
+
+    if (!webhookResponse.ok) {
+      const errorText = await webhookResponse.text();
+      // Aunque el webhook falle, la subida fue exitosa, así que no lanzamos un error fatal.
+      console.warn(`[${originalFileName}] Alerta: La notificación al webhook de n8n falló (${webhookResponse.status}): ${errorText}`);
+      return {
+        success: true,
+        message: `Archivo subido, pero la notificación al workflow falló.`,
+        url: publicUrl,
+      };
+    }
     
     return {
       success: true,
-      message: `Archivo "${fileName}" subido correctamente.`,
+      message: `Archivo "${originalFileName}" subido y procesado.`,
       url: publicUrl,
-      path: filePath,
     };
 
   } catch (error: any) {
-    console.error(`[${fileName}] Error en el proceso de subida:`, error);
-    // Propagar un mensaje de error claro al frontend
-    throw new Error(error.message || `Ocurrió un error inesperado al procesar ${fileName}.`);
+    console.error(`[${originalFileName}] Error en el proceso de subida:`, error);
+    throw new Error(error.message || `Ocurrió un error inesperado al procesar ${originalFileName}.`);
   }
 }
