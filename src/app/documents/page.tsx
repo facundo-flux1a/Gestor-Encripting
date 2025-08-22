@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Upload, Loader2, ChevronsUpDown } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import type { Document } from "@/lib/types";
-import { ExportButton } from "@/components/dashboard/export-button";
 import { UploadDocumentDialog } from "@/components/dashboard/upload-dialog";
 import {
   DropdownMenu,
@@ -71,6 +70,7 @@ export default function DocumentsPage() {
     : `Viendo todos los documentos de tipo "${docTypeFilter}".`;
 
   const hiddenColumns = docTypeFilter === 'todos' ? [] : ['tipo_documento'];
+  const filename = docTypeFilter === 'todos' ? 'todos-los-documentos' : `documentos_${docTypeFilter}`;
 
   return (
     <MainLayout>
@@ -107,7 +107,6 @@ export default function DocumentsPage() {
                     <Upload className="mr-2" />
                     Subir Documento
                 </Button>
-                <ExportButton data={filteredDocuments} filename={docTypeFilter === 'todos' ? 'todos-los-documentos' : `documentos_${docTypeFilter}`} />
             </div>
         </MainLayoutHeader>
         <div className="mt-6">
@@ -116,7 +115,7 @@ export default function DocumentsPage() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
-                <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} />
+                <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} filename={filename} />
             )}
         </div>
       </div>

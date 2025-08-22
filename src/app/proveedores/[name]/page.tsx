@@ -141,7 +141,6 @@ export default function ProveedorDetailPage() {
                                         className="h-11 pl-10"
                                     />
                                 </div>
-                                <ExportButton data={filteredProducts} filename={`productos_${provider.identificador_fiscal}`} />
                             </div>
                         </div>
 
@@ -170,7 +169,7 @@ export default function ProveedorDetailPage() {
                     
                     <TabsContent value="documents">
                         <div className="space-y-4">
-                            <DocumentsTable documents={documents} />
+                            <DocumentsTable documents={documents} filename={`documentos_${provider.identificador_fiscal}`} />
                         </div>
                     </TabsContent>
                 </Tabs>

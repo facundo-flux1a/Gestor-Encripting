@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { MoreHorizontal, FileText, BrainCircuit } from 'lucide-react';
-import type { ColumnDef, Row } from '@tanstack/react-table';
+import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { flexRender } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
@@ -27,6 +27,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
 import { TableCell, TableRow } from '../ui/table';
+import { ExportButton } from './export-button';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any) => void,
@@ -156,7 +157,7 @@ const getColumns = (
   return columns;
 }
 
-export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean }) {
+export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
   const [tableData, setTableData] = useState(documents);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -229,7 +230,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} renderRow={renderRow}/>
+      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} renderRow={renderRow} filename={filename} />
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}

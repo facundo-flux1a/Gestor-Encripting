@@ -30,10 +30,9 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
-  DragOverlay,
 } from '@dnd-kit/core';
-import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { arrayMove, SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
+import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -54,6 +53,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, GripVertical, ArrowUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ExportButton } from '@/components/dashboard/export-button';
 
 
 interface DataTableProps<TData, TValue> {
@@ -61,6 +61,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   hiddenColumns?: string[];
   renderRow?: (row: Row<TData>) => React.ReactNode;
+  filename: string;
 }
 
 // Draggable Header Cell Component
@@ -189,6 +190,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   data,
   hiddenColumns = [],
   renderRow,
+  filename
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -254,8 +256,13 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const getHeaderName = (columnId: string) => {
     const col = table.getColumn(columnId);
     if (!col) return columnId;
-    const header = col.columnDef.header;
-    if (typeof header === 'string') return header;
+    const headerDef = col.columnDef.header;
+    if (typeof headerDef === 'string') return headerDef;
+    if (headerDef) {
+       const context = header.getContext();
+       const renderedHeader = flexRender(headerDef, context);
+       if (typeof renderedHeader === 'string') return renderedHeader;
+    }
     const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
@@ -273,22 +280,6 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     }
   };
 
-  const handleRowDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (active && over && active.id !== over.id) {
-        const oldId = Number(active.id.toString().replace('row-', ''));
-        const newId = Number(over.id.toString().replace('row-', ''));
-        setDataState((items) => {
-            const oldIndex = items.findIndex(item => item.id_documento === oldId);
-            const newIndex = items.findIndex(item => item.id_documento === newId);
-            if (oldIndex !== -1 && newIndex !== -1) {
-                return arrayMove(items, oldIndex, newIndex);
-            }
-            return items;
-        });
-    }
-  };
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(MouseSensor),
@@ -301,14 +292,8 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   return (
     <DndContext
         collisionDetection={closestCenter}
-        onDragEnd={(event) => {
-            const { active } = event;
-            if (active.id.toString().startsWith('column-')) {
-                handleColumnDragEnd(event);
-            } else if (active.id.toString().startsWith('row-')) {
-                handleRowDragEnd(event);
-            }
-        }}
+        onDragEnd={handleColumnDragEnd}
+        modifiers={[restrictToHorizontalAxis]}
         sensors={sensors}
     >
         <div className="space-y-4">
@@ -325,29 +310,32 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                     />
                 </div>
             </div>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                    const header = getHeaderName(column.id);
+            <div className="flex items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="ml-auto">
+                        Columnas <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                    {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                        const header = getHeaderName(column.id);
 
-                    return (
-                    <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                    >
-                        {header}
-                    </DropdownMenuCheckboxItem>
-                    );
-                })}
-                </DropdownMenuContent>
-            </DropdownMenu>
+                        return (
+                        <DropdownMenuCheckboxItem
+                            key={column.id}
+                            className="capitalize"
+                            checked={column.getIsVisible()}
+                            onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                        >
+                            {header}
+                        </DropdownMenuCheckboxItem>
+                        );
+                    })}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <ExportButton table={table} filename={filename} />
+            </div>
         </div>
 
 
@@ -369,10 +357,6 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                     ))}
                 </TableHeader>
                 <TableBody>
-                    <SortableContext 
-                        items={dataState.map(d => `row-${d.id_documento}`)} 
-                        strategy={verticalListSortingStrategy}
-                    >
                     {rows.length > 0 ? (
                         rows.map((row) => (
                              renderRow ? renderRow(row) : <DraggableTableRow key={row.original.id_documento} row={row} />
@@ -384,7 +368,6 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                         </TableCell>
                         </TableRow>
                     )}
-                    </SortableContext>
                 </TableBody>
             </Table>
         </div>

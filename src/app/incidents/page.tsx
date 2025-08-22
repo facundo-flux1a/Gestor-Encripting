@@ -6,7 +6,6 @@ import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { useEffect, useState } from "react";
 import type { Document } from "@/lib/types";
 import type { IncidentsAnalyticsData } from "@/components/incidents/incidents-analytics";
-import { ExportButton } from "@/components/dashboard/export-button";
 import { Loader2 } from "lucide-react";
 import { IncidentsAnalytics } from "@/components/incidents/incidents-analytics";
 import { AnalyzeDocumentsCard } from "@/components/incidents/analyze-documents-card";
@@ -71,9 +70,8 @@ export default function IncidentsPage() {
                 <div>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-2xl font-semibold tracking-tight">Documentos con Incidencias Pendientes</h3>
-                        <ExportButton data={documents} filename="incidencias" />
                     </div>
-                    <DocumentsTable documents={documents} isIncidentsPage={true} />
+                    <DocumentsTable documents={documents} isIncidentsPage={true} filename="incidencias" />
                 </div>
             </div>
         )}

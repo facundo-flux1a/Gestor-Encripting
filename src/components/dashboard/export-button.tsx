@@ -5,130 +5,94 @@ import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import type { Document } from '@/lib/types';
+import type { Table as TanstackTable, flexRender } from '@tanstack/react-table';
 
 interface ExportButtonProps {
-    data: any[];
+    table: TanstackTable<any>;
     filename: string;
 }
 
-const isDocumentData = (data: any[]): boolean => {
-    if (data.length === 0) return false;
-    const item = data[0];
-    return 'id_documento' in item && 'numero_factura' in item && 'iva_details' in item;
+const getCellString = (cell: any) => {
+    const value = cell.getValue();
+    if (value instanceof Date) {
+        return value.toLocaleDateString('es-ES');
+    }
+    if (typeof value === 'boolean') {
+        return value ? 'Sí' : 'No';
+    }
+    if (typeof value === 'number') {
+        // Attempt to format as currency if it looks like one
+        if (cell.column.id.toLowerCase().includes('total') || cell.column.id.toLowerCase().includes('base') || cell.column.id.toLowerCase().includes('iva')) {
+             return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+        }
+        return value.toString();
+    }
+    return String(value ?? '');
 }
 
-const flattenDocumentForExport = (doc: Document) => {
-    const base = {
-        'Nº Factura': doc.numero_factura,
-        'Tipo Documento': doc.tipo_documento,
-        'Fecha Emisión': doc.fecha_emision ? new Date(doc.fecha_emision).toLocaleDateString('es-ES') : '',
-        'Fecha Vencimiento': doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toLocaleDateString('es-ES') : '',
-        'Proveedor': doc.proveedor,
-        'CIF': doc.cif,
-        'Total Base Imponible': doc.base_imponible,
-        'Total IVA': doc.iva,
-        'Total': doc.total,
-        'Moneda': doc.moneda,
-        'Observaciones': doc.observaciones,
-        'Estado': doc.verificado ? 'Validado' : 'Pendiente',
-        'Incidencia Razón': doc.incidencia_razon,
-    };
 
-    const ivaPivoted: { [key: string]: number | undefined } = {};
-    const ivaTypes = [21, 10, 4, 0]; 
-    
-    ivaTypes.forEach(type => {
-        const ivaDetail = doc.iva_details.find(i => i.porcentaje === type);
-        ivaPivoted[`Base IVA ${type}%`] = ivaDetail?.base_imponible;
-        ivaPivoted[`Cuota IVA ${type}%`] = ivaDetail?.cuota;
-    });
-
-    return { ...base, ...ivaPivoted };
-};
-
-
-const flattenObject = (obj: any, parentKey = '', res: { [key: string]: any } = {}): { [key: string]: any } => {
-    for (let key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const propName = parentKey ? `${parentKey}_${key}` : key;
-            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-                flattenObject(obj[key], propName, res);
-            } else if (Array.isArray(obj[key])) {
-                res[propName] = JSON.stringify(obj[key]);
-            } else {
-                res[propName] = obj[key];
-            }
-        }
-    }
-    return res;
-};
-
-const convertToCsv = (data: any[], isDocument: boolean): string => {
-    if (data.length === 0) return '';
-    const flattenedData = isDocument ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
-    
-    if (flattenedData.length === 0) return '';
-
-    const headers = Object.keys(flattenedData[0]);
-    const csvRows = [
-        headers.join(','),
-        ...flattenedData.map(row => 
-            headers.map(header => {
-                const value = row[header as keyof typeof row];
-                const stringValue = value === null || value === undefined ? '' : String(value);
-                return JSON.stringify(stringValue);
-            }).join(',')
-        )
-    ];
-    return csvRows.join('\n');
-};
-
-const convertToTxt = (data: any[], isDocument: boolean): string => {
-    const flattenedData = isDocument ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
-    return flattenedData.map(item => JSON.stringify(item, null, 2)).join('\n\n' + '-'.repeat(80) + '\n\n');
-};
-
-const downloadFile = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-};
-
-export function ExportButton({ data, filename }: ExportButtonProps) {
+export function ExportButton({ table, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        if (!data || data.length === 0) {
+        const headers = table.getVisibleFlatColumns()
+            .map(column => {
+                const headerDef = column.columnDef.header;
+                if (typeof headerDef === 'string') return headerDef;
+                // Simplified text extraction for non-string headers
+                return column.id;
+            });
+            
+        const rows = table.getRowModel().rows.map(row => {
+            const rowData: { [key: string]: any } = {};
+            row.getVisibleCells().forEach(cell => {
+                const header = headers[cell.column.getIndex()];
+                rowData[header] = getCellString(cell);
+            });
+            return rowData;
+        });
+
+        if (rows.length === 0) {
             console.warn("No data to export.");
             return;
         }
 
-        const isDoc = isDocumentData(data);
-        const flattenedData = isDoc ? data.map(d => flattenDocumentForExport(d as Document)) : data.map(row => flattenObject(row));
-
         switch (format) {
             case 'excel':
-                const worksheet = XLSX.utils.json_to_sheet(flattenedData);
+                const worksheet = XLSX.utils.json_to_sheet(rows);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
                 XLSX.writeFile(workbook, `${filename}.xlsx`);
                 break;
-            case 'csv':
-                const csvContent = convertToCsv(data, isDoc);
+            case 'csv': {
+                const csvContent = [
+                    headers.join(','),
+                    ...rows.map(row => headers.map(header => JSON.stringify(row[header] ?? '')).join(','))
+                ].join('\n');
                 downloadFile(csvContent, `${filename}.csv`, 'text/csv;charset=utf-8;');
                 break;
-            case 'txt':
-                const txtContent = convertToTxt(data, isDoc);
+            }
+            case 'txt': {
+                 const txtContent = rows.map(row => 
+                    headers.map(header => `${header}: ${row[header] ?? ''}`).join('\n')
+                 ).join('\n\n' + '-'.repeat(40) + '\n\n');
                 downloadFile(txtContent, `${filename}.txt`, 'text/plain;charset=utf-8;');
                 break;
+            }
         }
     };
+    
+    const downloadFile = (content: string, filename: string, mimeType: string) => {
+        const blob = new Blob([`\uFEFF${content}`], { type: mimeType }); // Add BOM for Excel UTF-8 compatibility
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
 
     return (
         <DropdownMenu>
