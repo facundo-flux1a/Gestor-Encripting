@@ -18,9 +18,6 @@ import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// The workerSrc should be configured only on the client side.
-// pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
-
 interface UploadDocumentDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -28,28 +25,57 @@ interface UploadDocumentDialogProps {
 }
 
 const extractTextFromPdf = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-    let fullText = '';
-    
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
+    try {
+        const arrayBuffer = await file.arrayBuffer();
         
-        // Extraer todo el texto de cada página preservando espacios y saltos de línea
-        const pageText = textContent.items
-            .map((item: any) => {
-                if ('str' in item) {
-                    return item.str;
-                }
-                return '';
-            })
-            .join(' ');
+        // Configurar opciones para el documento
+        const loadingTask = pdfjsLib.getDocument({
+            data: arrayBuffer,
+            useSystemFonts: true,
+            disableFontFace: false,
+        });
         
-        fullText += `--- Página ${i} ---\n${pageText}\n\n`;
+        const pdf = await loadingTask.promise;
+        let fullText = '';
+        
+        console.log(`📖 Procesando PDF con ${pdf.numPages} páginas`);
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+            console.log(`🔄 Procesando página ${i}/${pdf.numPages}`);
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            // Extraer todo el texto de cada página preservando espacios y saltos de línea
+            const pageText = textContent.items
+                .map((item: any) => {
+                    if ('str' in item && item.str) {
+                        return item.str;
+                    }
+                    return '';
+                })
+                .filter(text => text.trim().length > 0) // Filtrar strings vacíos
+                .join(' ');
+            
+            if (pageText.trim()) {
+                fullText += `--- Página ${i} ---\n${pageText.trim()}\n\n`;
+            }
+            
+            // Liberar recursos de la página
+            page.cleanup();
+        }
+        
+        // Liberar recursos del documento
+        pdf.destroy();
+        
+        const result = fullText.trim();
+        console.log(`✅ Texto extraído exitosamente: ${result.length} caracteres`);
+        
+        return result;
+        
+    } catch (error) {
+        console.error('❌ Error al extraer texto del PDF:', error);
+        throw new Error(`No se pudo extraer el texto del PDF: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
-    
-    return fullText.trim();
 };
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
@@ -57,11 +83,14 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [currentFileProgress, setCurrentFileProgress] = useState<string>('');
+  const [isWorkerReady, setIsWorkerReady] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Configure the worker source only on the client side after the component has mounted.
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
+      // Configurar el worker de PDF.js solo en el lado del cliente
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      setIsWorkerReady(true);
+      console.log('✅ Worker PDF.js configurado en el cliente');
   }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -88,6 +117,15 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
       return;
     }
 
+    if (!isWorkerReady) {
+      toast({
+        title: 'Error',
+        description: 'El procesador de PDF aún no está listo. Intenta nuevamente.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setUploadProgress({ current: 0, total: files.length });
 
@@ -96,19 +134,16 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        setCurrentFileProgress(`Procesando: ${file.name}`);
+        setCurrentFileProgress(`Extrayendo texto: ${file.name}`);
         setUploadProgress({ current: i + 1, total: files.length });
         
         try {
-            // Extraer todo el texto del PDF
-            console.log(`Extrayendo texto de ${file.name}...`);
+            // Extraer todo el texto del PDF usando la función mejorada
+            console.log(`🔄 Extrayendo texto de ${file.name}...`);
             const extractedText = await extractTextFromPdf(file);
             
-            if (!extractedText.trim()) {
-                throw new Error('No se pudo extraer texto del PDF');
-            }
-
-            console.log(`Texto extraído (${extractedText.length} caracteres):`, extractedText.substring(0, 200) + '...');
+            console.log(`📝 Texto extraído exitosamente: ${extractedText.length} caracteres`);
+            setCurrentFileProgress(`Enviando: ${file.name}`);
             
             // Crear FormData con el archivo y el texto extraído
             const formData = new FormData();
@@ -127,9 +162,9 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             
         } catch (error: any) {
             errorCount++;
-            console.error(`Error procesando ${file.name}:`, error);
+            console.error(`❌ Error procesando ${file.name}:`, error);
             toast({
-              title: `❌ Error al subir ${file.name}`,
+              title: `❌ Error: ${file.name}`,
               description: error.message || 'Ocurrió un problema al procesar o subir el archivo.',
               variant: 'destructive',
             });
@@ -170,7 +205,12 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos PDF. Se extraerá todo el contenido de texto y se procesará automáticamente.
+            Selecciona uno o más archivos PDF. Se extraerá todo el contenido de texto automáticamente.
+            {!isWorkerReady && (
+              <div className="mt-2 text-orange-600 text-sm">
+                ⚠️ Configurando procesador de PDF...
+              </div>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
@@ -178,7 +218,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
               isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            } ${isLoading ? 'pointer-events-none opacity-50' : ''}`}
+            } ${isLoading || !isWorkerReady ? 'pointer-events-none opacity-50' : ''}`}
           >
             <input {...getInputProps()} disabled={isLoading} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
@@ -244,13 +284,18 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             </Button>
           <Button 
             onClick={handleUpload} 
-            disabled={files.length === 0 || isLoading} 
+            disabled={files.length === 0 || isLoading || !isWorkerReady} 
             className="w-full sm:w-auto"
           >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Procesando...
+              </>
+            ) : !isWorkerReady ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Inicializando PDF...
               </>
             ) : (
              `Subir ${files.length} Archivo${files.length > 1 ? 's' : ''}`
