@@ -18,7 +18,8 @@ import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use a specific, known-working version of the worker to avoid mismatches.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -30,19 +31,32 @@ const extractTextFromPdf = async (file: File): Promise<string> => {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
     let fullText = '';
+    
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => ('str' in item ? item.str : '')).join(' ');
-        fullText += pageText + '\n';
+        
+        // Extraer todo el texto de cada página preservando espacios y saltos de línea
+        const pageText = textContent.items
+            .map((item: any) => {
+                if ('str' in item) {
+                    return item.str;
+                }
+                return '';
+            })
+            .join(' ');
+        
+        fullText += `--- Página ${i} ---\n${pageText}\n\n`;
     }
-    return fullText;
-}
+    
+    return fullText.trim();
+};
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [currentFileProgress, setCurrentFileProgress] = useState<string>('');
   const { toast } = useToast();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -72,26 +86,45 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setIsLoading(true);
     setUploadProgress({ current: 0, total: files.length });
 
+    let successCount = 0;
+    let errorCount = 0;
+
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        setCurrentFileProgress(`Procesando: ${file.name}`);
         setUploadProgress({ current: i + 1, total: files.length });
         
         try {
+            // Extraer todo el texto del PDF
+            console.log(`Extrayendo texto de ${file.name}...`);
             const extractedText = await extractTextFromPdf(file);
             
+            if (!extractedText.trim()) {
+                throw new Error('No se pudo extraer texto del PDF');
+            }
+
+            console.log(`Texto extraído (${extractedText.length} caracteres):`, extractedText.substring(0, 200) + '...');
+            
+            // Crear FormData con el archivo y el texto extraído
             const formData = new FormData();
             formData.append('file', file);
             formData.append('text', extractedText);
+            formData.append('fileName', file.name);
 
+            // Enviar al servicio de upload
             const result = await uploadDocument(formData);
             
+            successCount++;
             toast({
-              title: `Éxito: ${file.name}`,
+              title: `✅ Éxito: ${file.name}`,
               description: result.message,
             });
+            
         } catch (error: any) {
+            errorCount++;
+            console.error(`Error procesando ${file.name}:`, error);
             toast({
-              title: `Error al subir ${file.name}`,
+              title: `❌ Error al subir ${file.name}`,
               description: error.message || 'Ocurrió un problema al procesar o subir el archivo.',
               variant: 'destructive',
             });
@@ -101,21 +134,29 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setIsLoading(false);
     setFiles([]); 
     setUploadProgress({ current: 0, total: 0 });
+    setCurrentFileProgress('');
+    
+    // Toast de resumen final
     toast({
-        title: 'Proceso Finalizado',
-        description: 'Se ha completado la subida de todos los archivos seleccionados.',
+        title: '📋 Proceso Finalizado',
+        description: `${successCount} archivos subidos exitosamente. ${errorCount} errores.`,
     });
-    onUploadSuccess();
+    
+    if (successCount > 0) {
+        onUploadSuccess();
+    }
     setIsOpen(false);
   };
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) {
+    if (!open && !isLoading) {
       setFiles([]);
-      setIsLoading(false);
       setUploadProgress({ current: 0, total: 0 });
+      setCurrentFileProgress('');
     }
-    setIsOpen(open);
+    if (!isLoading) {
+      setIsOpen(open);
+    }
   };
 
   return (
@@ -124,7 +165,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos PDF. Se analizarán para procesar su contenido.
+            Selecciona uno o más archivos PDF. Se extraerá todo el contenido de texto y se procesará automáticamente.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
@@ -132,9 +173,9 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
               isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            }`}
+            } ${isLoading ? 'pointer-events-none opacity-50' : ''}`}
           >
-            <input {...getInputProps()} />
+            <input {...getInputProps()} disabled={isLoading} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
             {isDragActive ? (
               <p>Suelta los archivos aquí...</p>
@@ -142,6 +183,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
               <p className="text-center">Arrastra y suelta PDFs aquí, o haz clic para seleccionar</p>
             )}
           </div>
+          
           {files.length > 0 && (
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                 <h4 className="text-sm font-medium">Archivos seleccionados ({files.length}):</h4>
@@ -149,29 +191,57 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
                      <div key={file.name} className="flex items-center justify-between p-2 bg-muted rounded-md">
                         <div className="flex items-center gap-2 min-w-0">
                             <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">{file.name}</span>
+                            <div className="min-w-0">
+                                <span className="text-sm font-medium truncate block">{file.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </span>
+                            </div>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeFile(file.name)} disabled={isLoading}>
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 flex-shrink-0" 
+                            onClick={() => removeFile(file.name)} 
+                            disabled={isLoading}
+                        >
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
                 ))}
             </div>
           )}
-           {isLoading && (
-            <div className="space-y-2">
-                 <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="w-full" />
-                 <p className="text-sm text-center text-muted-foreground">
-                    Procesando {uploadProgress.current} de {uploadProgress.total} archivos...
-                 </p>
+          
+          {isLoading && (
+            <div className="space-y-3">
+                <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="w-full" />
+                <div className="text-center">
+                    <p className="text-sm text-muted-foreground">
+                        Procesando {uploadProgress.current} de {uploadProgress.total} archivos...
+                    </p>
+                    {currentFileProgress && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {currentFileProgress}
+                        </p>
+                    )}
+                </div>
             </div>
           )}
         </div>
         <DialogFooter className="flex-col-reverse sm:flex-row">
-            <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading} className="w-full sm:w-auto">
+            <Button 
+                variant="outline" 
+                onClick={() => setIsOpen(false)} 
+                disabled={isLoading} 
+                className="w-full sm:w-auto"
+            >
               Cancelar
             </Button>
-          <Button onClick={handleUpload} disabled={files.length === 0 || isLoading} className="w-full sm:w-auto">
+          <Button 
+            onClick={handleUpload} 
+            disabled={files.length === 0 || isLoading} 
+            className="w-full sm:w-auto"
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
