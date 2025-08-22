@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
   Dialog,
@@ -18,8 +18,8 @@ import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use a specific, known-working version of the worker to avoid mismatches.
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
+// The workerSrc should be configured only on the client side.
+// pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -58,6 +58,11 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [currentFileProgress, setCurrentFileProgress] = useState<string>('');
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Configure the worker source only on the client side after the component has mounted.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles(prevFiles => [...prevFiles, ...acceptedFiles]);
