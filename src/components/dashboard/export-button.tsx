@@ -2,11 +2,14 @@
 
 'use client';
 
+import * as React from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import type { Table as TanstackTable, flexRender, Cell } from '@tanstack/react-table';
+import type { Table as TanstackTable, Cell } from '@tanstack/react-table';
+import { flexRender } from '@tanstack/react-table';
+
 
 interface ExportButtonProps {
     table: TanstackTable<any>;
@@ -147,4 +150,3 @@ export function ExportButton({ table, filename }: ExportButtonProps) {
         </DropdownMenu>
     );
 }
-
