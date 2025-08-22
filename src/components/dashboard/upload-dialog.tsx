@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { extractTextFromPdf } from '@/utils/pdf-worker-setup';
-import * as pdfjsLib from 'pdfjs-dist';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -36,15 +35,8 @@ interface UploadableFile {
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
   const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isWorkerReady, setIsWorkerReady] = useState(false);
+  const [isWorkerReady, setIsWorkerReady] = useState(true); // Assume ready, handled by utility
   const { toast } = useToast();
-
-  useEffect(() => {
-    // We just need to set the worker source. The actual setup is now in the utility file.
-    // This ensures pdf.js knows where to find its worker script.
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-    setIsWorkerReady(true);
-  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
@@ -83,7 +75,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     let extractedText = '';
 
     try {
-      // Step 1: Extract text if it's a PDF
+      // Step 1: Extract text
       if (file.type === 'application/pdf') {
         updateFileStatus(file.name, 'extracting', 'Extrayendo texto...');
         extractedText = await extractTextFromPdf(file);
@@ -116,9 +108,9 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     setIsProcessing(true);
 
     const promises = uploadableFiles.map(processFile);
-    const results = await Promise.allSettled(promises);
+    await Promise.allSettled(promises);
     
-    const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+    const successCount = uploadableFiles.filter(f => f.status === 'success').length;
 
     setIsProcessing(false);
 
@@ -130,10 +122,10 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     if (successCount > 0) {
       onUploadSuccess();
     }
-    // Clear all files after processing is done to allow for a new batch
-    setUploadableFiles([]);
+    
     if (successCount === uploadableFiles.length) {
        setTimeout(() => {
+        setUploadableFiles([]);
         setIsOpen(false);
       }, 1000);
     }
