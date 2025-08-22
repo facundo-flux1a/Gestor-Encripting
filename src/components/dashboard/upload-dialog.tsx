@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import {
   Dialog,
   DialogContent,
@@ -10,10 +9,11 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileUp, FileText, X } from 'lucide-react';
+import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
 import { extractTextFromPdf } from '@/utils/pdf-worker-setup';
@@ -25,127 +25,134 @@ interface UploadDocumentDialogProps {
   onUploadSuccess: () => void;
 }
 
+type FileStatus = 'pending' | 'extracting' | 'uploading' | 'success' | 'error';
+
+interface UploadableFile {
+    file: File;
+    status: FileStatus;
+    progress: number;
+    message?: string;
+}
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
-  const [currentFileProgress, setCurrentFileProgress] = useState<string>('');
+  const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isWorkerReady, setIsWorkerReady] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-      // Configurar el worker de PDF.js solo en el lado del cliente
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-      setIsWorkerReady(true);
-      console.log('✅ Worker PDF.js configurado en el cliente');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    setIsWorkerReady(true);
   }, []);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(prevFiles => [...prevFiles, ...acceptedFiles]);
-  }, []);
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
+    const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
+      file,
+      status: 'pending',
+      progress: 0,
+    }));
+    setUploadableFiles(prev => [...prev, ...newFiles]);
+
+    if (fileRejections.length > 0) {
+      toast({
+        title: 'Algunos archivos no fueron aceptados',
+        description: `${fileRejections.length} archivo(s) no se pudieron agregar.`,
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
   });
-  
+
   const removeFile = (fileName: string) => {
-    setFiles(files.filter(file => file.name !== fileName));
+    setUploadableFiles(files => files.filter(f => f.file.name !== fileName));
+  };
+
+  const updateFileStatus = (fileName: string, status: FileStatus, message?: string) => {
+    setUploadableFiles(prev => prev.map(uf => 
+      uf.file.name === fileName ? { ...uf, status, message } : uf
+    ));
+  };
+  
+  const processFile = async (uploadableFile: UploadableFile): Promise<boolean> => {
+    const { file } = uploadableFile;
+    let extractedText = '';
+
+    try {
+      // Step 1: Extract text if it's a PDF
+      if (file.type === 'application/pdf') {
+        updateFileStatus(file.name, 'extracting');
+        extractedText = await extractTextFromPdf(file);
+      } else {
+        extractedText = `Archivo no-PDF: ${file.name}, Tamaño: ${file.size} bytes.`;
+      }
+      
+      // Step 2: Upload
+      updateFileStatus(file.name, 'uploading');
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('text', extractedText);
+      formData.append('fileName', file.name);
+
+      const result = await uploadDocument(formData);
+      
+      updateFileStatus(file.name, 'success', result.message);
+      return true;
+
+    } catch (error: any) {
+      console.error(`Error procesando ${file.name}:`, error);
+      updateFileStatus(file.name, 'error', error.message || 'Error desconocido');
+      return false;
+    }
   };
 
   const handleUpload = async () => {
-    if (files.length === 0) {
-      toast({
-        title: 'Error',
-        description: 'Por favor, selecciona al menos un archivo PDF para subir.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    if (uploadableFiles.length === 0) return;
 
-    if (!isWorkerReady) {
-      toast({
-        title: 'Error',
-        description: 'El procesador de PDF aún no está listo. Intenta nuevamente.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    setIsProcessing(true);
 
-    setIsLoading(true);
-    setUploadProgress({ current: 0, total: files.length });
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setCurrentFileProgress(`Extrayendo texto: ${file.name}`);
-        setUploadProgress({ current: i + 1, total: files.length });
-        
-        try {
-            // Extraer todo el texto del PDF usando la función mejorada
-            console.log(`🔄 Extrayendo texto de ${file.name}...`);
-            const extractedText = await extractTextFromPdf(file);
-            
-            console.log(`📝 Texto extraído exitosamente: ${extractedText.length} caracteres`);
-            setCurrentFileProgress(`Enviando: ${file.name}`);
-            
-            // Crear FormData con el archivo y el texto extraído
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('text', extractedText);
-            formData.append('fileName', file.name);
-
-            // Enviar al servicio de upload
-            const result = await uploadDocument(formData);
-            
-            successCount++;
-            toast({
-              title: `✅ Éxito: ${file.name}`,
-              description: result.message,
-            });
-            
-        } catch (error: any) {
-            errorCount++;
-            console.error(`❌ Error procesando ${file.name}:`, error);
-            toast({
-              title: `❌ Error: ${file.name}`,
-              description: error.message || 'Ocurrió un problema al procesar o subir el archivo.',
-              variant: 'destructive',
-            });
-        }
-    }
-
-    setIsLoading(false);
-    setFiles([]); 
-    setUploadProgress({ current: 0, total: 0 });
-    setCurrentFileProgress('');
+    const promises = uploadableFiles.map(processFile);
+    const results = await Promise.allSettled(promises);
     
-    // Toast de resumen final
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+
+    setIsProcessing(false);
+
     toast({
-        title: '📋 Proceso Finalizado',
-        description: `${successCount} archivos subidos exitosamente. ${errorCount} errores.`,
+      title: 'Proceso Finalizado',
+      description: `${successCount} de ${uploadableFiles.length} archivos subidos exitosamente.`,
     });
-    
+
     if (successCount > 0) {
-        onUploadSuccess();
+      onUploadSuccess();
+      // Reset only on full success or leave files with errors? Let's clear all.
+      setTimeout(() => {
+        setUploadableFiles([]);
+        setIsOpen(false);
+      }, 1500);
     }
-    setIsOpen(false);
   };
 
   const handleOpenChange = (open: boolean) => {
-    if (!open && !isLoading) {
-      setFiles([]);
-      setUploadProgress({ current: 0, total: 0 });
-      setCurrentFileProgress('');
+    if (isProcessing) return;
+    if (!open) {
+      setUploadableFiles([]);
     }
-    if (!isLoading) {
-      setIsOpen(open);
-    }
+    setIsOpen(open);
   };
+  
+  const getStatusIcon = (status: FileStatus) => {
+      switch (status) {
+          case 'pending': return <FileText className="h-5 w-5 text-muted-foreground" />;
+          case 'extracting':
+          case 'uploading': return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
+          case 'success': return <CheckCircle className="h-5 w-5 text-green-500" />;
+          case 'error': return <AlertCircle className="h-5 w-5 text-destructive" />;
+      }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -153,42 +160,41 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos PDF. Se extraerá todo el contenido de texto automáticamente.
-            {!isWorkerReady && (
-              <div className="mt-2 text-orange-600 text-sm">
-                ⚠️ Configurando procesador de PDF...
-              </div>
-            )}
+            Selecciona uno o más archivos. El texto de los PDFs se extraerá y enviará para su procesamiento.
           </DialogDescription>
         </DialogHeader>
+        
         <div className="py-4 space-y-4">
           <div
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
               isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            } ${isLoading || !isWorkerReady ? 'pointer-events-none opacity-50' : ''}`}
+            } ${isProcessing || !isWorkerReady ? 'pointer-events-none opacity-50' : ''}`}
           >
-            <input {...getInputProps()} disabled={isLoading} />
+            <input {...getInputProps()} disabled={isProcessing || !isWorkerReady} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
             {isDragActive ? (
               <p>Suelta los archivos aquí...</p>
             ) : (
-              <p className="text-center">Arrastra y suelta PDFs aquí, o haz clic para seleccionar</p>
+              <p className="text-center">Arrastra y suelta archivos aquí, o haz clic para seleccionar</p>
+            )}
+             {!isWorkerReady && (
+              <p className="text-xs text-orange-500 mt-2">Inicializando procesador de PDF...</p>
             )}
           </div>
           
-          {files.length > 0 && (
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                <h4 className="text-sm font-medium">Archivos seleccionados ({files.length}):</h4>
-                {files.map(file => (
-                     <div key={file.name} className="flex items-center justify-between p-2 bg-muted rounded-md">
+          {uploadableFiles.length > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                <h4 className="text-sm font-medium">Archivos en cola ({uploadableFiles.length}):</h4>
+                {uploadableFiles.map(({file, status, message}) => (
+                     <div key={file.name} className="flex items-center justify-between p-2 bg-muted rounded-md gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                           {getStatusIcon(status)}
                             <div className="min-w-0">
-                                <span className="text-sm font-medium truncate block">{file.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </span>
+                                <p className="text-sm font-medium truncate block" title={file.name}>{file.name}</p>
+                                <p className="text-xs text-muted-foreground truncate" title={message}>
+                                    {status === 'pending' ? `${(file.size / 1024).toFixed(1)} KB` : message || status}
+                                </p>
                             </div>
                         </div>
                         <Button 
@@ -196,7 +202,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
                             size="icon" 
                             className="h-6 w-6 flex-shrink-0" 
                             onClick={() => removeFile(file.name)} 
-                            disabled={isLoading}
+                            disabled={isProcessing}
                         >
                             <X className="h-4 w-4" />
                         </Button>
@@ -204,50 +210,26 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
                 ))}
             </div>
           )}
-          
-          {isLoading && (
-            <div className="space-y-3">
-                <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="w-full" />
-                <div className="text-center">
-                    <p className="text-sm text-muted-foreground">
-                        Procesando {uploadProgress.current} de {uploadProgress.total} archivos...
-                    </p>
-                    {currentFileProgress && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {currentFileProgress}
-                        </p>
-                    )}
-                </div>
-            </div>
-          )}
         </div>
-        <DialogFooter className="flex-col-reverse sm:flex-row">
-            <Button 
-                variant="outline" 
-                onClick={() => setIsOpen(false)} 
-                disabled={isLoading} 
-                className="w-full sm:w-auto"
-            >
-              Cancelar
-            </Button>
+        
+        <DialogFooter>
+          <DialogClose asChild>
+              <Button variant="outline" disabled={isProcessing}>
+                Cancelar
+              </Button>
+          </DialogClose>
           <Button 
             onClick={handleUpload} 
-            disabled={files.length === 0 || isLoading || !isWorkerReady} 
-            className="w-full sm:w-auto"
+            disabled={uploadableFiles.length === 0 || isProcessing || !isWorkerReady} 
           >
-            {isLoading ? (
-              <>
+            {isProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Procesando...
-              </>
-            ) : !isWorkerReady ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Inicializando PDF...
-              </>
             ) : (
-             `Subir ${files.length} Archivo${files.length > 1 ? 's' : ''}`
+                <FileUp className="mr-2 h-4 w-4" />
             )}
+            <span>
+                {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.length} archivo${uploadableFiles.length !== 1 ? 's' : ''}`}
+            </span>
           </Button>
         </DialogFooter>
       </DialogContent>
