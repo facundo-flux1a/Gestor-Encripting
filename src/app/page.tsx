@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'; 
 import { Loader2 } from 'lucide-react';
 
 // Este componente actúa como guardian y redirige a la página apropiada
