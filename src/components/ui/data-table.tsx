@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -16,10 +15,10 @@ import {
   useReactTable,
   getFacetedRowModel,
   getFacetedUniqueValues,
-  Table as ReactTable,
-  Row,
-  Header,
-  RowData
+  type Table as ReactTable,
+  type Row,
+  type Header as TableHeaderType,
+  type RowData
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -69,7 +68,7 @@ interface DataTableProps<TData, TValue> {
 const DraggableTableHeader = <TData, TValue>({
   header,
 }: {
-  header: Header<TData, TValue>;
+  header: TableHeaderType<TData, TValue>;
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
@@ -257,37 +256,23 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const getHeaderName = (columnId: string) => {
     const col = table.getColumn(columnId);
     if (!col) return columnId;
-    
+
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
-    
+
     if (headerDef) {
        // Create a temporary header to render its content
-       const tempHeader = new Header<TData, unknown>(
+       const context = {
          table,
-         {
-           id: col.id,
-           column: col,
-           depth: 0,
-           index: 0,
-           isPlaceholder: false,
-           placeholderId: '',
-           subHeaders: [],
-           colSpan: 1,
-           rowSpan: 1,
-           getLeafHeaders: () => [],
-           // @ts-ignore - private method but necessary
-           getContext: () => ({ table, header: tempHeader, column: col })
-         }
-       );
-       const context = tempHeader.getContext();
-       const renderedHeader = flexRender(headerDef, context);
+         header: { column: col } as TableHeaderType<TData, unknown>, // Minimal context
+       };
+       const renderedHeader = flexRender(headerDef, context as any);
        if (typeof renderedHeader === 'string') return renderedHeader;
     }
 
     const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
-  }
+}
   
   const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -423,3 +408,5 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     </DndContext>
   );
 }
+
+    
