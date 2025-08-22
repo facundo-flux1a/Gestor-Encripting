@@ -14,7 +14,7 @@ const UploadResponseSchema = z.object({
  * Gestiona la subida de un documento a S3 y notifica a un webhook.
  * 1. Genera un nombre de archivo único con timestamp.
  * 2. Sube el archivo al bucket S3/MinIO con permisos públicos.
- * 3. Envía la URL pública del archivo al webhook de n8n.
+ * 3. Envía la ruta del archivo en el bucket al webhook de n8n.
  *
  * @param formData El FormData que contiene el archivo ('file').
  * @returns Una promesa que se resuelve con un objeto indicando el éxito y el mensaje.
@@ -71,12 +71,12 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] Subida completada. URL pública: ${publicUrl}`);
 
-    // 4. Enviar la URL al webhook de n8n.
-    console.log(`[${originalFileName}] Notificando al webhook de n8n...`);
+    // 4. Enviar la RUTA (path) del archivo al webhook de n8n.
+    console.log(`[${originalFileName}] Notificando al webhook de n8n con la ruta: ${filePath}`);
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: publicUrl }), // Enviamos la URL en la propiedad 'text'
+      body: JSON.stringify({ text: filePath }), // Enviamos solo la ruta en la propiedad 'text'
     });
 
     if (!webhookResponse.ok) {
