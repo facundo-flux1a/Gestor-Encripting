@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -13,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle, Rocket } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 
 interface UploadDocumentDialogProps {
@@ -67,6 +68,9 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   };
   
   const processFile = async (uploadableFile: UploadableFile): Promise<boolean> => {
+    // Solo procesar archivos que están pendientes
+    if (uploadableFile.status !== 'pending') return true;
+
     const { file } = uploadableFile;
     try {
       updateFileStatus(file.name, 'uploading', 'Subiendo archivo...');
@@ -76,44 +80,38 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
       const result = await uploadDocument(formData);
       
-      updateFileStatus(file.name, 'success', result.message);
+      updateFileStatus(file.name, 'success', result.message || 'Archivo enviado para análisis.');
       return true;
 
     } catch (error: any) {
       console.error(`Error procesando ${file.name}:`, error);
-      updateFileStatus(file.name, 'error', error.message || 'Error desconocido');
+      updateFileStatus(file.name, 'error', error.message || 'Error desconocido al subir.');
       return false;
     }
   };
 
   const handleUpload = async () => {
-    if (uploadableFiles.length === 0) return;
+    const filesToUpload = uploadableFiles.filter(f => f.status === 'pending');
+    if (filesToUpload.length === 0) return;
 
     setIsProcessing(true);
 
-    const promises = uploadableFiles.map(processFile);
+    const promises = filesToUpload.map(processFile);
     await Promise.allSettled(promises);
     
-    const successCount = uploadableFiles.filter(f => f.status === 'success').length;
-
     setIsProcessing(false);
 
+    const successCount = uploadableFiles.filter(f => f.status === 'success').length;
     toast({
-      title: 'Proceso Finalizado',
-      description: `${successCount} de ${uploadableFiles.length} archivos subidos exitosamente.`,
+      title: 'Proceso de subida finalizado',
+      description: `${successCount} de ${uploadableFiles.length} archivos subidos correctamente.`,
     });
-
-    if (successCount > 0) {
-      onUploadSuccess();
-    }
-    
-    if (successCount === uploadableFiles.length) {
-       setTimeout(() => {
-        setUploadableFiles([]);
-        setIsOpen(false);
-      }, 1000);
-    }
   };
+
+  const handleClose = () => {
+      onUploadSuccess();
+      setIsOpen(false);
+  }
 
   const handleOpenChange = (open: boolean) => {
     if (isProcessing) return;
@@ -132,13 +130,16 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
       }
   }
 
+  const filesPending = uploadableFiles.some(f => f.status === 'pending');
+  const allFilesProcessed = uploadableFiles.length > 0 && !filesPending && !isProcessing;
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona uno o más archivos para subir. Serán procesados por el sistema.
+            Selecciona o arrastra archivos. Serán subidos y enviados para su procesamiento.
           </DialogDescription>
         </DialogHeader>
         
@@ -177,7 +178,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
                             size="icon" 
                             className="h-6 w-6 flex-shrink-0" 
                             onClick={() => removeFile(file.name)} 
-                            disabled={isProcessing}
+                            disabled={isProcessing || status !== 'pending'}
                         >
                             <X className="h-4 w-4" />
                         </Button>
@@ -188,24 +189,34 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         </div>
         
         <DialogFooter>
-          <DialogClose asChild>
-              <Button variant="outline" disabled={isProcessing}>
-                Cancelar
+          {!allFilesProcessed && (
+              <DialogClose asChild>
+                  <Button variant="outline" disabled={isProcessing}>
+                    Cancelar
+                  </Button>
+              </DialogClose>
+          )}
+
+          {allFilesProcessed ? (
+              <Button onClick={handleClose} className="bg-green-600 hover:bg-green-700">
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Finalizar
               </Button>
-          </DialogClose>
-          <Button 
-            onClick={handleUpload} 
-            disabled={uploadableFiles.length === 0 || isProcessing} 
-          >
-            {isProcessing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <FileUp className="mr-2 h-4 w-4" />
-            )}
-            <span>
-                {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.length} archivo${uploadableFiles.length !== 1 ? 's' : ''}`}
-            </span>
-          </Button>
+          ) : (
+             <Button 
+                onClick={handleUpload} 
+                disabled={!filesPending || isProcessing} 
+              >
+                {isProcessing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Rocket className="mr-2 h-4 w-4" />
+                )}
+                <span>
+                    {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.filter(f=>f.status === 'pending').length} archivo(s)`}
+                </span>
+              </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
