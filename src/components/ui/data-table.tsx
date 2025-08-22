@@ -18,7 +18,8 @@ import {
   getFacetedUniqueValues,
   Table as ReactTable,
   Row,
-  Header
+  Header,
+  RowData
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -256,13 +257,34 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const getHeaderName = (columnId: string) => {
     const col = table.getColumn(columnId);
     if (!col) return columnId;
+    
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
+    
     if (headerDef) {
-       const context = header.getContext();
+       // Create a temporary header to render its content
+       const tempHeader = new Header<TData, unknown>(
+         table,
+         {
+           id: col.id,
+           column: col,
+           depth: 0,
+           index: 0,
+           isPlaceholder: false,
+           placeholderId: '',
+           subHeaders: [],
+           colSpan: 1,
+           rowSpan: 1,
+           getLeafHeaders: () => [],
+           // @ts-ignore - private method but necessary
+           getContext: () => ({ table, header: tempHeader, column: col })
+         }
+       );
+       const context = tempHeader.getContext();
        const renderedHeader = flexRender(headerDef, context);
        if (typeof renderedHeader === 'string') return renderedHeader;
     }
+
     const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
@@ -319,7 +341,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                     {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                        const header = getHeaderName(column.id);
+                        const headerName = getHeaderName(column.id);
 
                         return (
                         <DropdownMenuCheckboxItem
@@ -328,7 +350,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                             checked={column.getIsVisible()}
                             onCheckedChange={(value) => column.toggleVisibility(!!value)}
                         >
-                            {header}
+                            {headerName}
                         </DropdownMenuCheckboxItem>
                         );
                     })}
