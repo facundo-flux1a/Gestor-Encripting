@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -261,13 +262,16 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     if (typeof headerDef === 'string') return headerDef;
 
     if (headerDef) {
-       // Create a temporary header to render its content
        const context = {
          table,
-         header: { column: col } as TableHeaderType<TData, unknown>, // Minimal context
+         header: { column: col } as TableHeaderType<TData, unknown>,
        };
        const renderedHeader = flexRender(headerDef, context as any);
        if (typeof renderedHeader === 'string') return renderedHeader;
+       // Attempt to extract from simple components
+       if (React.isValidElement(renderedHeader) && typeof renderedHeader.props.children === 'string') {
+          return renderedHeader.props.children;
+       }
     }
 
     const readableId = columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

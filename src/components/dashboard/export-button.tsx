@@ -1,55 +1,83 @@
 
+
 'use client';
 
 import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import type { Table as TanstackTable, flexRender } from '@tanstack/react-table';
+import type { Table as TanstackTable, flexRender, Cell } from '@tanstack/react-table';
 
 interface ExportButtonProps {
     table: TanstackTable<any>;
     filename: string;
 }
 
-const getCellString = (cell: any) => {
+const getCellString = (cell: Cell<any, unknown>) => {
     const value = cell.getValue();
+
     if (value instanceof Date) {
         return value.toLocaleDateString('es-ES');
     }
     if (typeof value === 'boolean') {
         return value ? 'Sí' : 'No';
     }
-    if (typeof value === 'number') {
-        // Attempt to format as currency if it looks like one
-        if (cell.column.id.toLowerCase().includes('total') || cell.column.id.toLowerCase().includes('base') || cell.column.id.toLowerCase().includes('iva')) {
-             return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+     if (typeof value === 'number') {
+        const columnId = cell.column.id.toLowerCase();
+        if (columnId.includes('total') || columnId.includes('base') || columnId.includes('iva') || columnId.includes('precio') || columnId.includes('importe')) {
+             return new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
         }
         return value.toString();
     }
+    if(value === null || value === undefined) {
+        return '';
+    }
+    
+    // For complex cells (like our EditableCell), we might need to look at the rendered content.
+    // This is a simple fallback. A more robust solution might need a custom `meta` prop on columns.
+    const rendered = flexRender(cell.column.columnDef.cell, cell.getContext());
+    if (typeof rendered === 'string' || typeof rendered === 'number') {
+        return String(rendered);
+    }
+    
     return String(value ?? '');
+}
+
+const getHeaderName = (table: TanstackTable<any>, columnId: string): string => {
+     const col = table.getColumn(columnId);
+    if (!col) return columnId;
+
+    const headerDef = col.columnDef.header;
+    if (typeof headerDef === 'string') return headerDef;
+
+    if (headerDef) {
+       const context = {
+         table,
+         header: { column: col } as any,
+       };
+       const renderedHeader = flexRender(headerDef, context);
+       if (typeof renderedHeader === 'string') return renderedHeader;
+        if (React.isValidElement(renderedHeader) && typeof renderedHeader.props.children === 'string') {
+          return renderedHeader.props.children;
+       }
+    }
+    return columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 
 export function ExportButton({ table, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        const headers = table.getVisibleFlatColumns()
-            .map(column => {
-                const headerDef = column.columnDef.header;
-                if (typeof headerDef === 'string') return headerDef;
-                // Simplified text extraction for non-string headers
-                return column.id;
-            });
-            
+        const headers = table.getVisibleFlatColumns().map(column => getHeaderName(table, column.id));
         const rows = table.getRowModel().rows.map(row => {
             const rowData: { [key: string]: any } = {};
             row.getVisibleCells().forEach(cell => {
-                const header = headers[cell.column.getIndex()];
-                rowData[header] = getCellString(cell);
+                 const header = getHeaderName(table, cell.column.id);
+                 rowData[header] = getCellString(cell);
             });
             return rowData;
         });
+
 
         if (rows.length === 0) {
             console.warn("No data to export.");
@@ -119,3 +147,4 @@ export function ExportButton({ table, filename }: ExportButtonProps) {
         </DropdownMenu>
     );
 }
+
