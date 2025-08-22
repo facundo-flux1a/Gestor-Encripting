@@ -68,7 +68,6 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   };
   
   const processFile = async (uploadableFile: UploadableFile): Promise<boolean> => {
-    // Solo procesar archivos que están pendientes
     if (uploadableFile.status !== 'pending') return true;
 
     const { file } = uploadableFile;
@@ -80,7 +79,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
       const result = await uploadDocument(formData);
       
-      updateFileStatus(file.name, 'success', result.message || 'Archivo enviado para análisis.');
+      updateFileStatus(file.name, 'success', 'Archivo enviado para análisis.');
       return true;
 
     } catch (error: any) {
@@ -95,23 +94,41 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     if (filesToUpload.length === 0) return;
 
     setIsProcessing(true);
+    setIsOpen(false); // Cierra el diálogo y muestra el progreso en el toast.
 
-    const promises = filesToUpload.map(processFile);
-    await Promise.allSettled(promises);
+    const { id: toastId, update } = toast({
+      title: "Iniciando proceso de subida...",
+      description: `Preparando ${filesToUpload.length} archivo(s).`,
+    });
+
+    for (let i = 0; i < filesToUpload.length; i++) {
+        const fileToProcess = filesToUpload[i];
+        update({
+            id: toastId,
+            title: `Procesando archivo ${i + 1} de ${filesToUpload.length}`,
+            description: `Subiendo: ${fileToProcess.file.name}`,
+        });
+        await processFile(fileToProcess);
+    }
     
     setIsProcessing(false);
 
     const successCount = uploadableFiles.filter(f => f.status === 'success').length;
-    toast({
-      title: 'Proceso de subida finalizado',
-      description: `${successCount} de ${uploadableFiles.length} archivos subidos correctamente.`,
+    const errorCount = uploadableFiles.filter(f => f.status === 'error').length;
+    
+    update({
+        id: toastId,
+        title: "Proceso de subida finalizado",
+        description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
+        variant: errorCount > 0 ? "destructive" : "default",
     });
+    
+    if(successCount > 0) {
+        onUploadSuccess();
+    }
+    // Limpia los archivos del diálogo después de procesarlos
+    setUploadableFiles([]);
   };
-
-  const handleClose = () => {
-      onUploadSuccess();
-      setIsOpen(false);
-  }
 
   const handleOpenChange = (open: boolean) => {
     if (isProcessing) return;
@@ -131,7 +148,6 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   }
 
   const filesPending = uploadableFiles.some(f => f.status === 'pending');
-  const allFilesProcessed = uploadableFiles.length > 0 && !filesPending && !isProcessing;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -189,34 +205,24 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         </div>
         
         <DialogFooter>
-          {!allFilesProcessed && (
-              <DialogClose asChild>
-                  <Button variant="outline" disabled={isProcessing}>
-                    Cancelar
-                  </Button>
-              </DialogClose>
-          )}
-
-          {allFilesProcessed ? (
-              <Button onClick={handleClose} className="bg-green-600 hover:bg-green-700">
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Finalizar
+          <DialogClose asChild>
+              <Button variant="outline" disabled={isProcessing}>
+                Cancelar
               </Button>
-          ) : (
-             <Button 
-                onClick={handleUpload} 
-                disabled={!filesPending || isProcessing} 
-              >
-                {isProcessing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                    <Rocket className="mr-2 h-4 w-4" />
-                )}
-                <span>
-                    {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.filter(f=>f.status === 'pending').length} archivo(s)`}
-                </span>
-              </Button>
-          )}
+          </DialogClose>
+          <Button 
+            onClick={handleUpload} 
+            disabled={!filesPending || isProcessing} 
+          >
+            {isProcessing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+                <Rocket className="mr-2 h-4 w-4" />
+            )}
+            <span>
+                {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.filter(f=>f.status === 'pending').length} archivo(s)`}
+            </span>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
