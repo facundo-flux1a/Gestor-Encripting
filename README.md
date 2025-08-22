@@ -1,7 +1,7 @@
 it pu# Firebase Studio
-
+ 
 This is a NextJS starter in Firebase Studio.
-
+ aa
 To get started, take a look at src/app/page.tsx.
   src/components/dashboard/upload-dialog.tsx: Este es el componente de la interfaz de usuario (frontend).
 
