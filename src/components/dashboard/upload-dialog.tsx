@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { Progress } from '../ui/progress';
+import { extractTextFromPdf } from '@/utils/pdf-worker-setup';
 import * as pdfjsLib from 'pdfjs-dist';
 
 interface UploadDocumentDialogProps {
@@ -24,59 +25,6 @@ interface UploadDocumentDialogProps {
   onUploadSuccess: () => void;
 }
 
-const extractTextFromPdf = async (file: File): Promise<string> => {
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        
-        // Configurar opciones para el documento
-        const loadingTask = pdfjsLib.getDocument({
-            data: arrayBuffer,
-            useSystemFonts: true,
-            disableFontFace: false,
-        });
-        
-        const pdf = await loadingTask.promise;
-        let fullText = '';
-        
-        console.log(`📖 Procesando PDF con ${pdf.numPages} páginas`);
-        
-        for (let i = 1; i <= pdf.numPages; i++) {
-            console.log(`🔄 Procesando página ${i}/${pdf.numPages}`);
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            
-            // Extraer todo el texto de cada página preservando espacios y saltos de línea
-            const pageText = textContent.items
-                .map((item: any) => {
-                    if ('str' in item && item.str) {
-                        return item.str;
-                    }
-                    return '';
-                })
-                .filter(text => text.trim().length > 0) // Filtrar strings vacíos
-                .join(' ');
-            
-            if (pageText.trim()) {
-                fullText += `--- Página ${i} ---\n${pageText.trim()}\n\n`;
-            }
-            
-            // Liberar recursos de la página
-            page.cleanup();
-        }
-        
-        // Liberar recursos del documento
-        pdf.destroy();
-        
-        const result = fullText.trim();
-        console.log(`✅ Texto extraído exitosamente: ${result.length} caracteres`);
-        
-        return result;
-        
-    } catch (error) {
-        console.error('❌ Error al extraer texto del PDF:', error);
-        throw new Error(`No se pudo extraer el texto del PDF: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-    }
-};
 
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
