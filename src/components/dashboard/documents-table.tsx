@@ -95,12 +95,12 @@ const getColumns = (
             id: `base_${rate}`,
             header: `Base ${rate}%`,
             cell: ({ row }: { row: Row<Document> }) => {
-                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
+                const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
                 return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency />
             },
             footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-                    const detail = row.original.iva_details.find(d => d.porcentaje === rate);
+                    const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
                     return sum + (detail?.base_imponible || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -110,12 +110,12 @@ const getColumns = (
             id: `iva_${rate}`,
             header: `IVA ${rate}%`,
             cell: ({ row }: { row: Row<Document> }) => {
-                const ivaDetail = row.original.iva_details.find(i => i.porcentaje === rate);
+                const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
                 return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency />
             },
              footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-                    const detail = row.original.iva_details.find(d => d.porcentaje === rate);
+                    const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
                     return sum + (detail?.cuota || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -213,11 +213,9 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     const rates = new Set<number>();
     documents.forEach(doc => {
         doc.iva_details.forEach(detail => {
-            // Normalize percentage to a number to avoid duplicates like 4 and 4.00
             rates.add(Number(detail.porcentaje));
         });
     });
-    // Ensure standard rates are always present for column stability, even if empty.
     [0, 4, 10, 21].forEach(rate => rates.add(rate));
     return Array.from(rates).sort((a,b) => b - a); 
   }, [documents]);

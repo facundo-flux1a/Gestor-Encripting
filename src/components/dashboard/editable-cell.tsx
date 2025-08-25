@@ -30,9 +30,11 @@ const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
         const d = new Date(dateString);
-        const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
+        // This is crucial: to avoid timezone issues, treat the date as UTC.
+        // The time part is irrelevant for display.
+        const utcDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         return new Intl.DateTimeFormat('es-ES', {
-            year: 'numeric', month: '2-digit', day: '2-digit'
+            year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
         }).format(utcDate);
     } catch {
         return dateString;
@@ -150,7 +152,3 @@ export function EditableCell({
     </div>
   );
 }
-
-
-
-
