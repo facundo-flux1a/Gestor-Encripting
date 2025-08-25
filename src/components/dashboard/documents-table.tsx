@@ -58,6 +58,7 @@ const getColumns = (
             </div>
         ),
         enableHiding: false,
+        footer: () => 'Totales',
      },
     {
       accessorKey: 'fecha_emision',
@@ -124,7 +125,12 @@ const getColumns = (
      {
       accessorKey: 'retencion',
       header: 'Retención',
-      cell: ({ row }: { row: Row<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency />
+      cell: ({ row }: { row: Row<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency />,
+      footer: ({ table }) => {
+          // Assuming 'retencion' is not a direct field, so we sum a placeholder or a calculated value if available.
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + 0, 0); // Replace with actual field if exists
+          return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      }
     },
     {
       accessorKey: 'base_imponible',

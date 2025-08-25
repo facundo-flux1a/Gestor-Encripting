@@ -20,7 +20,8 @@ import {
   type Row,
   type Header as TableHeaderType,
   type RowData,
-  type Column
+  type Column,
+  getFacetedMinMaxValues
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -91,36 +92,39 @@ const DraggableTableHeader = <TData, TValue>({
     <TableHead
       ref={setNodeRef}
       style={style}
+      colSpan={header.colSpan}
       className={cn("p-0 whitespace-nowrap group relative bg-muted/50")}
     >
-        <div className="flex items-center h-full">
-            {!isSelectColumn && (
-                 <Button
-                    variant="ghost"
-                    size="sm"
-                    {...attributes}
-                    {...listeners}
-                    className="cursor-grab p-2 h-full touch-none"
-                    >
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                </Button>
-            )}
-            <div
-                className={cn(
-                    "flex items-center text-left w-full h-full px-2 py-3",
-                    header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
-                    isSelectColumn ? "justify-start" : ""
+       {header.isPlaceholder ? null : (
+            <div className="flex items-center h-full">
+                {!isSelectColumn && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        {...attributes}
+                        {...listeners}
+                        className="cursor-grab p-2 h-full touch-none"
+                        >
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                 )}
-                 onClick={header.column.getToggleSortingHandler()}
-            >
-                <span className="font-bold text-xs">
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                </span>
-                {header.column.getCanSort() && !isSelectColumn && (
-                    <ArrowUpDown className="ml-2 h-3 w-3" />
-                )}
+                <div
+                    className={cn(
+                        "flex items-center text-left w-full h-full px-2 py-3",
+                        header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
+                        isSelectColumn ? "justify-start" : ""
+                    )}
+                    onClick={header.column.getToggleSortingHandler()}
+                >
+                    <span className="font-bold text-xs">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                    </span>
+                    {header.column.getCanSort() && !isSelectColumn && (
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                    )}
+                </div>
             </div>
-        </div>
+       )}
     </TableHead>
   );
 };
@@ -241,6 +245,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    getFacetedMinMaxValues: getFacetedMinMaxValues,
     meta: {
         updateData: (rowIndex: number, columnId: string, value: unknown) => {
             setDataState(old => old.map((row, index) => {
@@ -371,6 +376,20 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                             </SortableContext>
                         </TableRow>
                     ))}
+                    {table.getFooterGroups().map(footerGroup => (
+                        <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
+                            {footerGroup.headers.map(header => (
+                                <TableHead key={header.id} colSpan={header.colSpan}>
+                                    {header.isPlaceholder
+                                        ? null
+                                        : flexRender(
+                                            header.column.columnDef.footer,
+                                            header.getContext()
+                                          )}
+                                </TableHead>
+                            ))}
+                        </TableRow>
+                    ))}
                 </TableHeader>
                 <TableBody>
                     {rows.length > 0 ? (
@@ -385,22 +404,6 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                         </TableRow>
                     )}
                 </TableBody>
-                 <TableFooter className="sticky bottom-0 bg-secondary/90 font-medium">
-                    {table.getFooterGroups().map(footerGroup => (
-                        <TableRow key={footerGroup.id}>
-                            {footerGroup.headers.map(header => (
-                                <TableCell key={header.id} colSpan={header.colSpan}>
-                                    {header.isPlaceholder
-                                        ? null
-                                        : flexRender(
-                                            header.column.columnDef.footer,
-                                            header.getContext()
-                                          )}
-                                </TableCell>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableFooter>
             </Table>
         </div>
 
@@ -433,5 +436,3 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
     </DndContext>
   );
 }
-
-    
