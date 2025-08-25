@@ -16,10 +16,8 @@ import {
   useReactTable,
   getFacetedRowModel,
   getFacetedUniqueValues,
-  type Table as ReactTable,
   type Row,
   type Header as TableHeaderType,
-  type RowData,
   type Column,
   getFacetedMinMaxValues
 } from '@tanstack/react-table';
@@ -368,7 +366,11 @@ export function DataTable<TData, TValue>({
                     })}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <ExportButton table={table} filename={filename} />
+                <ExportButton
+                    columns={table.getVisibleFlatColumns()} 
+                    data={table.getRowModel().rows} 
+                    filename={filename} 
+                />
             </div>
         </div>
 

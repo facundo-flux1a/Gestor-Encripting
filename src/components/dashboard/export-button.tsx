@@ -7,11 +7,12 @@ import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import { flexRender, type Table as TanstackTable, type Cell, type Column, type Row } from '@tanstack/react-table';
+import { flexRender, type Column, type Row } from '@tanstack/react-table';
 
 
 interface ExportButtonProps {
-    table: TanstackTable<any>;
+    columns: Column<any, unknown>[];
+    data: Row<any>[];
     filename: string;
 }
 
@@ -20,16 +21,22 @@ const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
     return new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits, maximumFractionDigits: 2 }).format(amount);
 }
 
-const getCellString = (cell: Cell<any, unknown>): string => {
+const getCellString = (cell: any): string => {
     const value = cell.getValue();
     const columnId = cell.column.id;
+    const isCurrencyColumn = columnId.toLowerCase().includes('total') || 
+                           columnId.toLowerCase().includes('precio') || 
+                           columnId.toLowerCase().includes('importe') ||
+                           columnId.toLowerCase().includes('iva') ||
+                           columnId.toLowerCase().includes('base_imponible') ||
+                           columnId.toLowerCase().includes('base') ||
+                           columnId.toLowerCase().includes('retencion');
 
-    // Handle dynamic VAT columns specifically
     if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
-        const rateMatch = columnId.match(/\d+(\.\d+)?/);
+        const rateMatch = columnId.match(/\d+/);
         if (rateMatch) {
-            const rate = parseFloat(rateMatch[0]);
-            const ivaDetail = cell.row.original.iva_details?.find((i: any) => i.porcentaje === rate);
+            const rate = Number(rateMatch[0]);
+            const ivaDetail = cell.row.original.iva_details?.find((i: any) => Number(i.porcentaje) === rate);
             if (columnId.startsWith('base_')) {
                 return formatCurrency(ivaDetail?.base_imponible ?? 0);
             }
@@ -39,7 +46,6 @@ const getCellString = (cell: Cell<any, unknown>): string => {
         }
     }
     
-    // Original logic for other cells
     if (value instanceof Date) {
         return value.toLocaleDateString('es-ES');
     }
@@ -47,22 +53,16 @@ const getCellString = (cell: Cell<any, unknown>): string => {
         return value ? 'Sí' : 'No';
     }
     if (typeof value === 'number') {
-        const isCurrency = columnId.toLowerCase().includes('total') || 
-                           columnId.toLowerCase().includes('precio') || 
-                           columnId.toLowerCase().includes('importe') ||
-                           columnId.toLowerCase().includes('iva') ||
-                           columnId.toLowerCase().includes('base_imponible');
-        return isCurrency ? formatCurrency(value) : value.toString();
+        return isCurrencyColumn ? formatCurrency(value) : value.toString();
     }
     if (value === null || value === undefined) {
         return '';
     }
 
-    // Fallback for complex components by accessing initialValue if possible
     const rendered = flexRender(cell.column.columnDef.cell, cell.getContext());
     if (React.isValidElement(rendered) && rendered.props.initialValue !== undefined) {
         const initialValue = rendered.props.initialValue;
-        if(typeof initialValue === 'number' && rendered.props.isCurrency) {
+        if(typeof initialValue === 'number' && (rendered.props.isCurrency || isCurrencyColumn)) {
             return formatCurrency(initialValue);
         }
         if (initialValue instanceof Date) {
@@ -71,53 +71,39 @@ const getCellString = (cell: Cell<any, unknown>): string => {
         return String(initialValue);
     }
     
-    // Fallback for simple values
-    const simpleValue = cell.row.original[columnId];
-    if (simpleValue !== undefined && simpleValue !== null) {
-        return String(simpleValue);
+    if (React.isValidElement(rendered)) {
+         if (typeof rendered.props.children === 'string' || typeof rendered.props.children === 'number') {
+            return String(rendered.props.children);
+        }
+        if (Array.isArray(rendered.props.children)) {
+             const textChild = rendered.props.children.find((c: any) => typeof c === 'string' || typeof c === 'number');
+             if(textChild) return String(textChild);
+        }
     }
     
     return String(value ?? '');
 }
 
-
-const getHeaderName = (col: Column<any, unknown>, table: TanstackTable<any>): string => {
+const getHeaderName = (col: Column<any, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
 
-    if (headerDef) {
-       const context = {
-         table: table,
-         header: { column: col } as any,
-       };
-       const renderedHeader = flexRender(headerDef, context);
-       if (typeof renderedHeader === 'string') return renderedHeader;
-        if (React.isValidElement(renderedHeader)) {
-            // This is a common pattern for simple headers with an icon and text
-            const children = React.Children.toArray(renderedHeader.props.children);
-            const textChild = children.find(child => typeof child === 'string' || (typeof child === 'object' && child?.type === 'span'));
-            if(textChild && typeof textChild === 'object' && textChild.props.children) {
-                 return textChild.props.children;
-            }
-             if(typeof textChild === 'string') {
-                return textChild;
-            }
-        }
-    }
-    return col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    // This part is tricky as flexRender needs a component context. 
+    // We will simplify it to read from id if it's not a simple string.
+    const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return readableId.charAt(0).toUpperCase() + readableId.slice(1);
 }
 
 
-export function ExportButton({ table, filename }: ExportButtonProps) {
+export function ExportButton({ columns, data, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        const visibleColumns = table.getVisibleFlatColumns();
-        const headers = visibleColumns.map(column => getHeaderName(column, table));
+        const headers = columns.map(column => getHeaderName(column));
         
-        const rows = table.getRowModel().rows.map(row => {
+        const rows = data.map(row => {
             const rowData: { [key: string]: any } = {};
             row.getVisibleCells().forEach(cell => {
-                 const header = getHeaderName(cell.column, table);
+                 const header = getHeaderName(cell.column);
                  rowData[header] = getCellString(cell);
             });
             return rowData;
