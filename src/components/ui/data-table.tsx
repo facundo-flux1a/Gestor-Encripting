@@ -45,7 +45,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TableFooter,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,7 +75,7 @@ const DraggableTableHeader = <TData, TValue>({
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
-    disabled: header.column.id === 'select'
+    disabled: !header.column.getCanSort()
   });
 
   const style: React.CSSProperties = {
@@ -86,7 +85,7 @@ const DraggableTableHeader = <TData, TValue>({
     opacity: isDragging ? 0.5 : 1,
   };
   
-  const isSelectColumn = header.column.id === 'select';
+  const isSortable = header.column.getCanSort();
 
   return (
     <TableHead
@@ -97,7 +96,7 @@ const DraggableTableHeader = <TData, TValue>({
     >
        {header.isPlaceholder ? null : (
             <div className="flex items-center h-full">
-                {!isSelectColumn && (
+                {isSortable && (
                     <Button
                         variant="ghost"
                         size="sm"
@@ -111,16 +110,18 @@ const DraggableTableHeader = <TData, TValue>({
                 <div
                     className={cn(
                         "flex items-center text-left w-full h-full px-2 py-3",
-                        header.column.getCanSort() && !isSelectColumn ? 'cursor-pointer select-none' : '',
-                        isSelectColumn ? "justify-start" : ""
+                        isSortable ? 'cursor-pointer select-none' : ''
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                 >
                     <span className="font-bold text-xs">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                     </span>
-                    {header.column.getCanSort() && !isSelectColumn && (
-                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                    {isSortable && (
+                        <ArrowUpDown className={cn(
+                            "ml-2 h-3 w-3 transition-opacity duration-300",
+                            header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        )} />
                     )}
                 </div>
             </div>
@@ -130,7 +131,7 @@ const DraggableTableHeader = <TData, TValue>({
 };
 
 
-// Draggable Table Row Component
+// Draggable Table Row Component for Documents
 const DraggableTableRow = <TData extends { id_documento: number }>({
     row,
 }: {
@@ -155,9 +156,6 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
         zIndex: isDragging ? 1 : 0,
     };
 
-    const firstCell = row.getVisibleCells()[0];
-    const otherCells = row.getVisibleCells().slice(1);
-
     return (
         <TableRow
             ref={setNodeRef}
@@ -165,25 +163,43 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
             data-state={row.getIsSelected() && 'selected'}
             className="bg-background even:bg-muted/50 hover:bg-muted/75"
         >
-            {/* First cell with drag handle */}
-            <TableCell style={{ width: firstCell.column.getSize() }} className="whitespace-nowrap sticky left-0 bg-inherit z-10 flex items-center gap-2">
-                 <Button
-                    variant="ghost"
-                    size="icon"
-                    {...attributes}
-                    {...listeners}
-                    className="cursor-grab p-2 h-8 w-8 touch-none flex-shrink-0"
-                >
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <div className="flex-grow">
-                    {flexRender(firstCell.column.columnDef.cell, firstCell.getContext())}
-                </div>
-            </TableCell>
+             {row.getVisibleCells().map(cell => (
+                <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
+                    <div className="flex items-center">
+                        {cell.column.id === columns[0].id && (
+                             <Button
+                                variant="ghost"
+                                size="icon"
+                                {...attributes}
+                                {...listeners}
+                                className="cursor-grab p-2 h-8 w-8 touch-none flex-shrink-0"
+                            >
+                                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                        )}
+                        <div className="flex-grow">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </div>
+                    </div>
+                </TableCell>
+            ))}
+        </TableRow>
+    );
+};
 
-            {/* Other cells */}
-            {otherCells.map(cell => (
-                <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap">
+// Standard Table Row for other data types
+const StandardTableRow = <TData,>({
+    row,
+}: {
+    row: Row<TData>,
+}) => {
+     return (
+        <TableRow
+            data-state={row.getIsSelected() && 'selected'}
+            className="bg-background even:bg-muted/50 hover:bg-muted/75"
+        >
+             {row.getVisibleCells().map(cell => (
+                <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-4">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
             ))}
@@ -192,7 +208,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
 };
 
 
-export function DataTable<TData extends { id_documento: number }, TValue>({
+export function DataTable<TData, TValue>({
   columns,
   data,
   hiddenColumns = [],
@@ -251,7 +267,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
             setDataState(old => old.map((row, index) => {
                 if (index === rowIndex) {
                     return {
-                        ...old[rowIndex],
+                        ...old[rowIndex] as any,
                         [columnId]: value,
                     }
                 }
@@ -264,24 +280,31 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
-
-    if (headerDef) {
-       const context = {
-         table,
-         header: { column: col } as TableHeaderType<TData, unknown>,
-       };
-       const renderedHeader = flexRender(headerDef, context as any);
-       if (typeof renderedHeader === 'string') return renderedHeader;
-        if (React.isValidElement(renderedHeader)) {
-            const children = React.Children.toArray(renderedHeader.props.children);
-            const textChild = children.find(child => typeof child === 'string' || (typeof child === 'object' && child?.type === 'span'));
-             if(textChild && typeof textChild === 'object' && textChild.props.children) {
-                 return textChild.props.children;
-            }
-             if(typeof textChild === 'string') {
-                return textChild;
-            }
+    if (typeof headerDef === 'function') {
+      const context = {
+        table: table,
+        header: {
+          id: col.id,
+          colSpan: 1,
+          depth: 1,
+          index: col.getIndex(),
+          isPlaceholder: false,
+          column: col,
+          getContext: () => context,
+        },
+      };
+      const renderedHeader = flexRender(headerDef, context as any);
+      if (typeof renderedHeader === 'string') return renderedHeader;
+      if (React.isValidElement(renderedHeader) && renderedHeader.props.children) {
+        const children = React.Children.toArray(renderedHeader.props.children);
+        const textChild = children.find(child => typeof child === 'string' || (typeof child === 'object' && child?.type === 'span'));
+        if(textChild && typeof textChild === 'object' && textChild.props.children) {
+              return textChild.props.children;
         }
+          if(typeof textChild === 'string') {
+            return textChild;
+        }
+      }
     }
 
     const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -310,6 +333,15 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
   
   const rows = table.getRowModel().rows;
   
+  const defaultRenderRow = (row: Row<TData>) => {
+    // Check if data has id_documento for draggable rows
+    const hasIdDocumento = 'id_documento' in row.original;
+    if(hasIdDocumento) {
+        return <DraggableTableRow key={(row.original as any).id_documento} row={row as Row<TData & { id_documento: number }>} />;
+    }
+    return <StandardTableRow key={row.id} row={row} />;
+  }
+
   return (
     <DndContext
         collisionDetection={closestCenter}
@@ -394,7 +426,7 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                 <TableBody>
                     {rows.length > 0 ? (
                         rows.map((row) => (
-                             renderRow ? renderRow(row) : <DraggableTableRow key={row.original.id_documento} row={row} />
+                             renderRow ? renderRow(row) : defaultRenderRow(row)
                         ))
                     ) : (
                         <TableRow>
