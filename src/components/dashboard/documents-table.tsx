@@ -101,7 +101,7 @@ const getColumns = (
             footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
                     const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (detail?.base_imponible || 0);
+                    return sum + (Number(detail?.base_imponible) || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
             }
@@ -116,7 +116,7 @@ const getColumns = (
              footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
                     const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (detail?.cuota || 0);
+                    return sum + (Number(detail?.cuota) || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
             }
@@ -127,8 +127,7 @@ const getColumns = (
       header: 'Retención',
       cell: ({ row }: { row: Row<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency />,
       footer: ({ table }) => {
-          // Assuming 'retencion' is not a direct field, so we sum a placeholder or a calculated value if available.
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + 0, 0); // Replace with actual field if exists
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + 0, 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
@@ -137,7 +136,7 @@ const getColumns = (
       header: 'Total Base',
       cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="importe_sin_impuestos" onUpdate={onUpdate} isCurrency />,
       footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (row.original.base_imponible || 0), 0);
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
@@ -146,7 +145,7 @@ const getColumns = (
       header: 'Total IVA',
       cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva_total" onUpdate={onUpdate} isCurrency />,
        footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (row.original.iva || 0), 0);
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
@@ -155,7 +154,7 @@ const getColumns = (
       header: 'Total',
       cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="importe_total" onUpdate={onUpdate} isCurrency />,
        footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (row.original.total || 0), 0);
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
@@ -216,7 +215,8 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
             rates.add(Number(detail.porcentaje));
         });
     });
-    [0, 4, 10, 21].forEach(rate => rates.add(rate));
+    // Ensure standard rates are always present for column consistency
+    [0, 4, 10, 21].forEach(rate => rates.add(rate)); 
     return Array.from(rates).sort((a,b) => b - a); 
   }, [documents]);
 
