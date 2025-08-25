@@ -166,7 +166,7 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
              {row.getVisibleCells().map(cell => (
                 <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
                     <div className="flex items-center">
-                        {cell.column.id === columns[0].id && (
+                        {cell.column.id === 'select' && (
                              <Button
                                 variant="ghost"
                                 size="icon"
@@ -219,12 +219,6 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   
-  const [dataState, setDataState] = React.useState(data);
-
-  React.useEffect(() => {
-    setDataState(data);
-  }, [data]);
-  
   const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
     columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
   );
@@ -241,7 +235,7 @@ export function DataTable<TData, TValue>({
   }, [hiddenColumns]);
 
   const table = useReactTable({
-    data: dataState,
+    data,
     columns,
     state: {
       sorting,
@@ -262,19 +256,6 @@ export function DataTable<TData, TValue>({
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
     getFacetedMinMaxValues: getFacetedMinMaxValues,
-    meta: {
-        updateData: (rowIndex: number, columnId: string, value: unknown) => {
-            setDataState(old => old.map((row, index) => {
-                if (index === rowIndex) {
-                    return {
-                        ...old[rowIndex] as any,
-                        [columnId]: value,
-                    }
-                }
-                return row;
-            }))
-        }
-    }
   });
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
