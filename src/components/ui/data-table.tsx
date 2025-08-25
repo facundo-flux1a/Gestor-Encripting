@@ -44,6 +44,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -384,6 +385,22 @@ export function DataTable<TData extends { id_documento: number }, TValue>({
                         </TableRow>
                     )}
                 </TableBody>
+                 <TableFooter className="sticky bottom-0 bg-secondary/90 font-medium">
+                    {table.getFooterGroups().map(footerGroup => (
+                        <TableRow key={footerGroup.id}>
+                            {footerGroup.headers.map(header => (
+                                <TableCell key={header.id} colSpan={header.colSpan}>
+                                    {header.isPlaceholder
+                                        ? null
+                                        : flexRender(
+                                            header.column.columnDef.footer,
+                                            header.getContext()
+                                          )}
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    ))}
+                </TableFooter>
             </Table>
         </div>
 
