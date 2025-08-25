@@ -61,7 +61,6 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   hiddenColumns?: string[];
-  renderRow?: (row: Row<TData>) => React.ReactNode;
   filename: string;
 }
 
@@ -210,7 +209,6 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   hiddenColumns = [],
-  renderRow,
   filename
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -409,7 +407,7 @@ export function DataTable<TData, TValue>({
                 <TableBody>
                     {rows.length > 0 ? (
                         rows.map((row) => (
-                             renderRow ? renderRow(row) : defaultRenderRow(row)
+                             defaultRenderRow(row)
                         ))
                     ) : (
                         <TableRow>

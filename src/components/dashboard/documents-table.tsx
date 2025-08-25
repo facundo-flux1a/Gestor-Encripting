@@ -262,7 +262,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} renderRow={renderRow} filename={filename} />
+      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} filename={filename} />
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}
