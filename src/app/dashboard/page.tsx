@@ -10,7 +10,7 @@ import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
-import { FileText, Users, AlertTriangle, Package, Euro, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { FileText, Users, AlertTriangle, Package, Euro, ArrowUpRight, ArrowDownLeft, Scale, Banknote } from 'lucide-react';
 
 
 export default function DashboardPage() {
@@ -62,42 +62,30 @@ export default function DashboardPage() {
 
         <div className="space-y-4">
           {/* KPIs */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
               title="Total Ingresos"
               value={formatCurrency(analytics.kpis.totalIngresos)}
               icon={ArrowUpRight}
-              description={`${analytics.kpis.totalFacturasIngreso} facturas`}
+              description={`${analytics.kpis.totalFacturasIngreso} facturas de venta`}
             />
             <StatsCard
               title="Total Gastos"
               value={formatCurrency(analytics.kpis.totalGastos)}
               icon={ArrowDownLeft}
-               description={`${analytics.kpis.totalFacturasGasto} facturas`}
+               description={`${analytics.kpis.totalFacturasGasto} facturas de compra`}
             />
             <StatsCard
               title="Beneficio Bruto"
-              value={formatCurrency(analytics.kpis.totalIngresos - analytics.kpis.totalGastos)}
-              icon={Euro}
+              value={formatCurrency(analytics.kpis.beneficio)}
+              icon={Scale}
               description="Ingresos - Gastos"
             />
             <StatsCard
-              title="Incidencias"
-              value={analytics.kpis.incidenciasAbiertas.toString()}
-              icon={AlertTriangle}
-              description="Pendientes de revisión"
-            />
-             <StatsCard
-              title="Proveedores"
-              value={analytics.kpis.totalProveedores.toString()}
-              icon={Users}
-              description="Proveedores únicos"
-            />
-             <StatsCard
-              title="Productos"
-              value={analytics.kpis.totalProductos.toString()}
-              icon={Package}
-              description="Productos únicos registrados"
+              title="Resultado IVA"
+              value={formatCurrency(analytics.kpis.resultadoIva)}
+              icon={Banknote}
+              description="IVA Repercutido - Soportado"
             />
           </div>
 
@@ -109,14 +97,34 @@ export default function DashboardPage() {
             <div className="col-span-1 lg:col-span-3">
                <DocumentStatusChart data={analytics.documentDistribution} />
             </div>
-            <div className="col-span-1 lg:col-span-full">
+             <div className="col-span-1 lg:col-span-full">
+               <IvaSummary data={ivaSummaryData} />
+            </div>
+             <div className="col-span-1 lg:col-span-4">
                 <InsightsWidget 
                     incidentRate={analytics.kpis.incidentRate}
                     topProviders={analytics.topProviders}
                 />
             </div>
-             <div className="col-span-1 lg:col-span-full">
-               <IvaSummary data={ivaSummaryData} />
+            <div className="col-span-1 lg:col-span-3 grid grid-cols-1 gap-4 auto-rows-min">
+                 <StatsCard
+                    title="Incidencias Abiertas"
+                    value={analytics.kpis.incidenciasAbiertas.toString()}
+                    icon={AlertTriangle}
+                    description={`${analytics.kpis.incidentRate.toFixed(1)}% de los documentos`}
+                />
+                <StatsCard
+                    title="Proveedores Únicos"
+                    value={analytics.kpis.totalProveedores.toString()}
+                    icon={Users}
+                    description="Total de proveedores registrados"
+                />
+                <StatsCard
+                    title="Productos Únicos"
+                    value={analytics.kpis.totalProductos.toString()}
+                    icon={Package}
+                    description="Total de productos registrados"
+                />
             </div>
           </div>
         </div>

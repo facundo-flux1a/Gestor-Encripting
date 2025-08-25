@@ -19,6 +19,7 @@ interface DocumentPacket extends RowDataPacket {
     fecha_vencimiento: string | null;
     importe_total: number;
     importe_sin_impuestos: number;
+    iva: number;
     moneda: string;
     observaciones: string | null;
     datos_extra: any | null;
@@ -87,12 +88,16 @@ interface IncidenciaPacket extends RowDataPacket {
     validado: boolean;
 }
 
-export interface DashboardAnalytics {
+export type DashboardAnalytics = {
   kpis: {
     totalIngresos: number;
     totalGastos: number;
     totalFacturasIngreso: number;
     totalFacturasGasto: number;
+    beneficio: number;
+    ivaRepercutido: number;
+    ivaSoportado: number;
+    resultadoIva: number;
     incidenciasAbiertas: number;
     totalProveedores: number;
     totalProductos: number;
@@ -165,7 +170,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             cuota: tax.cuota,
         }));
         
-        const total_iva = iva_details.reduce((acc, tax) => acc + (Number(tax.cuota) || 0), 0);
+        const total_iva = Number(doc.iva) || 0;
 
         const entidades: DocumentEntity[] = currentEntidades.map(e => ({
             id: e.id,
@@ -239,7 +244,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
 
 export async function getDocuments(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*
+        SELECT d.*,
+               (SELECT SUM(id.cuota) FROM impuestos_documento id WHERE id.documento_id = d.id) as iva
         FROM documentos d
         ORDER BY d.fecha_emision DESC
     `);
@@ -249,7 +255,8 @@ export async function getDocuments(): Promise<Document[]> {
 
 export async function getDocumentById(id: number): Promise<Document | null> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT d.*
+        SELECT d.*,
+               (SELECT SUM(id.cuota) FROM impuestos_documento id WHERE id.documento_id = d.id) as iva
         FROM documentos d
         WHERE d.id = ?
     `, [id]);
@@ -264,7 +271,8 @@ export async function getDocumentById(id: number): Promise<Document | null> {
 
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT DISTINCT d.* 
+        SELECT DISTINCT d.*,
+               (SELECT SUM(id.cuota) FROM impuestos_documento id WHERE id.documento_id = d.id) as iva
         FROM documentos d
         JOIN incidencias_documento i ON d.id = i.documento_id
         WHERE i.validado = 0
@@ -327,8 +335,8 @@ async function recalculateDocumentTotals(docId: number, connection: any) {
     const total = baseImponible + totalIva;
 
     await connection.query(
-        'UPDATE documentos SET importe_sin_impuestos = ?, iva = ?, importe_total = ? WHERE id = ?',
-        [baseImponible, totalIva, total, docId]
+        'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
+        [baseImponible, total, docId]
     );
 }
 
@@ -873,6 +881,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
             SELECT 
                 d.id,
                 d.importe_total,
+                d.importe_sin_impuestos,
+                (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as total_iva,
                 -- A document is "issued" (income) if there is a 'receptor' or 'cliente'. Otherwise, it's received (expense).
                 MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
@@ -880,8 +890,10 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
             GROUP BY d.id
         )
         SELECT
-          (SELECT SUM(importe_total) FROM DocTypes WHERE is_issued = 1) as totalIngresos,
-          (SELECT SUM(importe_total) FROM DocTypes WHERE is_issued = 0) as totalGastos,
+          (SELECT SUM(importe_sin_impuestos) FROM DocTypes WHERE is_issued = 1) as totalIngresos,
+          (SELECT SUM(importe_sin_impuestos) FROM DocTypes WHERE is_issued = 0) as totalGastos,
+          (SELECT SUM(total_iva) FROM DocTypes WHERE is_issued = 1) as ivaRepercutido,
+          (SELECT SUM(total_iva) FROM DocTypes WHERE is_issued = 0) as ivaSoportado,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 1) as totalFacturasIngreso,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento WHERE validado = 0) as incidenciasAbiertas,
@@ -891,12 +903,14 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     `);
   const kpis = kpiRows[0];
   const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
+  const beneficio = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
+  const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
 
   const [quarterlyRows] = await db.query<RowDataPacket[]>(`
     WITH DocTypes AS (
         SELECT 
             d.id,
-            d.importe_total,
+            d.importe_sin_impuestos,
             d.fecha_emision,
             MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
         FROM documentos d
@@ -905,8 +919,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     )
     SELECT
       CONCAT('T', QUARTER(dt.fecha_emision)) as quarter,
-      SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_total ELSE 0 END) as ingresos,
-      SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_total ELSE 0 END) as gastos
+      SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as ingresos,
+      SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END) as gastos
     FROM DocTypes dt
     WHERE YEAR(dt.fecha_emision) = YEAR(CURDATE())
     GROUP BY quarter
@@ -914,7 +928,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 
   const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
   quarterlyRows.forEach(r => {
-    quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: r.ingresos, gastos: r.gastos };
+    quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: Number(r.ingresos), gastos: Number(r.gastos) };
   });
 
   const [distributionRows] = await db.query<RowDataPacket[]>(`
@@ -945,7 +959,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   `);
   const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
   ivaRows.forEach(r => {
-    ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: r.repercutido, soportado: r.soportado };
+    ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: Number(r.repercutido), soportado: Number(r.soportado) };
   });
 
   const [topProvidersRows] = await db.query<RowDataPacket[]>(`
@@ -962,6 +976,10 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     kpis: {
       totalIngresos: Number(kpis.totalIngresos || 0),
       totalGastos: Number(kpis.totalGastos || 0),
+      beneficio: Number(beneficio),
+      ivaRepercutido: Number(kpis.ivaRepercutido || 0),
+      ivaSoportado: Number(kpis.ivaSoportado || 0),
+      resultadoIva: Number(resultadoIva),
       totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
       totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
       incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
