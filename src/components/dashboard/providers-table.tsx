@@ -79,19 +79,13 @@ const getColumns = (): ColumnDef<ProviderWithStats>[] => {
 }
 
 export function ProvidersTable({ providers }: { providers: ProviderWithStats[] }) {
-  const [tableData, setTableData] = useState(providers);
-
-   useEffect(() => {
-    setTableData(providers);
-  }, [providers]);
-
   const columns = useMemo(() => getColumns(), []);
 
   return (
     <TooltipProvider>
       <DataTable 
         columns={columns} 
-        data={tableData} 
+        data={providers} 
         filename="proveedores" 
       />
     </TooltipProvider>
