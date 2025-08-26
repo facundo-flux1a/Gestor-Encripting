@@ -25,7 +25,7 @@ export async function createTaxValidationRule(payload: CreateTaxValidationRulePa
   
   const [result] = await db.query<OkPacket>(
     'INSERT INTO validacion_impuestos (date_init, date_finish, tipo_impuesto, porcentaje, vigente) VALUES (?, ?, ?, ?, ?)',
-    [date_init, date_finish, tipo_impuesto, porcentaje, false] // Default to not vigente
+    [date_init, date_finish, tipo_impuesto, porcentaje, true] // Default to vigente = true
   );
 
   const [newRuleRows] = await db.query<RowDataPacket[]>('SELECT * FROM validacion_impuestos WHERE id = ?', [result.insertId]);
@@ -53,55 +53,4 @@ export async function updateTaxRuleVigente(id: number, vigente: boolean): Promis
 export async function deleteTaxRule(id: number): Promise<{ success: boolean }> {
     await db.query<OkPacket>('DELETE FROM validacion_impuestos WHERE id = ?', [id]);
     return { success: true };
-}
-
-
-/**
- * Re-runs validation for all active rules against all documents.
- */
-export async function runAllTaxValidations(): Promise<{ incidentsCreated: number }> {
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
-
-    let totalIncidentsCreated = 0;
-
-    try {
-        const [activeRules] = await connection.query<RowDataPacket[]>('SELECT * FROM validacion_impuestos WHERE vigente = 1');
-
-        if (activeRules.length === 0) {
-            await connection.commit();
-            return { incidentsCreated: 0 };
-        }
-
-        for (const rule of activeRules) {
-            const description = `Impuesto no válido: utiliza ${rule.tipo_impuesto} al ${Number(rule.porcentaje)}% en el rango (${new Date(rule.date_init).toLocaleDateString()} - ${new Date(rule.date_finish).toLocaleDateString()})`;
-
-            const [docsToFlag] = await connection.query<RowDataPacket[]>(`
-                SELECT DISTINCT d.id
-                FROM documentos d
-                JOIN impuestos_documento i ON d.id = i.documento_id
-                WHERE
-                    d.fecha_emision BETWEEN ? AND ?
-                    AND i.tipo_impuesto = ?
-                    AND i.porcentaje = ?
-            `, [rule.date_init, rule.date_finish, rule.tipo_impuesto, rule.porcentaje]);
-
-            for (const doc of docsToFlag) {
-                 const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion = ?', [doc.id, description]);
-                 if (existing.length === 0) {
-                     await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion, tipo_incidencia) VALUES (?, ?, ?)', [doc.id, description, 'Validación de Impuesto']);
-                     totalIncidentsCreated++;
-                 }
-            }
-        }
-
-        await connection.commit();
-        return { incidentsCreated: totalIncidentsCreated };
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error running tax validations:", error);
-        throw new Error("Ocurrió un error al ejecutar la validación de impuestos.");
-    } finally {
-        connection.release();
-    }
 }
