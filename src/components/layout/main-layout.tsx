@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -11,7 +12,9 @@ import {
   SidebarMenuButton,
   SidebarInset,
   SidebarFooter,
-  useSidebar
+  useSidebar,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import {
   FileText,
