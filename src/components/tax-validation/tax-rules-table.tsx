@@ -30,7 +30,9 @@ import {
 
 const formatDate = (date: string) => {
     try {
-        return new Intl.DateTimeFormat('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(date));
+        const d = new Date(date);
+        const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
+        return new Intl.DateTimeFormat('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }).format(utcDate);
     } catch (e) {
         return 'Fecha inválida';
     }
@@ -146,3 +148,4 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: 
         </>
     );
 }
+

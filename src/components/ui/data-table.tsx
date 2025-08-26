@@ -211,57 +211,58 @@ export function DataTable<TData, TValue>({
   hiddenColumns = [],
   filename
 }: DataTableProps<TData, TValue>) {
-    const [isMounted, setIsMounted] = React.useState(false);
-    
-    // Ensure dnd-kit logic only runs on the client
-    React.useEffect(() => {
-        setIsMounted(true);
-    }, []);
+  const [isMounted, setIsMounted] = React.useState(false);
 
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-    const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
-        columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
-    );
-    const [globalFilter, setGlobalFilter] = React.useState('');
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-    const initialVisibility = React.useMemo(() => {
-        const visibility: VisibilityState = {};
-        hiddenColumns.forEach(col => {
-        visibility[col] = false;
-        });
-        return visibility;
-    }, [hiddenColumns]);
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = React.useState('');
 
-    const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
+  const initialVisibility = React.useMemo(() => {
+      const visibility: VisibilityState = {};
+      hiddenColumns.forEach(col => {
+      visibility[col] = false;
+      });
+      return visibility;
+  }, [hiddenColumns]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
+  
+  React.useEffect(() => {
+    setColumnVisibility(initialVisibility);
+  }, [initialVisibility])
 
-    const table = useReactTable({
-        data,
-        columns,
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            columnOrder,
-            globalFilter,
-        },
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
-        onColumnVisibilityChange: setColumnVisibility,
-        onColumnOrderChange: setColumnOrder,
-        onGlobalFilterChange: setGlobalFilter,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getFacetedRowModel: getFacetedRowModel(),
-        getFacetedUniqueValues: getFacetedUniqueValues(),
-        getFacetedMinMaxValues: getFacetedMinMaxValues,
-    });
 
-    React.useEffect(() => {
-        setColumnVisibility(initialVisibility);
-    }, [initialVisibility]);
+  const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
+    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
+  );
+
+  const table = useReactTable({
+    data,
+    columns,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+      columnOrder,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    getFacetedMinMaxValues: getFacetedMinMaxValues,
+  });
+
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
@@ -316,18 +317,17 @@ export function DataTable<TData, TValue>({
     useSensor(TouchSensor),
     useSensor(KeyboardSensor)
   );
-  
+
   const defaultRenderRow = (row: Row<TData>) => {
-    // Check if data has id_documento for draggable rows
     const hasIdDocumento = 'id_documento' in row.original;
     if(hasIdDocumento) {
         return <DraggableTableRow key={(row.original as any).id_documento} row={row as Row<TData & { id_documento: number }>} />;
     }
     return <StandardTableRow key={row.id} row={row} />;
   }
-
+  
   const tableContent = (
-    <DndContext
+     <DndContext
         collisionDetection={closestCenter}
         onDragEnd={handleColumnDragEnd}
         modifiers={[restrictToHorizontalAxis]}
@@ -379,7 +379,7 @@ export function DataTable<TData, TValue>({
             </Table>
         </div>
     </DndContext>
-  );
+  )
 
   const skeletonContent = (
     <div className="space-y-4">
@@ -408,8 +408,8 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-    {/* Controls: Filter input and column visibility */}
-    <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
+      {/* Controls: Filter input and column visibility */}
+      <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
         <div className="flex-1 w-full sm:w-auto">
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -453,10 +453,7 @@ export function DataTable<TData, TValue>({
         </div>
     </div>
 
-
-    {/* Table */}
     {isMounted ? tableContent : skeletonContent}
-    
 
     {/* Pagination */}
     <div className="flex items-center justify-between">
@@ -486,3 +483,4 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
+
