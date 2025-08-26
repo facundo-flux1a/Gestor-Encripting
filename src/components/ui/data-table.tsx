@@ -54,6 +54,7 @@ import {
 import { ChevronDown, GripVertical, ArrowUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
+import { Skeleton } from './skeleton';
 
 
 interface DataTableProps<TData, TValue> {
@@ -210,48 +211,57 @@ export function DataTable<TData, TValue>({
   hiddenColumns = [],
   filename
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  
-  const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
-    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
-  );
+    const [isMounted, setIsMounted] = React.useState(false);
+    
+    // Ensure dnd-kit logic only runs on the client
+    React.useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
-  const [globalFilter, setGlobalFilter] = React.useState('');
+    const [sorting, setSorting] = React.useState<SortingState>([]);
+    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+    const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
+        columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
+    );
+    const [globalFilter, setGlobalFilter] = React.useState('');
 
-  const initialVisibility = React.useMemo(() => {
-    const visibility: VisibilityState = {};
-    hiddenColumns.forEach(col => {
-      visibility[col] = false;
+    const initialVisibility = React.useMemo(() => {
+        const visibility: VisibilityState = {};
+        hiddenColumns.forEach(col => {
+        visibility[col] = false;
+        });
+        return visibility;
+    }, [hiddenColumns]);
+
+    const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
+
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            columnFilters,
+            columnVisibility,
+            columnOrder,
+            globalFilter,
+        },
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
+        onColumnVisibilityChange: setColumnVisibility,
+        onColumnOrderChange: setColumnOrder,
+        onGlobalFilterChange: setGlobalFilter,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        getFacetedRowModel: getFacetedRowModel(),
+        getFacetedUniqueValues: getFacetedUniqueValues(),
+        getFacetedMinMaxValues: getFacetedMinMaxValues,
     });
-    return visibility;
-  }, [hiddenColumns]);
 
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
-
-  const table = useReactTable({
-    data,
-    columns,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      columnOrder,
-      globalFilter,
-    },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
-    onColumnOrderChange: setColumnOrder,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
-    getFacetedMinMaxValues: getFacetedMinMaxValues,
-  });
+    React.useEffect(() => {
+        setColumnVisibility(initialVisibility);
+    }, [initialVisibility]);
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
@@ -316,55 +326,7 @@ export function DataTable<TData, TValue>({
     return <StandardTableRow key={row.id} row={row} />;
   }
 
-  return (
-    <div className="space-y-4">
-    {/* Controls: Filter input and column visibility */}
-    <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
-        <div className="flex-1 w-full sm:w-auto">
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder='Buscar en todas las columnas...'
-                    value={globalFilter ?? ''}
-                    onChange={(event) => setGlobalFilter(event.target.value)}
-                    className="h-10 pl-10 w-full max-w-sm"
-                />
-            </div>
-        </div>
-        <div className="flex items-center gap-2">
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                    const headerName = getHeaderName(column);
-
-                    return (
-                    <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                    >
-                        {headerName}
-                    </DropdownMenuCheckboxItem>
-                    );
-                })}
-                </DropdownMenuContent>
-            </DropdownMenu>
-            <ExportButton
-                columns={table.getVisibleFlatColumns()} 
-                data={table.getRowModel().rows} 
-                filename={filename} 
-            />
-        </div>
-    </div>
-
-
-    {/* Table */}
+  const tableContent = (
     <DndContext
         collisionDetection={closestCenter}
         onDragEnd={handleColumnDragEnd}
@@ -417,6 +379,84 @@ export function DataTable<TData, TValue>({
             </Table>
         </div>
     </DndContext>
+  );
+
+  const skeletonContent = (
+    <div className="space-y-4">
+        <div className="rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <TableHead key={i}><Skeleton className="h-5 w-24" /></TableHead>
+                        ))}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {Array.from({ length: 10 }).map((_, i) => (
+                        <TableRow key={i}>
+                            {Array.from({ length: 6 }).map((_, j) => (
+                                <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+                            ))}
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+    {/* Controls: Filter input and column visibility */}
+    <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
+        <div className="flex-1 w-full sm:w-auto">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder='Buscar en todas las columnas...'
+                    value={globalFilter ?? ''}
+                    onChange={(event) => setGlobalFilter(event.target.value)}
+                    className="h-10 pl-10 w-full max-w-sm"
+                />
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="ml-auto">
+                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                    const headerName = getHeaderName(column);
+
+                    return (
+                    <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    >
+                        {headerName}
+                    </DropdownMenuCheckboxItem>
+                    );
+                })}
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <ExportButton
+                columns={table.getVisibleFlatColumns()} 
+                data={table.getRowModel().rows} 
+                filename={filename} 
+            />
+        </div>
+    </div>
+
+
+    {/* Table */}
+    {isMounted ? tableContent : skeletonContent}
+    
 
     {/* Pagination */}
     <div className="flex items-center justify-between">
@@ -446,5 +486,3 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
-
-    
