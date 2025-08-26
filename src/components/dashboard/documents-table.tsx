@@ -272,3 +272,5 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </>
   );
 }
+
+    
