@@ -7,4 +7,4 @@ To get started, take a look at src/app/page.tsx.
 
 Función: Muestra el diálogo donde arrastras o seleccionas los archivos PDF.
 Proceso: Una vez seleccionados los archivos, este componente itera sobre cada uno, extrae el texto del PDF directamente en el navegador y luego llama al servicio de backend (upload-service.ts) para cada archivo, enviándole tanto el archivo original como el texto extraído.
-src/services/upload-service.ts: Este es el servicio de backend (una
+src/services/upload-service.ts: Este es el servicio de backend 
