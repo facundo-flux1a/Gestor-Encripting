@@ -77,7 +77,9 @@ export function EditableCell({
 
     setIsLoading(true);
     try {
-      const result = await updateDocumentField(docId, fieldName, processedValue);
+      // Use "numero_documento" instead of "numero_factura"
+      const apiFieldName = fieldName === 'numero_factura' ? 'numero_documento' : fieldName;
+      const result = await updateDocumentField(docId, apiFieldName, processedValue);
       if (result.success) {
         onUpdate(docId, fieldName, processedValue);
         toast({
