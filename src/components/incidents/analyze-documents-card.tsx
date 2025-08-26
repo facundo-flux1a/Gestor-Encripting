@@ -11,7 +11,7 @@ import { analyzeDocumentsForIncidents } from '@/ai/flows/analyze-incidents';
 import type { IncidentAnalysisResult } from '@/lib/types';
 
 interface AnalyzeDocumentsCardProps {
-    onAnalysisComplete: () => void;
+    onAnalysisComplete: () => Promise<void>;
 }
 
 export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCardProps) {
@@ -32,9 +32,7 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
                 title: "Análisis Completado",
                 description: analysisResult.message,
             });
-            if (analysisResult.newIncidentsFound > 0) {
-                onAnalysisComplete();
-            }
+            await onAnalysisComplete();
         } catch (e: any) {
             console.error("Analysis failed", e);
             const errorMessage = e.message || 'Ocurrió un error al analizar los documentos.';
