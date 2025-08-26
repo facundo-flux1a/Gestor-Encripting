@@ -1,21 +1,10 @@
-'use client';
+
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getProvidersWithStats } from "@/services/document-service";
-import { useEffect, useState } from "react";
-import type { ProviderWithStats } from "@/lib/types";
-import { Loader2 } from "lucide-react";
 import { ProvidersTable } from "@/components/dashboard/providers-table";
 
-export default function ProveedoresPage() {
-  const [providers, setProviders] = useState<ProviderWithStats[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    getProvidersWithStats().then(provs => {
-        setProviders(provs);
-        setIsLoading(false);
-    });
-  }, []);
+export default async function ProveedoresPage() {
+  const providers = await getProvidersWithStats();
 
   return (
     <MainLayout>
@@ -30,13 +19,7 @@ export default function ProveedoresPage() {
         </MainLayoutHeader>
         
         <div className="mt-6">
-            {isLoading ? (
-                <div className="flex justify-center items-center py-16">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-            ) : (
-                <ProvidersTable providers={providers} />
-            )}
+            <ProvidersTable providers={providers} />
         </div>
       </div>
     </MainLayout>

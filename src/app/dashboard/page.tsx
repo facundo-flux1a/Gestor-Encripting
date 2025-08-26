@@ -1,41 +1,16 @@
 
-'use client';
-
-import { useState, useEffect } from 'react';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { DocumentStatusChart } from '@/components/dashboard/document-status-chart';
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
-import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
-import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { getDashboardAnalytics } from '@/services/document-service';
 import { FileText, Users, AlertTriangle, Package, Euro, ArrowUpRight, ArrowDownLeft, Scale, Banknote } from 'lucide-react';
 
 
-export default function DashboardPage() {
-  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const data = await getDashboardAnalytics();
-        setAnalytics(data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard analytics", error);
-        // Here you could set an error state and show an error message
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadData();
-  }, []);
-
-  if (isLoading || !analytics) {
-    return <DashboardSkeleton />;
-  }
+export default async function DashboardPage() {
+  const analytics = await getDashboardAnalytics();
   
   const formatCurrency = (amount: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
   

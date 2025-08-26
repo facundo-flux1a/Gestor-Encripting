@@ -4,7 +4,7 @@
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Loader2 } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { getTaxValidationRules, type TaxValidationRule } from "@/services/tax-validation-service";
 import { TaxRulesTable } from "@/components/tax-validation/tax-rules-table";
@@ -13,12 +13,10 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function TaxValidationPage() {
     const [rules, setRules] = useState<TaxValidationRule[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const { toast } = useToast();
 
-    const fetchRules = async () => {
-        setIsLoading(true);
+    const fetchRules = useCallback(async () => {
         try {
             const fetchedRules = await getTaxValidationRules();
             setRules(fetchedRules);
@@ -29,14 +27,12 @@ export default function TaxValidationPage() {
                 description: "No se pudieron cargar las reglas de validación.",
                 variant: "destructive"
             });
-        } finally {
-            setIsLoading(false);
         }
-    };
+    }, [toast]);
 
     useEffect(() => {
         fetchRules();
-    }, []);
+    }, [fetchRules]);
 
     const onRuleCreated = useCallback(() => {
         fetchRules();
@@ -44,7 +40,7 @@ export default function TaxValidationPage() {
             title: "Regla Creada",
             description: "La nueva regla de validación de impuestos ha sido creada con éxito."
         });
-    }, [toast]);
+    }, [fetchRules, toast]);
 
     const onRuleUpdated = useCallback(() => {
         fetchRules();
@@ -52,7 +48,7 @@ export default function TaxValidationPage() {
             title: "Regla Actualizada",
             description: "La regla ha sido actualizada."
         });
-    }, [toast]);
+    }, [fetchRules, toast]);
 
     const onRuleDeleted = useCallback(() => {
         fetchRules();
@@ -60,7 +56,7 @@ export default function TaxValidationPage() {
             title: "Regla Eliminada",
             description: "La regla ha sido eliminada con éxito."
         });
-    }, [toast]);
+    }, [fetchRules, toast]);
 
 
     return (
@@ -88,17 +84,11 @@ export default function TaxValidationPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                           {isLoading ? (
-                                <div className="flex justify-center items-center py-16">
-                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                </div>
-                            ) : (
-                                <TaxRulesTable 
-                                    rules={rules}
-                                    onRuleUpdated={onRuleUpdated}
-                                    onRuleDeleted={onRuleDeleted}
-                                />
-                            )}
+                           <TaxRulesTable 
+                                rules={rules}
+                                onRuleUpdated={onRuleUpdated}
+                                onRuleDeleted={onRuleDeleted}
+                            />
                         </CardContent>
                     </Card>
                 </div>
@@ -111,3 +101,4 @@ export default function TaxValidationPage() {
         </MainLayout>
     )
 }
+

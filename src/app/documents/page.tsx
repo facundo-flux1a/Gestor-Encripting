@@ -4,7 +4,7 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getDocuments } from "@/services/document-service";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2, ChevronsUpDown } from "lucide-react";
+import { Upload, ChevronsUpDown } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import type { Document } from "@/lib/types";
 import { UploadDocumentDialog } from "@/components/dashboard/upload-dialog";
@@ -32,15 +32,12 @@ const normalizeDocType = (type: string | null | undefined): string => {
 
 export default function DocumentsPage() {
   const [allDocuments, setAllDocuments] = useState<Document[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [docTypeFilter, setDocTypeFilter] = useState('todos');
 
   const fetchDocuments = () => {
-    setIsLoading(true);
     getDocuments().then(docs => {
         setAllDocuments(docs);
-        setIsLoading(false);
     });
   }
 
@@ -110,13 +107,7 @@ export default function DocumentsPage() {
             </div>
         </MainLayoutHeader>
         <div className="mt-6">
-            {isLoading ? (
-                <div className="flex justify-center items-center py-16">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-            ) : (
-                <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} filename={filename} />
-            )}
+           <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} filename={filename} />
         </div>
       </div>
       <UploadDocumentDialog 
@@ -127,3 +118,4 @@ export default function DocumentsPage() {
     </MainLayout>
   );
 }
+
