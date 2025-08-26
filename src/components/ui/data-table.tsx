@@ -212,22 +212,22 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   
   const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
     columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
   );
 
-
   const [globalFilter, setGlobalFilter] = React.useState('');
 
-  React.useEffect(() => {
-    const initialVisibility: VisibilityState = {};
+  const initialVisibility = React.useMemo(() => {
+    const visibility: VisibilityState = {};
     hiddenColumns.forEach(col => {
-      initialVisibility[col] = false;
+      visibility[col] = false;
     });
-    setColumnVisibility(initialVisibility);
+    return visibility;
   }, [hiddenColumns]);
+
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
 
   const table = useReactTable({
     data,
@@ -446,3 +446,5 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
+
+    
