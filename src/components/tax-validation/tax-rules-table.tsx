@@ -36,6 +36,65 @@ const formatDate = (date: string) => {
     }
 };
 
+const getColumns = (
+    onToggle: (rule: TaxValidationRule) => void,
+    onDelete: (rule: TaxValidationRule) => void
+): ColumnDef<TaxValidationRule>[] => [
+    {
+        accessorKey: 'vigente',
+        header: 'Vigente',
+        cell: ({ row }) => (
+            <Switch
+                checked={row.original.vigente}
+                onCheckedChange={() => onToggle(row.original)}
+            />
+        )
+    },
+    {
+        accessorKey: 'tipo_impuesto',
+        header: 'Tipo de Impuesto',
+         cell: ({ row }) => (
+            <Badge variant="secondary">{row.original.tipo_impuesto}</Badge>
+        )
+    },
+    {
+        accessorKey: 'porcentaje',
+        header: 'Porcentaje Inválido',
+        cell: ({ row }) => `${row.original.porcentaje}%`
+    },
+    {
+        accessorKey: 'date_init',
+        header: 'Desde',
+        cell: ({ row }) => formatDate(row.original.date_init)
+    },
+    {
+        accessorKey: 'date_finish',
+        header: 'Hasta',
+        cell: ({ row }) => formatDate(row.original.date_finish)
+    },
+    {
+        id: 'actions',
+        cell: ({ row }) => (
+            <div className="text-right">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Abrir menú</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onDelete(row.original)} className="text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        )
+    }
+];
+
 export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: TaxValidationRule[], onRuleUpdated: () => void, onRuleDeleted: () => void }) {
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState<TaxValidationRule | null>(null);
@@ -62,62 +121,8 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: 
             setIsDeleting(null);
         }
     }
-
-    const columns = useMemo((): ColumnDef<TaxValidationRule>[] => [
-        {
-            accessorKey: 'vigente',
-            header: 'Vigente',
-            cell: ({ row }) => (
-                <Switch
-                    checked={row.original.vigente}
-                    onCheckedChange={() => handleToggleVigente(row.original)}
-                />
-            )
-        },
-        {
-            accessorKey: 'tipo_impuesto',
-            header: 'Tipo de Impuesto',
-             cell: ({ row }) => (
-                <Badge variant="secondary">{row.original.tipo_impuesto}</Badge>
-            )
-        },
-        {
-            accessorKey: 'porcentaje',
-            header: 'Porcentaje Inválido',
-            cell: ({ row }) => `${row.original.porcentaje}%`
-        },
-        {
-            accessorKey: 'date_init',
-            header: 'Desde',
-            cell: ({ row }) => formatDate(row.original.date_init)
-        },
-        {
-            accessorKey: 'date_finish',
-            header: 'Hasta',
-            cell: ({ row }) => formatDate(row.original.date_finish)
-        },
-        {
-            id: 'actions',
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Abrir menú</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setIsDeleting(row.original)} className="text-destructive">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Eliminar
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            )
-        }
-    ], [rules]);
+    
+    const columns = useMemo(() => getColumns(handleToggleVigente, setIsDeleting), [onRuleUpdated, onRuleDeleted]);
 
     return (
         <>
