@@ -5,7 +5,7 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getTaxValidationRules, type TaxValidationRule } from "@/services/tax-validation-service";
 import { TaxRulesTable } from "@/components/tax-validation/tax-rules-table";
 import { CreateTaxRuleDialog } from "@/components/tax-validation/create-tax-rule-dialog";
@@ -38,29 +38,29 @@ export default function TaxValidationPage() {
         fetchRules();
     }, []);
 
-    const onRuleCreated = () => {
+    const onRuleCreated = useCallback(() => {
         fetchRules();
         toast({
             title: "Regla Creada",
             description: "La nueva regla de validación de impuestos ha sido creada con éxito."
         });
-    }
+    }, [toast]);
 
-    const onRuleUpdated = () => {
+    const onRuleUpdated = useCallback(() => {
         fetchRules();
         toast({
             title: "Regla Actualizada",
             description: "La regla ha sido actualizada."
         });
-    }
+    }, [toast]);
 
-    const onRuleDeleted = () => {
+    const onRuleDeleted = useCallback(() => {
         fetchRules();
         toast({
             title: "Regla Eliminada",
             description: "La regla ha sido eliminada con éxito."
         });
-    }
+    }, [toast]);
 
 
     return (

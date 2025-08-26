@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import type { TaxValidationRule } from '@/lib/types';
@@ -99,7 +99,7 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: 
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState<TaxValidationRule | null>(null);
 
-    const handleToggleVigente = async (rule: TaxValidationRule) => {
+    const handleToggleVigente = useCallback(async (rule: TaxValidationRule) => {
         try {
             await updateTaxRuleVigente(rule.id, !rule.vigente);
             onRuleUpdated();
@@ -107,9 +107,9 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: 
             console.error("Failed to update rule", error);
             toast({ title: "Error", description: "No se pudo actualizar la regla.", variant: "destructive" });
         }
-    };
+    }, [onRuleUpdated, toast]);
 
-    const handleDeleteRule = async () => {
+    const handleDeleteRule = useCallback(async () => {
         if (!isDeleting) return;
         try {
             await deleteTaxRule(isDeleting.id);
@@ -120,9 +120,9 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: { rules: 
         } finally {
             setIsDeleting(null);
         }
-    }
+    }, [isDeleting, onRuleDeleted, toast]);
     
-    const columns = useMemo(() => getColumns(handleToggleVigente, setIsDeleting), [onRuleUpdated, onRuleDeleted]);
+    const columns = useMemo(() => getColumns(handleToggleVigente, setIsDeleting), [handleToggleVigente]);
 
     return (
         <>
