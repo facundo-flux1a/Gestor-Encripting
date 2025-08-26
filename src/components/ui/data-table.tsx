@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -308,8 +307,6 @@ export function DataTable<TData, TValue>({
     useSensor(KeyboardSensor)
   );
   
-  const rows = table.getRowModel().rows;
-  
   const defaultRenderRow = (row: Row<TData>) => {
     // Check if data has id_documento for draggable rows
     const hasIdDocumento = 'id_documento' in row.original;
@@ -320,60 +317,60 @@ export function DataTable<TData, TValue>({
   }
 
   return (
+    <div className="space-y-4">
+    {/* Controls: Filter input and column visibility */}
+    <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
+        <div className="flex-1 w-full sm:w-auto">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder='Buscar en todas las columnas...'
+                    value={globalFilter ?? ''}
+                    onChange={(event) => setGlobalFilter(event.target.value)}
+                    className="h-10 pl-10 w-full max-w-sm"
+                />
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="ml-auto">
+                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                    const headerName = getHeaderName(column);
+
+                    return (
+                    <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    >
+                        {headerName}
+                    </DropdownMenuCheckboxItem>
+                    );
+                })}
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <ExportButton
+                columns={table.getVisibleFlatColumns()} 
+                data={table.getRowModel().rows} 
+                filename={filename} 
+            />
+        </div>
+    </div>
+
+
+    {/* Table */}
     <DndContext
         collisionDetection={closestCenter}
         onDragEnd={handleColumnDragEnd}
         modifiers={[restrictToHorizontalAxis]}
         sensors={sensors}
     >
-        <div className="space-y-4">
-        {/* Controls: Filter input and column visibility */}
-        <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
-            <div className="flex-1 w-full sm:w-auto">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder='Buscar en todas las columnas...'
-                        value={globalFilter ?? ''}
-                        onChange={(event) => setGlobalFilter(event.target.value)}
-                        className="h-10 pl-10 w-full max-w-sm"
-                    />
-                </div>
-            </div>
-            <div className="flex items-center gap-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="ml-auto">
-                        Columnas <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                    {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                        const headerName = getHeaderName(column);
-
-                        return (
-                        <DropdownMenuCheckboxItem
-                            key={column.id}
-                            className="capitalize"
-                            checked={column.getIsVisible()}
-                            onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                        >
-                            {headerName}
-                        </DropdownMenuCheckboxItem>
-                        );
-                    })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                <ExportButton
-                    columns={table.getVisibleFlatColumns()} 
-                    data={table.getRowModel().rows} 
-                    filename={filename} 
-                />
-            </div>
-        </div>
-
-
-        {/* Table */}
         <div className="rounded-md border overflow-auto">
             <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
@@ -405,8 +402,8 @@ export function DataTable<TData, TValue>({
                     ))}
                 </TableHeader>
                 <TableBody>
-                    {rows.length > 0 ? (
-                        rows.map((row) => (
+                    {table.getRowModel().rows?.length ? (
+                        table.getRowModel().rows.map((row) => (
                              defaultRenderRow(row)
                         ))
                     ) : (
@@ -419,33 +416,33 @@ export function DataTable<TData, TValue>({
                 </TableBody>
             </Table>
         </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between">
-            <div className="flex-1 text-sm text-muted-foreground">
-            {table.getFilteredSelectedRowModel().rows.length} de{" "}
-            {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
-            </div>
-            <div className="flex items-center space-x-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => table.previousPage()}
-                    disabled={!table.getCanPreviousPage()}
-                >
-                    Anterior
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => table.nextPage()}
-                    disabled={!table.getCanNextPage()}
-                >
-                    Siguiente
-                </Button>
-            </div>
-        </div>
-        </div>
     </DndContext>
+
+    {/* Pagination */}
+    <div className="flex items-center justify-between">
+        <div className="flex-1 text-sm text-muted-foreground">
+        {table.getFilteredSelectedRowModel().rows.length} de{" "}
+        {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
+        </div>
+        <div className="flex items-center space-x-2">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+            >
+                Anterior
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+            >
+                Siguiente
+            </Button>
+        </div>
+    </div>
+    </div>
   );
 }
