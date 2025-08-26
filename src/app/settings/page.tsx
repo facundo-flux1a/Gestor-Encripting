@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/services/auth-service";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 
 export default function SettingsPage() {
     const handleLogout = async () => {
@@ -18,7 +18,7 @@ export default function SettingsPage() {
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
                 <MainLayoutHeader>
-                     <h2 className="text-3xl font-bold tracking-tight">Ajustes</h2>
+                     <h2 className="text-3xl font-bold tracking-tight">Ajustes Generales</h2>
                 </MainLayoutHeader>
 
                 <div className="grid gap-6">

@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -24,6 +23,7 @@ import {
   PanelRightClose,
   LogOut,
   Bot,
+  ShieldCheck,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -139,10 +139,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
   ];
+  
+  const settingsNavItems = [
+      { href: '/settings', label: 'General', icon: Settings },
+      { href: '/settings/tax-validation', label: 'Validación de Impuestos', icon: ShieldCheck },
+  ]
 
   const isActive = (href: string) => {
-    if (href === '/') {
-        return pathname === '/';
+    if (href === '/settings') {
+        return pathname === href;
     }
     return pathname.startsWith(href);
   }
@@ -178,12 +183,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
            <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Ajustes" isActive={isActive('/settings')}>
+                    <SidebarMenuButton asChild tooltip="Ajustes" isActive={pathname.startsWith('/settings')}>
                         <Link href="/settings">
                             <Settings />
                              <span className="group-data-[collapsible=icon]:hidden">Ajustes</span>
                         </Link>
                     </SidebarMenuButton>
+                     {pathname.startsWith('/settings') && (
+                        <SidebarMenuSub className="group-data-[collapsible=icon]:hidden">
+                            {settingsNavItems.map(item => (
+                               <SidebarMenuItem key={item.href}>
+                                  <SidebarMenuSubButton asChild isActive={pathname === item.href}>
+                                    <Link href={item.href}>
+                                      <item.icon />
+                                      <span>{item.label}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenuSub>
+                    )}
                 </SidebarMenuItem>
            </SidebarMenu>
             <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">

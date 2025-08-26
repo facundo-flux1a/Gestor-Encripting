@@ -131,3 +131,16 @@ export const IncidentAnalysisResultSchema = z.object({
   message: z.string().describe('A summary message of the operation.'),
 });
 export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
+
+export const TaxValidationRuleSchema = z.object({
+  id: z.number(),
+  vigente: z.boolean(),
+  date_init: z.string(),
+  date_finish: z.string(),
+  tipo_impuesto: z.string(),
+  porcentaje: z.coerce.number(),
+});
+export type TaxValidationRule = z.infer<typeof TaxValidationRuleSchema>;
+
+export const CreateTaxValidationRuleSchema = TaxValidationRuleSchema.omit({ id: true, vigente: true });
+export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
