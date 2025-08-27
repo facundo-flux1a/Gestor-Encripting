@@ -38,9 +38,11 @@ export async function createTaxValidationRule(payload: CreateTaxValidationRulePa
             };
         }
         
+        // Insert with vigente = false to avoid the faulty trigger from blocking the creation.
+        // The user can then activate it manually.
         const [result] = await db.query<OkPacket>(
             'INSERT INTO validacion_impuestos (date_init, date_finish, tipo_impuesto, porcentaje, vigente) VALUES (?, ?, ?, ?, ?)',
-            [date_init, date_finish, tipo_impuesto, porcentaje, true]
+            [date_init, date_finish, tipo_impuesto, porcentaje, false]
         );
         
         revalidatePath('/settings/tax-validation');
