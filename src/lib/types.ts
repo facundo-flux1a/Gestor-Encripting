@@ -139,3 +139,22 @@ export const IncidentAnalysisResultSchema = z.object({
   message: z.string().describe('A summary message of the operation.'),
 });
 export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
+
+export const TaxValidationRuleSchema = z.object({
+    id: z.number(),
+    vigente: z.boolean(),
+    date_init: z.string(),
+    date_finish: z.string(),
+    tipo_impuesto: z.string(),
+    porcentaje: z.number(),
+});
+export type TaxValidationRule = z.infer<typeof TaxValidationRuleSchema>;
+
+export const CreateTaxValidationRuleSchema = z.object({
+  date_init: z.string().min(1, "La fecha de inicio es obligatoria."),
+  date_finish: z.string().min(1, "La fecha de fin es obligatoria."),
+  tipo_impuesto: z.string().min(1, "El tipo de impuesto es obligatorio."),
+  porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
+});
+export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
+

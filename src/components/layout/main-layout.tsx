@@ -146,6 +146,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   
   const settingsNavItems = [
       { href: '/settings', label: 'General', icon: Settings },
+      { href: '/settings/tax-validation', label: 'Validación de Impuestos', icon: ShieldCheck }
   ]
 
   const isActive = (href: string) => {
