@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import { MoreHorizontal, FileText, BrainCircuit } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
-import { flexRender } from '@tanstack/react-table';
+import { flexRender, useReactTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
@@ -63,40 +63,40 @@ const getColumns = (
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_emision')} fieldName="fecha_emision" onUpdate={onUpdate} inputType='date' />
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_emision')} fieldName="fecha_emision" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
       accessorKey: 'fecha_vencimiento',
       header: 'Fecha Documento',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_vencimiento')} fieldName="fecha_vencimiento" onUpdate={onUpdate} inputType='date' />
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_vencimiento')} fieldName="fecha_vencimiento" onUpdate={onUpdate} table={table} rowIndex={row.index} inputType='date' />
     },
     {
         accessorKey: 'proveedor',
         header: 'Proveedor',
-        cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('proveedor')} fieldName="proveedor_nombre" onUpdate={onUpdate} />
+        cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('proveedor')} fieldName="proveedor_nombre" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
         accessorKey: 'cif',
         header: 'CIF',
-        cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('cif')} fieldName="proveedor_cif" onUpdate={onUpdate} />
+        cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('cif')} fieldName="proveedor_cif" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('observaciones')} fieldName="observaciones" onUpdate={onUpdate} />
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('observaciones')} fieldName="observaciones" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
       accessorKey: 'tipo_documento',
       header: 'Tipo Gasto',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} />
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     ...uniqueVatRates.flatMap(rate => ([
         {
             id: `base_${rate}`,
             header: `Base ${rate}%`,
-            cell: ({ row }: { row: Row<Document> }) => {
+            cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
                 const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency />
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
             },
             footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
@@ -109,9 +109,9 @@ const getColumns = (
         {
             id: `iva_${rate}`,
             header: `IVA ${rate}%`,
-            cell: ({ row }: { row: Row<Document> }) => {
+            cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
                 const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency />
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
             },
              footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
@@ -125,7 +125,7 @@ const getColumns = (
      {
       accessorKey: 'retencion',
       header: 'Retención',
-      cell: ({ row }: { row: Row<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency />,
+      cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>,
       footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + 0, 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -134,7 +134,7 @@ const getColumns = (
     {
       accessorKey: 'base_imponible',
       header: 'Total Base',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="importe_sin_impuestos" onUpdate={onUpdate} isCurrency />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="importe_sin_impuestos" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
       footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -143,7 +143,7 @@ const getColumns = (
     {
       accessorKey: 'iva',
       header: 'Total IVA',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva_total" onUpdate={onUpdate} isCurrency />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva_total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
        footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -152,7 +152,7 @@ const getColumns = (
     {
       accessorKey: 'total',
       header: 'Total',
-      cell: ({ row }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="importe_total" onUpdate={onUpdate} isCurrency />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="importe_total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
        footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -189,23 +189,11 @@ const getColumns = (
 }
 
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
-  const [tableData, setTableData] = useState(documents);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
 
-   useEffect(() => {
-    setTableData(documents);
-  }, [documents]);
-
-  const handleUpdate = useCallback((docId: number, field: string, value: any) => {
-    setTableData(prevData => {
-        return prevData.map(doc => {
-            if (doc.id_documento === docId) {
-                return { ...doc, [field as keyof Document]: value };
-            }
-            return doc;
-        });
-    });
+  const handleUpdate = useCallback((docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => {
+      table.options.meta?.updateData(rowIndex, field, value)
   }, []);
   
   const uniqueVatRates = useMemo(() => {
@@ -228,41 +216,11 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
 
   const columns = useMemo(() => getColumns(handleUpdate, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
   
-  const renderRow = (row: Row<Document>) => {
-    const doc = row.original;
-    return (
-        <ContextMenu key={row.original.id_documento}>
-            <ContextMenuTrigger asChild>
-                <TableRow
-                    data-state={row.getIsSelected() && 'selected'}
-                    className="bg-background even:bg-muted/50 hover:bg-muted/75"
-                >
-                    {row.getVisibleCells().map(cell => (
-                        <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                    ))}
-                </TableRow>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-                <ContextMenuItem asChild>
-                    <Link href={`/documento/${doc.id_documento}`} className="flex items-center">
-                        <FileText className="mr-2 h-4 w-4" /> Ver detalles
-                    </Link>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleSummarize(doc)}>
-                    <BrainCircuit className="mr-2 h-4 w-4" /> Resumir con IA
-                </ContextMenuItem>
-            </ContextMenuContent>
-        </ContextMenu>
-    );
-};
-
 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} filename={filename} />
+      <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}
@@ -272,5 +230,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </>
   );
 }
+
+    
 
     

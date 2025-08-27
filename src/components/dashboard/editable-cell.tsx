@@ -8,14 +8,19 @@ import { useToast } from '@/hooks/use-toast';
 import { updateDocumentField } from '@/services/document-service';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
+import type { Table } from '@tanstack/react-table';
+import type { Document } from '@/lib/types';
+
 
 interface EditableCellProps {
   initialValue: any;
   docId: number;
   fieldName: string;
-  onUpdate: (docId: number, fieldName: string, value: any) => void;
+  onUpdate: (docId: number, fieldName: string, value: any, table: Table<Document>, rowIndex: number) => void;
   inputType?: 'text' | 'number' | 'date';
   isCurrency?: boolean;
+  table: Table<Document>;
+  rowIndex: number;
 }
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
@@ -48,6 +53,8 @@ export function EditableCell({
   onUpdate,
   inputType = 'text',
   isCurrency = false,
+  table,
+  rowIndex
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
@@ -81,7 +88,7 @@ export function EditableCell({
       const apiFieldName = fieldName === 'numero_factura' ? 'numero_documento' : fieldName;
       const result = await updateDocumentField(docId, apiFieldName, processedValue);
       if (result.success) {
-        onUpdate(docId, fieldName, processedValue);
+        onUpdate(docId, fieldName, processedValue, table, rowIndex);
         toast({
             title: 'Campo Actualizado',
             description: `El campo se ha guardado correctamente.`,
@@ -154,3 +161,5 @@ export function EditableCell({
     </div>
   );
 }
+
+    
