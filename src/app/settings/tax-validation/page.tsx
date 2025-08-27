@@ -1,11 +1,10 @@
-
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { getTaxValidationRules, type TaxValidationRule } from "@/services/tax-validation-service";
 import { TaxRulesTable } from "@/components/tax-validation/tax-rules-table";
 import { CreateTaxRuleDialog } from "@/components/tax-validation/create-tax-rule-dialog";

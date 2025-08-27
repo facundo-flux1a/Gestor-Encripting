@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateTaxValidationRuleSchema, type CreateTaxValidationRulePayload } from '@/lib/types';
@@ -17,7 +16,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -42,7 +40,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
     },
   });
 
-  const onSubmit = useCallback(async (data: CreateTaxValidationRulePayload) => {
+  const onSubmit = async (data: CreateTaxValidationRulePayload) => {
     setIsLoading(true);
     try {
       await createTaxValidationRule(data);
@@ -59,7 +57,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
     } finally {
       setIsLoading(false);
     }
-  }, [onRuleCreated, setIsOpen, form, toast]);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -92,7 +90,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
                 <FormItem>
                   <FormLabel>Porcentaje Inválido (%)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" {...field} />
+                    <Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
