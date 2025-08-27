@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type TaxValidationRule } from '@/lib/types';
 import { DataTable } from '@/components/ui/data-table';
-import { useState, useMemo, useCallback } from 'react';
+import { useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import {
@@ -23,37 +23,66 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
+import { updateTaxRuleVigente, deleteTaxRule } from '@/services/tax-validation-service';
 
 interface TaxRulesTableProps {
     rules: TaxValidationRule[];
-    onRuleUpdated: (id: number, vigente: boolean) => void;
-    onRuleDeleted: (id: number) => void;
 }
 
+const formatDate = (dateString: string) => {
+    try {
+        const date = new Date(dateString);
+        // Adjust for timezone offset to display the correct date
+        const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+        return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    } catch {
+        return 'N/A';
+    }
+}
 
-export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: TaxRulesTableProps) {
+export function TaxRulesTable({ rules }: TaxRulesTableProps) {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [ruleToDelete, setRuleToDelete] = useState<number | null>(null);
+    const { toast } = useToast();
 
-    const handleToggleVigente = useCallback((id: number, currentStatus: boolean) => {
-        onRuleUpdated(id, !currentStatus);
-    }, [onRuleUpdated]);
-    
-    const handleDeleteRule = useCallback((id: number) => {
+    // The component receives rules as props and does not manage its own state for them.
+    // Actions will call server actions and the user will refresh to see changes.
+
+    const handleToggleVigente = async (id: number, currentStatus: boolean) => {
+        try {
+            await updateTaxRuleVigente(id, !currentStatus);
+            toast({ title: "Estado Actualizado", description: "El estado de la regla ha cambiado. Refresca para ver los cambios." });
+        } catch (error) {
+            toast({ title: "Error", description: "No se pudo actualizar la regla.", variant: "destructive" });
+        }
+    };
+
+    const handleDeleteRule = (id: number) => {
         setRuleToDelete(id);
         setIsDeleteDialogOpen(true);
-    }, []);
+    };
 
-    const confirmDelete = useCallback(() => {
+    const confirmDelete = async () => {
         if (ruleToDelete !== null) {
-            onRuleDeleted(ruleToDelete);
-            setRuleToDelete(null);
+            try {
+                await deleteTaxRule(ruleToDelete);
+                toast({ title: "Regla Eliminada", description: "La regla ha sido eliminada. Refresca para ver los cambios." });
+            } catch (error) {
+                 toast({ title: "Error", description: "No se pudo eliminar la regla.", variant: "destructive" });
+            } finally {
+                setRuleToDelete(null);
+                setIsDeleteDialogOpen(false);
+            }
         }
-        setIsDeleteDialogOpen(false);
-    }, [ruleToDelete, onRuleDeleted]);
+    };
 
-    const columns: ColumnDef<TaxValidationRule>[] = useMemo(() => [
+    const columns: ColumnDef<TaxValidationRule>[] = [
         {
             accessorKey: 'vigente',
             header: 'Activa',
@@ -76,10 +105,12 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: TaxRulesT
         {
             accessorKey: 'date_init',
             header: 'Fecha Inicio',
+            cell: ({ row }) => formatDate(row.original.date_init)
         },
         {
             accessorKey: 'date_finish',
             header: 'Fecha Fin',
+            cell: ({ row }) => formatDate(row.original.date_finish)
         },
         {
             id: 'actions',
@@ -103,7 +134,7 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: TaxRulesT
                 );
             },
         },
-    ], [handleToggleVigente, handleDeleteRule]);
+    ];
 
     return (
         <>
@@ -131,4 +162,3 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: TaxRulesT
         </>
     );
 }
-

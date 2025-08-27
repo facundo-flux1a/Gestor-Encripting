@@ -8,6 +8,9 @@ import { revalidatePath } from 'next/cache';
 
 export async function getTaxValidationRules(): Promise<TaxValidationRule[]> {
     const [rows] = await db.query<RowDataPacket[]>('SELECT id, vigente, DATE_FORMAT(date_init, "%Y-%m-%d") as date_init, DATE_FORMAT(date_finish, "%Y-%m-%d") as date_finish, tipo_impuesto, porcentaje FROM validacion_impuestos ORDER BY date_init DESC');
+    if (!rows || rows.length === 0) {
+        return [];
+    }
     return rows.map(row => ({
         ...row,
         vigente: Boolean(row.vigente),

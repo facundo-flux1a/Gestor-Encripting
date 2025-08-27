@@ -9,25 +9,20 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateTaxValidationRuleSchema, type CreateTaxValidationRulePayload } from '@/lib/types';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
+import { createTaxValidationRule } from '@/services/tax-validation-service';
 
-interface CreateTaxRuleDialogProps {
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  onRuleCreated: (payload: CreateTaxValidationRulePayload) => Promise<boolean>;
-}
-
-export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: CreateTaxRuleDialogProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export function CreateTaxRuleDialog() {
+  const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<CreateTaxValidationRulePayload>({
@@ -41,23 +36,24 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
   });
 
   const onSubmit = async (data: CreateTaxValidationRulePayload) => {
-    setIsSubmitting(true);
-    const success = await onRuleCreated(data);
-    if (success) {
+    try {
+      await createTaxValidationRule(data);
+      toast({ title: "Éxito", description: "Nueva regla de validación creada. Refresca la página para ver los cambios." });
       setIsOpen(false);
       form.reset();
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo crear la regla.", variant: "destructive" });
     }
-    setIsSubmitting(false);
   };
-  
-  const handleOpenChange = (open: boolean) => {
-      if(isSubmitting) return;
-      setIsOpen(open);
-      if(!open) form.reset();
-  }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger asChild>
+            <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Crear Nueva Regla
+            </Button>
+        </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Crear Nueva Regla de Validación</DialogTitle>
@@ -113,7 +109,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
                         <FormItem>
                             <FormLabel>Porcentaje</FormLabel>
                             <FormControl>
-                                <Input type="number" step="0.01" {...field} />
+                                <Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                             </FormControl>
                              <FormMessage />
                         </FormItem>
@@ -121,11 +117,11 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
                  />
 
                 <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
+                    <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={form.formState.isSubmitting}>
                         Cancelar
                     </Button>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button type="submit" disabled={form.formState.isSubmitting}>
+                        {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Crear Regla
                     </Button>
                 </DialogFooter>
