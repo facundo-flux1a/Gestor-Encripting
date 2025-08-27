@@ -1,11 +1,11 @@
 
 'use client';
 
+import { useMemo, useState, useCallback } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type TaxValidationRule } from '@/lib/types';
 import { DataTable } from '@/components/ui/data-table';
-import { useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import {
@@ -46,29 +46,85 @@ const formatDate = (dateString: string) => {
     }
 }
 
+// Moved columns definition outside the component
+const getColumns = (
+    onToggle: (id: number, status: boolean) => void, 
+    onDelete: (id: number) => void
+): ColumnDef<TaxValidationRule>[] => [
+    {
+        accessorKey: 'vigente',
+        header: 'Activa',
+        cell: ({ row }) => (
+            <Switch
+                checked={row.original.vigente}
+                onCheckedChange={() => onToggle(row.original.id, row.original.vigente)}
+                aria-label="Toggle rule status"
+            />
+        )
+    },
+    {
+        accessorKey: 'tipo_impuesto',
+        header: 'Tipo Impuesto',
+    },
+    {
+        accessorKey: 'porcentaje',
+        header: 'Porcentaje',
+        cell: ({ row }) => `${row.original.porcentaje}%`
+    },
+    {
+        accessorKey: 'date_init',
+        header: 'Fecha Inicio',
+        cell: ({ row }) => formatDate(row.original.date_init)
+    },
+    {
+        accessorKey: 'date_finish',
+        header: 'Fecha Fin',
+        cell: ({ row }) => formatDate(row.original.date_finish)
+    },
+    {
+        id: 'actions',
+        cell: ({ row }) => {
+            const rule = row.original;
+            return (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Abrir menú</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onDelete(rule.id)} className="text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            );
+        },
+    },
+];
+
 export function TaxRulesTable({ rules }: TaxRulesTableProps) {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [ruleToDelete, setRuleToDelete] = useState<number | null>(null);
     const { toast } = useToast();
 
-    // The component receives rules as props and does not manage its own state for them.
-    // Actions will call server actions and the user will refresh to see changes.
-
-    const handleToggleVigente = async (id: number, currentStatus: boolean) => {
+    const handleToggleVigente = useCallback(async (id: number, currentStatus: boolean) => {
         try {
             await updateTaxRuleVigente(id, !currentStatus);
             toast({ title: "Estado Actualizado", description: "El estado de la regla ha cambiado. Refresca para ver los cambios." });
         } catch (error) {
             toast({ title: "Error", description: "No se pudo actualizar la regla.", variant: "destructive" });
         }
-    };
+    }, [toast]);
 
-    const handleDeleteRule = (id: number) => {
+    const handleDeleteRule = useCallback((id: number) => {
         setRuleToDelete(id);
         setIsDeleteDialogOpen(true);
-    };
+    }, []);
 
-    const confirmDelete = async () => {
+    const confirmDelete = useCallback(async () => {
         if (ruleToDelete !== null) {
             try {
                 await deleteTaxRule(ruleToDelete);
@@ -80,61 +136,12 @@ export function TaxRulesTable({ rules }: TaxRulesTableProps) {
                 setIsDeleteDialogOpen(false);
             }
         }
-    };
+    }, [ruleToDelete, toast]);
 
-    const columns: ColumnDef<TaxValidationRule>[] = [
-        {
-            accessorKey: 'vigente',
-            header: 'Activa',
-            cell: ({ row }) => (
-                <Switch
-                    checked={row.original.vigente}
-                    onCheckedChange={() => handleToggleVigente(row.original.id, row.original.vigente)}
-                />
-            )
-        },
-        {
-            accessorKey: 'tipo_impuesto',
-            header: 'Tipo Impuesto',
-        },
-        {
-            accessorKey: 'porcentaje',
-            header: 'Porcentaje',
-            cell: ({ row }) => `${row.original.porcentaje}%`
-        },
-        {
-            accessorKey: 'date_init',
-            header: 'Fecha Inicio',
-            cell: ({ row }) => formatDate(row.original.date_init)
-        },
-        {
-            accessorKey: 'date_finish',
-            header: 'Fecha Fin',
-            cell: ({ row }) => formatDate(row.original.date_finish)
-        },
-        {
-            id: 'actions',
-            cell: ({ row }) => {
-                const rule = row.original;
-                return (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Abrir menú</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleDeleteRule(rule.id)} className="text-destructive">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Eliminar
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                );
-            },
-        },
-    ];
+    const columns = useMemo(
+      () => getColumns(handleToggleVigente, handleDeleteRule), 
+      [handleToggleVigente, handleDeleteRule]
+    );
 
     return (
         <>
