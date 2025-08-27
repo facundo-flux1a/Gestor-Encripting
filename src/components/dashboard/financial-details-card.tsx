@@ -83,7 +83,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                                  <FormField control={form.control} name={`iva_details.${index}.porcentaje`} render={({field}) => (
                                     <Input type="number" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-7 w-16" placeholder="%" />
                                 )} />
-                                <FormField control={form.control} name={`iva_details.${index}.cuota_iva`} render={({field}) => (
+                                <FormField control={form.control} name={`iva_details.${index}.cuota`} render={({field}) => (
                                      <Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-7 w-24 text-right" />
                                 )} />
                             </div>
@@ -92,7 +92,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                         doc.iva_details.map((iva, index) => (
                             <div key={index} className="flex items-center justify-between text-muted-foreground">
                                 <span>{iva.tipo_impuesto} ({iva.porcentaje}%)</span>
-                                <span className="font-mono">{formatCurrency(iva.cuota_iva, doc.moneda)}</span>
+                                <span className="font-mono">{formatCurrency(iva.cuota, doc.moneda)}</span>
                             </div>
                         ))
                     )}

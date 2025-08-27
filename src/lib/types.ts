@@ -21,7 +21,7 @@ export const IvaDetailSchema = z.object({
   tipo_impuesto: z.string().optional().nullable(),
   porcentaje: z.coerce.number(),
   base_imponible: z.coerce.number(),
-  cuota_iva: z.coerce.number(),
+  cuota: z.coerce.number(),
 });
 export type IvaDetail = z.infer<typeof IvaDetailSchema>;
 

@@ -110,12 +110,12 @@ const getColumns = (
             header: `IVA ${rate}%`,
             cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
                 const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota_iva ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
             },
              footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
                     const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (Number(detail?.cuota_iva) || 0);
+                    return sum + (Number(detail?.cuota) || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
             }
@@ -126,12 +126,12 @@ const getColumns = (
       header: 'Retención',
       cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
         const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
-        return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota_iva ?? 0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>
+        return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>
       },
       footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
              const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
-             return sum + (Number(detail?.cuota_iva) || 0);
+             return sum + (Number(detail?.cuota) || 0);
           }, 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
