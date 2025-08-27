@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -207,11 +208,16 @@ const StandardTableRow = <TData,>({
 
 export function DataTable<TData, TValue>({
   columns,
-  data,
+  data: initialData,
   hiddenColumns = [],
   filename
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
+  const [data, setData] = React.useState(initialData);
+
+  React.useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -260,7 +266,22 @@ export function DataTable<TData, TValue>({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    getFacetedMinMaxValues: getFacetedMinMaxValues,
+    getFacetedMinMaxValues: getFacetedMinMaxValues(),
+    meta: {
+      updateData: (rowIndex: number, columnId: string, value: any) => {
+        setData(old =>
+          old.map((row, index) => {
+            if (index === rowIndex) {
+              return {
+                ...old[rowIndex]!,
+                [columnId]: value,
+              }
+            }
+            return row
+          })
+        )
+      },
+    },
   });
 
 
@@ -483,4 +504,3 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
-

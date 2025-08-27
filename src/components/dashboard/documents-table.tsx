@@ -191,18 +191,14 @@ const getColumns = (
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
-  const [tableData, setTableData] = useState(documents);
-
-  useEffect(() => {
-    setTableData(documents);
-  }, [documents]);
 
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
-    setTableData(prevData =>
-      prevData.map(row =>
-        row.id_documento === docId ? { ...row, [fieldName]: value } : row
-      )
-    );
+    // This function is now primarily for optimistic updates if needed,
+    // but the main goal is to trigger a server-side update.
+    // To avoid re-renders, we won't manage a local state copy here.
+    // The EditableCell component handles the server update.
+    // A full page refresh or a more sophisticated state management (like SWR or React Query)
+    // would be needed to see updates without a manual refresh.
   }, []);
   
   const uniqueVatRates = useMemo(() => {
@@ -229,7 +225,7 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} filename={filename} />
+      <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}
@@ -239,7 +235,3 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </>
   );
 }
-
-    
-
-    

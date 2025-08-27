@@ -164,4 +164,3 @@ export function TaxRulesTable({ rules, onRuleUpdated, onRuleDeleted }: TaxRulesT
       />
     );
 }
-

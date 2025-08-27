@@ -88,7 +88,8 @@ export function EditableCell({
       const apiFieldName = fieldName === 'numero_factura' ? 'numero_documento' : fieldName;
       const result = await updateDocumentField(docId, apiFieldName, processedValue);
       if (result.success) {
-        onUpdate(docId, fieldName, processedValue, table, rowIndex);
+        // Optimistically update the table's internal state
+        table.options.meta?.updateData(rowIndex, fieldName, processedValue);
         toast({
             title: 'Campo Actualizado',
             description: `El campo se ha guardado correctamente.`,
@@ -161,5 +162,3 @@ export function EditableCell({
     </div>
   );
 }
-
-    
