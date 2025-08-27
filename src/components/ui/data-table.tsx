@@ -32,8 +32,8 @@ import {
   useSensors,
   PointerSensor,
 } from '@dnd-kit/core';
-import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
-import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { arrayMove, SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -80,7 +80,6 @@ const DraggableTableHeader = <TData, TValue>({
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
-    disabled: !header.column.getCanSort()
   });
 
   const style: React.CSSProperties = {
@@ -101,17 +100,15 @@ const DraggableTableHeader = <TData, TValue>({
     >
        {header.isPlaceholder ? null : (
             <div className="flex items-center h-full">
-                {isSortable && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        {...attributes}
-                        {...listeners}
-                        className="cursor-grab p-2 h-full touch-none"
-                        >
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                )}
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab p-2 h-full touch-none"
+                    >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
                 <div
                     className={cn(
                         "flex items-center text-left w-full h-full px-2 py-3",
@@ -291,6 +288,7 @@ export function DataTable<TData, TValue>({
     },
   });
 
+  const rowIds = React.useMemo(() => data.map(item => (item as any).id_documento), [data]);
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
@@ -326,16 +324,24 @@ export function DataTable<TData, TValue>({
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   }
   
-  const handleColumnDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-        const oldId = active.id.toString().replace('column-', '');
-        const newId = over.id.toString().replace('column-', '');
-        setColumnOrder((items) => {
-            const oldIndex = items.indexOf(oldId);
-            const newIndex = items.indexOf(newId);
-            return arrayMove(items, oldIndex, newIndex);
-        });
+        if(active.id.toString().startsWith('column-')) {
+            const oldId = active.id.toString().replace('column-', '');
+            const newId = over.id.toString().replace('column-', '');
+            setColumnOrder((items) => {
+                const oldIndex = items.indexOf(oldId);
+                const newIndex = items.indexOf(newId);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        } else if(active.id.toString().startsWith('row-')) {
+            setData((items) => {
+                const oldIndex = items.findIndex(item => (item as any).id_documento === rowIds[active.data.current!.sortable.index]);
+                const newIndex = items.findIndex(item => (item as any).id_documento === rowIds[over.data.current!.sortable.index]);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
     }
   };
 
@@ -357,8 +363,7 @@ export function DataTable<TData, TValue>({
   const tableContent = (
      <DndContext
         collisionDetection={closestCenter}
-        onDragEnd={handleColumnDragEnd}
-        modifiers={[restrictToHorizontalAxis]}
+        onDragEnd={handleDragEnd}
         sensors={sensors}
     >
         <div className="rounded-md border overflow-auto">
@@ -392,6 +397,10 @@ export function DataTable<TData, TValue>({
                     ))}
                 </TableHeader>
                 <TableBody>
+                     <SortableContext
+                        items={rowIds.map(id => `row-${id}`)}
+                        strategy={verticalListSortingStrategy}
+                    >
                     {table.getRowModel().rows?.length ? (
                         table.getRowModel().rows.map((row) => (
                              defaultRenderRow(row)
@@ -403,6 +412,7 @@ export function DataTable<TData, TValue>({
                         </TableCell>
                         </TableRow>
                     )}
+                    </SortableContext>
                 </TableBody>
             </Table>
         </div>
