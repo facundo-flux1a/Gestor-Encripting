@@ -30,8 +30,7 @@ import { TableCell, TableRow } from '../ui/table';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
-    onSummarize: (doc: Document) => void,
-    uniqueVatRates: number[]
+    onSummarize: (doc: Document) => void
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
      {
@@ -63,7 +62,7 @@ const getColumns = (
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_emision')} fieldName="fecha_emision" onUpdate={onUpdate} table={table} rowIndex={row.index} />
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_emision')} fieldName="fecha_emision" onUpdate={onUpdate} table={table} rowIndex={row.index} inputType='date' />
     },
     {
       accessorKey: 'fecha_vencimiento',
@@ -90,7 +89,7 @@ const getColumns = (
       header: 'Tipo Gasto',
       cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
-    ...uniqueVatRates.flatMap(rate => ([
+    ...[21, 10, 4, 0].flatMap(rate => ([
         {
             id: `base_${rate}`,
             header: `Base ${rate}%`,
@@ -125,16 +124,22 @@ const getColumns = (
      {
       accessorKey: 'retencion',
       header: 'Retención',
-      cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => <EditableCell docId={row.original.id_documento} initialValue={0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>,
+      cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
+        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
+        return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota_iva ?? 0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>
+      },
       footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + 0, 0);
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+             const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
+             return sum + (Number(detail?.cuota_iva) || 0);
+          }, 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
     {
       accessorKey: 'base_imponible',
       header: 'Total Base',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="importe_sin_impuestos" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="base_imponible" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
       footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -143,7 +148,7 @@ const getColumns = (
     {
       accessorKey: 'iva',
       header: 'Total IVA',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva_total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
        footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -152,7 +157,7 @@ const getColumns = (
     {
       accessorKey: 'total',
       header: 'Total',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="importe_total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
        footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
@@ -201,25 +206,12 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     // would be needed to see updates without a manual refresh.
   }, []);
   
-  const uniqueVatRates = useMemo(() => {
-    const rates = new Set<number>();
-    documents.forEach(doc => {
-        doc.iva_details.forEach(detail => {
-            rates.add(Number(detail.porcentaje));
-        });
-    });
-    // Ensure standard rates are always present for column consistency
-    [0, 4, 10, 21].forEach(rate => rates.add(rate)); 
-    return Array.from(rates).sort((a,b) => b - a); 
-  }, [documents]);
-
-
   const handleSummarize = (doc: Document) => {
     setSelectedDocForSummary(doc);
     setIsSummarizeOpen(true);
   };
 
-  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
+  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize), [handleUpdate]);
   
 
   return (
@@ -235,3 +227,5 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </>
   );
 }
+
+    

@@ -151,13 +151,38 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
 
-        const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
-            id: tax.id,
-            tipo_impuesto: tax.tipo_impuesto,
-            porcentaje: tax.porcentaje,
-            base_imponible: tax.base_imponible,
-            cuota_iva: tax.cuota_iva,
-        }));
+        const iva_details: IvaDetail[] = [];
+        const standardRates = [21, 10, 4, 0];
+
+        standardRates.forEach(rate => {
+            const taxDetail = currentImpuestos.find(t => Number(t.porcentaje) === rate);
+            if (taxDetail) {
+                iva_details.push({
+                    id: taxDetail.id,
+                    tipo_impuesto: taxDetail.tipo_impuesto,
+                    porcentaje: taxDetail.porcentaje,
+                    base_imponible: taxDetail.base_imponible,
+                    cuota_iva: taxDetail.cuota_iva,
+                });
+            } else {
+                iva_details.push({
+                    porcentaje: rate,
+                    base_imponible: 0,
+                    cuota_iva: 0,
+                });
+            }
+        });
+
+        const otherTaxes = currentImpuestos.filter(t => !standardRates.includes(Number(t.porcentaje)));
+        otherTaxes.forEach(taxDetail => {
+            iva_details.push({
+                id: taxDetail.id,
+                tipo_impuesto: taxDetail.tipo_impuesto,
+                porcentaje: taxDetail.porcentaje,
+                base_imponible: taxDetail.base_imponible,
+                cuota_iva: taxDetail.cuota_iva,
+            });
+        });
         
         const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota_iva) || 0), 0);
 
@@ -323,12 +348,20 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 }
 
 async function recalculateDocumentTotals(docId: number, connection: any) {
-    const [taxes] = await connection.query<ImpuestoPacket[]>('SELECT * FROM documento_impuestos WHERE documento_id = ?', [docId]);
-    const [lines] = await connection.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id = ?', [docId]);
-
-    const totalIva = taxes.reduce((sum, tax) => sum + (Number(tax.cuota_iva) || 0), 0);
-    const baseImponible = lines.reduce((sum, line) => sum + (Number(line.importe_linea) || 0), 0);
-    const total = baseImponible + totalIva;
+    // Recalculate base_imponible from lines
+    const [lineSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?', [docId]);
+    const baseImponible = Number(lineSumResult[0].total_lines) || 0;
+    
+    // Recalculate total_iva from taxes (excluding retentions)
+    const [taxSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(cuota_iva) as total_tax FROM documento_impuestos WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [docId, '%retencion%']);
+    const totalIva = Number(taxSumResult[0].total_tax) || 0;
+    
+    // Get total retentions
+    const [retentionSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(cuota_iva) as total_retention FROM documento_impuestos WHERE documento_id = ? AND tipo_impuesto LIKE ?', [docId, '%retencion%']);
+    const totalRetention = Number(retentionSumResult[0].total_retention) || 0;
+    
+    // The total is base + taxes - retentions
+    const total = baseImponible + totalIva + totalRetention; // Note: retentions are often negative, so adding works.
 
     await connection.query(
         'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
@@ -336,15 +369,21 @@ async function recalculateDocumentTotals(docId: number, connection: any) {
     );
 }
 
+
 export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'importe_sin_impuestos', 'importe_total', 'observaciones', 'tipo_documento'];
+        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento', 'iva'];
         
         if (directDocumentFields.includes(fieldName)) {
-            await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [fieldName, value, id]);
+            const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
+                                fieldName === 'total' ? 'importe_total' :
+                                fieldName;
+             if (dbFieldName !== 'iva') { // 'iva' is a calculated field, don't update directly
+                await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
+            }
         } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
             const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
             const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
@@ -360,20 +399,30 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
             const percentage = parseInt(parts[2], 10);
             const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota_iva';
             
-            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM documento_impuestos WHERE documento_id = ? AND porcentaje = ?', [id, percentage]);
+            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM documento_impuestos WHERE documento_id = ? AND porcentaje = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [id, percentage, '%retencion%']);
 
             if (existing.length > 0) {
                 await connection.query(`UPDATE documento_impuestos SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
             } else {
                 const base = type === 'base' ? value : 0;
                 const cuota_iva = type === 'cuota' ? value : 0;
-                await connection.query('INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?)', [id, percentage, base, cuota_iva]);
+                await connection.query('INSERT INTO documento_impuestos (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?, ?)', [id, `IVA`, percentage, base, cuota_iva]);
             }
-            await recalculateDocumentTotals(id, connection);
 
+        } else if (fieldName === 'retencion') {
+            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM documento_impuestos WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%retencion%']);
+             if (existing.length > 0) {
+                await connection.query(`UPDATE documento_impuestos SET cuota_iva = ? WHERE id = ?`, [value, existing[0].id]);
+            } else {
+                // Assuming a default percentage if none, or you might need to specify one.
+                await connection.query('INSERT INTO documento_impuestos (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
+            }
         } else {
             throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
         }
+        
+        // Recalculate totals after any financial field is updated
+        await recalculateDocumentTotals(id, connection);
 
         await connection.commit();
         return { success: true };
@@ -1002,25 +1051,5 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 
   return JSON.parse(JSON.stringify(analyticsData));
 }
-    
 
     
-
-    
-
-
-
-
-    
-
-    
-
-    
-
-
-
-
-    
-
-    
-
