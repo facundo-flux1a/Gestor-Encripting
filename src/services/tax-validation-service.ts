@@ -7,16 +7,24 @@ import type { TaxValidationRule, CreateTaxValidationRulePayload } from '@/lib/ty
 import { revalidatePath } from 'next/cache';
 
 export async function getTaxValidationRules(): Promise<TaxValidationRule[]> {
-    const [rows] = await db.query<RowDataPacket[]>('SELECT id, vigente, DATE_FORMAT(date_init, "%Y-%m-%d") as date_init, DATE_FORMAT(date_finish, "%Y-%m-%d") as date_finish, tipo_impuesto, porcentaje FROM validacion_impuestos ORDER BY date_init DESC');
-    if (!rows || rows.length === 0) {
+    try {
+        const [rows] = await db.query<RowDataPacket[]>('SELECT id, vigente, DATE_FORMAT(date_init, "%Y-%m-%d") as date_init, DATE_FORMAT(date_finish, "%Y-%m-%d") as date_finish, tipo_impuesto, porcentaje FROM validacion_impuestos ORDER BY date_init DESC');
+        if (!rows || rows.length === 0) {
+            return [];
+        }
+        return rows.map(row => ({
+            ...row,
+            vigente: Boolean(row.vigente),
+            porcentaje: parseFloat(row.porcentaje)
+        })) as TaxValidationRule[];
+    } catch (error) {
+        console.error("Failed to fetch tax validation rules:", error);
+        // En un entorno de producción, podrías manejar esto de forma más elegante
+        // pero por ahora, devolver un array vacío es seguro.
         return [];
     }
-    return rows.map(row => ({
-        ...row,
-        vigente: Boolean(row.vigente),
-        porcentaje: parseFloat(row.porcentaje)
-    })) as TaxValidationRule[];
 }
+
 
 export async function createTaxValidationRule(payload: CreateTaxValidationRulePayload): Promise<{ success: boolean; id?: number }> {
   const { date_init, date_finish, tipo_impuesto, porcentaje } = payload;
