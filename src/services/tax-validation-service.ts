@@ -19,8 +19,8 @@ export async function getTaxValidationRules(): Promise<TaxValidationRule[]> {
         })) as TaxValidationRule[];
     } catch (error) {
         console.error("Failed to fetch tax validation rules:", error);
-        // En un entorno de producción, podrías manejar esto de forma más elegante
-        // pero por ahora, devolver un array vacío es seguro.
+        // In a production environment, you might handle this more gracefully,
+        // but for now, returning an empty array is safe.
         return [];
     }
 }

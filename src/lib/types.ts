@@ -113,6 +113,7 @@ export type Document = {
   cif: string;
   incidencia: boolean;
   verificado: boolean;
+  incidencia_razon?: string | null;
 };
 
 export const DocumentUpdateSchema = z.object({
@@ -157,5 +158,6 @@ export const CreateTaxValidationRuleSchema = z.object({
   porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
+
 
 

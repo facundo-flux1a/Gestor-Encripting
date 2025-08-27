@@ -3,7 +3,7 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats } from '@/lib/types';
+import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
@@ -65,7 +65,7 @@ interface LineaPacket extends RowDataPacket {
 
 interface ImpuestoPacket extends RowDataPacket {
     id: number;
-    tipo_impuesto: string;
+    tipo_impuesto: string | null; // Can be null
     porcentaje: number;
     base_imponible: number;
     cuota_iva: number;
@@ -85,6 +85,7 @@ interface IncidenciaPacket extends RowDataPacket {
     documento_id: number;
     descripcion: string | null;
     validado: boolean;
+    fecha_incidencia: string;
 }
 
 export type DashboardAnalytics = {
@@ -149,21 +150,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
         const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
-        // A document is "issued" (income) if there is a 'receptor' or 'cliente'. Otherwise, it's a received document (expense).
-        const emitida = !!receptor;
-
-        let ingreso = 0;
-        let gasto = 0;
-        
-        if (emitida) {
-            ingreso = Number(doc.importe_total) || 0;
-        } else {
-            gasto = Number(doc.importe_total) || 0;
-        }
 
         const iva_details: IvaDetail[] = currentImpuestos.map(tax => ({
             id: tax.id,
-            tipo_impuesto: 'IVA', // The old table did not have this field, so we hardcode it.
+            tipo_impuesto: tax.tipo_impuesto,
             porcentaje: tax.porcentaje,
             base_imponible: tax.base_imponible,
             cuota_iva: tax.cuota_iva,
@@ -181,10 +171,12 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             telefono: e.telefono,
             email: e.email,
             datos_extra: safeJsonParse(e.datos_extra),
+            fecha_creacion: e.fecha_creacion,
         }));
 
         const lineas: DocumentLine[] = currentLineas.map(l => ({
              id: l.id,
+             documento_id: l.documento_id,
              codigo: l.codigo,
              descripcion: l.descripcion,
              cantidad: l.cantidad,
@@ -194,10 +186,12 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
              precio_neto: l.precio_neto,
              importe_linea: l.importe_linea,
              datos_extra: safeJsonParse(l.datos_extra),
+             fecha_creacion: l.fecha_creacion,
         }));
         
         const archivos: DocumentFile[] = currentFiles.map(f => ({
             id: f.id,
+            documento_id: f.documento_id,
             tipo_archivo: f.tipo_archivo,
             nombre_archivo: f.nombre_archivo,
             ruta_archivo: f.ruta_archivo,
@@ -205,8 +199,19 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             fecha_subida: f.fecha_subida,
         }));
 
-        const pendientes = currentIncidencias.filter(i => !i.validado).length;
-        const primeraIncidenciaPendiente = currentIncidencias.find(i => !i.validado);
+        const incidencias: Incident[] = currentIncidencias.map(i => ({
+            id: i.id,
+            documento_id: i.documento_id,
+            incidencia: true,
+            descripcion: i.descripcion,
+            validado: i.validado,
+            fecha_incidencia: i.fecha_incidencia,
+            fecha_validacion: null, // these fields are not in the query
+            validado_por: null, // these fields are not in the query
+        }));
+
+        const pendientes = incidencias.filter(i => !i.validado).length;
+        const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
 
         return {
             id_documento: doc.id,
@@ -221,20 +226,15 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             moneda: doc.moneda,
             observaciones: doc.observaciones,
             datos_extra: safeJsonParse(doc.datos_extra),
-            ingreso: ingreso,
-            gasto: gasto,
             base_imponible: Number(doc.importe_sin_impuestos) || 0,
-            iva: total_iva,
             total: Number(doc.importe_total) || 0,
             entidades: entidades,
             lineas: lineas,
             iva_details: iva_details,
             archivos: archivos,
-            fecha_subida: doc.fecha_emision, 
+            incidencias: incidencias,
             proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
             cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
-            nombre_archivo: currentFiles.length > 0 ? currentFiles[0].nombre_archivo ?? `doc-${doc.id}`: `doc-${doc.id}`,
-            contenido: doc.observaciones ?? "",
         };
     });
     
@@ -305,8 +305,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         }
         for (const iva of iva_details) {
             await connection.query(
-                'INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?)', 
-                [id, iva.porcentaje, iva.base_imponible, iva.cuota_iva]
+                'INSERT INTO documento_impuestos (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?, ?)', 
+                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota_iva]
             );
         }
 
@@ -433,7 +433,8 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
             MAX(direccion) as direccion,
             MAX(telefono) as telefono,
             MAX(email) as email,
-            MAX(datos_extra) as datos_extra
+            MAX(datos_extra) as datos_extra,
+            MAX(fecha_creacion) as fecha_creacion
         FROM entidades_documento
         WHERE (rol = 'proveedor' OR rol = 'emisor')
           AND identificador_fiscal IS NOT NULL 
@@ -451,6 +452,7 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
         telefono: p.telefono,
         email: p.email,
         datos_extra: safeJsonParse(p.datos_extra),
+        fecha_creacion: p.fecha_creacion,
     }));
 
     return JSON.parse(JSON.stringify(providers));
@@ -556,6 +558,7 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
         telefono: p.telefono,
         email: p.email,
         datos_extra: safeJsonParse(p.datos_extra),
+        fecha_creacion: p.fecha_creacion
     };
 
     return JSON.parse(JSON.stringify(provider));
@@ -581,6 +584,7 @@ export async function getProductsByProviderName(fiscalId: string): Promise<Docum
 
     const products: DocumentLine[] = lineaRows.map(l => ({
         id: l.id,
+        documento_id: l.documento_id,
         codigo: l.codigo,
         descripcion: l.descripcion,
         cantidad: l.cantidad,
@@ -590,6 +594,7 @@ export async function getProductsByProviderName(fiscalId: string): Promise<Docum
         precio_neto: l.precio_neto,
         importe_linea: l.importe_linea,
         datos_extra: safeJsonParse(l.datos_extra),
+        fecha_creacion: l.fecha_creacion,
         fecha_emision: l.fecha_emision, // Add this field
    }));
 
@@ -629,6 +634,7 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
         datos_extra: safeJsonParse(l.datos_extra),
         fecha_emision: l.fecha_emision,
         numero_documento: l.numero_documento,
+        fecha_creacion: null, // this field is not in the query
    }));
 
     const productInfo = history[0]; // The first one is the most recent
@@ -672,8 +678,10 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
 
     const monthlySpendMap: { [key: string]: number } = {};
     docs.forEach(doc => {
-        const month = new Date(doc.fecha_emision).toISOString().substring(0, 7); // YYYY-MM
-        monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
+        if (doc.fecha_emision) {
+            const month = new Date(doc.fecha_emision).toISOString().substring(0, 7); // YYYY-MM
+            monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
+        }
     });
 
     const monthlySpend = Object.entries(monthlySpendMap)
@@ -763,7 +771,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
                 (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
                 (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
-                (SELECT SUM(cuota_iva) FROM documento_impuestos WHERE documento_id = d.id) as sum_cuota
+                (SELECT SUM(cuota_iva) FROM documento_impuestos WHERE documento_id = d.id) as sum_cuota_iva
             FROM documentos d
             WHERE d.id IN (?)
         `, [docIds]);
@@ -826,11 +834,11 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
 
             // Check 2: Base Amount + Taxes vs Total Amount
-            if (doc.sum_cuota !== null) { 
-                 const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota) || 0);
+            if (doc.sum_cuota_iva !== null) { 
+                 const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
                 if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
                     calculationErrors++;
-                    const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+                    const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
                     const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el total%']);
                     if (existing.length === 0) {
                         await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
@@ -877,8 +885,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
                 d.id,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                (SELECT SUM(cuota_iva) FROM documento_impuestos WHERE documento_id = d.id) as total_iva,
-                -- A document is "issued" (income) if there is a 'receptor' or 'cliente'. Otherwise, it's received (expense).
+                (SELECT SUM(di.cuota_iva) FROM documento_impuestos di WHERE di.documento_id = d.id) as total_iva,
                 MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
@@ -923,7 +930,9 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 
   const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
   quarterlyRows.forEach(r => {
-    quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: Number(r.ingresos), gastos: Number(r.gastos) };
+    if(r.quarter) {
+      quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: Number(r.ingresos), gastos: Number(r.gastos) };
+    }
   });
 
   const [distributionRows] = await db.query<RowDataPacket[]>(`
@@ -954,7 +963,9 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   `);
   const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
   ivaRows.forEach(r => {
-    ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: Number(r.repercutido), soportado: Number(r.soportado) };
+    if(r.quarter) {
+      ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: Number(r.repercutido), soportado: Number(r.soportado) };
+    }
   });
 
   const [topProvidersRows] = await db.query<RowDataPacket[]>(`
@@ -1011,3 +1022,4 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     
 
     
+
