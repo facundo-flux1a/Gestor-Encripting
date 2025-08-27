@@ -1,4 +1,3 @@
-
 'use client';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
@@ -7,9 +6,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/services/auth-service";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { type User } from "@/lib/types";
+import { getCurrentUser } from "@/services/user-service";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SettingsPage() {
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const currentUser = await getCurrentUser();
+                setUser(currentUser);
+            } catch (error) {
+                console.error("Failed to fetch user:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchUser();
+    }, []);
+
     const handleLogout = async () => {
         await logout();
     };
@@ -24,21 +44,36 @@ export default function SettingsPage() {
                 <div className="grid gap-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Perfil de Empresa</CardTitle>
+                            <CardTitle>Perfil de Usuario</CardTitle>
                             <CardDescription>
-                                Actualiza la información de tu empresa. Esta información es solo para visualización.
+                                Esta es la información de tu cuenta.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                              <form className="space-y-4 max-w-lg">
-                                <div className="space-y-2">
-                                    <Label htmlFor="companyName">Nombre de la Empresa</Label>
-                                    <Input id="companyName" defaultValue="Mi Empresa S.L." disabled />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email de Contacto</Label>
-                                    <Input id="email" type="email" defaultValue="contacto@miempresa.com" disabled />
-                                </div>
+                                {isLoading ? (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="companyName">Nombre</Label>
+                                            <Skeleton className="h-10 w-full" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="email">Email de Contacto</Label>
+                                            <Skeleton className="h-10 w-full" />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="companyName">Nombre</Label>
+                                            <Input id="companyName" defaultValue={user?.nombre || ''} disabled />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="email">Email de Contacto</Label>
+                                            <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
+                                        </div>
+                                    </>
+                                )}
                                 <Button type="submit" disabled>Guardar Cambios</Button>
                             </form>
                         </CardContent>
