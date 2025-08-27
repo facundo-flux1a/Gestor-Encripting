@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -149,8 +150,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   ]
 
   const isActive = (href: string) => {
-    if (href === '/settings') {
-        return pathname === href;
+    if (href === '/dashboard' || href === '/documents' || href === '/incidents' || href === '/proveedores') {
+       return pathname === href;
     }
     return pathname.startsWith(href);
   }
@@ -198,7 +199,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                <SidebarMenuItem key={item.href}>
                                   <SidebarMenuSubButton asChild isActive={pathname === item.href}>
                                     <Link href={item.href}>
-                                      <item.icon />
+                                      {/* <item.icon /> Icono opcional para sub-items */}
                                       <span>{item.label}</span>
                                     </Link>
                                   </SidebarMenuSubButton>

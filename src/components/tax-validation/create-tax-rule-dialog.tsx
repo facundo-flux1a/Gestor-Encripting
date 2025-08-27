@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateTaxValidationRuleSchema, type CreateTaxValidationRulePayload } from '@/lib/types';
@@ -42,7 +42,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
     },
   });
 
-  const onSubmit = async (data: CreateTaxValidationRulePayload) => {
+  const onSubmit = useCallback(async (data: CreateTaxValidationRulePayload) => {
     setIsLoading(true);
     try {
       await createTaxValidationRule(data);
@@ -59,7 +59,7 @@ export function CreateTaxRuleDialog({ isOpen, setIsOpen, onRuleCreated }: Create
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onRuleCreated, setIsOpen, form, toast]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

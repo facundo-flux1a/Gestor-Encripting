@@ -18,7 +18,7 @@ export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 
 export const IvaDetailSchema = z.object({
   id: z.number().optional(),
-  tipo_impuesto: z.string(),
+  tipo_impuesto: z.string().optional().nullable(),
   porcentaje: z.coerce.number(),
   base_imponible: z.coerce.number(),
   cuota: z.coerce.number(),
@@ -35,6 +35,7 @@ export const DocumentEntitySchema = z.object({
     telefono: z.string().nullable(),
     email: z.string().nullable(),
     datos_extra: z.any().nullable(),
+    fecha_creacion: z.string().optional().nullable(),
 });
 export type DocumentEntity = z.infer<typeof DocumentEntitySchema>;
 
@@ -58,6 +59,7 @@ export const DocumentLineSchema = z.object({
     precio_neto: z.coerce.number(),
     importe_linea: z.coerce.number(),
     datos_extra: z.any().nullable(),
+    fecha_creacion: z.string().optional().nullable(),
     fecha_emision: z.string().optional(), // for product listings
     numero_documento: z.string().optional(), // for product history
 });
@@ -65,51 +67,57 @@ export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
 export const DocumentFileSchema = z.object({
     id: z.number().optional(),
+    documento_id: z.number().optional(),
     tipo_archivo: z.string().nullable(),
     nombre_archivo: z.string().nullable(),
     ruta_archivo: z.string().nullable(),
     hash_archivo: z.string().nullable(),
-    fecha_subida: z.string(),
+    fecha_subida: z.string().nullable(),
 });
 export type DocumentFile = z.infer<typeof DocumentFileSchema>;
 
+export const IncidentSchema = z.object({
+    id: z.number(),
+    documento_id: z.number(),
+    incidencia: z.boolean(),
+    fecha_incidencia: z.string(),
+    descripcion: z.string().nullable(),
+    validado: z.boolean(),
+    fecha_validacion: z.string().nullable(),
+    validado_por: z.string().nullable(),
+});
+export type Incident = z.infer<typeof IncidentSchema>;
+
+
 export type Document = {
   id_documento: number;
-  numero_factura: string;
+  numero_documento: string | null;
   tipo_documento: string;
-  verificado: boolean;
-  incidencia: boolean; 
-  incidencia_razon?: string | null;
-  fecha_emision: string;
+  fecha_emision: string | null;
   fecha_vencimiento: string | null;
   fecha_creacion: string;
   moneda: string;
   observaciones: string | null;
   datos_extra: any | null;
-  ingreso: number;
-  gasto: number;
   base_imponible: number;
-  iva: number;
   total: number;
   
   entidades: DocumentEntity[];
   lineas: DocumentLine[];
   iva_details: IvaDetail[];
   archivos: DocumentFile[];
+  incidencias: Incident[];
   
-
-  fecha_subida: string; 
+  // Flattened for table display
   proveedor: string;
   cif: string;
-  nombre_archivo: string;
-  contenido: string;
+  incidencia: boolean;
+  verificado: boolean;
 };
 
 export const DocumentUpdateSchema = z.object({
-  numero_factura: z.string().min(1, "El número de factura es obligatorio."),
-  fecha_emision: z.string().min(1, "La fecha es obligatoria."),
-  proveedor: z.string().min(1, "El proveedor es obligatorio.").optional(),
-  cif: z.string().min(1, "El CIF es obligatorio.").optional(),
+  numero_documento: z.string().min(1, "El número de documento es obligatorio.").nullable(),
+  fecha_emision: z.string().min(1, "La fecha es obligatoria.").nullable(),
   base_imponible: z.coerce.number(),
   total: z.coerce.number(),
   tipo_documento: z.string().min(1, "El tipo de documento es obligatorio."),
