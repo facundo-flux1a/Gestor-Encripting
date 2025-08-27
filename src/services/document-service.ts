@@ -375,15 +375,13 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     try {
         await connection.beginTransaction();
 
-        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento', 'iva'];
+        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
         
         if (directDocumentFields.includes(fieldName)) {
             const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
                                 fieldName === 'total' ? 'importe_total' :
                                 fieldName;
-             if (dbFieldName !== 'iva') { // 'iva' is a calculated field, don't update directly
-                await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
-            }
+            await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
         } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
             const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
             const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
