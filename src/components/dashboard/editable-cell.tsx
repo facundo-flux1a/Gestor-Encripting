@@ -84,9 +84,7 @@ export function EditableCell({
 
     setIsLoading(true);
     try {
-      // Use "numero_documento" instead of "numero_factura"
-      const apiFieldName = fieldName === 'numero_factura' ? 'numero_documento' : fieldName;
-      const result = await updateDocumentField(docId, apiFieldName, processedValue);
+      const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
         // Optimistically update the table's internal state
         table.options.meta?.updateData(rowIndex, fieldName, processedValue);

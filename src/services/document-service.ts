@@ -227,6 +227,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             observaciones: doc.observaciones,
             datos_extra: safeJsonParse(doc.datos_extra),
             base_imponible: Number(doc.importe_sin_impuestos) || 0,
+            iva: total_iva,
             total: Number(doc.importe_total) || 0,
             entidades: entidades,
             lineas: lineas,

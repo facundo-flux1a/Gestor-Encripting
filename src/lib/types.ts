@@ -100,6 +100,7 @@ export type Document = {
   observaciones: string | null;
   datos_extra: any | null;
   base_imponible: number;
+  iva: number;
   total: number;
   
   entidades: DocumentEntity[];
@@ -158,6 +159,3 @@ export const CreateTaxValidationRuleSchema = z.object({
   porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
-
-
-
