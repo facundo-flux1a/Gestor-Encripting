@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from './theme-toggle';
+import { Separator } from '@/components/ui/separator';
 
 
 function AppLogo() {
