@@ -239,8 +239,8 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     <CardTitle className="flex items-center gap-2">
                         <Info className="h-5 w-5" /> Información General
                     </CardTitle>
-                    <CardDescription>
-                         {isEditing ? (
+                     {isEditing ? (
+                        <div className="text-sm text-muted-foreground">
                             <FormField
                                 control={form.control}
                                 name="tipo_documento"
@@ -258,14 +258,16 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                     </FormItem>
                                 )}
                             />
-                        ) : (
-                           doc.tipo_documento
-                        )}
-                    </CardDescription>
+                        </div>
+                    ) : (
+                        <CardDescription>
+                           {doc.tipo_documento}
+                        </CardDescription>
+                    )}
                 </CardHeader>
                 <CardContent>
                     <div className="grid md:grid-cols-3 gap-6 text-sm">
-                        {renderEditableField("numero_factura", "Nº Documento")}
+                        {renderEditableField("numero_documento", "Nº Documento")}
                         {renderEditableDate("fecha_emision", "Fecha Emisión")}
                         {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
                         
