@@ -21,7 +21,7 @@ export const IvaDetailSchema = z.object({
   tipo_impuesto: z.string().optional().nullable(),
   porcentaje: z.coerce.number(),
   base_imponible: z.coerce.number(),
-  cuota: z.coerce.number(),
+  cuota_iva: z.coerce.number(),
 });
 export type IvaDetail = z.infer<typeof IvaDetailSchema>;
 
@@ -157,5 +157,6 @@ export const CreateTaxValidationRuleSchema = z.object({
   porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
+
 
 

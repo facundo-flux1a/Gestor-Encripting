@@ -29,7 +29,7 @@ import { EditableCell } from './editable-cell';
 import { TableCell, TableRow } from '../ui/table';
 
 const getColumns = (
-    onUpdate: (docId: number, field: string, value: any) => void,
+    onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
     onSummarize: (doc: Document) => void,
     uniqueVatRates: number[]
 ): ColumnDef<Document>[] => {
@@ -111,12 +111,12 @@ const getColumns = (
             header: `IVA ${rate}%`,
             cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
                 const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
+                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota_iva ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
             },
              footer: ({ table }) => {
                 const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
                     const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (Number(detail?.cuota) || 0);
+                    return sum + (Number(detail?.cuota_iva) || 0);
                 }, 0);
                 return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
             }
@@ -191,9 +191,18 @@ const getColumns = (
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
+  const [tableData, setTableData] = useState(documents);
 
-  const handleUpdate = useCallback((docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => {
-      table.options.meta?.updateData(rowIndex, field, value)
+  useEffect(() => {
+    setTableData(documents);
+  }, [documents]);
+
+  const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
+    setTableData(prevData =>
+      prevData.map(row =>
+        row.id_documento === docId ? { ...row, [fieldName]: value } : row
+      )
+    );
   }, []);
   
   const uniqueVatRates = useMemo(() => {
@@ -214,13 +223,13 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     setIsSummarizeOpen(true);
   };
 
-  const columns = useMemo(() => getColumns(handleUpdate, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
+  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize, uniqueVatRates), [handleUpdate, uniqueVatRates]);
   
 
   return (
     <>
     <TooltipProvider>
-      <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
+      <DataTable columns={columns} data={tableData} hiddenColumns={hiddenColumns} filename={filename} />
     </TooltipProvider>
     <SummarizeDialog 
         doc={selectedDocForSummary}

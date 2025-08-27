@@ -68,7 +68,7 @@ interface ImpuestoPacket extends RowDataPacket {
     tipo_impuesto: string;
     porcentaje: number;
     base_imponible: number;
-    cuota: number;
+    cuota_iva: number;
     documento_id: number;
 }
 
@@ -166,10 +166,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             tipo_impuesto: 'IVA', // The old table did not have this field, so we hardcode it.
             porcentaje: tax.porcentaje,
             base_imponible: tax.base_imponible,
-            cuota: tax.cuota,
+            cuota_iva: tax.cuota_iva,
         }));
         
-        const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+        const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota_iva) || 0), 0);
 
 
         const entidades: DocumentEntity[] = currentEntidades.map(e => ({
@@ -305,8 +305,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         }
         for (const iva of iva_details) {
             await connection.query(
-                'INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?)', 
-                [id, iva.porcentaje, iva.base_imponible, iva.cuota]
+                'INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?)', 
+                [id, iva.porcentaje, iva.base_imponible, iva.cuota_iva]
             );
         }
 
@@ -325,7 +325,7 @@ async function recalculateDocumentTotals(docId: number, connection: any) {
     const [taxes] = await connection.query<ImpuestoPacket[]>('SELECT * FROM documento_impuestos WHERE documento_id = ?', [docId]);
     const [lines] = await connection.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id = ?', [docId]);
 
-    const totalIva = taxes.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+    const totalIva = taxes.reduce((sum, tax) => sum + (Number(tax.cuota_iva) || 0), 0);
     const baseImponible = lines.reduce((sum, line) => sum + (Number(line.importe_linea) || 0), 0);
     const total = baseImponible + totalIva;
 
@@ -357,7 +357,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
             const parts = fieldName.split('_');
             const type = parts[1]; // 'base' or 'cuota'
             const percentage = parseInt(parts[2], 10);
-            const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
+            const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota_iva';
             
             const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM documento_impuestos WHERE documento_id = ? AND porcentaje = ?', [id, percentage]);
 
@@ -365,8 +365,8 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
                 await connection.query(`UPDATE documento_impuestos SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
             } else {
                 const base = type === 'base' ? value : 0;
-                const cuota = type === 'cuota' ? value : 0;
-                await connection.query('INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?)', [id, percentage, base, cuota]);
+                const cuota_iva = type === 'cuota' ? value : 0;
+                await connection.query('INSERT INTO documento_impuestos (documento_id, porcentaje, base_imponible, cuota_iva) VALUES (?, ?, ?, ?)', [id, percentage, base, cuota_iva]);
             }
             await recalculateDocumentTotals(id, connection);
 
@@ -763,7 +763,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
                 (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
                 (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
-                (SELECT SUM(cuota) FROM documento_impuestos WHERE documento_id = d.id) as sum_cuota
+                (SELECT SUM(cuota_iva) FROM documento_impuestos WHERE documento_id = d.id) as sum_cuota
             FROM documentos d
             WHERE d.id IN (?)
         `, [docIds]);
@@ -877,7 +877,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
                 d.id,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                (SELECT SUM(cuota) FROM documento_impuestos WHERE documento_id = d.id) as total_iva,
+                (SELECT SUM(cuota_iva) FROM documento_impuestos WHERE documento_id = d.id) as total_iva,
                 -- A document is "issued" (income) if there is a 'receptor' or 'cliente'. Otherwise, it's received (expense).
                 MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
@@ -944,8 +944,8 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     )
     SELECT
       CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-      SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota ELSE 0 END) as repercutido,
-      SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota ELSE 0 END) as soportado
+      SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota_iva ELSE 0 END) as repercutido,
+      SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota_iva ELSE 0 END) as soportado
     FROM documentos d
     JOIN documento_impuestos i ON d.id = i.documento_id
     JOIN DocTypes dt ON d.id = dt.id
@@ -1011,6 +1011,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     
 
     
+
 
 
 
