@@ -81,12 +81,13 @@ function UserProfile({ user }: { user: User | null }) {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2">
+                <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left">
                     <Avatar className="h-8 w-8">
                         <AvatarFallback>{initials}</AvatarFallback>
                     </Avatar>
-                    <div className="text-left">
-                        <p className="text-sm font-medium">{user.nombre}</p>
+                     <div className="group-data-[collapsible=icon]:hidden">
+                        <p className="text-sm font-medium leading-none">{user.nombre}</p>
+                        <p className="text-xs text-muted-foreground leading-none">{user.email}</p>
                     </div>
                 </Button>
             </DropdownMenuTrigger>
@@ -118,7 +119,7 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
                 setUser({
                     id: session.userId,
                     email: session.email,
-                    nombre: session.email, 
+                    nombre: session.nombre, 
                 });
             }
         });
@@ -128,13 +129,26 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
         <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
             <div className="flex-1">{children}</div>
             <ThemeToggle />
-            <UserProfile user={user} />
+            {/* <UserProfile user={user} /> */}
         </header>
     )
 }
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [user, setUser] = React.useState<User | null>(null);
+
+  React.useEffect(() => {
+      getSession().then(session => {
+          if (session) {
+              setUser({
+                  id: session.userId,
+                  email: session.email,
+                  nombre: session.nombre,
+              });
+          }
+      });
+  }, []);
   
   const navItems = [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -184,30 +198,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-           <SidebarMenu>
-                <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Ajustes" isActive={pathname.startsWith('/settings')}>
-                        <Link href="/settings">
-                            <Settings />
-                             <span className="group-data-[collapsible=icon]:hidden">Ajustes</span>
-                        </Link>
-                    </SidebarMenuButton>
-                     {pathname.startsWith('/settings') && (
-                        <SidebarMenuSub className="group-data-[collapsible=icon]:hidden">
-                            {settingsNavItems.map(item => (
-                               <SidebarMenuItem key={item.href}>
-                                  <SidebarMenuSubButton asChild isActive={pathname === item.href}>
-                                    <Link href={item.href}>
-                                      {/* <item.icon /> Icono opcional para sub-items */}
-                                      <span>{item.label}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenuSub>
-                    )}
-                </SidebarMenuItem>
-           </SidebarMenu>
+           <div className="p-2 border-t">
+              <UserProfile user={user} />
+           </div>
+           <Separator />
             <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">
                 <a href="https://flux1a.com.ar" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground">
                     <img src="https://dashboard.flux1a.com.ar/_next/image?url=%2Flogo-simple.png&w=1920&q=75" alt="Flux1a Logo" className="h-6 w-6" />

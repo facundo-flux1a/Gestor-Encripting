@@ -1,3 +1,4 @@
+
 'use server';
 
 import db from '@/lib/db';
@@ -11,26 +12,15 @@ import type { RowDataPacket } from 'mysql2';
  */
 export async function getCurrentUser(): Promise<User | null> {
   const session = await getSession();
-
+  
   if (!session?.userId) {
     return null;
   }
 
-  try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email FROM usuarios WHERE id = ?',
-      [session.userId]
-    );
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    return rows[0] as User;
-  } catch (error) {
-    console.error("Error fetching current user:", error);
-    // In case of a database error, we should not expose details
-    // and return null as if the user was not found.
-    return null;
-  }
+  // The session now contains all the necessary user data, no need to query again.
+  return {
+    id: session.userId,
+    nombre: session.nombre,
+    email: session.email,
+  };
 }

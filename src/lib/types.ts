@@ -11,6 +11,7 @@ export type User = z.infer<typeof UserSchema>;
 export const SessionPayloadSchema = z.object({
   userId: z.number(),
   email: z.string(),
+  nombre: z.string(),
   expires: z.date(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;

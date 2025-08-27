@@ -1,4 +1,5 @@
-'use client';
+
+'use server';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,30 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/services/auth-service";
 import { LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
-import { type User } from "@/lib/types";
 import { getCurrentUser } from "@/services/user-service";
-import { Skeleton } from "@/components/ui/skeleton";
 
-export default function SettingsPage() {
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    
-    useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                const currentUser = await getCurrentUser();
-                setUser(currentUser);
-            } catch (error) {
-                console.error("Failed to fetch user:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchUser();
-    }, []);
+export default async function SettingsPage() {
+    const user = await getCurrentUser();
 
     const handleLogout = async () => {
+        'use server';
         await logout();
     };
 
@@ -50,32 +34,17 @@ export default function SettingsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                             <form className="space-y-4 max-w-lg">
-                                {isLoading ? (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="companyName">Nombre</Label>
-                                            <Skeleton className="h-10 w-full" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="email">Email de Contacto</Label>
-                                            <Skeleton className="h-10 w-full" />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="companyName">Nombre</Label>
-                                            <Input id="companyName" defaultValue={user?.nombre || ''} disabled />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="email">Email de Contacto</Label>
-                                            <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
-                                        </div>
-                                    </>
-                                )}
+                             <div className="space-y-4 max-w-lg">
+                                <div className="space-y-2">
+                                    <Label htmlFor="companyName">Nombre</Label>
+                                    <Input id="companyName" defaultValue={user?.nombre || ''} disabled />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email de Contacto</Label>
+                                    <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
+                                </div>
                                 <Button type="submit" disabled>Guardar Cambios</Button>
-                            </form>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -87,10 +56,12 @@ export default function SettingsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Button variant="destructive" onClick={handleLogout}>
-                                <LogOut className="mr-2 h-4 w-4" />
-                                Cerrar Sesión
-                            </Button>
+                            <form action={handleLogout}>
+                                <Button variant="destructive" type="submit">
+                                    <LogOut className="mr-2 h-4 w-4" />
+                                    Cerrar Sesión
+                                </Button>
+                            </form>
                         </CardContent>
                     </Card>
                 </div>

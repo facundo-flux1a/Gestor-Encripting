@@ -27,10 +27,11 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
     const { payload } = await jwtVerify(session, key, {
       algorithms: ['HS256'],
     });
-    // Add runtime validation
+    
     const parsedPayload = z.object({
         userId: z.number(),
         email: z.string().email(),
+        nombre: z.string(),
         exp: z.number(),
     }).safeParse(payload);
     
@@ -39,6 +40,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
     return {
         userId: parsedPayload.data.userId,
         email: parsedPayload.data.email,
+        nombre: parsedPayload.data.nombre,
         expires: new Date(parsedPayload.data.exp * 1000),
     };
 
@@ -55,9 +57,9 @@ export async function getSession(): Promise<SessionPayload | null> {
   return await decrypt(sessionCookie);
 }
 
-export async function createSession(userId: number, email: string) {
+export async function createSession(userId: number, email: string, nombre: string) {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    const session = await encrypt({ userId, email, expires });
+    const session = await encrypt({ userId, email, nombre, expires });
 
     cookies().set(SESSION_COOKIE_NAME, session, {
         expires,
@@ -87,7 +89,7 @@ export async function login(formData: FormData) {
 
     const user = rows[0] as User;
 
-    await createSession(user.id, user.email);
+    await createSession(user.id, user.email, user.nombre);
     
   } catch (error) {
     console.error('Login error:', error);
@@ -118,7 +120,7 @@ export async function register(formData: FormData) {
         );
 
         const newUserId = result.insertId;
-        await createSession(newUserId, email);
+        await createSession(newUserId, email, nombre);
 
     } catch (error) {
         console.error('Registration error:', error);
