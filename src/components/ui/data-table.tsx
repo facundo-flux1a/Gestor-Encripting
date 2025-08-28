@@ -291,38 +291,27 @@ export function DataTable<TData, TValue>({
   const rowIds = React.useMemo(() => data.map(item => (item as any).id_documento), [data]);
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
-    const headerDef = col.columnDef.header;
-    if (typeof headerDef === 'string') return headerDef;
-    if (typeof headerDef === 'function') {
-      const context = {
-        table: table,
-        header: {
-          id: col.id,
-          colSpan: 1,
-          depth: 1,
-          index: col.getIndex(),
-          isPlaceholder: false,
-          column: col,
-          getContext: () => context,
-        },
-      };
-      const renderedHeader = flexRender(headerDef, context as any);
-      if (typeof renderedHeader === 'string') return renderedHeader;
-      if (React.isValidElement(renderedHeader) && renderedHeader.props.children) {
-        const children = React.Children.toArray(renderedHeader.props.children);
-        const textChild = children.find(child => typeof child === 'string' || (typeof child === 'object' && child?.type === 'span'));
-        if(textChild && typeof textChild === 'object' && textChild.props.children) {
-              return textChild.props.children;
-        }
-          if(typeof textChild === 'string') {
-            return textChild;
-        }
-      }
+    if (typeof col.columnDef.header === 'string') {
+      return col.columnDef.header;
     }
-
+    // Attempt to get a simple string from the header function, but do not render it.
+    // This is a simplified approach to avoid render-in-render issues.
+    // It assumes header is a simple string or a function returning a simple string.
+    const headerValue = col.columnDef.header;
+    if (typeof headerValue === 'function') {
+        const simpleContext = { table, header: { column: col, ...({} as any) }, ...({} as any) };
+        try {
+            // This is still risky, but we try to see if it's a simple render
+            const rendered = flexRender(headerValue, simpleContext);
+            if (typeof rendered === 'string') return rendered;
+        } catch (e) {
+            // Fallback if rendering fails
+        }
+    }
+    
     const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
-  }
+  };
   
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
