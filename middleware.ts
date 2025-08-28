@@ -2,43 +2,34 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/services/auth-service';
 
-// Define las rutas que no requieren autenticación
 const publicRoutes = ['/auth/login', '/auth/register'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // Comprueba si la ruta actual es una de las rutas públicas
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
-
-  // Obtiene la sesión del usuario
   const session = await getSession();
 
-  // Si la ruta es pública
-  if (isPublicRoute) {
-    // Si hay una sesión activa y el usuario intenta acceder a una ruta pública,
-    // redirigir al dashboard
-    if (session) {
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  const isProtectedRoute = !isPublicRoute;
+
+  // Si el usuario está autenticado
+  if (session) {
+    // Si intenta acceder a una ruta pública (login/register) o la raíz, redirigir al dashboard
+    if (isPublicRoute || pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-    // Si no hay sesión, permite el acceso a la ruta pública
+    // Si está en una ruta protegida, permitir el acceso
     return NextResponse.next();
   }
 
-  // Si la ruta no es pública y no hay sesión, redirigir a la página de login
-  if (!session) {
-    // Guarda la URL a la que intentaba acceder para redirigir después del login
+  // Si el usuario NO está autenticado
+  if (isProtectedRoute) {
+    // Si intenta acceder a una ruta protegida, redirigir a login
     const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    loginUrl.searchParams.set('redirect', pathname); // Opcional: para redirigir después del login
     return NextResponse.redirect(loginUrl);
   }
 
-  // Si hay sesión y la ruta es la raíz, redirigir al dashboard
-  if (pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Si hay sesión y no es una ruta pública, permite el acceso
+  // Si no está autenticado y está en una ruta pública, permitir acceso
   return NextResponse.next();
 }
 
