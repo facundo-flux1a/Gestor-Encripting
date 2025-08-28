@@ -170,6 +170,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     return pathname.startsWith(href);
   }
 
+  const isSettingsActive = () => {
+    return pathname.startsWith('/settings');
+  }
+
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
@@ -196,6 +200,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             ))}
+            <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Ajustes" isActive={isSettingsActive()}>
+                     <Settings />
+                     <span className="group-data-[collapsible=icon]:hidden">
+                        Ajustes
+                    </span>
+                </SidebarMenuButton>
+                 <SidebarMenuSub>
+                    {settingsNavItems.map(item => (
+                        <SidebarMenuSubItem key={item.href}>
+                            <SidebarMenuSubButton asChild isActive={pathname === item.href}>
+                                <Link href={item.href}>
+                                    <item.icon />
+                                    <span>{item.label}</span>
+                                </Link>
+                            </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                    ))}
+                </SidebarMenuSub>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
