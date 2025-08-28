@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -28,6 +27,7 @@ import {
   LogOut,
   Bot,
   ShieldCheck,
+  LogIn,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -72,7 +72,20 @@ function SidebarToggle() {
 }
 
 const UserProfile = React.memo(function UserProfile({ user }: { user: User | null }) {
-    if (!user) return null;
+    if (!user) {
+        return (
+            <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left w-full justify-start" asChild>
+                <Link href="/auth/login">
+                    <Avatar className="h-8 w-8 flex items-center justify-center bg-muted">
+                       <LogIn className="h-4 w-4" />
+                    </Avatar>
+                     <div className="group-data-[collapsible=icon]:hidden">
+                        <p className="text-sm font-medium leading-none">Iniciar Sesión</p>
+                    </div>
+                </Link>
+            </Button>
+        )
+    }
 
     const initials = user.nombre ? user.nombre.charAt(0).toUpperCase() : '?';
 
@@ -155,9 +168,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   email: session.email,
                   nombre: session.nombre,
               });
+          } else {
+              setUser(null);
           }
       });
-  }, []);
+  }, [pathname]); // Re-check session on route change
   
   const navItems = [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
