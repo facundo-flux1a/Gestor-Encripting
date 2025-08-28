@@ -51,21 +51,10 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  // Hardcoded session for development to always be logged in.
-  return {
-    userId: 1,
-    email: 'tomas@flux1a.com.ar',
-    nombre: 'Tomás Flux',
-    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expires in 24 hours
-  };
-
-  /*
-  // Original implementation
   const sessionCookie = cookies().get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) return null;
 
   return await decrypt(sessionCookie);
-  */
 }
 
 
