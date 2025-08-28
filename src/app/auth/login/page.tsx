@@ -50,7 +50,7 @@ function LoginError() {
     if (!errorMessage) return null;
 
     return (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error de Autenticación</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
@@ -58,18 +58,21 @@ function LoginError() {
     )
 }
 
+
 function LoginForm() {
     return (
         <form action={login} className="space-y-4">
-            <Suspense fallback={null}>
-                <LoginError />
-            </Suspense>
             <div className="space-y-2">
                 <Label htmlFor="email">Correo Electrónico</Label>
                 <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
             </div>
             <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Contraseña</Label>
+                    <Link href="#" className="text-sm font-medium text-primary hover:underline" prefetch={false}>
+                        ¿Olvidaste tu contraseña?
+                    </Link>
+                </div>
                 <Input id="password" name="password" type="password" required />
             </div>
             <LoginButton />
@@ -87,6 +90,9 @@ export default function LoginPage() {
           <CardDescription>Ingresa tu correo electrónico y contraseña para acceder a tu cuenta.</CardDescription>
         </CardHeader>
         <CardContent>
+          <Suspense fallback={null}>
+            <LoginError />
+          </Suspense>
           <LoginForm />
           <div className="my-4 flex items-center">
             <div className="flex-grow border-t border-muted" />
