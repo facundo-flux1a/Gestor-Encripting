@@ -34,20 +34,9 @@ const useUserData = () => {
 
   // Función memoizada para fetch del usuario
   const fetchUser = React.useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch('/api/user/profile')
-      if (!response.ok) throw new Error('Failed to fetch user')
-      
-      const userData = await response.json()
-      setUser(userData)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error loading user')
-    } finally {
-      setLoading(false)
-    }
+    // This is a placeholder. In a real app, this would fetch from an API.
+    // For now, we will rely on the session data passed through the context.
+    setLoading(false);
   }, [])
 
   // Cargar usuario solo una vez
