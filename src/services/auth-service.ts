@@ -65,7 +65,7 @@ export async function createSession(userId: number, email: string, nombre: strin
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const session = await encrypt({ userId, email, nombre, expires });
 
-    (await cookies()).set(SESSION_COOKIE_NAME, session, {
+    cookies().set(SESSION_COOKIE_NAME, session, {
         expires,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -134,30 +134,6 @@ export async function register(formData: FormData) {
     redirect('/dashboard');
 }
 
-async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
-    const { email, displayName } = firebaseUser;
-
-    if (!email) {
-        throw new Error('El proveedor de Google no proporcionó un email.');
-    }
-
-    const [existingUsers] = await db.query<RowDataPacket[]>(
-        'SELECT * FROM usuarios WHERE email = ?',
-        [email]
-    );
-
-    if (existingUsers.length > 0) {
-        return existingUsers[0] as User;
-    } else {
-        const nombre = displayName || email.split('@')[0];
-        // Google users don't have a password in our system
-        const [result] = await db.query<OkPacket>(
-            'INSERT INTO usuarios (nombre, email, id_firebase) VALUES (?, ?, ?)',
-            [nombre, email, firebaseUser.uid]
-        );
-        return { id: result.insertId, email, nombre };
-    }
-}
 
 export async function signInWithGoogle() {
   'use client';
@@ -165,20 +141,16 @@ export async function signInWithGoogle() {
     const result = await signInWithPopup(auth, googleProvider);
     const firebaseUser = result.user;
     
-    // This part needs to be a server action or API route
-    // to interact with the database and set cookies.
-    // For now, let's call a server action to handle this.
     const response = await handleGoogleSignInOnServer(firebaseUser);
 
     if(response.success) {
-      // Redirect on the client-side after successful server-side session creation
-      window.location.href = '/dashboard';
+      // Return a success status to the client to handle redirection
+      return { success: true };
     } else {
       throw new Error(response.error || 'Error del servidor durante el inicio de sesión con Google.');
     }
   } catch (error: any) {
     console.error("Error during Google sign-in:", error);
-    // Rethrow a more user-friendly error message
     if (error.code === 'auth/popup-closed-by-user') {
       throw new Error('El proceso de inicio de sesión fue cancelado.');
     }
@@ -186,7 +158,7 @@ export async function signInWithGoogle() {
   }
 }
 
-// This server action will be called by the client-side signInWithGoogle function.
+// This is a server action that will be called by the client-side signInWithGoogle function.
 export async function handleGoogleSignInOnServer(firebaseUser: {uid: string, email: string | null, displayName: string | null}) {
   try {
     const { email, displayName, uid } = firebaseUser;
@@ -197,15 +169,15 @@ export async function handleGoogleSignInOnServer(firebaseUser: {uid: string, ema
       'SELECT * FROM usuarios WHERE email = ?',
       [email]
     );
-    let user: User;
+    let user: User & {id_firebase?: string};
     if (existingUsers.length > 0) {
-      user = existingUsers[0] as User;
+      user = existingUsers[0] as User & {id_firebase?: string};
       // Optionally update Firebase ID if it's missing
       if (!user.id_firebase) {
         await db.query('UPDATE usuarios SET id_firebase = ? WHERE id = ?', [uid, user.id]);
       }
     } else {
-      const nombre = displayName || email.split('@')[0];
+      const nombre = displayName || email.split('@')[0] || 'Usuario';
       const [result] = await db.query<OkPacket>(
           'INSERT INTO usuarios (nombre, email, id_firebase) VALUES (?, ?, ?)',
           [nombre, email, uid]
@@ -222,6 +194,6 @@ export async function handleGoogleSignInOnServer(firebaseUser: {uid: string, ema
 
 
 export async function logout() {
-  (await cookies()).delete(SESSION_COOKIE_NAME);
+  cookies().delete(SESSION_COOKIE_NAME);
   redirect('/auth/login');
 }

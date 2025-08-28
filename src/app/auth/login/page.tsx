@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { login, signInWithGoogle } from '@/services/auth-service';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Chrome } from 'lucide-react';
 import React, { Suspense } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -25,11 +26,16 @@ function LoginButton() {
 
 function GoogleLoginButton() {
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithGoogle();
-      // La redirección se maneja en el servicio después de un login exitoso.
+      const result = await signInWithGoogle();
+      if(result?.success) {
+          router.push('/dashboard');
+      } else {
+          throw new Error('El inicio de sesión con Google falló.');
+      }
     } catch (error: any) {
       toast({
         title: 'Error de Autenticación',
