@@ -217,7 +217,7 @@ export function DataTable<TData, TValue>({
   filename
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
-  const [data, setData] = React.useState(initialData);
+  const [data, setData] = React.useState(() => initialData);
 
   React.useEffect(() => {
     setData(initialData);
@@ -232,17 +232,18 @@ export function DataTable<TData, TValue>({
   const [globalFilter, setGlobalFilter] = React.useState('');
 
   const initialVisibility = React.useMemo(() => {
-      const visibility: VisibilityState = {};
-      hiddenColumns.forEach(col => {
+    const visibility: VisibilityState = {};
+    hiddenColumns.forEach(col => {
       visibility[col] = false;
-      });
-      return visibility;
+    });
+    return visibility;
   }, [hiddenColumns]);
+
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialVisibility);
-  
+
   React.useEffect(() => {
     setColumnVisibility(initialVisibility);
-  }, [initialVisibility])
+  }, [initialVisibility]);
 
 
   const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
@@ -293,8 +294,13 @@ export function DataTable<TData, TValue>({
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
-    const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    return readableId.charAt(0).toUpperCase() + readableId.slice(1);
+    if (typeof headerDef === 'function') {
+      // Avoid rendering the component, which can cause side effects.
+      // Instead, we rely on a simplified string representation based on the column ID.
+      const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return readableId.charAt(0).toUpperCase() + readableId.slice(1);
+    }
+    return col.id;
   };
   
   const handleDragEnd = (event: DragEndEvent) => {
