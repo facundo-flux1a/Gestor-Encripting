@@ -136,31 +136,37 @@ export async function handleGoogleSignInOnServer(
     firebaseUser: {uid: string, email: string | null, displayName: string | null}
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { email, displayName, uid } = firebaseUser;
+    const { email, displayName } = firebaseUser;
     if (!email) {
       return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
     }
+
     const [existingUsers] = await db.query<RowDataPacket[]>(
       'SELECT * FROM usuarios WHERE email = ?',
       [email]
     );
-    let user: User & {id_firebase?: string};
+
+    let user: User;
+
     if (existingUsers.length > 0) {
-      user = existingUsers[0] as User & {id_firebase?: string};
-      // Optionally update Firebase ID if it's missing
-      if (!user.id_firebase) {
-        await db.query('UPDATE usuarios SET id_firebase = ? WHERE id = ?', [uid, user.id]);
-      }
+      // User exists, use their data.
+      user = existingUsers[0] as User;
     } else {
-      const nombre = displayName || email.split('@')[0] || 'Usuario';
+      // User does not exist, create a new one.
+      const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
+      // We don't store a password for Google-based users.
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email, id_firebase) VALUES (?, ?, ?)',
-          [nombre, email, uid]
+          'INSERT INTO usuarios (nombre, email) VALUES (?, ?)',
+          [nombre, email]
       );
       user = { id: result.insertId, email, nombre };
     }
+
+    // Create session for the user (existing or new)
     await createSession(user.id, user.email, user.nombre);
+    
     return { success: true };
+
   } catch (error) {
     console.error("Server-side Google sign-in error:", error);
     return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
