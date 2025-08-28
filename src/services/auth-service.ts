@@ -8,8 +8,6 @@ import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
-import { auth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, User as FirebaseUser } from 'firebase/auth';
  
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
@@ -134,32 +132,9 @@ export async function register(formData: FormData) {
     redirect('/dashboard');
 }
 
-
-export async function signInWithGoogle(): Promise<{ success: boolean; error?: string; }> {
-  'use client';
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const firebaseUser = result.user;
-    
-    const response = await handleGoogleSignInOnServer(firebaseUser);
-
-    if(response.success) {
-      return { success: true };
-    } else {
-      return { success: false, error: response.error };
-    }
-  } catch (error: any) {
-    console.error("Error during Google sign-in:", error);
-    if (error.code === 'auth/popup-closed-by-user') {
-      return { success: false, error: 'El proceso de inicio de sesión fue cancelado.' };
-    }
-    return { success: false, error: 'No se pudo completar el inicio de sesión con Google.' };
-  }
-}
-
-// This is a server action that will be called by the client-side signInWithGoogle function.
-async function handleGoogleSignInOnServer(firebaseUser: {uid: string, email: string | null, displayName: string | null}) {
-  'use server';
+export async function handleGoogleSignInOnServer(
+    firebaseUser: {uid: string, email: string | null, displayName: string | null}
+): Promise<{ success: boolean; error?: string }> {
   try {
     const { email, displayName, uid } = firebaseUser;
     if (!email) {

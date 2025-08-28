@@ -2,7 +2,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
-import { login, signInWithGoogle } from '@/services/auth-service';
+import { login, handleGoogleSignInOnServer } from '@/services/auth-service';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,9 @@ import { AlertCircle, Chrome } from 'lucide-react';
 import React, { Suspense } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '@/lib/firebase';
+
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -30,20 +33,36 @@ function GoogleLoginButton() {
 
   const handleGoogleSignIn = async () => {
     try {
-      const result = await signInWithGoogle();
-      if(result?.success) {
-          router.push('/dashboard');
-      } else {
-          throw new Error(result?.error || 'El inicio de sesión con Google falló.');
-      }
+        const result = await signInWithPopup(auth, googleProvider);
+        const firebaseUser = result.user;
+        
+        const serverResponse = await handleGoogleSignInOnServer({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+        });
+
+        if (serverResponse.success) {
+            router.push('/dashboard');
+        } else {
+            throw new Error(serverResponse.error || 'El inicio de sesión con Google falló en el servidor.');
+        }
     } catch (error: any) {
-      toast({
-        title: 'Error de Autenticación',
-        description: error.message || 'No se pudo iniciar sesión con Google.',
-        variant: 'destructive',
-      });
+        let errorMessage = 'No se pudo iniciar sesión con Google.';
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorMessage = 'El proceso de inicio de sesión fue cancelado.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        toast({
+            title: 'Error de Autenticación',
+            description: errorMessage,
+            variant: 'destructive',
+        });
     }
   };
+
 
   return (
     <Button variant="outline" className="w-full" type="button" onClick={handleGoogleSignIn}>
