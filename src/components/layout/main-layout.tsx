@@ -15,6 +15,7 @@ import {
   useSidebar,
   SidebarMenuSub,
   SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import {
   FileText,
