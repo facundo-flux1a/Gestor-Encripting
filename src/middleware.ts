@@ -1,41 +1,41 @@
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { getSession } from '@/services/auth-service';
 
+export const runtime = 'nodejs';
+
 const publicRoutes = ['/auth/login', '/auth/register'];
+const rootRoute = '/';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  
+  // Utiliza el servicio de autenticación para obtener la sesión
   const session = await getSession();
 
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
-  const isProtectedRoute = !isPublicRoute;
+  const isPublicRoute = publicRoutes.includes(pathname);
 
   // Si el usuario está autenticado
   if (session) {
-    // Si intenta acceder a una ruta pública (login/register) o la raíz, redirigir al dashboard
-    if (isPublicRoute || pathname === '/') {
+    // Si intenta acceder a una ruta pública (login, register) o a la raíz, redirigir al dashboard
+    if (isPublicRoute || pathname === rootRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-    // Si está en una ruta protegida, permitir el acceso
-    return NextResponse.next();
+  } 
+  // Si el usuario no está autenticado
+  else {
+    // Si intenta acceder a una ruta que no es pública, redirigir al login
+    if (!isPublicRoute) {
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
   }
 
-  // Si el usuario NO está autenticado
-  if (isProtectedRoute) {
-    // Si intenta acceder a una ruta protegida, redirigir a login
-    const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname); // Opcional: para redirigir después del login
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Si no está autenticado y está en una ruta pública, permitir acceso
+  // Si ninguna de las condiciones de redirección se cumple, permite que la solicitud continúe
   return NextResponse.next();
 }
 
-// Configura el middleware para que se ejecute en todas las rutas excepto las estáticas
+// Configuración para que el middleware se aplique a todas las rutas excepto las estáticas.
 export const config = {
-  matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
