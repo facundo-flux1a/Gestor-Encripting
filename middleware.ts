@@ -1,55 +1,50 @@
+
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/services/auth-service';
 
-export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - auth/login (login page)
-     * - auth/register (register page)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico|auth/login|auth/register).*)',
-  ],
-};
+// Define las rutas que no requieren autenticación
+const publicRoutes = ['/auth/login', '/auth/register'];
 
 export async function middleware(request: NextRequest) {
-  try {
-    const session = await getSession();
-    const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
-    // If there's no session and the user is not on an auth page, redirect to login
-    if (!session) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/auth/login';
-      url.searchParams.set('redirect', pathname); // Optional: save redirect path
-      return NextResponse.redirect(url);
+  // Comprueba si la ruta actual es una de las rutas públicas
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+  // Obtiene la sesión del usuario
+  const session = await getSession();
+
+  // Si la ruta es pública
+  if (isPublicRoute) {
+    // Si hay una sesión activa y el usuario intenta acceder a una ruta pública,
+    // redirigir al dashboard
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-
-    // If there is a session and the user is on the root path, redirect to dashboard
-    if (session && pathname === '/') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
-      return NextResponse.redirect(url);
-    }
-
-    // If there is a session and the user is trying to access auth pages, redirect to dashboard
-    if (session && (pathname === '/auth/login' || pathname === '/auth/register')) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
-      return NextResponse.redirect(url);
-    }
-
-    // Allow the request to continue
+    // Si no hay sesión, permite el acceso a la ruta pública
     return NextResponse.next();
-  } catch (error) {
-    // If there's an error getting the session, redirect to login
-    console.error('Middleware error:', error);
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth/login';
-    return NextResponse.redirect(url);
   }
+
+  // Si la ruta no es pública y no hay sesión, redirigir a la página de login
+  if (!session) {
+    // Guarda la URL a la que intentaba acceder para redirigir después del login
+    const loginUrl = new URL('/auth/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Si hay una sesión y la ruta es la raíz, redirigir al dashboard
+  if (pathname === '/') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Si hay sesión y no es una ruta pública, permite el acceso
+  return NextResponse.next();
 }
+
+// Configura el middleware para que se ejecute en todas las rutas excepto las estáticas
+export const config = {
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+};
