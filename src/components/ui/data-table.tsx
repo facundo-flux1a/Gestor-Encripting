@@ -291,24 +291,8 @@ export function DataTable<TData, TValue>({
   const rowIds = React.useMemo(() => data.map(item => (item as any).id_documento), [data]);
 
   const getHeaderName = (col: Column<TData, unknown>): string => {
-    if (typeof col.columnDef.header === 'string') {
-      return col.columnDef.header;
-    }
-    // Attempt to get a simple string from the header function, but do not render it.
-    // This is a simplified approach to avoid render-in-render issues.
-    // It assumes header is a simple string or a function returning a simple string.
-    const headerValue = col.columnDef.header;
-    if (typeof headerValue === 'function') {
-        const simpleContext = { table, header: { column: col, ...({} as any) }, ...({} as any) };
-        try {
-            // This is still risky, but we try to see if it's a simple render
-            const rendered = flexRender(headerValue, simpleContext);
-            if (typeof rendered === 'string') return rendered;
-        } catch (e) {
-            // Fallback if rendering fails
-        }
-    }
-    
+    const headerDef = col.columnDef.header;
+    if (typeof headerDef === 'string') return headerDef;
     const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
   };

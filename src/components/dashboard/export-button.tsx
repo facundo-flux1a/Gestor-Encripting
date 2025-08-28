@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import { flexRender, type Column, type Row } from '@tanstack/react-table';
+import { type Column, type Row } from '@tanstack/react-table';
 
 
 interface ExportButtonProps {
@@ -24,14 +24,15 @@ const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
 const getCellString = (cell: any): string => {
     const value = cell.getValue();
     const columnId = cell.column.id;
-    const isCurrencyColumn = columnId.toLowerCase().includes('total') || 
-                           columnId.toLowerCase().includes('precio') || 
-                           columnId.toLowerCase().includes('importe') ||
-                           columnId.toLowerCase().includes('iva') ||
-                           columnId.toLowerCase().includes('base_imponible') ||
-                           columnId.toLowerCase().includes('base') ||
-                           columnId.toLowerCase().includes('retencion');
 
+    if (value instanceof Date) {
+        return value.toLocaleDateString('es-ES');
+    }
+    if (typeof value === 'boolean') {
+        return value ? 'Sí' : 'No';
+    }
+    
+    // For specific tax columns, dig into the original row data
     if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
         const rateMatch = columnId.match(/\d+/);
         if (rateMatch) {
@@ -46,50 +47,24 @@ const getCellString = (cell: any): string => {
         }
     }
     
-    if (value instanceof Date) {
-        return value.toLocaleDateString('es-ES');
-    }
-    if (typeof value === 'boolean') {
-        return value ? 'Sí' : 'No';
-    }
+    // For other currency columns, check the initial value from EditableCell
     if (typeof value === 'number') {
-        return isCurrencyColumn ? formatCurrency(value) : value.toString();
+        return formatCurrency(value);
     }
+    
     if (value === null || value === undefined) {
         return '';
     }
-
-    const rendered = flexRender(cell.column.columnDef.cell, cell.getContext());
-    if (React.isValidElement(rendered) && rendered.props.initialValue !== undefined) {
-        const initialValue = rendered.props.initialValue;
-        if(typeof initialValue === 'number' && (rendered.props.isCurrency || isCurrencyColumn)) {
-            return formatCurrency(initialValue);
-        }
-        if (initialValue instanceof Date) {
-            return initialValue.toLocaleDateString('es-ES');
-        }
-        return String(initialValue);
-    }
     
-    if (React.isValidElement(rendered)) {
-         if (typeof rendered.props.children === 'string' || typeof rendered.props.children === 'number') {
-            return String(rendered.props.children);
-        }
-        if (Array.isArray(rendered.props.children)) {
-             const textChild = rendered.props.children.find((c: any) => typeof c === 'string' || typeof c === 'number');
-             if(textChild) return String(textChild);
-        }
-    }
-    
+    // Fallback for simple values
     return String(value ?? '');
 }
 
 const getHeaderName = (col: Column<any, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
-
-    // This part is tricky as flexRender needs a component context. 
-    // We will simplify it to read from id if it's not a simple string.
+    
+    // Fallback for complex headers
     const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
 }
@@ -98,11 +73,16 @@ const getHeaderName = (col: Column<any, unknown>): string => {
 export function ExportButton({ columns, data, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        const headers = columns.map(column => getHeaderName(column));
+        // Filter out the 'select' and 'actions' columns from export
+        const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
+        
+        const headers = exportableColumns.map(column => getHeaderName(column));
         
         const rows = data.map(row => {
             const rowData: { [key: string]: any } = {};
-            row.getVisibleCells().forEach(cell => {
+            row.getVisibleCells()
+                .filter(cell => cell.column.id !== 'select' && cell.column.id !== 'actions')
+                .forEach(cell => {
                  const header = getHeaderName(cell.column);
                  rowData[header] = getCellString(cell);
             });
