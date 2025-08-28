@@ -8,7 +8,7 @@ import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
-
+ 
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
