@@ -1,28 +1,37 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
-import { MoreHorizontal, FileText, Building, ArrowRight } from 'lucide-react';
-import type { ColumnDef } from '@tanstack/react-table';
+import { ArrowRight, Building } from 'lucide-react';
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
+
 import { Button } from '@/components/ui/button';
 import { type ProviderWithStats } from '@/lib/types';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from '@/components/ui/data-table';
-import { useState, useMemo, useEffect } from 'react';
-import { Badge } from '../ui/badge';
-import { TooltipProvider } from '../ui/tooltip';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const formatCurrency = (amount: number) => {
     if (isNaN(amount)) return 'N/A';
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 };
 
-const getColumns = (): ColumnDef<ProviderWithStats>[] => {
-  const columns: ColumnDef<ProviderWithStats>[] = [
+export const columns: ColumnDef<ProviderWithStats>[] = [
     {
       accessorKey: 'nombre',
       header: 'Proveedor',
@@ -75,19 +84,99 @@ const getColumns = (): ColumnDef<ProviderWithStats>[] => {
     },
   ];
 
-  return columns;
-}
-
 export function ProvidersTable({ providers }: { providers: ProviderWithStats[] }) {
-  const columns = useMemo(() => getColumns(), []);
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [globalFilter, setGlobalFilter] = React.useState('');
+
+  const table = useReactTable({
+    data: providers,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
   return (
     <TooltipProvider>
-      <DataTable 
-        columns={columns} 
-        data={providers} 
-        filename="proveedores" 
-      />
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <Input
+                placeholder="Buscar proveedor..."
+                value={globalFilter ?? ''}
+                onChange={(event) => setGlobalFilter(event.target.value)}
+                className="max-w-sm"
+                />
+            </div>
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow key={headerGroup.id}>
+                                {headerGroup.headers.map((header) => {
+                                    return (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder
+                                                ? null
+                                                : flexRender(
+                                                    header.column.columnDef.header,
+                                                    header.getContext()
+                                                )}
+                                        </TableHead>
+                                    );
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableHeader>
+                    <TableBody>
+                        {table.getRowModel().rows?.length ? (
+                            table.getRowModel().rows.map((row) => (
+                                <TableRow
+                                    key={row.id}
+                                    data-state={row.getIsSelected() && 'selected'}
+                                >
+                                    {row.getVisibleCells().map((cell) => (
+                                        <TableCell key={cell.id}>
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                    No hay resultados.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+            <div className="flex items-center justify-end space-x-2 py-4">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                >
+                    Anterior
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                >
+                    Siguiente
+                </Button>
+            </div>
+        </div>
     </TooltipProvider>
   );
 }
