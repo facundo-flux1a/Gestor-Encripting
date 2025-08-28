@@ -8,6 +8,8 @@ import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
+import { auth, googleProvider } from '@/lib/firebase';
+import { signInWithPopup, User as FirebaseUser } from 'firebase/auth';
  
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
@@ -130,6 +132,92 @@ export async function register(formData: FormData) {
     }
 
     redirect('/dashboard');
+}
+
+async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
+    const { email, displayName } = firebaseUser;
+
+    if (!email) {
+        throw new Error('El proveedor de Google no proporcionó un email.');
+    }
+
+    const [existingUsers] = await db.query<RowDataPacket[]>(
+        'SELECT * FROM usuarios WHERE email = ?',
+        [email]
+    );
+
+    if (existingUsers.length > 0) {
+        return existingUsers[0] as User;
+    } else {
+        const nombre = displayName || email.split('@')[0];
+        // Google users don't have a password in our system
+        const [result] = await db.query<OkPacket>(
+            'INSERT INTO usuarios (nombre, email, id_firebase) VALUES (?, ?, ?)',
+            [nombre, email, firebaseUser.uid]
+        );
+        return { id: result.insertId, email, nombre };
+    }
+}
+
+export async function signInWithGoogle() {
+  'use client';
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const firebaseUser = result.user;
+    
+    // This part needs to be a server action or API route
+    // to interact with the database and set cookies.
+    // For now, let's call a server action to handle this.
+    const response = await handleGoogleSignInOnServer(firebaseUser);
+
+    if(response.success) {
+      // Redirect on the client-side after successful server-side session creation
+      window.location.href = '/dashboard';
+    } else {
+      throw new Error(response.error || 'Error del servidor durante el inicio de sesión con Google.');
+    }
+  } catch (error: any) {
+    console.error("Error during Google sign-in:", error);
+    // Rethrow a more user-friendly error message
+    if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('El proceso de inicio de sesión fue cancelado.');
+    }
+    throw new Error('No se pudo completar el inicio de sesión con Google.');
+  }
+}
+
+// This server action will be called by the client-side signInWithGoogle function.
+export async function handleGoogleSignInOnServer(firebaseUser: {uid: string, email: string | null, displayName: string | null}) {
+  try {
+    const { email, displayName, uid } = firebaseUser;
+    if (!email) {
+      return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
+    }
+    const [existingUsers] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM usuarios WHERE email = ?',
+      [email]
+    );
+    let user: User;
+    if (existingUsers.length > 0) {
+      user = existingUsers[0] as User;
+      // Optionally update Firebase ID if it's missing
+      if (!user.id_firebase) {
+        await db.query('UPDATE usuarios SET id_firebase = ? WHERE id = ?', [uid, user.id]);
+      }
+    } else {
+      const nombre = displayName || email.split('@')[0];
+      const [result] = await db.query<OkPacket>(
+          'INSERT INTO usuarios (nombre, email, id_firebase) VALUES (?, ?, ?)',
+          [nombre, email, uid]
+      );
+      user = { id: result.insertId, email, nombre };
+    }
+    await createSession(user.id, user.email, user.nombre);
+    return { success: true };
+  } catch (error) {
+    console.error("Server-side Google sign-in error:", error);
+    return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
+  }
 }
 
 

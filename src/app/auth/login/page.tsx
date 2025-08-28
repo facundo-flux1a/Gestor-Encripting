@@ -2,7 +2,7 @@
 'use client';
 
 import { useFormState, useFormStatus } from 'react-dom';
-import { login } from '@/services/auth-service';
+import { login, signInWithGoogle } from '@/services/auth-service';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Chrome } from 'lucide-react';
 import React, { Suspense } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -23,8 +24,23 @@ function LoginButton() {
 }
 
 function GoogleLoginButton() {
+  const { toast } = useToast();
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      // La redirección se maneja en el servicio después de un login exitoso.
+    } catch (error: any) {
+      toast({
+        title: 'Error de Autenticación',
+        description: error.message || 'No se pudo iniciar sesión con Google.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
-    <Button variant="outline" className="w-full" type="button" disabled>
+    <Button variant="outline" className="w-full" type="button" onClick={handleGoogleSignIn}>
       <Chrome className="mr-2 h-4 w-4" />
       Continuar con Google
     </Button>
@@ -58,7 +74,6 @@ function LoginError() {
     )
 }
 
-
 function LoginForm() {
     return (
         <form action={login} className="space-y-4">
@@ -81,7 +96,6 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
@@ -90,7 +104,7 @@ export default function LoginPage() {
           <CardDescription>Ingresa tu correo electrónico y contraseña para acceder a tu cuenta.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={null}>
+          <Suspense>
             <LoginError />
           </Suspense>
           <LoginForm />
