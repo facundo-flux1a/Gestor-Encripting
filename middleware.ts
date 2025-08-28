@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Si hay una sesión y la ruta es la raíz, redirigir al dashboard
+  // Si hay sesión y la ruta es la raíz, redirigir al dashboard
   if (pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
   }
