@@ -12,7 +12,7 @@ export const SessionPayloadSchema = z.object({
   userId: z.number(),
   email: z.string(),
   nombre: z.string(),
-  expires: z.date(),
+  expires: z.string(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 

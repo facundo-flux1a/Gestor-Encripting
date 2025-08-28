@@ -41,7 +41,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         userId: parsedPayload.data.userId,
         email: parsedPayload.data.email,
         nombre: parsedPayload.data.nombre,
-        expires: new Date(parsedPayload.data.exp * 1000),
+        expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
   } catch (error) {
@@ -56,7 +56,7 @@ export async function getSession(): Promise<SessionPayload | null> {
     userId: 1,
     email: 'tomas@flux1a.com.ar',
     nombre: 'Tomás Flux',
-    expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expires in 24 hours
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expires in 24 hours
   };
 
   /*
