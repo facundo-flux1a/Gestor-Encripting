@@ -34,7 +34,7 @@ function GoogleLoginButton() {
       if(result?.success) {
           router.push('/dashboard');
       } else {
-          throw new Error('El inicio de sesión con Google falló.');
+          throw new Error(result?.error || 'El inicio de sesión con Google falló.');
       }
     } catch (error: any) {
       toast({

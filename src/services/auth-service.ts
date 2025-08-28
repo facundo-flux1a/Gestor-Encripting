@@ -135,7 +135,7 @@ export async function register(formData: FormData) {
 }
 
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(): Promise<{ success: boolean; error?: string; }> {
   'use client';
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -144,22 +144,22 @@ export async function signInWithGoogle() {
     const response = await handleGoogleSignInOnServer(firebaseUser);
 
     if(response.success) {
-      // Return a success status to the client to handle redirection
       return { success: true };
     } else {
-      throw new Error(response.error || 'Error del servidor durante el inicio de sesión con Google.');
+      return { success: false, error: response.error };
     }
   } catch (error: any) {
     console.error("Error during Google sign-in:", error);
     if (error.code === 'auth/popup-closed-by-user') {
-      throw new Error('El proceso de inicio de sesión fue cancelado.');
+      return { success: false, error: 'El proceso de inicio de sesión fue cancelado.' };
     }
-    throw new Error('No se pudo completar el inicio de sesión con Google.');
+    return { success: false, error: 'No se pudo completar el inicio de sesión con Google.' };
   }
 }
 
 // This is a server action that will be called by the client-side signInWithGoogle function.
-export async function handleGoogleSignInOnServer(firebaseUser: {uid: string, email: string | null, displayName: string | null}) {
+async function handleGoogleSignInOnServer(firebaseUser: {uid: string, email: string | null, displayName: string | null}) {
+  'use server';
   try {
     const { email, displayName, uid } = firebaseUser;
     if (!email) {
