@@ -52,13 +52,35 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
 
 // Updated to accept a cookie value, making it more testable and decoupled
 export async function getSession(cookie?: string): Promise<SessionPayload | null> {
-    // Hardcoded session for development purposes
-    return {
-        userId: 1, // This should correspond to the user ID in the database
-        email: 'tomas@flux1a.com.ar',
-        nombre: 'Tomás Flux', // A representative name
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Session expires in 24 hours
-    };
+    
+    // =========================================================================
+    // MODO DESARROLLO: Forzar sesión para el usuario 'tomas@flux1a.com.ar'
+    // Para desactivar y usar la lógica real, simplemente comenta o elimina este bloque.
+    // =========================================================================
+    const DEVELOPMENT_MODE = true;
+    if (DEVELOPMENT_MODE) {
+        return {
+            userId: 1, // Asegúrate de que este ID exista en tu tabla de usuarios.
+            email: 'tomas@flux1a.com.ar',
+            nombre: 'Tomás Flux (Dev)',
+            expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 horas de sesión
+        };
+    }
+    // =========================================================================
+    // FIN MODO DESARROLLO
+    // =========================================================================
+
+    const sessionCookie = cookie ?? cookies().get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) return null;
+    
+    const session = await decrypt(sessionCookie);
+    if (!session) {
+      // If decryption fails, the cookie is invalid. Clear it.
+      cookies().delete(SESSION_COOKIE_NAME);
+      return null;
+    }
+    
+    return session;
 }
 
 
