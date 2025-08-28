@@ -52,10 +52,13 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
 
 // Updated to accept a cookie value, making it more testable and decoupled
 export async function getSession(cookie?: string): Promise<SessionPayload | null> {
-  const sessionCookie = cookie ?? (await cookies()).get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionCookie) return null;
-
-  return await decrypt(sessionCookie);
+    // Hardcoded session for development purposes
+    return {
+        userId: 1, // This should correspond to the user ID in the database
+        email: 'tomas@flux1a.com.ar',
+        nombre: 'Tomás Flux', // A representative name
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Session expires in 24 hours
+    };
 }
 
 
