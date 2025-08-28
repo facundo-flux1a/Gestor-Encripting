@@ -51,7 +51,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const sessionCookie = cookies().get(SESSION_COOKIE_NAME)?.value;
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) return null;
 
   return await decrypt(sessionCookie);
@@ -62,7 +62,7 @@ export async function createSession(userId: number, email: string, nombre: strin
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const session = await encrypt({ userId, email, nombre, expires });
 
-    cookies().set(SESSION_COOKIE_NAME, session, {
+    (await cookies()).set(SESSION_COOKIE_NAME, session, {
         expires,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -133,6 +133,6 @@ export async function register(formData: FormData) {
 
 
 export async function logout() {
-  cookies().delete(SESSION_COOKIE_NAME);
+  (await cookies()).delete(SESSION_COOKIE_NAME);
   redirect('/auth/login');
 }
