@@ -151,38 +151,13 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
 
-        const iva_details: IvaDetail[] = [];
-        const standardRates = [21, 10, 4, 0];
-
-        standardRates.forEach(rate => {
-            const taxDetail = currentImpuestos.find(t => Number(t.porcentaje) === rate);
-            if (taxDetail) {
-                iva_details.push({
-                    id: taxDetail.id,
-                    tipo_impuesto: taxDetail.tipo_impuesto,
-                    porcentaje: taxDetail.porcentaje,
-                    base_imponible: taxDetail.base_imponible,
-                    cuota: taxDetail.cuota,
-                });
-            } else {
-                iva_details.push({
-                    porcentaje: rate,
-                    base_imponible: 0,
-                    cuota: 0,
-                });
-            }
-        });
-
-        const otherTaxes = currentImpuestos.filter(t => !standardRates.includes(Number(t.porcentaje)));
-        otherTaxes.forEach(taxDetail => {
-            iva_details.push({
-                id: taxDetail.id,
-                tipo_impuesto: taxDetail.tipo_impuesto,
-                porcentaje: taxDetail.porcentaje,
-                base_imponible: taxDetail.base_imponible,
-                cuota: taxDetail.cuota,
-            });
-        });
+        const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
+             id: i.id,
+             tipo_impuesto: i.tipo_impuesto,
+             porcentaje: i.porcentaje,
+             base_imponible: i.base_imponible,
+             cuota: i.cuota,
+        }));
         
         const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
 
@@ -331,8 +306,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         }
         for (const iva of iva_details) {
             await connection.query(
-                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)', 
-                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, iva.base_imponible + iva.cuota]
+                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', 
+                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
             );
         }
 
@@ -509,42 +484,19 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
 
 export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
      const [providerRows] = await db.query<ProviderStatsPacket[]>(`
-        WITH NormalizedProviders AS (
-            SELECT
-                *,
-                -- Normalize CIF/NIF by removing common prefixes like 'ES'
-                REPLACE(UPPER(identificador_fiscal), 'ES-', '') AS normalized_fiscal_id
-            FROM entidades_documento
-            WHERE identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
-              AND (rol = 'proveedor' OR rol = 'emisor')
-        ),
-        RankedNames AS (
-            SELECT
-                normalized_fiscal_id,
-                nombre,
-                identificador_fiscal,
-                -- Rank names and original fiscal IDs by frequency for each normalized ID
-                ROW_NUMBER() OVER(PARTITION BY normalized_fiscal_id ORDER BY COUNT(*) DESC, MAX(fecha_creacion) DESC) as rn
-            FROM NormalizedProviders
-            GROUP BY normalized_fiscal_id, nombre, identificador_fiscal
-        ),
-        PrimaryIdentifiers AS (
-            -- Select the most common name and original fiscal ID for each normalized ID
-            SELECT normalized_fiscal_id, nombre, identificador_fiscal
-            FROM RankedNames
-            WHERE rn = 1
-        )
         SELECT 
-            pi.nombre,
-            pi.identificador_fiscal, -- Show the most common original fiscal_id
+            e.nombre,
+            e.identificador_fiscal,
             SUM(d.importe_total) as totalSpent,
             COUNT(DISTINCT d.id) as totalDocuments,
             COUNT(DISTINCT ld.codigo) as uniqueProducts
-        FROM NormalizedProviders np
-        JOIN documentos d ON np.documento_id = d.id
+        FROM entidades_documento e
+        JOIN documentos d ON e.documento_id = d.id
         LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
-        JOIN PrimaryIdentifiers pi ON np.normalized_fiscal_id = pi.normalized_fiscal_id
-        GROUP BY pi.normalized_fiscal_id, pi.nombre, pi.identificador_fiscal
+        WHERE e.rol IN ('proveedor', 'emisor')
+          AND e.identificador_fiscal IS NOT NULL 
+          AND e.identificador_fiscal != ''
+        GROUP BY e.identificador_fiscal, e.nombre
         ORDER BY totalSpent DESC;
     `);
     
