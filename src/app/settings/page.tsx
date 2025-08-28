@@ -10,13 +10,14 @@ import { logout } from "@/services/auth-service";
 import { LogOut } from "lucide-react";
 import { getCurrentUser } from "@/services/user-service";
 
+
+async function handleLogout() {
+    'use server';
+    await logout();
+};
+
 export default async function SettingsPage() {
     const user = await getCurrentUser();
-
-    const handleLogout = async () => {
-        'use server';
-        await logout();
-    };
 
     return (
         <MainLayout>
