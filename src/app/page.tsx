@@ -12,26 +12,10 @@ export default function RootPage() {
   const [isRedirecting, setIsRedirecting] = useState(true);
 
   useEffect(() => {
-    const handleRedirection = async () => {
-      try {
-        // Aquí puedes agregar lógica de autenticación si es necesario
-        // Por ejemplo, verificar si el usuario está autenticado
-        
-        // Simular una verificación rápida (puedes reemplazar con tu lógica real)
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // El middleware manejará la redirección, pero esto es un fallback
-        router.replace('/dashboard');
-      } catch (error) {
-        console.error('Error durante la redirección:', error);
-        // En caso de error, redirigir a una página de error o login
-        router.replace('/dashboard');
-      } finally {
-        setIsRedirecting(false);
-      }
-    };
-
-    handleRedirection();
+    // El middleware se encarga de toda la lógica de redirección.
+    // Este componente solo muestra un loader como fallback visual.
+    // Si el middleware funciona, el usuario nunca debería ver esto por mucho tiempo.
+    // En un caso de error, podríamos redirigir a una página de error o login.
   }, [router]);
 
   // Mostrar un loader más elaborado mientras se redirige
@@ -43,9 +27,9 @@ export default function RootPage() {
           <div className="absolute inset-0 h-8 w-8 animate-ping rounded-full bg-primary/20" />
         </div>
         <div className="text-center">
-          <p className="text-lg font-medium text-foreground">Redirigiendo...</p>
+          <p className="text-lg font-medium text-foreground">Cargando...</p>
           <p className="text-sm text-muted-foreground">
-            Cargando aplicación de gestión de documentos
+            Iniciando aplicación de gestión de documentos
           </p>
         </div>
       </div>
