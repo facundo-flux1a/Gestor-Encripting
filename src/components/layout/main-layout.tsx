@@ -71,7 +71,7 @@ function SidebarToggle() {
     )
 }
 
-function UserProfile({ user }: { user: User | null }) {
+const UserProfile = React.memo(function UserProfile({ user }: { user: User | null }) {
     if (!user) return null;
 
     const initials = user.nombre ? user.nombre.charAt(0).toUpperCase() : '?';
@@ -116,7 +116,8 @@ function UserProfile({ user }: { user: User | null }) {
             </DropdownMenuContent>
         </DropdownMenu>
     );
-}
+});
+
 
 export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
     const [user, setUser] = React.useState<User | null>(null);
