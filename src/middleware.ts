@@ -1,41 +1,42 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getSession } from '@/services/auth-service';
-
-export const runtime = 'nodejs';
 
 const publicRoutes = ['/auth/login', '/auth/register'];
 const rootRoute = '/';
 
-export async function middleware(request: NextRequest) {
+/**
+ * Middleware to protect routes by checking for the presence of a session cookie.
+ * This middleware is designed to be lightweight and compatible with the Edge runtime.
+ * It does not validate the JWT, only checks for its existence. The actual validation
+ * happens in Server Components or API routes running in the Node.js environment.
+ */
+export function middleware(request: NextRequest) {
+  const sessionCookie = request.cookies.get('session');
   const { pathname } = request.nextUrl;
-  
-  // Utiliza el servicio de autenticación para obtener la sesión
-  const session = await getSession();
 
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  // Si el usuario está autenticado
-  if (session) {
-    // Si intenta acceder a una ruta pública (login, register) o a la raíz, redirigir al dashboard
+  // If the user has a session cookie
+  if (sessionCookie) {
+    // If they are on a public route (login/register) or the root page, redirect to the dashboard.
     if (isPublicRoute || pathname === rootRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   } 
-  // Si el usuario no está autenticado
+  // If the user does not have a session cookie
   else {
-    // Si intenta acceder a una ruta que no es pública, redirigir al login
+    // If they are trying to access any page that isn't public, redirect to login.
     if (!isPublicRoute) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
   }
 
-  // Si ninguna de las condiciones de redirección se cumple, permite que la solicitud continúe
+  // Allow the request to proceed if no redirection is needed.
   return NextResponse.next();
 }
 
-// Configuración para que el middleware se aplique a todas las rutas excepto las estáticas.
+// Configuration for which paths the middleware should apply to.
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };

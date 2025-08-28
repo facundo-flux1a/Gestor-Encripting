@@ -50,8 +50,9 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+// Updated to accept a cookie value, making it more testable and decoupled
+export async function getSession(cookie?: string): Promise<SessionPayload | null> {
+  const sessionCookie = cookie ?? (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) return null;
 
   return await decrypt(sessionCookie);
