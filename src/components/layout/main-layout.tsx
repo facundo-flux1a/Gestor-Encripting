@@ -83,7 +83,7 @@ function UserProfile({ user }: { user: User | null }) {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left">
+                <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left w-full justify-start">
                     <Avatar className="h-8 w-8">
                         <AvatarFallback>{initials}</AvatarFallback>
                     </Avatar>
@@ -100,6 +100,12 @@ function UserProfile({ user }: { user: User | null }) {
                     <Link href="/settings">
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Ajustes</span>
+                    </Link>
+                </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                    <Link href="/settings/tax-validation">
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        <span>Impuestos</span>
                     </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -158,21 +164,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
       { href: '/proveedores', label: 'Proveedores', icon: Users }
   ];
-  
-  const settingsNavItems = [
-      { href: '/settings', label: 'General', icon: Settings },
-      { href: '/settings/tax-validation', label: 'Validación de Impuestos', icon: ShieldCheck }
-  ]
 
   const isActive = (href: string) => {
-    if (href === '/dashboard' || href === '/documents' || href === '/incidents' || href === '/proveedores') {
-       return pathname === href;
-    }
     return pathname.startsWith(href);
-  }
-
-  const isSettingsActive = () => {
-    return pathname.startsWith('/settings');
   }
 
   return (
@@ -190,7 +184,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton 
                         asChild 
-                        isActive={isActive(item.href)} 
+                        isActive={pathname === item.href} 
                         tooltip={item.label}>
                         <Link href={item.href}>
                             <item.icon />
@@ -201,26 +195,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             ))}
-            <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Ajustes" isActive={isSettingsActive()}>
-                     <Settings />
-                     <span className="group-data-[collapsible=icon]:hidden">
-                        Ajustes
-                    </span>
-                </SidebarMenuButton>
-                 <SidebarMenuSub>
-                    {settingsNavItems.map(item => (
-                        <SidebarMenuSubItem key={item.href}>
-                            <SidebarMenuSubButton asChild isActive={pathname === item.href}>
-                                <Link href={item.href}>
-                                    <item.icon />
-                                    <span>{item.label}</span>
-                                </Link>
-                            </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                    ))}
-                </SidebarMenuSub>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
