@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export const UserSchema = z.object({
@@ -159,3 +160,4 @@ export const CreateTaxValidationRuleSchema = z.object({
   porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
+

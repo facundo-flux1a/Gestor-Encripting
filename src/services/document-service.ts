@@ -879,6 +879,9 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 
 
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
+    // This is the CIF/NIF of the main company.
+    const MY_COMPANY_FISCAL_ID = 'B97376321';
+
     const [kpiRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
@@ -886,7 +889,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
                 d.importe_total,
                 d.importe_sin_impuestos,
                 (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id) as total_iva,
-                MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol IN ('emisor') THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             GROUP BY d.id
@@ -899,107 +902,110 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 1) as totalFacturasIngreso,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento WHERE validado = 0) as incidenciasAbiertas,
-          (SELECT COUNT(DISTINCT identificador_fiscal) FROM entidades_documento WHERE rol IN ('proveedor', 'emisor') AND identificador_fiscal IS NOT NULL AND identificador_fiscal != '') as totalProveedores,
+          (SELECT COUNT(DISTINCT identificador_fiscal) FROM entidades_documento WHERE rol IN ('proveedor', 'emisor') AND identificador_fiscal != ?) as totalProveedores,
           (SELECT COUNT(DISTINCT codigo) FROM lineas_documento WHERE codigo IS NOT NULL AND codigo != '') as totalProductos,
           (SELECT COUNT(*) FROM documentos) as totalDocs
+    `, [MY_COMPANY_FISCAL_ID, MY_COMPANY_FISCAL_ID]);
+
+    const kpis = kpiRows[0];
+    const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
+    const beneficio = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
+    const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
+
+    const [quarterlyRows] = await db.query<RowDataPacket[]>(`
+        WITH DocTypes AS (
+            SELECT 
+                d.id,
+                d.importe_sin_impuestos,
+                d.fecha_emision,
+                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol = 'emisor' THEN 1 ELSE 0 END) > 0 as is_issued
+            FROM documentos d
+            LEFT JOIN entidades_documento e ON d.id = e.documento_id
+            GROUP BY d.id
+        )
+        SELECT
+          CONCAT('T', QUARTER(dt.fecha_emision)) as quarter,
+          SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as ingresos,
+          SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END) as gastos
+        FROM DocTypes dt
+        WHERE YEAR(dt.fecha_emision) = YEAR(CURDATE())
+        GROUP BY quarter
+    `, [MY_COMPANY_FISCAL_ID]);
+
+    const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
+    quarterlyRows.forEach(r => {
+        if(r.quarter) {
+            quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: Number(r.ingresos), gastos: Number(r.gastos) };
+        }
+    });
+
+    const [distributionRows] = await db.query<RowDataPacket[]>(`
+        SELECT tipo_documento as name, COUNT(*) as value
+        FROM documentos
+        GROUP BY tipo_documento
+        ORDER BY value DESC
     `);
-  const kpis = kpiRows[0];
-  const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
-  const beneficio = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
-  const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
 
-  const [quarterlyRows] = await db.query<RowDataPacket[]>(`
-    WITH DocTypes AS (
-        SELECT 
-            d.id,
-            d.importe_sin_impuestos,
-            d.fecha_emision,
-            MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
+    const [ivaRows] = await db.query<RowDataPacket[]>(`
+        WITH DocTypes AS (
+            SELECT 
+                d.id,
+                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol = 'emisor' THEN 1 ELSE 0 END) > 0 as is_issued
+            FROM documentos d
+            LEFT JOIN entidades_documento e ON d.id = e.documento_id
+            GROUP BY d.id
+        )
+        SELECT
+          CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
+          SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota ELSE 0 END) as repercutido,
+          SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota ELSE 0 END) as soportado
         FROM documentos d
-        LEFT JOIN entidades_documento e ON d.id = e.documento_id
-        GROUP BY d.id
-    )
-    SELECT
-      CONCAT('T', QUARTER(dt.fecha_emision)) as quarter,
-      SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as ingresos,
-      SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END) as gastos
-    FROM DocTypes dt
-    WHERE YEAR(dt.fecha_emision) = YEAR(CURDATE())
-    GROUP BY quarter
-  `);
+        JOIN impuestos_documento i ON d.id = i.documento_id
+        JOIN DocTypes dt ON d.id = dt.id
+        WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
+        GROUP BY quarter
+    `, [MY_COMPANY_FISCAL_ID]);
 
-  const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
-  quarterlyRows.forEach(r => {
-    if(r.quarter) {
-      quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { ingresos: Number(r.ingresos), gastos: Number(r.gastos) };
-    }
-  });
+    const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
+    ivaRows.forEach(r => {
+        if(r.quarter) {
+            ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: Number(r.repercutido), soportado: Number(r.soportado) };
+        }
+    });
 
-  const [distributionRows] = await db.query<RowDataPacket[]>(`
-    SELECT tipo_documento as name, COUNT(*) as value
-    FROM documentos
-    GROUP BY tipo_documento
-    ORDER BY value DESC
-  `);
-
-  const [ivaRows] = await db.query<RowDataPacket[]>(`
-     WITH DocTypes AS (
-        SELECT 
-            d.id,
-            MAX(CASE WHEN e.rol IN ('cliente', 'receptor') THEN 1 ELSE 0 END) > 0 as is_issued
+    const [topProvidersRows] = await db.query<RowDataPacket[]>(`
+        SELECT e.nombre, e.identificador_fiscal, SUM(d.importe_total) as total
         FROM documentos d
-        LEFT JOIN entidades_documento e ON d.id = e.documento_id
-        GROUP BY d.id
-    )
-    SELECT
-      CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-      SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota ELSE 0 END) as repercutido,
-      SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota ELSE 0 END) as soportado
-    FROM documentos d
-    JOIN impuestos_documento i ON d.id = i.documento_id
-    JOIN DocTypes dt ON d.id = dt.id
-    WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
-    GROUP BY quarter
-  `);
-  const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
-  ivaRows.forEach(r => {
-    if(r.quarter) {
-      ivaSummary[r.quarter as keyof typeof ivaSummary] = { repercutido: Number(r.repercutido), soportado: Number(r.soportado) };
-    }
-  });
+        JOIN entidades_documento e ON d.id = e.documento_id
+        WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') AND e.identificador_fiscal != ?
+        GROUP BY e.nombre, e.identificador_fiscal
+        ORDER BY total DESC
+        LIMIT 5
+    `, [MY_COMPANY_FISCAL_ID]);
 
-  const [topProvidersRows] = await db.query<RowDataPacket[]>(`
-    SELECT e.nombre, e.identificador_fiscal, SUM(d.importe_total) as total
-    FROM documentos d
-    JOIN entidades_documento e ON d.id = e.documento_id
-    WHERE e.rol = 'proveedor' OR e.rol = 'emisor'
-    GROUP BY e.nombre, e.identificador_fiscal
-    ORDER BY total DESC
-    LIMIT 5
-  `);
+    const analyticsData = {
+        kpis: {
+            totalIngresos: Number(kpis.totalIngresos || 0),
+            totalGastos: Number(kpis.totalGastos || 0),
+            beneficio: Number(beneficio),
+            ivaRepercutido: Number(kpis.ivaRepercutido || 0),
+            ivaSoportado: Number(kpis.ivaSoportado || 0),
+            resultadoIva: Number(resultadoIva),
+            totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
+            totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
+            incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
+            totalProveedores: Number(kpis.totalProveedores || 0),
+            totalProductos: Number(kpis.totalProductos || 0),
+            incidentRate: Number(incidentRate || 0),
+        },
+        quarterlySummary,
+        documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
+        ivaSummary,
+        topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
+    };
 
-  const analyticsData = {
-    kpis: {
-      totalIngresos: Number(kpis.totalIngresos || 0),
-      totalGastos: Number(kpis.totalGastos || 0),
-      beneficio: Number(beneficio),
-      ivaRepercutido: Number(kpis.ivaRepercutido || 0),
-      ivaSoportado: Number(kpis.ivaSoportado || 0),
-      resultadoIva: Number(resultadoIva),
-      totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
-      totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
-      incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
-      totalProveedores: Number(kpis.totalProveedores || 0),
-      totalProductos: Number(kpis.totalProductos || 0),
-      incidentRate: Number(incidentRate || 0),
-    },
-    quarterlySummary,
-    documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
-    ivaSummary,
-    topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
-  };
-
-  return JSON.parse(JSON.stringify(analyticsData));
+    return JSON.parse(JSON.stringify(analyticsData));
 }
 
     
+
