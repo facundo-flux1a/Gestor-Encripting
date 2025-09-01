@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck, Eye } from 'lucide-react';
+import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck, Eye, Lock } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
@@ -23,6 +23,25 @@ import { useFieldArray } from 'react-hook-form';
 import { FinancialDetailsCard } from '@/components/dashboard/financial-details-card';
 import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
+
+
+// Helper function to check if a date is in the current quarter
+const isDateInCurrentQuarter = (dateString: string | null): boolean => {
+    if (!dateString) return false;
+    
+    try {
+        const docDate = new Date(dateString);
+        if (isNaN(docDate.getTime())) return false;
+
+        const now = new Date();
+
+        const getQuarter = (d: Date) => Math.floor(d.getMonth() / 3);
+
+        return docDate.getFullYear() === now.getFullYear() && getQuarter(docDate) === getQuarter(now);
+    } catch {
+        return false;
+    }
+};
 
 
 export default function DocumentoPage() {
@@ -159,11 +178,11 @@ export default function DocumentoPage() {
       setIsEditing(false);
       setKey(prevKey => prevKey + 1);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar el documento.',
+        description: error.message || 'No se pudo actualizar el documento.',
         variant: 'destructive',
       });
     } finally {
@@ -175,6 +194,8 @@ export default function DocumentoPage() {
       if (!doc) return;
       resetFormWithDocData(doc);
   }
+
+  const isEditable = useMemo(() => isDateInCurrentQuarter(doc?.fecha_emision ?? null), [doc]);
 
 
   if (isLoading) {
@@ -246,10 +267,21 @@ export default function DocumentoPage() {
                                     </Button>
                                 )}
                                 
-                                <Button type="button" onClick={() => setIsEditing(true)}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Editar
-                                </Button>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                         <div tabIndex={0}>
+                                            <Button type="button" onClick={() => setIsEditing(true)} disabled={!isEditable}>
+                                                {isEditable ? <Edit className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                                                Editar
+                                            </Button>
+                                        </div>
+                                    </TooltipTrigger>
+                                    {!isEditable && (
+                                        <TooltipContent>
+                                            <p>Solo se pueden editar documentos del trimestre actual.</p>
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
                                 <Button variant="destructive" type="button" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
                                     {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                                     Eliminar

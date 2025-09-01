@@ -279,11 +279,27 @@ export async function getIncidents(): Promise<Document[]> {
     return mapDocumentPacketsToDocuments(documentRows);
 }
 
+const isDateInCurrentQuarter = (date: Date): boolean => {
+    const now = new Date();
+    const getQuarter = (d: Date) => Math.floor(d.getMonth() / 3);
+    return date.getFullYear() === now.getFullYear() && getQuarter(date) === getQuarter(now);
+};
+
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
     try {
+        const [docRows] = await connection.query<DocumentPacket[]>('SELECT fecha_emision FROM documentos WHERE id = ?', [id]);
+        if (docRows.length === 0) {
+            throw new Error('Documento no encontrado.');
+        }
+        
+        const docDate = new Date(docRows[0].fecha_emision);
+        if (!isDateInCurrentQuarter(docDate)) {
+            throw new Error('No se pueden editar documentos fuera del trimestre actual.');
+        }
+
         const { numero_documento, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
         
         await connection.query<OkPacket>(
@@ -349,6 +365,16 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
+
+        const [docRows] = await connection.query<DocumentPacket[]>('SELECT fecha_emision FROM documentos WHERE id = ?', [id]);
+        if (docRows.length === 0) {
+            throw new Error('Documento no encontrado.');
+        }
+
+        const docDate = new Date(docRows[0].fecha_emision);
+        if (!isDateInCurrentQuarter(docDate)) {
+             throw new Error('No se pueden editar campos de documentos fuera del trimestre actual.');
+        }
 
         const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
         
@@ -1008,4 +1034,3 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 }
 
     
-
