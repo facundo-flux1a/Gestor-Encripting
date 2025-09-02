@@ -43,7 +43,7 @@ function GoogleLoginButton() {
         });
 
         if (serverResponse.success) {
-            router.push('/dashboard');
+            router.push('/documento/94');
         } else {
             throw new Error(serverResponse.error || 'El inicio de sesión con Google falló en el servidor.');
         }

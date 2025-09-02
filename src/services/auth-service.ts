@@ -124,7 +124,7 @@ export async function login(formData: FormData) {
     return redirect('/auth/login?error=server_error');
   }
 
-  redirect('/dashboard');
+  redirect('/documento/94');
 }
 
 export async function register(formData: FormData) {
@@ -155,7 +155,7 @@ export async function register(formData: FormData) {
         return redirect('/auth/register?error=server_error');
     }
 
-    redirect('/dashboard');
+    redirect('/documento/94');
 }
 
 export async function handleGoogleSignInOnServer(
