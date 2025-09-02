@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -76,7 +77,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
       const formData = new FormData();
       formData.append('file', file);
 
-      const result = await uploadDocument(formData);
+      await uploadDocument(formData);
       
       updateFileStatus(file.name, 'success', 'Archivo enviado para análisis.');
       return true;
@@ -93,40 +94,42 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     if (filesToUpload.length === 0) return;
 
     setIsProcessing(true);
-    setIsOpen(false); // Cierra el diálogo y muestra el progreso en el toast.
+    setIsOpen(false); 
 
     const { id: toastId, update } = toast({
-      title: "Iniciando proceso de subida...",
-      description: `Preparando ${filesToUpload.length} archivo(s).`,
+      title: "Iniciando subida...",
+      description: `Enviando ${filesToUpload.length} archivo(s) en paralelo.`,
     });
 
-    for (let i = 0; i < filesToUpload.length; i++) {
-        const fileToProcess = filesToUpload[i];
-        update({
-            id: toastId,
-            title: `Procesando archivo ${i + 1} de ${filesToUpload.length}`,
-            description: `Subiendo: ${fileToProcess.file.name}`,
-        });
-        await processFile(fileToProcess);
-    }
+    const uploadPromises = filesToUpload.map(file => processFile(file));
+
+    await Promise.all(uploadPromises);
     
     setIsProcessing(false);
-
-    const successCount = uploadableFiles.filter(f => f.status === 'success').length;
-    const errorCount = uploadableFiles.filter(f => f.status === 'error').length;
     
-    update({
-        id: toastId,
-        title: "Proceso de subida finalizado",
-        description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
-        variant: errorCount > 0 ? "destructive" : "default",
+    // We need to read the state again after all promises are settled
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // Access the latest state via the updater function
+    setUploadableFiles(currentFiles => {
+        successCount = currentFiles.filter(f => f.status === 'success').length;
+        errorCount = currentFiles.filter(f => f.status === 'error').length;
+        
+        update({
+            id: toastId,
+            title: "Proceso de subida finalizado",
+            description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
+            variant: errorCount > 0 ? "destructive" : "default",
+        });
+        
+        if(successCount > 0) {
+            onUploadSuccess();
+        }
+        
+        // Clear files after processing
+        return [];
     });
-    
-    if(successCount > 0) {
-        onUploadSuccess();
-    }
-    // Limpia los archivos del diálogo después de procesarlos
-    setUploadableFiles([]);
   };
 
   const handleOpenChange = (open: boolean) => {
