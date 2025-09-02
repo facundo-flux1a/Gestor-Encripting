@@ -19,9 +19,9 @@ export function middleware(request: NextRequest) {
 
   // If the user has a session cookie
   if (sessionCookie) {
-    // If they are on a public route (login/register) or the root page, redirect to the document page.
+    // If they are on a public route (login/register) or the root page, redirect to the dashboard page.
     if (isPublicRoute || pathname === rootRoute) {
-      return NextResponse.redirect(new URL('/documento/94', request.url));
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   } 
   // If the user does not have a session cookie
