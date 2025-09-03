@@ -5,6 +5,8 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getProvidersWithStats } from "@/services/document-service";
 import { ProvidersTable } from "@/components/dashboard/providers-table";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Página para mostrar la lista de todos los proveedores y sus estadísticas.
  * Este es un Server Component, lo que permite la obtención de datos asíncrona

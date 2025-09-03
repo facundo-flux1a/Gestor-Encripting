@@ -8,6 +8,7 @@ import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { getDashboardAnalytics } from '@/services/document-service';
 import { FileText, Users, AlertTriangle, Package, Euro, ArrowUpRight, ArrowDownLeft, Scale, Banknote } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const analytics = await getDashboardAnalytics();
