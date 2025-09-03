@@ -59,6 +59,11 @@ const getColumns = (
         enableHiding: false,
         footer: () => 'Totales',
      },
+     {
+      accessorKey: 'numero_documento',
+      header: 'Nº Factura',
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('numero_documento')} fieldName="numero_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
+    },
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
