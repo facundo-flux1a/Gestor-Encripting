@@ -38,7 +38,7 @@ export default async function DashboardPage() {
 
         <div className="space-y-4">
           {/* KPIs */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <StatsCard
               title="Total Ingresos"
               value={formatCurrency(analytics.kpis.totalIngresos)}
@@ -62,6 +62,12 @@ export default async function DashboardPage() {
               value={formatCurrency(analytics.kpis.resultadoIva)}
               icon={Banknote}
               description="IVA Repercutido - Soportado"
+            />
+             <StatsCard
+              title="Total Documentos"
+              value={analytics.kpis.totalDocs.toString()}
+              icon={FileText}
+              description="Documentos en el sistema"
             />
           </div>
 

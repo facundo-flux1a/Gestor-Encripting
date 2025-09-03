@@ -1,5 +1,4 @@
 
-'use server';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getProvidersWithStats } from "@/services/document-service";

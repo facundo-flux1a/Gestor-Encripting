@@ -102,6 +102,7 @@ export type DashboardAnalytics = {
     totalProveedores: number;
     totalProductos: number;
     incidentRate: number;
+    totalDocs: number;
   };
   quarterlySummary: {
     [key: string]: { ingresos: number; gastos: number };
@@ -914,8 +915,9 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
                 d.id,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id) as total_iva,
-                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol IN ('emisor') THEN 1 ELSE 0 END) > 0 as is_issued
+                (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id AND di.tipo_impuesto NOT LIKE '%retencion%') as total_iva,
+                (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id AND di.tipo_impuesto LIKE '%retencion%') as total_retencion,
+                MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             GROUP BY d.id
@@ -944,7 +946,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
                 d.id,
                 d.importe_sin_impuestos,
                 d.fecha_emision,
-                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol = 'emisor' THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             GROUP BY d.id
@@ -976,7 +978,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
         WITH DocTypes AS (
             SELECT 
                 d.id,
-                MAX(CASE WHEN e.identificador_fiscal = ? AND e.rol = 'emisor' THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             GROUP BY d.id
@@ -988,7 +990,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
         FROM documentos d
         JOIN impuestos_documento i ON d.id = i.documento_id
         JOIN DocTypes dt ON d.id = dt.id
-        WHERE YEAR(d.fecha_emision) = YEAR(CURDATE())
+        WHERE YEAR(d.fecha_emision) = YEAR(CURDATE()) AND i.tipo_impuesto NOT LIKE '%retencion%'
         GROUP BY quarter
     `, [MY_COMPANY_FISCAL_ID]);
 
@@ -1023,6 +1025,7 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
             totalProveedores: Number(kpis.totalProveedores || 0),
             totalProductos: Number(kpis.totalProductos || 0),
             incidentRate: Number(incidentRate || 0),
+            totalDocs: Number(kpis.totalDocs || 0),
         },
         quarterlySummary,
         documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
@@ -1032,5 +1035,3 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 
     return JSON.parse(JSON.stringify(analyticsData));
 }
-
-    
