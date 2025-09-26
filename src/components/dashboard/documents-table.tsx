@@ -91,7 +91,7 @@ const getColumns = (
     },
     {
       accessorKey: 'tipo_documento',
-      header: 'Tipo Gasto',
+      header: 'Tipo Documento',
       cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     ...[21, 10, 4, 0].flatMap(rate => ([

@@ -6,7 +6,7 @@ import { useSidebar } from '@/components/ui/sidebar'
 import { Document } from '@/lib/types'
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { DocumentsTable } from '@/components/dashboard/documents-table' // Asumo que tienes un componente de tabla
+import { DocumentsTable } from '@/components/dashboard/documents-table'
 import { Button } from '@/components/ui/button'
 import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
 
@@ -41,29 +41,56 @@ function DocumentsPageContent() {
     loadDocuments();
   }, [selectedCompanyId, key]);
 
+  const { facturas, otrosDocumentos } = React.useMemo(() => {
+    const facturas: Document[] = [];
+    const otrosDocumentos: Document[] = [];
+    documents.forEach(doc => {
+      if (doc.tipo_documento?.toLowerCase().includes('factura')) {
+        facturas.push(doc);
+      } else {
+        otrosDocumentos.push(doc);
+      }
+    });
+    return { facturas, otrosDocumentos };
+  }, [documents]);
+
+  const otherDocsHiddenColumns = [
+    'base_21', 'iva_21', 'base_10', 'iva_10', 'base_4', 'iva_4', 'base_0', 'iva_0',
+    'retencion', 'base_imponible', 'iva', 'total'
+  ];
+
   return (
     <>
       <MainLayoutHeader>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold tracking-tight">
             Documentos
-            {selectedCompanyId && (
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({documents.length} documentos)
-              </span>
-            )}
           </h1>
         </div>
         <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
       </MainLayoutHeader>
       
-      <div className="flex-1 p-4 pt-6 md:p-8">
+      <div className="flex-1 space-y-8 p-4 pt-6 md:p-8">
         {loading ? (
           <div className="text-center text-muted-foreground">Cargando documentos...</div>
         ) : error ? (
           <div className="text-center text-destructive">{error}</div>
         ) : (
-          <DocumentsTable documents={documents} />
+          <>
+            <section>
+              <h2 className="text-xl font-semibold tracking-tight mb-4">Facturas ({facturas.length})</h2>
+              <DocumentsTable documents={facturas} filename="facturas" />
+            </section>
+            
+            <section>
+              <h2 className="text-xl font-semibold tracking-tight mb-4">Otros Documentos ({otrosDocumentos.length})</h2>
+              <DocumentsTable 
+                documents={otrosDocumentos} 
+                filename="otros_documentos"
+                hiddenColumns={otherDocsHiddenColumns} 
+              />
+            </section>
+          </>
         )}
       </div>
        <UploadDocumentDialog 
