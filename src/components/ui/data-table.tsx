@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -18,7 +19,8 @@ import {
   type Row,
   type Header as TableHeaderType,
   type Column,
-  getFacetedMinMaxValues
+  getFacetedMinMaxValues,
+  Table as TanstackTable
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -71,6 +73,58 @@ interface DataTableProps<TData, TValue> {
   filename: string;
 }
 
+
+function Filter<TData, TValue>({
+  column,
+  table,
+}: {
+  column: Column<TData, TValue>
+  table: TanstackTable<TData>
+}) {
+  const firstValue = table
+    .getPreFilteredRowModel()
+    .flatRows[0]?.getValue(column.id)
+
+  const columnFilterValue = column.getFilterValue()
+
+  return typeof firstValue === 'number' ? (
+    <div className="flex space-x-2">
+      <Input
+        type="number"
+        value={(columnFilterValue as [number, number])?.[0] ?? ''}
+        onChange={e =>
+          column.setFilterValue((old: [number, number]) => [
+            e.target.value,
+            old?.[1],
+          ])
+        }
+        placeholder={`Min`}
+        className="h-8 border-dashed"
+      />
+      <Input
+        type="number"
+        value={(columnFilterValue as [number, number])?.[1] ?? ''}
+        onChange={e =>
+          column.setFilterValue((old: [number, number]) => [
+            old?.[0],
+            e.target.value,
+          ])
+        }
+        placeholder={`Max`}
+        className="h-8 border-dashed"
+      />
+    </div>
+  ) : (
+    <Input
+      value={(columnFilterValue ?? '') as string}
+      onChange={e => column.setFilterValue(e.target.value)}
+      placeholder={`Filtrar...`}
+      className="h-8 border-dashed"
+    />
+  )
+}
+
+
 // Draggable Header Cell Component
 const DraggableTableHeader = <TData, TValue>({
   header,
@@ -98,33 +152,40 @@ const DraggableTableHeader = <TData, TValue>({
       className={cn("p-0 whitespace-nowrap group relative bg-muted/50")}
     >
        {header.isPlaceholder ? null : (
-            <div className="flex items-center h-full">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    {...attributes}
-                    {...listeners}
-                    className="cursor-grab p-2 h-full touch-none"
+            <div className="flex flex-col h-full">
+                 <div className="flex items-center h-full">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        {...attributes}
+                        {...listeners}
+                        className="cursor-grab p-2 h-full touch-none"
+                        >
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <div
+                        className={cn(
+                            "flex items-center text-left w-full h-full px-2 py-3",
+                            isSortable ? 'cursor-pointer select-none' : ''
+                        )}
+                        onClick={header.column.getToggleSortingHandler()}
                     >
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <div
-                    className={cn(
-                        "flex items-center text-left w-full h-full px-2 py-3",
-                        isSortable ? 'cursor-pointer select-none' : ''
-                    )}
-                    onClick={header.column.getToggleSortingHandler()}
-                >
-                    <span className="font-bold text-xs">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                    </span>
-                    {isSortable && (
-                        <ArrowUpDown className={cn(
-                            "ml-2 h-3 w-3 transition-opacity duration-300",
-                            header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        )} />
-                    )}
+                        <span className="font-bold text-xs">
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
+                        {isSortable && (
+                            <ArrowUpDown className={cn(
+                                "ml-2 h-3 w-3 transition-opacity duration-300",
+                                header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            )} />
+                        )}
+                    </div>
                 </div>
+                 {header.column.getCanFilter() ? (
+                    <div className="p-2 pt-0">
+                        <Filter column={header.column} table={header.getContext().table} />
+                    </div>
+                ) : null}
             </div>
        )}
     </TableHead>
