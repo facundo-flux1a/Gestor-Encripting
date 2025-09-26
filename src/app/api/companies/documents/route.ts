@@ -1,9 +1,7 @@
 // src/app/api/documents/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-// 🛑 IMPORTANTE: Asegurate que este path sea correcto para llegar a tu archivo de servicios.
-// Si tu archivo de servicios está en '@/lib/document-service', usá esa ruta.
-import { getDocuments } from '@/lib/document-service'; 
+import { getDocuments } from '@/services/document-service'; 
 
 export const dynamic = 'force-dynamic'; // Asegura que los datos sean siempre frescos.
 
@@ -26,10 +24,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json([]); 
     }
 
-    // 🛑 3. Llamar a tu función de servicio de documentos con el ID filtrado
-    // Nota: Si empresaId es 0 o undefined, tu servicio getDocuments traerá TODOS los documentos (o lo que hayas programado).
-    // Si querés que devuelva [] si no hay ID, tenés que manejarlo en el frontend o aquí:
-    // const documents = empresaId ? await getDocuments(empresaId) : [];
     const documents = await getDocuments(empresaId);
 
     // 4. Devolver la respuesta al frontend
