@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
@@ -18,6 +18,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+
+// Importar el servicio para obtener las empresas
+import { getCompanies } from '@/services/document-service';
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -52,6 +55,7 @@ const useUserData = () => {
   return { user, loading, error, updateUser, refetch: fetchUser }
 }
 
+// Tipo del contexto actualizado para incluir empresas
 type SidebarContext = {
   state: "expanded" | "collapsed"
   open: boolean
@@ -60,7 +64,6 @@ type SidebarContext = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
-  // Agregamos datos de usuario al contexto para compartir entre componentes
   userData: {
     user: any
     loading: boolean
@@ -68,6 +71,10 @@ type SidebarContext = {
     updateUser: (updates: any) => void
     refetchUser: () => Promise<void>
   }
+  companies: { id: number; nombre: string }[]
+  selectedCompanyId: number | null
+  setSelectedCompanyId: (id: number | null) => void
+  companiesLoading: boolean
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -162,6 +169,30 @@ const SidebarProvider = React.forwardRef<
       refetchUser: refetch
     }), [user, loading, error, updateUser, refetch])
 
+    // Estado para las empresas y la empresa seleccionada
+    const [companies, setCompanies] = React.useState<{id: number, nombre: string}[]>([]);
+    const [selectedCompanyId, setSelectedCompanyId] = React.useState<number | null>(null);
+    const [companiesLoading, setCompaniesLoading] = React.useState(true);
+
+    // Hook para cargar las empresas al inicio
+    React.useEffect(() => {
+        const fetchCompanies = async () => {
+            try {
+                setCompaniesLoading(true);
+                const fetchedCompanies = await getCompanies();
+                setCompanies(fetchedCompanies);
+                if (fetchedCompanies.length > 0) {
+                    setSelectedCompanyId(fetchedCompanies[0].id);
+                }
+            } catch (err) {
+                console.error("Error fetching companies:", err);
+            } finally {
+                setCompaniesLoading(false);
+            }
+        };
+        fetchCompanies();
+    }, []);
+
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
         state,
@@ -171,9 +202,13 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
-        userData
+        userData,
+        companies,
+        selectedCompanyId,
+        setSelectedCompanyId,
+        companiesLoading,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, userData]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, userData, companies, selectedCompanyId, setSelectedCompanyId, companiesLoading]
     )
 
     return (

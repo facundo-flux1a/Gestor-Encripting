@@ -1,15 +1,14 @@
-
-
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident } from '@/lib/types';
+import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident, Company, CreateDocumentPayload } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
 import type { IncidentAnalysisResult } from '@/lib/types';
 import { redirect } from 'next/navigation';
-
+import { getCurrentUser } from './user-service';
+import { revalidatePath } from 'next/cache';
 
 interface DocumentPacket extends RowDataPacket {
     id: number;
@@ -23,6 +22,7 @@ interface DocumentPacket extends RowDataPacket {
     observaciones: string | null;
     datos_extra: any | null;
     fecha_creacion: string;
+    id_de_empresa: number | null;
 }
 
 interface ArchivoPacket extends RowDataPacket {
@@ -45,6 +45,7 @@ interface EntidadPacket extends RowDataPacket {
     email: string | null;
     datos_extra: any | null;
     documento_id: number;
+    fecha_creacion: string;
 }
 
 interface LineaPacket extends RowDataPacket {
@@ -61,6 +62,7 @@ interface LineaPacket extends RowDataPacket {
     datos_extra: any | null;
     fecha_emision: string; // Joined from documentos table
     numero_documento: string; // Joined from documentos table
+    fecha_creacion: string | null;
 }
 
 interface ImpuestoPacket extends RowDataPacket {
@@ -86,6 +88,11 @@ interface IncidenciaPacket extends RowDataPacket {
     descripcion: string | null;
     validado: boolean;
     fecha_incidencia: string;
+}
+
+interface EmpresaPacket extends RowDataPacket {
+    id: number;
+    nombre: string;
 }
 
 export type DashboardAnalytics = {
@@ -114,7 +121,6 @@ export type DashboardAnalytics = {
   topProviders: { name: string; total: number; fiscalId: string }[];
 }
 
-
 // Helper function to safely parse JSON. Ensures the output is an object or null.
 const safeJsonParse = (data: any): object | null => {
     if (typeof data === 'string') {
@@ -127,7 +133,6 @@ const safeJsonParse = (data: any): object | null => {
     }
     return (typeof data === 'object' && data !== null) ? data : null;
 };
-
 
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
     if (!documentRows || documentRows.length === 0) {
@@ -151,7 +156,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
         const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
-
         const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
              id: i.id,
              tipo_impuesto: i.tipo_impuesto,
@@ -161,7 +165,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         }));
         
         const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
-
 
         const entidades: DocumentEntity[] = currentEntidades.map(e => ({
             id: e.id,
@@ -237,20 +240,69 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             incidencias: incidencias,
             proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
             cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
+            empresa_id: doc.id_de_empresa,
         };
     });
     
     return JSON.parse(JSON.stringify(documents));
 }
 
-export async function getDocuments(): Promise<Document[]> {
-    const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT *
-        FROM documentos
-        ORDER BY fecha_emision DESC
-    `);
-    
-    return mapDocumentPacketsToDocuments(documentRows);
+/**
+ * Obtiene todas las empresas del usuario actual
+ */
+export async function getCompanies(): Promise<Company[]> {
+    try {
+        const user = await getCurrentUser();
+        if (!user) {
+            return [];
+        }
+
+        const [rows] = await db.query<EmpresaPacket[]>(
+            'SELECT id, nombre as name FROM empresas WHERE usuario_id = ? ORDER BY nombre ASC',
+            [user.id]
+        );
+
+        if (!rows || rows.length === 0) {
+            return [];
+        }
+
+        return rows.map(row => ({
+            id: row.id,
+            name: row.nombre
+        })) as Company[];
+    } catch (error) {
+        console.error("Failed to fetch companies:", error);
+        return [];
+    }
+}
+
+/**
+ * Obtiene todos los documentos, opcionalmente filtrados por empresa
+ */
+export async function getDocuments(empresaId?: number): Promise<Document[]> {
+    try {
+        let query = `
+            SELECT d.*
+            FROM documentos d
+        `;
+        
+        const params: any[] = [];
+        
+        // Si se especifica una empresa, filtrar por ella
+        if (empresaId) {
+            query += ' WHERE d.id_de_empresa = ?';
+            params.push(empresaId);
+        }
+        
+        query += ' ORDER BY d.fecha_emision DESC';
+
+        const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+        
+        return mapDocumentPacketsToDocuments(documentRows);
+    } catch (error) {
+        console.error("Failed to fetch documents:", error);
+        return [];
+    }
 }
 
 export async function getDocumentById(id: number): Promise<Document | null> {
@@ -361,7 +413,6 @@ async function recalculateDocumentTotals(docId: number, connection: any) {
     );
 }
 
-
 export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
     const connection = await db.getConnection();
     try {
@@ -435,8 +486,6 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     }
 }
 
-
-
 export async function deleteDocument(id: number): Promise<void> {
     const connection = await db.getConnection();
     await connection.beginTransaction();
@@ -453,6 +502,49 @@ export async function deleteDocument(id: number): Promise<void> {
     }
 }
 
+/**
+ * Crea un nuevo documento
+ */
+export async function createDocument(payload: CreateDocumentPayload): Promise<{ success: boolean; id?: number; error?: string }> {
+    try {
+        const user = await getCurrentUser();
+        if (!user) {
+            return {
+                success: false,
+                error: 'Usuario no autenticado'
+            };
+        }
+
+        const { 
+            tipo_documento,
+            numero_documento, 
+            fecha_emision, 
+            fecha_vencimiento,
+            importe_total,
+            importe_sin_impuestos,
+            moneda,
+            observaciones,
+            empresa_id 
+        } = payload;
+
+        const [result] = await db.query<OkPacket>(
+            `INSERT INTO documentos 
+             (tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, id_de_empresa) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, empresa_id]
+        );
+
+        revalidatePath('/documents');
+        return { success: true, id: result.insertId };
+    } catch (error) {
+        console.error('Error creating document:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Error desconocido al crear el documento'
+        };
+    }
+}
+
 export async function validateDocumentIncidents(documentId: number): Promise<{success: boolean}> {
     await db.query<OkPacket>(
         'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
@@ -460,7 +552,6 @@ export async function validateDocumentIncidents(documentId: number): Promise<{su
     );
     return { success: true };
 }
-
 
 export async function getUniqueProvidersCount(): Promise<number> {
     const [providerRows] = await db.query<RowDataPacket[]>(`
@@ -508,7 +599,6 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     return JSON.parse(JSON.stringify(providers));
 }
 
-
 export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
      const [providerRows] = await db.query<ProviderStatsPacket[]>(`
         SELECT 
@@ -549,7 +639,6 @@ export async function getAllProducts(): Promise<number> {
     return lineaRows[0].count || 0;
 }
 
-
 // Get by fiscal Id, as name can be repeated or contain special chars
 export async function getDocumentsByProviderName(fiscalId: string): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
@@ -562,7 +651,6 @@ export async function getDocumentsByProviderName(fiscalId: string): Promise<Docu
 
     return mapDocumentPacketsToDocuments(documentRows);
 }
-
 
 export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
     const [providerRows] = await db.query<EntidadPacket[]>(`
@@ -590,7 +678,6 @@ export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentE
 
     return JSON.parse(JSON.stringify(provider));
 }
-
 
 export async function getProductsByProviderName(fiscalId: string): Promise<DocumentLine[]> {
     const [lineaRows] = await db.query<LineaPacket[]>(`
@@ -803,7 +890,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             WHERE d.id IN (?)
         `, [docIds]);
 
-
         // Check for incomplete documents
         for (const doc of docsWithDetails) {
             if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
@@ -815,7 +901,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 }
             }
         }
-        
 
         const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
 
@@ -845,7 +930,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
         // Check for calculation errors
         for (const doc of validDocsForAnalysis) {
-            
             // Check 1: Sum of line items vs Base Amount
             if (doc.sum_line_items !== null) {
                 if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
@@ -858,7 +942,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                     }
                 }
             }
-
 
             // Check 2: Base Amount + Taxes vs Total Amount
             if (doc.sum_cuota_iva !== null) { 
@@ -893,7 +976,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
     }
 }
 
-
 export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
     const [allDocIds] = await db.query<RowDataPacket[]>('SELECT id FROM documentos');
     const docIds = allDocIds.map(row => row.id);
@@ -903,7 +985,6 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
 export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
     return analyzeDocuments([documentId]);
 }
-
 
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
     // This is the CIF/NIF of the main company.

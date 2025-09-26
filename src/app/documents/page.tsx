@@ -1,121 +1,85 @@
+'use client'
 
-'use client';
-import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
-import { getDocuments } from "@/services/document-service";
-import { DocumentsTable } from "@/components/dashboard/documents-table";
-import { Button } from "@/components/ui/button";
-import { Upload, ChevronsUpDown } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
-import type { Document } from "@/lib/types";
-import { UploadDocumentDialog } from "@/components/dashboard/upload-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import * as React from 'react'
+import { getDocuments } from '@/services/document-service'
+import { useSidebar } from '@/components/ui/sidebar'
+import { Document } from '@/lib/types'
+import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import { DocumentsTable } from '@/components/dashboard/documents-table' // Asumo que tienes un componente de tabla
+import { Button } from '@/components/ui/button'
+import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
 
-const normalizeDocType = (type: string | null | undefined): string => {
-    if (!type || type.trim() === '') return 'Otro';
-    const lower = type.trim().toLowerCase();
-    
-    if (lower.includes('factura')) {
-        return 'Factura';
-    }
-    
-    return lower.charAt(0).toUpperCase() + lower.slice(1);
-};
+function DocumentsPageContent() {
+  const { selectedCompanyId } = useSidebar();
+  const [documents, setDocuments] = React.useState<Document[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isUploadOpen, setIsUploadOpen] = React.useState(false);
+  const [key, setKey] = React.useState(0); // Para forzar la recarga
 
-
-export default function DocumentsPage() {
-  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [docTypeFilter, setDocTypeFilter] = useState('todos');
-
-  const fetchDocuments = () => {
-    getDocuments().then(docs => {
-        setAllDocuments(docs);
-    });
-  }
-
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-  
   const handleUploadSuccess = () => {
-    fetchDocuments(); // Re-fetch documents after successful upload
-  }
+    setKey(prevKey => prevKey + 1); // Cambia la key para forzar el useEffect
+  };
 
-  const documentTypes = useMemo(() => {
-    const types = new Set(allDocuments.map(doc => normalizeDocType(doc.tipo_documento)));
-    return ['todos', ...Array.from(types)].sort();
-  }, [allDocuments]);
-
-  const filteredDocuments = useMemo(() => {
-    if (docTypeFilter === 'todos') {
-      return allDocuments;
+  React.useEffect(() => {
+    async function loadDocuments() {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const docs = await getDocuments(selectedCompanyId ?? undefined);
+        setDocuments(docs);
+      } catch (err) {
+        console.error('Error loading documents:', err);
+        setError('Error al cargar los documentos');
+      } finally {
+        setLoading(false);
+      }
     }
-    return allDocuments.filter(doc => normalizeDocType(doc.tipo_documento) === docTypeFilter);
-  }, [allDocuments, docTypeFilter]);
-  
-  const pageTitle = docTypeFilter === 'todos' ? 'Todos los Documentos' : `Documentos: ${docTypeFilter}`;
-  const pageDescription = docTypeFilter === 'todos' 
-    ? 'Gestiona y revisa todos tus documentos.'
-    : `Viendo todos los documentos de tipo "${docTypeFilter}".`;
 
-  const hiddenColumns = docTypeFilter === 'todos' ? [] : ['tipo_documento'];
-  const filename = docTypeFilter === 'todos' ? 'todos-los-documentos' : `documentos_${docTypeFilter}`;
+    loadDocuments();
+  }, [selectedCompanyId, key]);
 
   return (
-    <MainLayout>
-      <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
-        <MainLayoutHeader>
-            <div className="flex-1">
-                <h2 className="text-3xl font-bold tracking-tight">{pageTitle}</h2>
-                <p className="text-muted-foreground">
-                   {pageDescription}
-                </p>
-            </div>
-            <div className="flex items-center space-x-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="min-w-[200px] justify-between">
-                      {docTypeFilter === 'todos' ? 'Filtrar por tipo...' : docTypeFilter}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56">
-                    <DropdownMenuLabel>Selecciona un tipo de documento</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuRadioGroup value={docTypeFilter} onValueChange={setDocTypeFilter}>
-                       {documentTypes.map(type => (
-                        <DropdownMenuRadioItem key={type} value={type} className="capitalize">
-                          {type === 'todos' ? 'Todos los tipos' : type}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button onClick={() => setIsUploadOpen(true)}>
-                    <Upload className="mr-2" />
-                    Subir Documento
-                </Button>
-            </div>
-        </MainLayoutHeader>
-        <div className="mt-6">
-           <DocumentsTable documents={filteredDocuments} hiddenColumns={hiddenColumns} filename={filename} />
+    <>
+      <MainLayoutHeader>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Documentos
+            {selectedCompanyId && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({documents.length} documentos)
+              </span>
+            )}
+          </h1>
         </div>
+        <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
+      </MainLayoutHeader>
+      
+      <div className="flex-1 p-4 pt-6 md:p-8">
+        {loading ? (
+          <div className="text-center text-muted-foreground">Cargando documentos...</div>
+        ) : error ? (
+          <div className="text-center text-destructive">{error}</div>
+        ) : (
+          <DocumentsTable documents={documents} />
+        )}
       </div>
-      <UploadDocumentDialog 
-        isOpen={isUploadOpen}
-        setIsOpen={setIsUploadOpen}
+       <UploadDocumentDialog 
+        isOpen={isUploadOpen} 
+        setIsOpen={setIsUploadOpen} 
         onUploadSuccess={handleUploadSuccess}
       />
-    </MainLayout>
+    </>
   );
 }
 
+
+export default function DocumentsPage() {
+    return (
+        <MainLayout>
+            <DocumentsPageContent />
+        </MainLayout>
+    )
+}
