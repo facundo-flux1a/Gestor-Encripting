@@ -5,10 +5,10 @@ import { getDocuments } from '@/services/document-service'
 import { useSidebar } from '@/components/ui/sidebar'
 import { Document } from '@/lib/types'
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
-import { SidebarTrigger } from '@/components/ui/sidebar'
 import { DocumentsTable } from '@/components/dashboard/documents-table'
 import { Button } from '@/components/ui/button'
 import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function DocumentsPageContent() {
   const { selectedCompanyId } = useSidebar();
@@ -20,6 +20,7 @@ function DocumentsPageContent() {
 
   const handleUploadSuccess = () => {
     setKey(prevKey => prevKey + 1); // Cambia la key para forzar el useEffect
+    console.log()
   };
 
   React.useEffect(() => {
@@ -41,17 +42,20 @@ function DocumentsPageContent() {
     loadDocuments();
   }, [selectedCompanyId, key]);
 
-  const { facturas, otrosDocumentos } = React.useMemo(() => {
+  const { facturas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     const facturas: Document[] = [];
     const otrosDocumentos: Document[] = [];
+    const sinConfirmar: Document[] = [];
     documents.forEach(doc => {
-      if (doc.tipo_documento?.toLowerCase().includes('factura')) {
+      if (doc.tipo_documento?.toLowerCase().includes('(sin confirmar)')) {
+        sinConfirmar.push(doc);
+      } else if (doc.tipo_documento?.toLowerCase().includes('factura')) {
         facturas.push(doc);
       } else {
         otrosDocumentos.push(doc);
       }
     });
-    return { facturas, otrosDocumentos };
+    return { facturas, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
   const otherDocsHiddenColumns = [
@@ -70,27 +74,32 @@ function DocumentsPageContent() {
         <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
       </MainLayoutHeader>
       
-      <div className="flex-1 space-y-8 p-4 pt-6 md:p-8">
+      <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
         {loading ? (
           <div className="text-center text-muted-foreground">Cargando documentos...</div>
         ) : error ? (
           <div className="text-center text-destructive">{error}</div>
         ) : (
-          <>
-            <section>
-              <h2 className="text-xl font-semibold tracking-tight mb-4">Facturas ({facturas.length})</h2>
+          <Tabs defaultValue="facturas" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="sin-confirmar">Sin Confirmar ({sinConfirmar.length})</TabsTrigger>
+              <TabsTrigger value="facturas">Facturas ({facturas.length})</TabsTrigger>
+              <TabsTrigger value="otros">Otros Documentos ({otrosDocumentos.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="sin-confirmar" className="space-y-4">
+              <DocumentsTable documents={sinConfirmar} filename="documentos_sin_confirmar" />
+            </TabsContent>
+            <TabsContent value="facturas" className="space-y-4">
               <DocumentsTable documents={facturas} filename="facturas" />
-            </section>
-            
-            <section>
-              <h2 className="text-xl font-semibold tracking-tight mb-4">Otros Documentos ({otrosDocumentos.length})</h2>
+            </TabsContent>
+            <TabsContent value="otros" className="space-y-4">
               <DocumentsTable 
                 documents={otrosDocumentos} 
                 filename="otros_documentos"
                 hiddenColumns={otherDocsHiddenColumns} 
               />
-            </section>
-          </>
+            </TabsContent>
+          </Tabs>
         )}
       </div>
        <UploadDocumentDialog 

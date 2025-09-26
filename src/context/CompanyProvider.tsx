@@ -1,52 +1,34 @@
 'use client';
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getCompanies } from '@/services/document-service';
+import { createContext, useContext, useState, useMemo, ReactNode } from 'react';
 
-// Define los tipos para el contexto
-type Company = {
-  id: number;
-  name: string;
-};
-
+// Tipos de datos
 type CompanyContextType = {
-  companies: Company[];
   selectedCompanyId: string | null;
   setSelectedCompanyId: (id: string | null) => void;
+  // Agregamos un estado de carga, por si lo necesita el Dashboard
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
 };
 
 // Crea el contexto con un valor inicial nulo
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
-// Define el componente del proveedor del contexto
+// Define el componente del proveedor
 export const CompanyProvider = ({ children }: { children: ReactNode }) => {
-  const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Al cargar, se obtienen las empresas de la base de datos
-    getCompanies().then(companiesList => {
-      const companiesData = companiesList.map(c => ({
-        id: c.id,
-        name: c.name,
-      }));
-      setCompanies(companiesData);
-      // Opcional: Establecer una empresa por defecto (por ejemplo, la primera)
-      if (companiesData.length > 0) {
-        setSelectedCompanyId(companiesData[0].id.toString());
-      }
-    });
-  }, []);
-
-  const value = {
-    companies,
+  const value = useMemo(() => ({
     selectedCompanyId,
     setSelectedCompanyId,
-  };
+    isLoading,
+    setIsLoading,
+  }), [selectedCompanyId, isLoading]);
 
   return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 };
 
-// Hook personalizado para usar el contexto fácilmente en otros componentes
+// Hook para usar el contexto
 export const useCompanyContext = () => {
   const context = useContext(CompanyContext);
   if (context === undefined) {

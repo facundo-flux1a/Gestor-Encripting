@@ -54,7 +54,7 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
         accessKeyId: MINIO_ACCESS_KEY,
         secretAccessKey: MINIO_SECRET_KEY,
       },
-      forcePathStyle: true, // Crucial para MinIO
+      forcePathStyle: true, // Crucial para MinIOF
     });
 
     const fileBuffer = await file.arrayBuffer();

@@ -169,6 +169,17 @@ const getColumns = (
       }
     },
     {
+        id: 'view',
+        cell: ({ row }) => {
+            const doc = row.original;
+            return (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={`/documento/${doc.id_documento}`}>Ver Detalles</Link>
+                </Button>
+            );
+        },
+    },
+    {
       id: 'actions',
       cell: ({ row }) => {
         const doc = row.original;
@@ -176,14 +187,11 @@ const getColumns = (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Abrir menú</span>
+                <span className="sr-only">Ver más</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/documento/${doc.id_documento}`}>Ver detalles</Link>
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onSummarize(doc)}>
                 Resumir con IA
               </DropdownMenuItem>
@@ -199,6 +207,19 @@ const getColumns = (
 }
 
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
+  if (documents && documents.length > 0) {
+    console.log('✅ Primeros 5 documentos cargados en DocumentsTable:');
+    console.log(documents.slice(0, 5));
+    
+    // 🕵️‍♀️ VERIFICACIÓN RÁPIDA DE id_empresa EN EL PRIMER OBJETO
+    if ('id_empresa' in documents[0]) {
+        console.log('✅ El primer documento SÍ tiene la clave "id_empresa". Su valor es:', documents[0].id_empresa);
+    } else {
+        console.log('❌ El primer documento NO tiene la clave "id_empresa".');
+    }
+} else {
+    console.log('⚠️ DocumentsTable: El array de documentos está vacío o es nulo.');
+}
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
 

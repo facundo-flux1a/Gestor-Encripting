@@ -1,107 +1,108 @@
 'use client';
 
-import * as React from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useSidebar } from "@/components/ui/sidebar";
-import { Building } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import * as React from 'react';
+import { useCompanyContext } from '@/context/CompanyProvider'; 
+
+// Importa los componentes de UI
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from './ui/skeleton';
+
+// Tipos
+type Company = {
+  id: number;
+  name: string;
+};
 
 export function CompaniesSelector() {
-    const { 
-        companies, 
-        selectedCompanyId, 
-        setSelectedCompanyId, 
-        state,
-        companiesLoading 
-    } = useSidebar();
+  // ✅ Usamos el Contexto (estado global) para MANEJAR LA SELECCIÓN y la CARGA
+  const { 
+    selectedCompanyId, 
+    setSelectedCompanyId, 
+    isLoading, 
+    setIsLoading // Usamos este para el loading state
+  } = useCompanyContext(); 
 
-    const handleSelectChange = (value: string) => {
-        setSelectedCompanyId(Number(value));
-    };
+  // La lista de empresas SÍ se queda en el estado local, porque solo la necesita este componente.
+  const [availableCompanies, setAvailableCompanies] = React.useState<Company[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
 
-    // Si está en modo colapsado, mostrar solo el ícono con tooltip
-    if (state === 'collapsed') {
-        const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+  React.useEffect(() => {
+    async function fetchCompanies() {
+      try {
+        setIsLoading(true);
+        // La URL que ya funciona
+        const response = await fetch('/api/companies'); 
         
-        return (
-            <div className="p-2">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button 
-                                variant="outline" 
-                                size="icon" 
-                                className="size-8 rounded-md"
-                            >
-                                <Building className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                            <p>Empresa: {selectedCompany?.nombre || 'Seleccionar empresa'}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            </div>
-        );
+        if (!response.ok) {
+          throw new Error('Failed to fetch companies');
+        }
+        
+        const data: Company[] = await response.json();
+        
+        // Guardamos la lista en el estado local del componente
+        setAvailableCompanies(data); 
+        
+        // Establecemos la primera empresa seleccionada en el estado global si no hay ninguna.
+        if (data.length > 0 && selectedCompanyId === null) {
+          setSelectedCompanyId(data[0].id.toString());
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        console.error("Error al hacer fetch en el selector:", err);
+      } finally {
+        setIsLoading(false);
+      }
     }
 
-    // Si está cargando, mostrar skeleton
-    if (companiesLoading) {
-        return (
-            <div className="p-2">
-                <Skeleton className="h-10 w-full rounded-md" />
-            </div>
-        );
-    }
+    fetchCompanies();
+  // El useEffect solo se vuelve a ejecutar si el ID de la sesión cambia.
+  }, [selectedCompanyId, setSelectedCompanyId, setIsLoading]); 
 
-    // Si no hay empresas, mostrar mensaje
-    if (companies.length === 0) {
-        return (
-            <div className="p-2">
-                <div className="text-xs text-muted-foreground text-center py-2">
-                    No hay empresas disponibles
-                </div>
-            </div>
-        );
-    }
+  const handleValueChange = (companyId: string) => {
+    // ✅ Actualiza el estado global
+    setSelectedCompanyId(companyId); 
+    console.log('Empresa seleccionada (Global ID):', companyId);
+  };
 
-    // Modo expandido - mostrar el selector completo
+  // El resto del código de renderizado (ya usa isLoading y selectedCompanyId)
+  if (isLoading) {
     return (
-        <div className="p-2">
-            <div className="text-xs text-muted-foreground mb-2">
-                Empresa activa
-            </div>
-            <Select 
-                value={selectedCompanyId ? String(selectedCompanyId) : ""} 
-                onValueChange={handleSelectChange}
-            >
-                <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Seleccionar empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                    {companies.map((company) => (
-                        <SelectItem key={company.id} value={String(company.id)}>
-                            <div className="flex items-center gap-2">
-                                <Building className="size-4" />
-                                <span>{company.nombre}</span>
-                            </div>
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
+      <div className="p-2 space-y-2">
+         <Skeleton className="h-4 w-1/4" />
+         <Skeleton className="h-10 w-full" />
+      </div>
     );
+  }
+
+  if (error) {
+    return <div className="p-2 text-sm text-red-500">Error: {error}</div>;
+  }
+  
+  if(availableCompanies.length === 0){
+      return (
+          <div className="p-2 text-sm text-muted-foreground">
+              No se encontraron empresas.
+          </div>
+      )
+  }
+
+  return (
+    <div className="p-2 space-y-2">
+      <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+        Empresa
+      </label>
+      <Select value={selectedCompanyId || ''} onValueChange={handleValueChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Selecciona una empresa" />
+        </SelectTrigger>
+        <SelectContent>
+          {availableCompanies.map(company => (
+            <SelectItem key={company.id} value={company.id.toString()}>
+              {company.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }

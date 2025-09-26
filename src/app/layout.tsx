@@ -1,8 +1,10 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/layout/theme-provider';
-import { CompanyProvider } from '@/context/CompanyProvider'; // Importa el proveedor
+
+// 🛑 MODIFICACIÓN CLAVE: Usamos el nombre de archivo Company-Provider.
+import { CompanyProvider } from '@/context/CompanyProvider'; 
 
 export const metadata: Metadata = {
   title: 'Gestor Documental',
@@ -22,17 +24,17 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased bg-background">
-        <CompanyProvider> {/* Envuelve la aplicación con el proveedor */}
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <CompanyProvider> 
             {children}
             <Toaster />
-          </ThemeProvider>
-        </CompanyProvider>
+          </CompanyProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
