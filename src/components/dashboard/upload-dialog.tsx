@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -16,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle, Rocket } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
+import { useCompanyContext } from '@/context/CompanyProvider'; // AGREGAR ESTO
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -35,6 +35,10 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const { selectedCompanyId } = useCompanyContext(); // AGREGAR ESTO
+
+  // DEBUG: Log para verificar el contexto
+  console.log('🔍 [DEBUG] UploadDialog renderizado - selectedCompanyId:', selectedCompanyId);
 
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
@@ -72,10 +76,21 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
     const { file } = uploadableFile;
     try {
+      console.log('🔍 [DEBUG] En processFile - selectedCompanyId:', selectedCompanyId);
+      
       updateFileStatus(file.name, 'uploading', 'Subiendo archivo...');
       
       const formData = new FormData();
       formData.append('file', file);
+      
+      // AGREGAR EL empresaId AL FORMDATA
+      if (selectedCompanyId) {
+        formData.append('empresaId', selectedCompanyId);
+        console.log('📤 [UploadDialog] Enviando archivo con empresaId:', selectedCompanyId);
+        console.log('🔍 [DEBUG] empresaId en FormData:', formData.get('empresaId'));
+      } else {
+        console.warn('❌ [DEBUG] selectedCompanyId es falsy:', selectedCompanyId);
+      }
 
       await uploadDocument(formData);
       
@@ -90,6 +105,16 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   };
 
   const handleUpload = async () => {
+    // Verificar empresa seleccionada
+    if (!selectedCompanyId) {
+      toast({
+        title: 'Error',
+        description: 'Debes seleccionar una empresa antes de subir documentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const filesToUpload = uploadableFiles.filter(f => f.status === 'pending');
     if (filesToUpload.length === 0) return;
 
@@ -107,29 +132,26 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     
     setIsProcessing(false);
     
-    // We need to read the state again after all promises are settled
-    let successCount = 0;
-    let errorCount = 0;
+    // Primero obtenemos el estado actual
+    const currentFiles = uploadableFiles;
+    const successCount = currentFiles.filter(f => f.status === 'success').length;
+    const errorCount = currentFiles.filter(f => f.status === 'error').length;
     
-    // Access the latest state via the updater function
-    setUploadableFiles(currentFiles => {
-        successCount = currentFiles.filter(f => f.status === 'success').length;
-        errorCount = currentFiles.filter(f => f.status === 'error').length;
-        
-        update({
-            id: toastId,
-            title: "Proceso de subida finalizado",
-            description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
-            variant: errorCount > 0 ? "destructive" : "default",
-        });
-        
-        if(successCount > 0) {
-            onUploadSuccess();
-        }
-        
-        // Clear files after processing
-        return [];
+    // DESPUÉS actualizamos el toast (fuera del setState)
+    update({
+      id: toastId,
+      title: "Proceso de subida finalizado",
+      description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
+      variant: errorCount > 0 ? "destructive" : "default",
     });
+    
+    // Y ejecutamos el callback (fuera del setState)
+    if(successCount > 0) {
+      onUploadSuccess();
+    }
+    
+    // Por último limpiamos los archivos
+    setUploadableFiles([]);
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -158,6 +180,10 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
             Selecciona o arrastra archivos. Serán subidos y enviados para su procesamiento.
+            {selectedCompanyId ? 
+              ` (Empresa ID: ${selectedCompanyId})` : 
+              ' ⚠️ Selecciona una empresa primero.'
+            }
           </DialogDescription>
         </DialogHeader>
         
@@ -214,7 +240,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
           </DialogClose>
           <Button 
             onClick={handleUpload} 
-            disabled={!filesPending || isProcessing} 
+            disabled={!filesPending || isProcessing || !selectedCompanyId} 
           >
             {isProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -16,15 +15,24 @@ const UploadResponseSchema = z.object({
  * 2. Sube el archivo al bucket S3/MinIO con permisos públicos.
  * 3. Envía la ruta del archivo en el bucket al webhook de n8n.
  *
- * @param formData El FormData que contiene el archivo ('file').
+ * @param formData El FormData que contiene el archivo ('file') y empresaId.
  * @returns Una promesa que se resuelve con un objeto indicando el éxito y el mensaje.
  */
 export async function uploadDocument(formData: FormData): Promise<z.infer<typeof UploadResponseSchema>> {
   const file = formData.get('file') as File | null;
+  const empresaId = formData.get('empresaId') as string | null; // Obtener empresaId del FormData
+
+  console.log('📤 [UploadService] Recibido archivo:', file?.name);
+  console.log('📤 [UploadService] Recibido empresaId:', empresaId);
 
   if (!file) {
     throw new Error('No se ha proporcionado ningún archivo.');
   }
+
+  if (!empresaId) {
+    throw new Error('No se ha proporcionado el ID de empresa.');
+  }
+
   const originalFileName = file.name;
 
   // 1. Validar variables de entorno críticas ANTES de empezar.
@@ -71,12 +79,18 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] Subida completada. URL pública: ${publicUrl}`);
 
-    // 4. Enviar la RUTA (path) del archivo al webhook de n8n.
-    console.log(`[${originalFileName}] Notificando al webhook de n8n con la ruta: ${filePath}`);
+    // 4. Enviar la RUTA del archivo Y el empresaId al webhook de n8n.
+    const webhookPayload = {
+      text: filePath,
+      empresaId: empresaId
+    };
+
+    console.log(`[${originalFileName}] Notificando al webhook con payload:`, webhookPayload);
+    
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: filePath }), // Enviamos solo la ruta en la propiedad 'text'
+      body: JSON.stringify(webhookPayload), // Enviamos ruta Y empresaId
     });
 
     if (!webhookResponse.ok) {
@@ -90,9 +104,11 @@ export async function uploadDocument(formData: FormData): Promise<z.infer<typeof
       };
     }
     
+    console.log(`[${originalFileName}] Webhook notificado exitosamente con empresaId: ${empresaId}`);
+    
     return {
       success: true,
-      message: `Archivo "${originalFileName}" subido y procesado.`,
+      message: `Archivo "${originalFileName}" subido y procesado para empresa ${empresaId}.`,
       url: publicUrl,
     };
 

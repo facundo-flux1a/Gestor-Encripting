@@ -1,8 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { getDocuments } from '@/services/document-service'
-import { useSidebar } from '@/components/ui/sidebar'
+import { useCompanyContext } from '@/context/CompanyProvider'
 import { Document } from '@/lib/types'
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
 import { DocumentsTable } from '@/components/dashboard/documents-table'
@@ -11,31 +10,54 @@ import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function DocumentsPageContent() {
-  const { selectedCompanyId } = useSidebar();
+  const { selectedCompanyId } = useCompanyContext();
+  
   const [documents, setDocuments] = React.useState<Document[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [isUploadOpen, setIsUploadOpen] = React.useState(false);
-  const [key, setKey] = React.useState(0); // Para forzar la recarga
+  const [isUploadOpen, setIsUploadOpen] = React.useState();
+  const [key, setKey] = React.useState(0);
+
+  // DEBUG: Log cuando cambia selectedCompanyId
+  console.log('🏢 [DocumentsPage] selectedCompanyId actual:', selectedCompanyId);
 
   const handleUploadSuccess = () => {
-    setKey(prevKey => prevKey + 1); // Cambia la key para forzar el useEffect
-    console.log()
+    setKey(prevKey => prevKey + 1);
   };
 
   React.useEffect(() => {
+    console.log('🔄 [DocumentsPage] useEffect ejecutado - selectedCompanyId:', selectedCompanyId, 'key:', key);
+    
     async function loadDocuments() {
+      if (!selectedCompanyId) {
+        console.log('⚠️ [DocumentsPage] No hay empresa seleccionada, limpiando documentos');
+        setDocuments([]);
+        setLoading(false);
+        return;
+      }
+
       try {
+        console.log('🔍 [DocumentsPage] Iniciando fetch con companyId:', selectedCompanyId);
         setLoading(true);
         setError(null);
         
-        const docs = await getDocuments(selectedCompanyId ?? undefined);
+        const response = await fetch(`/api/documents?companyId=${selectedCompanyId}`);
+        console.log('📡 [DocumentsPage] Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error('Error al cargar documentos desde la API');
+        }
+        
+        const docs = await response.json();
+        console.log('📄 [DocumentsPage] Documentos recibidos:', docs.length, 'documentos');
+        console.log('📄 [DocumentsPage] Primer documento:', docs[0]);
         setDocuments(docs);
       } catch (err) {
-        console.error('Error loading documents:', err);
+        console.error('❌ [DocumentsPage] Error loading documents:', err);
         setError('Error al cargar los documentos');
       } finally {
         setLoading(false);
+        console.log('✅ [DocumentsPage] Loading finalizado');
       }
     }
 
@@ -55,6 +77,9 @@ function DocumentsPageContent() {
         otrosDocumentos.push(doc);
       }
     });
+    
+    console.log('📊 [DocumentsPage] Documentos categorizados - Facturas:', facturas.length, 'Otros:', otrosDocumentos.length, 'Sin confirmar:', sinConfirmar.length);
+    
     return { facturas, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
@@ -62,6 +87,26 @@ function DocumentsPageContent() {
     'base_21', 'iva_21', 'base_10', 'iva_10', 'base_4', 'iva_4', 'base_0', 'iva_0',
     'retencion', 'base_imponible', 'iva', 'total'
   ];
+
+  if (!selectedCompanyId) {
+    return (
+      <>
+        <MainLayoutHeader>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">
+              Documentos
+            </h1>
+          </div>
+        </MainLayoutHeader>
+        
+        <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
+          <div className="text-center text-muted-foreground">
+            Selecciona una empresa para ver sus documentos
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -110,7 +155,6 @@ function DocumentsPageContent() {
     </>
   );
 }
-
 
 export default function DocumentsPage() {
     return (
