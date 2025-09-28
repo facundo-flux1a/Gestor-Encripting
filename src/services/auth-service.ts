@@ -58,15 +58,7 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     // MODO DESARROLLO: Forzar sesión para el usuario 'tomas@flux1a.com.ar'
     // Para desactivar y usar la lógica real, simplemente comenta o elimina este bloque.
     // =========================================================================
-    const DEVELOPMENT_MODE = true;
-    if (DEVELOPMENT_MODE) {
-        return {
-            userId: 1, // Asegúrate de que este ID exista en tu tabla de usuarios.
-            email: 'tomas@flux1a.com.ar',
-            nombre: 'Tomás Flux (Dev)',
-            expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 horas de sesión
-        };
-    }
+  
     // =========================================================================
     // FIN MODO DESARROLLO
     // =========================================================================
