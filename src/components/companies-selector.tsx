@@ -41,6 +41,8 @@ export function CompaniesSelector() {
       try {
         setIsLoading(true);
         // La URL que ya funciona
+                // La URL que ya funciona
+
         const response = await fetch('/api/companies'); 
         
         if (!response.ok) {
