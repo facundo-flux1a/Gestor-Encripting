@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider'; 
 import { Plus } from 'lucide-react';
 
-// Importa los componentes de UI
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from './ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -12,14 +11,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-// Tipos
+// Tipo actualizado: nombreFiscal es opcional
 type Company = {
   id: number;
   name: string;
+  nombreFiscal?: string | null;
+  cif: string;
 };
 
 export function CompaniesSelector() {
-  // ✅ Usamos el Contexto (estado global) para MANEJAR LA SELECCIÓN y la CARGA
   const { 
     selectedCompanyId, 
     setSelectedCompanyId, 
@@ -27,20 +27,19 @@ export function CompaniesSelector() {
     setIsLoading 
   } = useCompanyContext(); 
 
-  // La lista de empresas SÍ se queda en el estado local, porque solo la necesita este componente.
   const [availableCompanies, setAvailableCompanies] = React.useState<Company[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   
-  // Estados para el modal de agregar empresa
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [newCompanyName, setNewCompanyName] = React.useState('');
+  const [newCompanyNombreFiscal, setNewCompanyNombreFiscal] = React.useState('');
+  const [newCompanyCif, setNewCompanyCif] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
 
   React.useEffect(() => {
     async function fetchCompanies() {
       try {
         setIsLoading(true);
-        // La URL que ya funciona
                 // La URL que ya funciona
 
         const response = await fetch('/api/companies'); 
@@ -51,10 +50,8 @@ export function CompaniesSelector() {
         
         const data: Company[] = await response.json();
         
-        // Guardamos la lista en el estado local del componente
         setAvailableCompanies(data); 
         
-        // Establecemos la primera empresa seleccionada en el estado global si no hay ninguna.
         if (data.length > 0 && selectedCompanyId === null) {
           setSelectedCompanyId(data[0].id.toString());
         }
@@ -70,22 +67,28 @@ export function CompaniesSelector() {
   }, [selectedCompanyId, setSelectedCompanyId, setIsLoading]); 
 
   const handleValueChange = (companyId: string) => {
-    // ✅ Actualiza el estado global
     setSelectedCompanyId(companyId); 
     console.log('Empresa seleccionada (Global ID):', companyId);
   };
 
-  // Función para crear una nueva empresa
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newCompanyName.trim()) return;
+    // Validar solo los campos obligatorios
+    if (!newCompanyName.trim() || !newCompanyCif.trim()) {
+      setError('El nombre de la empresa y el CIF son obligatorios');
+      return;
+    }
     
     try {
       setIsCreating(true);
-      setError(null); // Limpiar errores previos
+      setError(null);
       
-      console.log('Creando empresa:', newCompanyName.trim());
+      console.log('Creando empresa:', {
+        name: newCompanyName.trim(),
+        nombreFiscal: newCompanyNombreFiscal.trim() || null,
+        cif: newCompanyCif.trim()
+      });
       
       const response = await fetch('/api/companies', {
         method: 'POST',
@@ -93,14 +96,14 @@ export function CompaniesSelector() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          name: newCompanyName.trim()
+          name: newCompanyName.trim(),
+          nombreFiscal: newCompanyNombreFiscal.trim() || null,
+          cif: newCompanyCif.trim()
         }),
       });
       
       console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
       
-      // Intentar obtener el contenido de la respuesta
       const responseText = await response.text();
       console.log('Response body:', responseText);
       
@@ -110,13 +113,11 @@ export function CompaniesSelector() {
           const errorData = JSON.parse(responseText);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch {
-          // Si no es JSON válido, usar el texto tal como está
           errorMessage = responseText || errorMessage;
         }
         throw new Error(errorMessage);
       }
       
-      // Intentar parsear la respuesta como JSON
       let result;
       try {
         result = JSON.parse(responseText);
@@ -125,33 +126,29 @@ export function CompaniesSelector() {
         throw new Error('La respuesta del servidor no es JSON válido');
       }
       
-      // Manejar diferentes formatos de respuesta
       let newCompany: Company;
       
       if (result.success && result.company) {
-        // Formato: { success: true, company: {...} }
         newCompany = result.company;
       } else if (result.id && result.name) {
-        // Formato directo: { id: 1, name: "..." }
         newCompany = result;
       } else {
         console.error('Formato de respuesta inesperado:', result);
         throw new Error('El servidor devolvió un formato de respuesta inesperado');
       }
       
-      // Validar que la empresa tenga los campos necesarios
-      if (!newCompany.id || !newCompany.name) {
-        throw new Error('La empresa creada no tiene los campos requeridos (id, name)');
+      // Validar solo campos obligatorios
+      if (!newCompany.id || !newCompany.name || !newCompany.cif) {
+        throw new Error('La empresa creada no tiene todos los campos requeridos');
       }
       
-      // Agregar la nueva empresa a la lista
       setAvailableCompanies(prev => [...prev, newCompany]);
-      
-      // Seleccionar automáticamente la nueva empresa
       setSelectedCompanyId(newCompany.id.toString());
       
-      // Limpiar el formulario y cerrar el modal
+      // Limpiar todos los campos del formulario
       setNewCompanyName('');
+      setNewCompanyNombreFiscal('');
+      setNewCompanyCif('');
       setIsDialogOpen(false);
       
       console.log('Nueva empresa creada exitosamente:', newCompany);
@@ -165,7 +162,6 @@ export function CompaniesSelector() {
     }
   };
 
-  // El resto del código de renderizado
   if (isLoading) {
     return (
       <div className="p-2 space-y-2">
@@ -195,7 +191,6 @@ export function CompaniesSelector() {
             </SelectItem>
           ))}
           
-          {/* Separador y botón para agregar nueva empresa */}
           {availableCompanies.length > 0 && (
             <div className="border-t border-border my-1" />
           )}
@@ -213,7 +208,7 @@ export function CompaniesSelector() {
               </DialogHeader>
               <form onSubmit={handleCreateCompany} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company-name">Nombre de la empresa</Label>
+                  <Label htmlFor="company-name">Nombre de la empresa *</Label>
                   <Input
                     id="company-name"
                     type="text"
@@ -221,20 +216,50 @@ export function CompaniesSelector() {
                     value={newCompanyName}
                     onChange={(e) => setNewCompanyName(e.target.value)}
                     disabled={isCreating}
+                    required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company-cif">CIF *</Label>
+                  <Input
+                    id="company-cif"
+                    type="text"
+                    placeholder="Ingresa el CIF"
+                    value={newCompanyCif}
+                    onChange={(e) => setNewCompanyCif(e.target.value)}
+                    disabled={isCreating}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company-fiscal">Nombre Fiscal (recomendado)</Label>
+                  <Input
+                    id="company-fiscal"
+                    type="text"
+                    placeholder="Ingresa el nombre fiscal (opcional)"
+                    value={newCompanyNombreFiscal}
+                    onChange={(e) => setNewCompanyNombreFiscal(e.target.value)}
+                    disabled={isCreating}
+                  />
+                </div>
+                {error && (
+                  <div className="text-sm text-red-500">{error}</div>
+                )}
                 <div className="flex justify-end space-x-2">
                   <Button 
                     type="button" 
                     variant="outline" 
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      setError(null);
+                    }}
                     disabled={isCreating}
                   >
                     Cancelar
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={!newCompanyName.trim() || isCreating}
+                    disabled={!newCompanyName.trim() || !newCompanyCif.trim() || isCreating}
                   >
                     {isCreating ? 'Creando...' : 'Crear Empresa'}
                   </Button>
