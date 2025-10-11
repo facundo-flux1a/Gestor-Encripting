@@ -1,5 +1,3 @@
-
-
 import { z } from 'zod';
 
 export const UserSchema = z.object({
@@ -116,6 +114,11 @@ export type Document = {
   incidencia: boolean;
   verificado: boolean;
   incidencia_razon?: string | null;
+  
+  // Campos de empresa
+  empresa_id: number | null;
+  empresa_nombre?: string;
+  empresa_cif?: string;
 };
 
 export const DocumentUpdateSchema = z.object({
@@ -161,3 +164,21 @@ export const CreateTaxValidationRuleSchema = z.object({
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
 
+export type Company = {
+  id: number;
+  name: string;
+  nombreFiscal?: string | null;
+  cif?: string;
+};
+
+export type CreateDocumentPayload = {
+  tipo_documento: string;
+  numero_documento: string;
+  fecha_emision: string;
+  fecha_vencimiento?: string | null;
+  importe_total: number;
+  importe_sin_impuestos: number;
+  moneda: string;
+  observaciones?: string | null;
+  empresa_id: number;
+};

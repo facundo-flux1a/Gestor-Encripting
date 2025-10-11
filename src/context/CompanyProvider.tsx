@@ -1,34 +1,69 @@
 'use client';
-import { createContext, useContext, useState, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import type { Company } from '@/lib/types';
 
-// Tipos de datos
 type CompanyContextType = {
-  selectedCompanyId: string | null;
-  setSelectedCompanyId: (id: string | null) => void;
-  // Agregamos un estado de carga, por si lo necesita el Dashboard
+  companies: Company[];
+  setCompanies: (companies: Company[] | ((prev: Company[]) => Company[])) => void; // ⬅️ NUEVO
+  selectedCompanyIds: number[];
+  setSelectedCompanyIds: (ids: number[]) => void;
+  toggleCompanyId: (id: number) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
 };
 
-// Crea el contexto con un valor inicial nulo
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
-// Define el componente del proveedor
 export const CompanyProvider = ({ children }: { children: ReactNode }) => {
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/companies');
+        if (response.ok) {
+          const data = await response.json();
+          setCompanies(data);
+          setSelectedCompanyIds([]);
+        }
+      } catch (error) {
+        console.error('Error loading companies:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadCompanies();
+  }, []);
+
+  const toggleCompanyId = (id: number) => {
+    setSelectedCompanyIds(prev => {
+      const newSelection = prev.includes(id)
+        ? prev.filter(companyId => companyId !== id)
+        : [...prev, id];
+      
+      console.log('🔄 [CompanyProvider] Toggle empresa', id, '- Nueva selección:', newSelection);
+      return newSelection;
+    });
+  };
+
   const value = useMemo(() => ({
-    selectedCompanyId,
-    setSelectedCompanyId,
+    companies,
+    setCompanies, // ⬅️ NUEVO
+    selectedCompanyIds,
+    setSelectedCompanyIds,
+    toggleCompanyId,
     isLoading,
     setIsLoading,
-  }), [selectedCompanyId, isLoading]);
+  }), [companies, selectedCompanyIds, isLoading]);
+
+  console.log('🏢 [CompanyProvider] Companies:', companies.length, 'Selected:', selectedCompanyIds);
 
   return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 };
 
-// Hook para usar el contexto
 export const useCompanyContext = () => {
   const context = useContext(CompanyContext);
   if (context === undefined) {

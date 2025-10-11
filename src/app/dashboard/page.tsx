@@ -13,14 +13,14 @@ import { FileText, Users, AlertTriangle, Package, ArrowUpRight, ArrowDownLeft, S
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function DashboardPage() {
-  const { selectedCompanyId } = useCompanyContext();
+  const { selectedCompanyIds } = useCompanyContext();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAnalytics() {
-      if (!selectedCompanyId) {
+      if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
         setAnalytics(null);
         setIsLoading(false);
         return;
@@ -29,7 +29,9 @@ export default function DashboardPage() {
       try {
         setIsLoading(true);
         setError(null);
-        const data = await getDashboardAnalytics(Number(selectedCompanyId));
+        // Convertir los IDs de string a number
+        const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
+        const data = await getDashboardAnalytics(companyIdsAsNumbers);
         setAnalytics(data);
       } catch (err) {
         console.error('Error loading analytics:', err);
@@ -40,7 +42,7 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyId]);
+  }, [selectedCompanyIds]);
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
@@ -89,7 +91,7 @@ export default function DashboardPage() {
             <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
           </MainLayoutHeader>
           <div className="flex h-[400px] items-center justify-center text-muted-foreground">
-            Selecciona una empresa para ver el dashboard
+            Selecciona al menos una empresa para ver el dashboard
           </div>
         </div>
       </MainLayout>
@@ -114,7 +116,14 @@ export default function DashboardPage() {
     <MainLayout>
       <div className="flex-1 space-y-4 p-8 pt-6">
         <MainLayoutHeader>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Dashboard
+            {selectedCompanyIds.length > 1 && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({selectedCompanyIds.length} empresas seleccionadas)
+              </span>
+            )}
+          </h2>
         </MainLayoutHeader>
 
         <div className="space-y-4">

@@ -23,6 +23,8 @@ interface DocumentPacket extends RowDataPacket {
     datos_extra: any | null;
     fecha_creacion: string;
     id_de_empresa: number | null;
+    empresa_nombre?: string | null;  // ⬅️ AGREGAR
+    empresa_cif?: string | null; 
 }
 
 interface ArchivoPacket extends RowDataPacket {
@@ -210,13 +212,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             descripcion: i.descripcion,
             validado: i.validado,
             fecha_incidencia: i.fecha_incidencia,
-            fecha_validacion: null, // these fields are not in the query
-            validado_por: null, // these fields are not in the query
+            fecha_validacion: null,
+            validado_por: null,
         }));
 
         const pendientes = incidencias.filter(i => !i.validado).length;
         const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
 
+        // ⬇️ AQUÍ ESTÁ EL CAMBIO - AGREGA LAS ÚLTIMAS 2 LÍNEAS
         return {
             id_documento: doc.id,
             numero_documento: doc.numero_documento,
@@ -241,6 +244,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
             cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
             empresa_id: doc.id_de_empresa,
+            empresa_nombre: doc.empresa_nombre || 'Sin empresa',  // ⬅️ NUEVO
+            empresa_cif: doc.empresa_cif || null,                 // ⬅️ NUEVO
         };
     });
     
@@ -252,74 +257,208 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
  */
 export async function getCompanies(): Promise<Company[]> {
     try {
+        console.log('🔍 [getCompanies] Iniciando...');
+        
         const user = await getCurrentUser();
+        
+        console.log('👤 [getCompanies] Usuario obtenido:', user);
+        
         if (!user) {
+            console.warn('⚠️ [getCompanies] No hay usuario autenticado');
             return [];
         }
 
-        const [rows] = await db.query<EmpresaPacket[]>(
-            'SELECT id, nombre as name FROM empresas WHERE usuario_id = ? ORDER BY nombre ASC',
-            [user.id]
-        );
+        console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
+
+        const query = 'SELECT id, nombre_de_empresa as name, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
+        
+        console.log('📝 [getCompanies] Query:', query);
+        console.log('📝 [getCompanies] Params:', [user.id]);
+
+        const [rows] = await db.query<any[]>(query, [user.id]);
+
+        console.log('📊 [getCompanies] Filas obtenidas:', rows.length);
+        console.log('📋 [getCompanies] Datos RAW:', rows);
 
         if (!rows || rows.length === 0) {
             return [];
         }
 
-        return rows.map(row => ({
+        const companies = rows.map(row => ({
             id: row.id,
-            name: row.nombre
-        })) as Company[];
+            name: row.name
+        }));
+        
+        console.log('✅ [getCompanies] Empresas mapeadas:', companies);
+
+        return companies as Company[];
     } catch (error) {
-        console.error("Failed to fetch companies:", error);
+        console.error("❌ [getCompanies] Error:", error);
         return [];
     }
 }
 
 /**
+ * Crea una nueva empresa para el usuario actual
+ */
+export async function createCompany(data: {
+    name: string;
+    nombreFiscal?: string | null;
+    cif: string;
+  }): Promise<Company> {
+    try {
+      console.log('🏢 [createCompany] Iniciando creación de empresa:', data);
+      
+      const user = await getCurrentUser();
+      
+      if (!user) {
+        console.error('❌ [createCompany] No hay usuario autenticado');
+        throw new Error('Usuario no autenticado');
+      }
+  
+      console.log('👤 [createCompany] Usuario actual:', user.id);
+  
+      // Validaciones
+      if (!data.name || !data.name.trim()) {
+        throw new Error('El nombre de la empresa es obligatorio');
+      }
+  
+      if (!data.cif || !data.cif.trim()) {
+        throw new Error('El CIF es obligatorio');
+      }
+  
+      // Verificar si ya existe una empresa con el mismo CIF para este usuario
+      const [existingCompanies] = await db.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE CIF = ? AND id_de_usuario = ?',
+        [data.cif.trim(), user.id]
+      );
+  
+      if (existingCompanies.length > 0) {
+        throw new Error('Ya existe una empresa con este CIF');
+      }
+  
+      // Insertar la nueva empresa
+      const [result] = await db.query<OkPacket>(
+        'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, id_de_usuario) VALUES (?, ?, ?, ?)',
+        [data.name.trim(), data.nombreFiscal?.trim() || null, data.cif.trim(), user.id]
+      );
+  
+      console.log('✅ [createCompany] Empresa creada con ID:', result.insertId);
+  
+      const newCompany: Company = {
+        id: result.insertId,
+        name: data.name.trim(),
+        nombreFiscal: data.nombreFiscal?.trim() || null,
+        cif: data.cif.trim()
+      };
+  
+      // Revalidar las rutas relevantes
+      revalidatePath('/documents');
+      revalidatePath('/dashboard');
+  
+      return newCompany;
+  
+    } catch (error) {
+      console.error('❌ [createCompany] Error:', error);
+      throw error;
+    }
+  }
+/**
  * Obtiene todos los documentos, opcionalmente filtrados por empresa
  */
-export async function getDocuments(empresaId?: number): Promise<Document[]> {
+/**
+ * Obtiene todos los documentos, opcionalmente filtrados por empresas
+ */
+/**
+ * Obtiene todos los documentos, opcionalmente filtrados por empresas
+ */
+export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
+    console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds });
+    
     try {
+        const user = await getCurrentUser();
+        if (!user) {
+            console.warn('⚠️ [document-service] No hay usuario autenticado');
+            return [];
+        }
+
         let query = `
-            SELECT d.*
+            SELECT 
+                d.*,
+                e.nombre_de_empresa as empresa_nombre,
+                e.cif as empresa_cif
             FROM documentos d
+            LEFT JOIN empresas e ON d.id_de_empresa = e.id
+            WHERE e.id_de_usuario = ?
         `;
         
-        const params: any[] = [];
+        const params: any[] = [user.id];
         
-        // Si se especifica una empresa, filtrar por ella
-        if (empresaId) {
-            query += ' WHERE d.id_de_empresa = ?';
-            params.push(empresaId);
+        // Si se especifican empresas, filtrar por ellas
+        if (empresaIds && empresaIds.length > 0) {
+            query += ' AND d.id_de_empresa IN (?)';
+            params.push(empresaIds);
         }
         
         query += ' ORDER BY d.fecha_emision DESC';
 
+        console.log('📝 [document-service] Query:', query);
+        console.log('📝 [document-service] Params:', params);
+
         const [documentRows] = await db.query<DocumentPacket[]>(query, params);
         
-        return mapDocumentPacketsToDocuments(documentRows);
+        console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
+        
+        const result = await mapDocumentPacketsToDocuments(documentRows);
+        
+        console.log('✅ [document-service] Documentos mapeados:', result.length);
+        
+        return result;
     } catch (error) {
-        console.error("Failed to fetch documents:", error);
+        console.error("❌ [document-service] Error al obtener documentos:", error);
         return [];
     }
 }
-
+/**
+ * Obtiene un documento por su ID
+ */
 export async function getDocumentById(id: number): Promise<Document | null> {
-    const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT *
-        FROM documentos
-        WHERE id = ?
-    `, [id]);
+    try {
+        const user = await getCurrentUser();
+        if (!user) {
+            console.warn('⚠️ [document-service] No hay usuario autenticado');
+            return null;
+        }
 
-    if (documentRows.length === 0) {
+        const query = `
+            SELECT 
+                d.*,
+                e.nombre_de_empresa as empresa_nombre,
+                e.cif as empresa_cif
+            FROM documentos d
+            LEFT JOIN empresas e ON d.id_de_empresa = e.id
+            WHERE d.id = ? AND e.id_de_usuario = ?
+        `;
+
+        console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
+
+        const [documentRows] = await db.query<DocumentPacket[]>(query, [id, user.id]);
+        
+        if (documentRows.length === 0) {
+            console.log('⚠️ [document-service] Documento no encontrado:', id);
+            return null;
+        }
+
+        console.log('✅ [document-service] Documento encontrado:', documentRows[0].id);
+        
+        const documents = await mapDocumentPacketsToDocuments(documentRows);
+        
+        return documents[0] || null;
+    } catch (error) {
+        console.error("❌ [document-service] Error al obtener documento por ID:", error);
         return null;
     }
-
-    const documents = await mapDocumentPacketsToDocuments(documentRows);
-    return documents[0] || null;
 }
-
 export async function getIncidents(): Promise<Document[]> {
     const [documentRows] = await db.query<DocumentPacket[]>(`
         SELECT DISTINCT d.*
@@ -985,18 +1124,17 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
 export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
     return analyzeDocuments([documentId]);
 }
-
-export async function getDashboardAnalytics(empresaId?: number): Promise<DashboardAnalytics> {
+export async function getDashboardAnalytics(empresaIds?: number[]): Promise<DashboardAnalytics> {
     const MY_COMPANY_FISCAL_ID = 'B97376321';
 
     // Preparar parámetros
     const params: any[] = [];
     
-    // Filtro base para WHERE
+    // Filtro base para WHERE con múltiples empresas
     let whereEmpresa = '';
-    if (empresaId) {
-        whereEmpresa = 'AND d.id_de_empresa = ?';
-        params.push(empresaId);
+    if (empresaIds && empresaIds.length > 0) {
+        whereEmpresa = 'AND d.id_de_empresa IN (?)';
+        params.push(empresaIds);
     }
 
     const [kpiRows] = await db.query<RowDataPacket[]>(`

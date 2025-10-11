@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import Link from 'next/link';
@@ -33,33 +31,72 @@ const getColumns = (
     onSummarize: (doc: Document) => void
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
-     {
-        id: 'select',
-        header: ({ table }) => (
-            <div className="flex items-center gap-2">
-                <Checkbox
-                    checked={table.getIsAllPageRowsSelected()}
-                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-                    aria-label="Select all"
-                />
-                <span>ID</span>
-            </div>
-        ),
-        cell: ({ row }) => (
-            <div className="flex items-center gap-2">
-                 <Checkbox
-                    checked={row.getIsSelected()}
-                    onCheckedChange={(value) => row.toggleSelected(!!value)}
-                    aria-label="Select row"
-                    onClick={(e) => e.stopPropagation()}
-                />
-                <span>{row.original.id_documento}</span>
-            </div>
-        ),
-        enableHiding: false,
-        footer: () => 'Totales',
-     },
-     {
+    {
+      id: 'actions',
+      header: 'Acciones',
+      cell: ({ row }) => {
+        const doc = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/documento/${doc.id_documento}`}>Ver</Link>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-8 w-8 p-0">
+                  <span className="sr-only">Ver más</span>
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onSummarize(doc)}>
+                  Resumir con IA
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
+      footer: () => null,
+      enableHiding: false,
+    },
+    {
+      id: 'select',
+      header: ({ table }) => (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+          <span>ID</span>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span>{row.original.id_documento}</span>
+        </div>
+      ),
+      enableHiding: false,
+      footer: () => 'Totales',
+    },
+    {
+      accessorKey: 'empresa_nombre',
+      header: 'Empresa',
+      cell: ({ row }) => (
+        <div className="font-medium text-sm">
+          {row.getValue('empresa_nombre') || 'Sin empresa'}
+        </div>
+      ),
+      footer: () => null,
+    },
+    {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
       cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('numero_documento')} fieldName="numero_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
@@ -75,14 +112,14 @@ const getColumns = (
       cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_vencimiento')} fieldName="fecha_vencimiento" onUpdate={onUpdate} table={table} rowIndex={row.index} inputType='date' />
     },
     {
-        accessorKey: 'proveedor',
-        header: 'Proveedor',
-        cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('proveedor')} fieldName="proveedor_nombre" onUpdate={onUpdate} table={table} rowIndex={row.index} />
+      accessorKey: 'proveedor',
+      header: 'Proveedor',
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('proveedor')} fieldName="proveedor_nombre" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
-        accessorKey: 'cif',
-        header: 'CIF',
-        cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('cif')} fieldName="proveedor_cif" onUpdate={onUpdate} table={table} rowIndex={row.index} />
+      accessorKey: 'cif',
+      header: 'CIF',
+      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('cif')} fieldName="proveedor_cif" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     {
       accessorKey: 'observaciones',
@@ -95,111 +132,90 @@ const getColumns = (
       cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />
     },
     ...[21, 10, 4, 0].flatMap(rate => ([
-        {
-            id: `base_${rate}`,
-            header: `Base ${rate}%`,
-            cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
-                const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.base_imponible ?? 0} fieldName={`iva_base_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
-            },
-            footer: ({ table }) => {
-                const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-                    const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (Number(detail?.base_imponible) || 0);
-                }, 0);
-                return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
-            }
+      {
+        id: `base_${rate}`,
+        header: `Base ${rate}%`,
+        cell: ({ row }: { row: Row<Document> }) => {
+          const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
+          const value = ivaDetail?.base_imponible ?? 0;
+          return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
         },
-        {
-            id: `iva_${rate}`,
-            header: `IVA ${rate}%`,
-            cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
-                const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
-                return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName={`iva_cuota_${rate}`} onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />
-            },
-             footer: ({ table }) => {
-                const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-                    const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
-                    return sum + (Number(detail?.cuota) || 0);
-                }, 0);
-                return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
-            }
-        }
-    ])),
-     {
-      accessorKey: 'retencion',
-      header: 'Retención',
-      cell: ({ row, table }: { row: Row<Document>, table: TanstackTable<Document> }) => {
-        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
-        return <EditableCell docId={row.original.id_documento} initialValue={ivaDetail?.cuota ?? 0} fieldName="retencion" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index}/>
-      },
-      footer: ({ table }) => {
+        footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-             const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
-             return sum + (Number(detail?.cuota) || 0);
+            const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
+            return sum + (Number(detail?.base_imponible) || 0);
           }, 0);
           return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+        }
+      },
+      {
+        id: `iva_${rate}`,
+        header: `IVA ${rate}%`,
+        cell: ({ row }: { row: Row<Document> }) => {
+          const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
+          const value = ivaDetail?.cuota ?? 0;
+          return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+        },
+        footer: ({ table }) => {
+          const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+            const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
+            return sum + (Number(detail?.cuota) || 0);
+          }, 0);
+          return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+        }
+      }
+    ])),
+    {
+      accessorKey: 'retencion',
+      header: 'Retención',
+      cell: ({ row }: { row: Row<Document> }) => {
+        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
+        const value = ivaDetail?.cuota ?? 0;
+        return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
+          return sum + (Number(detail?.cuota) || 0);
+        }, 0);
+        return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
     {
       accessorKey: 'base_imponible',
       header: 'Total Base',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('base_imponible')} fieldName="base_imponible" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
+      cell: ({ row }) => {
+        const value = row.getValue('base_imponible');
+        return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      },
       footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
-          return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
+        return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
     {
       accessorKey: 'iva',
       header: 'Total IVA',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('iva')} fieldName="iva" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
-       footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
-          return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      cell: ({ row }) => {
+        const value = row.getValue('iva');
+        return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
+        return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       }
     },
     {
       accessorKey: 'total',
       header: 'Total',
-      cell: ({ row, table }) => <EditableCell docId={row.original.id_documento} initialValue={row.getValue('total')} fieldName="total" onUpdate={onUpdate} isCurrency table={table} rowIndex={row.index} />,
-       footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
-          return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
-      }
-    },
-    {
-        id: 'view',
-        cell: ({ row }) => {
-            const doc = row.original;
-            return (
-                <Button variant="outline" size="sm" asChild>
-                    <Link href={`/documento/${doc.id_documento}`}>Ver Detalles</Link>
-                </Button>
-            );
-        },
-    },
-    {
-      id: 'actions',
       cell: ({ row }) => {
-        const doc = row.original;
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Ver más</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSummarize(doc)}>
-                Resumir con IA
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
+        const value = row.getValue('total');
+        return <div className="text-right">{Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
       },
-       footer: () => null
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
+        return <div className="text-right font-bold">{total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div>;
+      }
     },
   ];
 
@@ -207,29 +223,11 @@ const getColumns = (
 }
 
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
-  if (documents && documents.length > 0) {
-    console.log('✅ Primeros 5 documentos cargados en DocumentsTable:');
-    console.log(documents.slice(0, 5));
-    
-    // 🕵️‍♀️ VERIFICACIÓN RÁPIDA DE id_empresa EN EL PRIMER OBJETO
-    if ('id_empresa' in documents[0]) {
-        console.log('✅ El primer documento SÍ tiene la clave "id_empresa". Su valor es:', documents[0].id_empresa);
-    } else {
-        console.log('❌ El primer documento NO tiene la clave "id_empresa".');
-    }
-} else {
-    console.log('⚠️ DocumentsTable: El array de documentos está vacío o es nulo.');
-}
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
 
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
-    // This function is now primarily for optimistic updates if needed,
-    // but the main goal is to trigger a server-side update.
-    // To avoid re-renders, we won't manage a local state copy here.
-    // The EditableCell component handles the server update.
-    // A full page refresh or a more sophisticated state management (like SWR or React Query)
-    // would be needed to see updates without a manual refresh.
+    // This function is now primarily for optimistic updates if needed
   }, []);
   
   const handleSummarize = (doc: Document) => {
@@ -238,14 +236,13 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   };
 
   const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize), [handleUpdate]);
-  
 
   return (
     <>
-    <TooltipProvider>
-      <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
-    </TooltipProvider>
-    <SummarizeDialog 
+      <TooltipProvider>
+        <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
+      </TooltipProvider>
+      <SummarizeDialog 
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
@@ -253,5 +250,3 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     </>
   );
 }
-
-    

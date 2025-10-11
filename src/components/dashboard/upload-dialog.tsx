@@ -11,11 +11,19 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle, Rocket } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
-import { useCompanyContext } from '@/context/CompanyProvider'; // AGREGAR ESTO
+import { useCompanyContext } from '@/context/CompanyProvider';
 
 interface UploadDocumentDialogProps {
   isOpen: boolean;
@@ -34,11 +42,15 @@ interface UploadableFile {
 export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
   const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedCompanyForUpload, setSelectedCompanyForUpload] = useState<number | null>(null);
   const { toast } = useToast();
-  const { selectedCompanyId } = useCompanyContext(); // AGREGAR ESTO
+  const { companies } = useCompanyContext();
 
-  // DEBUG: Log para verificar el contexto
-  console.log('🔍 [DEBUG] UploadDialog renderizado - selectedCompanyId:', selectedCompanyId);
+  console.log('🔍 [UploadDialog] Estado:', {
+    empresasTotal: companies.length,
+    empresaSeleccionada: selectedCompanyForUpload,
+    archivosEnCola: uploadableFiles.length
+  });
 
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
@@ -76,20 +88,16 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
 
     const { file } = uploadableFile;
     try {
-      console.log('🔍 [DEBUG] En processFile - selectedCompanyId:', selectedCompanyId);
-      
       updateFileStatus(file.name, 'uploading', 'Subiendo archivo...');
       
       const formData = new FormData();
       formData.append('file', file);
       
-      // AGREGAR EL empresaId AL FORMDATA
-      if (selectedCompanyId) {
-        formData.append('empresaId', selectedCompanyId);
-        console.log('📤 [UploadDialog] Enviando archivo con empresaId:', selectedCompanyId);
-        console.log('🔍 [DEBUG] empresaId en FormData:', formData.get('empresaId'));
+      if (selectedCompanyForUpload) {
+        formData.append('empresaId', selectedCompanyForUpload.toString());
+        console.log('📤 [UploadDialog] Enviando archivo con empresaId:', selectedCompanyForUpload);
       } else {
-        console.warn('❌ [DEBUG] selectedCompanyId es falsy:', selectedCompanyId);
+        throw new Error('No hay empresa seleccionada');
       }
 
       await uploadDocument(formData);
@@ -105,18 +113,25 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   };
 
   const handleUpload = async () => {
-    // Verificar empresa seleccionada
-    if (!selectedCompanyId) {
+    // Validar empresa seleccionada
+    if (!selectedCompanyForUpload) {
       toast({
-        title: 'Error',
-        description: 'Debes seleccionar una empresa antes de subir documentos.',
+        title: 'Empresa no seleccionada',
+        description: 'Por favor selecciona una empresa antes de subir los documentos.',
         variant: 'destructive',
       });
       return;
     }
 
     const filesToUpload = uploadableFiles.filter(f => f.status === 'pending');
-    if (filesToUpload.length === 0) return;
+    if (filesToUpload.length === 0) {
+      toast({
+        title: 'Sin archivos',
+        description: 'No hay archivos pendientes para subir.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setIsProcessing(true);
     setIsOpen(false); 
@@ -132,12 +147,10 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
     
     setIsProcessing(false);
     
-    // Primero obtenemos el estado actual
     const currentFiles = uploadableFiles;
     const successCount = currentFiles.filter(f => f.status === 'success').length;
     const errorCount = currentFiles.filter(f => f.status === 'error').length;
     
-    // DESPUÉS actualizamos el toast (fuera del setState)
     update({
       id: toastId,
       title: "Proceso de subida finalizado",
@@ -145,19 +158,19 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
       variant: errorCount > 0 ? "destructive" : "default",
     });
     
-    // Y ejecutamos el callback (fuera del setState)
     if(successCount > 0) {
       onUploadSuccess();
     }
     
-    // Por último limpiamos los archivos
     setUploadableFiles([]);
+    setSelectedCompanyForUpload(null);
   };
 
   const handleOpenChange = (open: boolean) => {
     if (isProcessing) return;
     if (!open) {
       setUploadableFiles([]);
+      setSelectedCompanyForUpload(null);
     }
     setIsOpen(open);
   };
@@ -172,6 +185,8 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
   }
 
   const filesPending = uploadableFiles.some(f => f.status === 'pending');
+  const hasCompanies = companies.length > 0;
+  const canUpload = filesPending && selectedCompanyForUpload && !isProcessing;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -179,27 +194,64 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
           <DialogDescription>
-            Selecciona o arrastra archivos. Serán subidos y enviados para su procesamiento.
-            {selectedCompanyId ? 
-              ` (Empresa ID: ${selectedCompanyId})` : 
-              ' ⚠️ Selecciona una empresa primero.'
+            {!hasCompanies 
+              ? '⚠️ No tienes empresas creadas. Crea una empresa primero desde el selector lateral.'
+              : 'Selecciona la empresa destino y arrastra los documentos a subir.'
             }
           </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-4">
+          {/* Selector de empresa - SIEMPRE VISIBLE */}
+          <div className="space-y-2">
+            <Label htmlFor="company">
+              Empresa destino <span className="text-red-500">*</span>
+            </Label>
+            <Select
+              value={selectedCompanyForUpload?.toString() || ''}
+              onValueChange={(value) => {
+                const id = parseInt(value, 10);
+                setSelectedCompanyForUpload(id);
+                console.log('✅ [UploadDialog] Empresa seleccionada:', id);
+              }}
+              disabled={!hasCompanies}
+            >
+              <SelectTrigger id="company">
+                <SelectValue placeholder={hasCompanies ? "Selecciona una empresa" : "No hay empresas disponibles"} />
+              </SelectTrigger>
+              <SelectContent>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id.toString()}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!hasCompanies && (
+              <p className="text-xs text-muted-foreground">
+                💡 Tip: Crea una empresa usando el botón "+ Nueva" en el selector lateral
+              </p>
+            )}
+          </div>
+
+          {/* Dropzone */}
           <div
             {...getRootProps()}
             className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
               isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            } ${isProcessing ? 'pointer-events-none opacity-50' : ''}`}
+            } ${!hasCompanies || isProcessing ? 'pointer-events-none opacity-50' : ''}`}
           >
-            <input {...getInputProps()} disabled={isProcessing} />
+            <input {...getInputProps()} disabled={!hasCompanies || isProcessing} />
             <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
             {isDragActive ? (
               <p>Suelta los archivos aquí...</p>
             ) : (
-              <p className="text-center">Arrastra y suelta archivos aquí, o haz clic para seleccionar</p>
+              <p className="text-center">
+                {!hasCompanies
+                  ? 'Crea una empresa primero'
+                  : 'Arrastra y suelta archivos aquí, o haz clic para seleccionar'
+                }
+              </p>
             )}
           </div>
           
@@ -240,7 +292,7 @@ export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: Upl
           </DialogClose>
           <Button 
             onClick={handleUpload} 
-            disabled={!filesPending || isProcessing || !selectedCompanyId} 
+            disabled={!canUpload}
           >
             {isProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

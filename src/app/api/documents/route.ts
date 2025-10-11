@@ -1,35 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocuments } from '@/services/document-service'; 
+import { getDocuments } from '@/services/document-service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    console.log('🚀 [API-DOCUMENTS] Iniciando...');
+    
     const { searchParams } = new URL(req.url);
-    const companyIdParam = searchParams.get('companyId'); 
+    const companyIdParams = searchParams.getAll('companyId');
 
-    console.log('🚀 [API-DOCUMENTS] Solicitud recibida con companyId:', companyIdParam);
+    console.log('📥 [API-DOCUMENTS] companyIdParams recibidos:', companyIdParams);
 
-    const empresaId = companyIdParam ? parseInt(companyIdParam, 10) : undefined;
-    
-    if (companyIdParam && isNaN(empresaId as number)) {
-        console.warn('⚠️ [API-DOCUMENTS] ID de empresa inválido:', companyIdParam);
-        return NextResponse.json([]); 
+    if (!companyIdParams || companyIdParams.length === 0) {
+      console.warn('⚠️ [API-DOCUMENTS] No se proporcionaron IDs');
+      return NextResponse.json([]);
     }
 
-    console.log('🔍 [API-DOCUMENTS] Llamando getDocuments con empresaId:', empresaId);
+    const empresaIds = companyIdParams
+      .map(id => parseInt(id, 10))
+      .filter(id => !isNaN(id));
     
-    const documents = await getDocuments(empresaId);
-    
-    console.log('📄 [API-DOCUMENTS] getDocuments retornó:', documents.length, 'documentos');
-    if (documents.length > 0) {
-      console.log('📄 [API-DOCUMENTS] Primer documento:', documents[0]);
+    console.log('🔢 [API-DOCUMENTS] IDs parseados:', empresaIds);
+
+    if (empresaIds.length === 0) {
+      console.warn('⚠️ [API-DOCUMENTS] IDs inválidos');
+      return NextResponse.json([]);
     }
+
+    console.log('🔍 [API-DOCUMENTS] Llamando getDocuments...');
+    
+    const documents = await getDocuments(empresaIds);
+    
+    console.log('✅ [API-DOCUMENTS] Documentos obtenidos:', documents.length);
     
     return NextResponse.json(documents);
     
   } catch (error) {
-    console.error('❌ [API-DOCUMENTS] Error fatal:', error); 
-    return new NextResponse('Internal Server Error', { status: 500 });
+    console.error('❌ [API-DOCUMENTS] Error:', error);
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Error desconocido' 
+    }, { status: 500 });
   }
 }
