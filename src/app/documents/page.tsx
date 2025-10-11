@@ -10,47 +10,65 @@ import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function DocumentsPageContent() {
-  const { selectedCompanyId } = useCompanyContext();
+  const { selectedCompanyIds } = useCompanyContext();
   
   const [documents, setDocuments] = React.useState<Document[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [isUploadOpen, setIsUploadOpen] = React.useState();
+  const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const [key, setKey] = React.useState(0);
+  
+  // ✅ Estado para mantener el tab activo
+  const [activeTab, setActiveTab] = React.useState('facturas');
 
-  // DEBUG: Log cuando cambia selectedCompanyId
-  console.log('🏢 [DocumentsPage] selectedCompanyId actual:', selectedCompanyId);
+  console.log('🏢 [DocumentsPage] selectedCompanyIds actual:', selectedCompanyIds);
 
   const handleUploadSuccess = () => {
     setKey(prevKey => prevKey + 1);
   };
 
   React.useEffect(() => {
-    console.log('🔄 [DocumentsPage] useEffect ejecutado - selectedCompanyId:', selectedCompanyId, 'key:', key);
+    console.log('🔄 [DocumentsPage] useEffect ejecutado - selectedCompanyIds:', selectedCompanyIds, 'key:', key);
     
     async function loadDocuments() {
-      if (!selectedCompanyId) {
-        console.log('⚠️ [DocumentsPage] No hay empresa seleccionada, limpiando documentos');
+      if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+        console.log('⚠️ [DocumentsPage] No hay empresas seleccionadas, limpiando documentos');
         setDocuments([]);
         setLoading(false);
         return;
       }
 
       try {
-        console.log('🔍 [DocumentsPage] Iniciando fetch con companyId:', selectedCompanyId);
+        console.log('🔍 [DocumentsPage] Iniciando fetch con companyIds:', selectedCompanyIds);
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`/api/documents?companyId=${selectedCompanyId}`);
+        const queryParams = selectedCompanyIds.map(id => `companyId=${id}`).join('&');
+        const url = `/api/documents?${queryParams}`;
+        
+        console.log('🌐 [DocumentsPage] URL completa:', url);
+        
+        const response = await fetch(url);
         console.log('📡 [DocumentsPage] Response status:', response.status);
         
         if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('❌ [DocumentsPage] Error response:', errorData);
           throw new Error('Error al cargar documentos desde la API');
         }
         
-        const docs = await response.json();
+        const data = await response.json();
+        
+        // Mostrar información de debug
+        if (data.debug) {
+          console.log('🔍 [DEBUG] Información del servidor:', data.debug);
+        }
+        
+        const docs = data.documents || data;
         console.log('📄 [DocumentsPage] Documentos recibidos:', docs.length, 'documentos');
-        console.log('📄 [DocumentsPage] Primer documento:', docs[0]);
+        if (docs.length > 0) {
+          console.log('📄 [DocumentsPage] Primer documento:', docs[0]);
+        }
         setDocuments(docs);
       } catch (err) {
         console.error('❌ [DocumentsPage] Error loading documents:', err);
@@ -62,7 +80,7 @@ function DocumentsPageContent() {
     }
 
     loadDocuments();
-  }, [selectedCompanyId, key]);
+  }, [selectedCompanyIds, key]);
 
   const { facturas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     const facturas: Document[] = [];
@@ -88,7 +106,7 @@ function DocumentsPageContent() {
     'retencion', 'base_imponible', 'iva', 'total'
   ];
 
-  if (!selectedCompanyId) {
+  if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>
         <MainLayoutHeader>
@@ -97,13 +115,22 @@ function DocumentsPageContent() {
               Documentos
             </h1>
           </div>
+          {/* ✅ BOTÓN SIEMPRE DISPONIBLE */}
+          <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
         </MainLayoutHeader>
         
         <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
           <div className="text-center text-muted-foreground">
-            Selecciona una empresa para ver sus documentos
+            Selecciona al menos una empresa para ver sus documentos
           </div>
         </div>
+        
+        {/* ✅ DIÁLOGO DISPONIBLE SIEMPRE */}
+        <UploadDocumentDialog 
+          isOpen={isUploadOpen} 
+          setIsOpen={setIsUploadOpen} 
+          onUploadSuccess={handleUploadSuccess}
+        />
       </>
     );
   }
@@ -114,8 +141,14 @@ function DocumentsPageContent() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold tracking-tight">
             Documentos
+            {selectedCompanyIds.length > 1 && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({selectedCompanyIds.length} empresas)
+              </span>
+            )}
           </h1>
         </div>
+        {/* ✅ BOTÓN SIEMPRE DISPONIBLE (sin restricción) */}
         <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
       </MainLayoutHeader>
       
@@ -125,7 +158,7 @@ function DocumentsPageContent() {
         ) : error ? (
           <div className="text-center text-destructive">{error}</div>
         ) : (
-          <Tabs defaultValue="facturas" className="space-y-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList>
               <TabsTrigger value="sin-confirmar">Sin Confirmar ({sinConfirmar.length})</TabsTrigger>
               <TabsTrigger value="facturas">Facturas ({facturas.length})</TabsTrigger>
@@ -147,7 +180,7 @@ function DocumentsPageContent() {
           </Tabs>
         )}
       </div>
-       <UploadDocumentDialog 
+      <UploadDocumentDialog 
         isOpen={isUploadOpen} 
         setIsOpen={setIsUploadOpen} 
         onUploadSuccess={handleUploadSuccess}
@@ -157,9 +190,9 @@ function DocumentsPageContent() {
 }
 
 export default function DocumentsPage() {
-    return (
-        <MainLayout>
-            <DocumentsPageContent />
-        </MainLayout>
-    )
+  return (
+    <MainLayout>
+      <DocumentsPageContent />
+    </MainLayout>
+  );
 }
