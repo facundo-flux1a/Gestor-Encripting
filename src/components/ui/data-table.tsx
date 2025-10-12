@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import * as React from 'react';
@@ -193,8 +191,8 @@ const DraggableTableHeader = <TData, TValue>({
 };
 
 
-// Draggable Table Row for Documents
-const DraggableTableRow = <TData extends { id_documento: number }>({
+// 🔥 Draggable Table Row for Documents - MODIFICADO PARA DRAG A EMPRESAS
+const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: number | null; numero_documento: string }>({
     row,
 }: {
     row: Row<TData>,
@@ -218,12 +216,31 @@ const DraggableTableRow = <TData extends { id_documento: number }>({
         zIndex: isDragging ? 1 : 0,
     };
 
+    // 🔥 Manejar drag hacia empresas (NUEVO)
+    const handleDragStart = (e: React.DragEvent) => {
+        const doc = row.original;
+        e.dataTransfer.setData('application/json', JSON.stringify({
+            documentId: doc.id_documento,
+            empresaId: doc.empresa_id,
+            numeroDocumento: doc.numero_documento,
+        }));
+        e.dataTransfer.effectAllowed = 'move';
+        console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
+    };
+
+    const handleDragEnd = (e: React.DragEvent) => {
+        console.log('🏁 [Drag End]');
+    };
+
     return (
         <TableRow
             ref={setNodeRef}
             style={style}
             data-state={row.getIsSelected() && 'selected'}
-            className="bg-background even:bg-muted/50 hover:bg-muted/75"
+            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-move"
+            draggable={true}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
         >
              {row.getVisibleCells().map(cell => (
                 <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
@@ -349,8 +366,6 @@ export function DataTable<TData, TValue>({
     if (typeof headerDef === 'string') {
         return headerDef;
     }
-    // This is a simplified fallback. In a real app, you might have a more robust way
-    // to get a string representation for complex header components.
     return col.id;
 };
   
@@ -385,7 +400,7 @@ export function DataTable<TData, TValue>({
   const defaultRenderRow = (row: Row<TData>) => {
     const hasIdDocumento = 'id_documento' in row.original;
     if(hasIdDocumento) {
-        return <DraggableTableRow key={(row.original as any).id_documento} row={row as Row<TData & { id_documento: number }>} />;
+        return <DraggableTableRow key={(row.original as any).id_documento} row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>} />;
     }
     return <StandardTableRow key={row.id} row={row} />;
   }

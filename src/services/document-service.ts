@@ -683,7 +683,88 @@ export async function createDocument(payload: CreateDocumentPayload): Promise<{ 
         };
     }
 }
-
+/**
+ * Mueve un documento a otra empresa
+ */
+export async function moveDocument(
+    documentId: number, 
+    newEmpresaId: number,
+    userId: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('🔄 [moveDocument] Iniciando - Doc:', documentId, 'Nueva empresa:', newEmpresaId);
+      
+      // Verificar que el documento existe y pertenece a una empresa del usuario
+      const [docRows] = await db.query<RowDataPacket[]>(
+        `SELECT d.id, d.id_de_empresa, e.id_de_usuario 
+         FROM documentos d
+         JOIN empresas e ON d.id_de_empresa = e.id
+         WHERE d.id = ? AND e.id_de_usuario = ?`,
+        [documentId, userId]
+      );
+  
+      if (docRows.length === 0) {
+        console.error('❌ [moveDocument] Documento no encontrado o no pertenece al usuario');
+        return {
+          success: false,
+          error: 'Documento no encontrado o no tienes permisos para moverlo'
+        };
+      }
+  
+      const currentEmpresaId = docRows[0].id_de_empresa;
+      
+      if (currentEmpresaId === newEmpresaId) {
+        console.warn('⚠️ [moveDocument] El documento ya está en esa empresa');
+        return {
+          success: false,
+          error: 'El documento ya pertenece a esa empresa'
+        };
+      }
+  
+      // Verificar que la nueva empresa existe y pertenece al usuario
+      const [empresaRows] = await db.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+        [newEmpresaId, userId]
+      );
+  
+      if (empresaRows.length === 0) {
+        console.error('❌ [moveDocument] Empresa destino no encontrada');
+        return {
+          success: false,
+          error: 'La empresa destino no existe o no tienes permisos'
+        };
+      }
+  
+      // Mover el documento
+      const [result] = await db.query<OkPacket>(
+        'UPDATE documentos SET id_de_empresa = ? WHERE id = ?',
+        [newEmpresaId, documentId]
+      );
+  
+      if (result.affectedRows === 0) {
+        console.error('❌ [moveDocument] No se pudo actualizar el documento');
+        return {
+          success: false,
+          error: 'No se pudo mover el documento'
+        };
+      }
+  
+      console.log('✅ [moveDocument] Documento movido exitosamente');
+      
+      // Revalidar rutas relevantes
+      revalidatePath('/documents');
+      revalidatePath('/dashboard');
+  
+      return { success: true };
+  
+    } catch (error) {
+      console.error('❌ [moveDocument] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al mover el documento'
+      };
+    }
+  }
 export async function validateDocumentIncidents(documentId: number): Promise<{success: boolean}> {
     await db.query<OkPacket>(
         'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
