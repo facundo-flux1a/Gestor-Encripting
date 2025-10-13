@@ -3,7 +3,7 @@ import { getCompanies, createCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
 
 export const dynamic = 'force-dynamic';
-
+//asdasdasds
 // GET - Obtener empresasssssssss
 export async function GET() {
   try {
