@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/services/user-service';
 
 export const dynamic = 'force-dynamic';
 
-// GET - Obtener empresassssss
+// GET - Obtener empresasssssssss
 export async function GET() {
   try {
     console.log('🏢 [API-COMPANIES] Iniciando GET...');
