@@ -625,22 +625,6 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     }
 }
 
-export async function deleteDocument(id: number): Promise<void> {
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
-    try {
-        await connection.query('DELETE FROM documentos WHERE id = ?', [id]);
-        await connection.commit();
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error deleting document:", error);
-        throw new Error('No se pudo eliminar el documento.');
-    } finally {
-        connection.release();
-        redirect('/documents');
-    }
-}
-
 /**
  * Crea un nuevo documento
  */
@@ -762,6 +746,117 @@ export async function moveDocument(
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Error desconocido al mover el documento'
+      };
+    }
+  }
+  /**
+ * Elimina un documento del usuario actual
+ */
+export async function deleteDocument(
+    documentId: number,
+    userId: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('🗑️ [deleteDocument] Iniciando eliminación de documento:', documentId);
+  
+      // Verificar que el documento pertenece a una empresa del usuario
+      const [docCheck] = await db.query<RowDataPacket[]>(
+        `SELECT d.id_documento 
+         FROM documentos d
+         INNER JOIN empresas e ON d.id_de_empresa = e.id
+         WHERE d.id_documento = ? AND e.id_de_usuario = ?`,
+        [documentId, userId]
+      );
+  
+      if (docCheck.length === 0) {
+        console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
+        return { success: false, error: 'Documento no encontrado' };
+      }
+  
+      // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
+      await db.query(
+        'DELETE FROM documentos WHERE id_documento = ?',
+        [documentId]
+      );
+  
+      console.log('✅ [deleteDocument] Documento eliminado correctamente');
+  
+      // Revalidar rutas
+      revalidatePath('/documents');
+      revalidatePath('/dashboard');
+  
+      return { success: true };
+  
+    } catch (error) {
+      console.error('❌ [deleteDocument] Error:', error);
+      return { 
+        success: false, 
+        error: 'Error al eliminar el documento' 
+      };
+    }
+  }
+  
+  /**
+   * Elimina una empresa y TODOS sus documentos asociados
+   */
+  export async function deleteCompany(
+    empresaId: number,
+    userId: number
+  ): Promise<{ success: boolean; error?: string; documentsDeleted?: number }> {
+    try {
+      console.log('🗑️ [deleteCompany] Iniciando eliminación de empresa:', empresaId);
+  
+      // Verificar que la empresa pertenece al usuario
+      const [companyCheck] = await db.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+        [empresaId, userId]
+      );
+  
+      if (companyCheck.length === 0) {
+        console.error('❌ [deleteCompany] Empresa no encontrada o no pertenece al usuario');
+        return { success: false, error: 'Empresa no encontrada' };
+      }
+  
+      // Contar documentos que se eliminarán
+      const [docCount] = await db.query<RowDataPacket[]>(
+        'SELECT COUNT(*) as count FROM documentos WHERE id_de_empresa = ?',
+        [empresaId]
+      );
+  
+      const documentsToDelete = docCount[0]?.count || 0;
+      console.log(`📄 [deleteCompany] Se eliminarán ${documentsToDelete} documento(s)`);
+  
+      // Eliminar todos los documentos de la empresa
+      if (documentsToDelete > 0) {
+        await db.query(
+          'DELETE FROM documentos WHERE id_de_empresa = ?',
+          [empresaId]
+        );
+        console.log(`✅ [deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
+      }
+  
+      // Eliminar la empresa
+      await db.query(
+        'DELETE FROM empresas WHERE id = ? AND id_de_usuario = ?',
+        [empresaId, userId]
+      );
+  
+      console.log('✅ [deleteCompany] Empresa eliminada correctamente');
+  
+      // Revalidar rutas
+      revalidatePath('/documents');
+      revalidatePath('/dashboard');
+  
+      return { 
+        success: true,
+        documentsDeleted: documentsToDelete
+      };
+  
+    } catch (error) {
+      console.error('❌ [deleteCompany] Error:', error);
+      return { 
+        success: false, 
+        error: 'Error al eliminar la empresa' 
       };
     }
   }

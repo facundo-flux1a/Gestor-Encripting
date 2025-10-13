@@ -2,529 +2,552 @@
 
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider'; 
-import { Plus, ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown, Trash2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
-type Company = {
-  id: number;
-  name: string;
-  nombreFiscal?: string | null;
-  cif?: string;
-};
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function CompaniesSelector() {
   const { 
     selectedCompanyIds, 
-    setSelectedCompanyIds,
     toggleCompanyId,
-    isLoading, 
-    setIsLoading,
+    isLoading,
     companies,
     setCompanies
-  } = useCompanyContext(); 
+  } = useCompanyContext();
 
   const { toast } = useToast();
-  const [availableCompanies, setAvailableCompanies] = React.useState<Company[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
+  const [availableCompanies, setAvailableCompanies] = React.useState(companies);
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const [companyToDelete, setCompanyToDelete] = React.useState<{ id: number; name: string; docCount: number } | null>(null);
+  const [newCompany, setNewCompany] = React.useState({
+    name: '',
+    nombreFiscal: '',
+    cif: '',
+  });
+
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
-  const [dragOverCompanyId, setDragOverCompanyId] = React.useState<number | null>(null);
-  
-  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
-  const [newCompanyName, setNewCompanyName] = React.useState('');
-  const [newCompanyNombreFiscal, setNewCompanyNombreFiscal] = React.useState('');
-  const [newCompanyCif, setNewCompanyCif] = React.useState('');
-  const [isCreating, setIsCreating] = React.useState(false);
 
   React.useEffect(() => {
-    async function fetchCompanies() {
+    setAvailableCompanies(companies);
+  }, [companies]);
+
+  React.useEffect(() => {
+    async function loadCompanies() {
       try {
-        setIsLoading(true);
-        const response = await fetch('/api/companies'); 
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch companies');
+        const response = await fetch('/api/companies');
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableCompanies(data);
+          setCompanies(data);
         }
-        
-        const data: Company[] = await response.json();
-        
-        setAvailableCompanies(data);
-        setCompanies(data);
-        
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-        console.error("Error al hacer fetch en el selector:", err);
-      } finally {
-        setIsLoading(false);
+      } catch (error) {
+        console.error('Error loading companies:', error);
       }
     }
+    loadCompanies();
+  }, [setCompanies]);
 
-    fetchCompanies();
-  }, [setIsLoading, setCompanies]); 
-
-  // 🔥 Detectar cuando algo está siendo arrastrado (NUEVO)
   React.useEffect(() => {
     const handleDragStart = () => {
-      console.log('🎯 [Global] Drag detectado, abriendo popover');
       setIsDragging(true);
       setIsPopoverOpen(true);
     };
     
     const handleDragEnd = () => {
-      console.log('🏁 [Global] Drag finalizado');
+      setIsDragging(false);
+    };
+
+    const handleDrop = () => {
       setIsDragging(false);
     };
 
     window.addEventListener('dragstart', handleDragStart);
     window.addEventListener('dragend', handleDragEnd);
-    window.addEventListener('drop', handleDragEnd);
+    window.addEventListener('drop', handleDrop);
 
     return () => {
       window.removeEventListener('dragstart', handleDragStart);
       window.removeEventListener('dragend', handleDragEnd);
-      window.removeEventListener('drop', handleDragEnd);
+      window.removeEventListener('drop', handleDrop);
     };
   }, []);
 
-  const handleToggleCompany = (companyId: number) => {
-    toggleCompanyId(companyId);
-    console.log('Empresa toggled:', companyId);
-  };
-
-  // 🔥 NUEVA FUNCIÓN: Manejar el drop de documentos
-  const handleDrop = async (e: React.DragEvent, targetCompanyId: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverCompanyId(null);
-
-    try {
-      const data = e.dataTransfer.getData('application/json');
-      if (!data) {
-        console.warn('No hay datos en el drag');
-        return;
-      }
-
-      const { documentId, empresaId, numeroDocumento } = JSON.parse(data);
-
-      console.log('📦 [Drop] Documento:', documentId, 'de empresa:', empresaId, 'a empresa:', targetCompanyId);
-
-      // Validar que no sea la misma empresa
-      if (empresaId === targetCompanyId) {
-        toast({
-          title: 'Misma empresa',
-          description: 'El documento ya pertenece a esta empresa',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      // Hacer el request para mover
-      const response = await fetch(`/api/documents/${documentId}/move`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          newEmpresaId: targetCompanyId,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al mover el documento');
-      }
-
+  const handleCreateCompany = async () => {
+    if (!newCompany.name.trim() || !newCompany.cif.trim()) {
       toast({
-        title: 'Documento movido',
-        description: `${numeroDocumento} movido exitosamente`,
+        title: "Error",
+        description: "El nombre y CIF son obligatorios",
+        variant: "destructive",
       });
-
-      // Recargar la página para refrescar los documentos
-      window.location.reload();
-
-    } catch (error) {
-      console.error('Error al mover documento:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Error desconocido',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent, companyId: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverCompanyId(companyId);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverCompanyId(null);
-  };
-
-  const handleCreateCompany = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!newCompanyName.trim() || !newCompanyCif.trim()) {
-      setError('El nombre de la empresa y el CIF son obligatorios');
       return;
     }
-    
+
+    setIsCreating(true);
     try {
-      setIsCreating(true);
-      setError(null);
-      
       const response = await fetch('/api/companies', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          name: newCompanyName.trim(),
-          nombreFiscal: newCompanyNombreFiscal.trim() || null,
-          cif: newCompanyCif.trim()
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCompany),
       });
-      
-      const responseText = await response.text();
-      
-      if (!response.ok) {
-        let errorMessage = `Error ${response.status}: ${response.statusText}`;
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          errorMessage = responseText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-      
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch {
-        throw new Error('La respuesta del servidor no es JSON válido');
-      }
-      
-      let newCompany: Company;
-      
-      if (result.success && result.company) {
-        newCompany = result.company;
-      } else if (result.id && result.name) {
-        newCompany = result;
+
+      if (response.ok) {
+        const data = await response.json();
+        const updatedCompanies = [...availableCompanies, data.company];
+        setAvailableCompanies(updatedCompanies);
+        setCompanies(updatedCompanies);
+        setNewCompany({ name: '', nombreFiscal: '', cif: '' });
+        toast({
+          title: "Éxito",
+          description: "Empresa creada correctamente",
+        });
       } else {
-        throw new Error('El servidor devolvió un formato de respuesta inesperado');
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.error || "Error al crear la empresa",
+          variant: "destructive",
+        });
       }
-      
-      if (!newCompany.id || !newCompany.name) {
-        throw new Error('La empresa creada no tiene todos los campos requeridos');
-      }
-      
-      setAvailableCompanies(prev => [...prev, newCompany]);
-      setCompanies(prev => [...prev, newCompany]);
-      setSelectedCompanyIds([...selectedCompanyIds, newCompany.id]);
-      
-      setNewCompanyName('');
-      setNewCompanyNombreFiscal('');
-      setNewCompanyCif('');
-      setIsDialogOpen(false);
-      
-      console.log('✅ [CompaniesSelector] Empresa creada y agregada al contexto:', newCompany);
-      
-    } catch (err) {
-      console.error('Error completo al crear empresa:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al crear la empresa';
-      setError(errorMessage);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error al crear la empresa",
+        variant: "destructive",
+      });
     } finally {
       setIsCreating(false);
     }
   };
 
+  const handleDeleteClick = async (companyId: number, companyName: string) => {
+    console.log('🗑️ [CompaniesSelector] handleDeleteClick llamado:', { companyId, companyName });
+    
+    try {
+      console.log('📡 [CompaniesSelector] Obteniendo documentos...');
+      const response = await fetch('/api/documents');
+      console.log('📡 [CompaniesSelector] Response status:', response.status);
+      
+      if (response.ok) {
+        const documents = await response.json();
+        console.log('📄 [CompaniesSelector] Documentos obtenidos:', documents.length);
+        const docCount = documents.filter((doc: any) => doc.empresa_id === companyId).length;
+        console.log('📊 [CompaniesSelector] Documentos de esta empresa:', docCount);
+        
+        console.log('✅ [CompaniesSelector] Abriendo diálogo de confirmación');
+        setCompanyToDelete({ 
+          id: companyId, 
+          name: companyName,
+          docCount 
+        });
+      } else {
+        console.error('❌ [CompaniesSelector] Error al obtener documentos:', response.status);
+        setCompanyToDelete({ 
+          id: companyId, 
+          name: companyName,
+          docCount: 0 
+        });
+      }
+    } catch (error) {
+      console.error('❌ [CompaniesSelector] Error al contar documentos:', error);
+      setCompanyToDelete({ 
+        id: companyId, 
+        name: companyName,
+        docCount: 0 
+      });
+    }
+  };
+
+  const handleDeleteCompany = async () => {
+    if (!companyToDelete) return;
+
+    console.log('🗑️ [CompaniesSelector] Iniciando eliminación:', companyToDelete);
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/companies/${companyToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+      console.log('📡 [CompaniesSelector] Respuesta del servidor:', data);
+
+      if (response.ok) {
+        const updatedCompanies = availableCompanies.filter(c => c.id !== companyToDelete.id);
+        setAvailableCompanies(updatedCompanies);
+        setCompanies(updatedCompanies);
+        
+        if (selectedCompanyIds.includes(companyToDelete.id)) {
+          toggleCompanyId(companyToDelete.id);
+        }
+
+        toast({
+          title: "Éxito",
+          description: data.documentsDeleted 
+            ? `Empresa eliminada junto con ${data.documentsDeleted} documento(s)` 
+            : "Empresa eliminada correctamente",
+        });
+        
+        console.log('✅ [CompaniesSelector] Recargando página...');
+        window.location.reload();
+      } else {
+        console.error('❌ [CompaniesSelector] Error del servidor:', data);
+        toast({
+          title: "Error",
+          description: data.error || "Error al eliminar la empresa",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('❌ [CompaniesSelector] Error en catch:', error);
+      toast({
+        title: "Error",
+        description: "Error al eliminar la empresa",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setCompanyToDelete(null);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, empresaId: number) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('bg-primary/10', 'border-primary', 'scale-105');
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.currentTarget.classList.remove('bg-primary/10', 'border-primary', 'scale-105');
+  };
+
+  const handleDrop = async (e: React.DragEvent, empresaId: number) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('bg-primary/10', 'border-primary', 'scale-105');
+
+    try {
+      const documentData = e.dataTransfer.getData('application/json');
+      const document = JSON.parse(documentData);
+
+      if (document.empresa_id === empresaId) {
+        toast({
+          title: "Sin cambios",
+          description: "El documento ya pertenece a esta empresa",
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/documents/${document.id_documento}/move`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newEmpresaId: empresaId }),
+      });
+
+      if (response.ok) {
+        const empresa = availableCompanies.find(c => c.id === empresaId);
+        toast({
+          title: "Documento movido",
+          description: `El documento se movió a ${empresa?.name}`,
+        });
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.error || "Error al mover el documento",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error al mover documento:', error);
+      toast({
+        title: "Error",
+        description: "Error al mover el documento",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Componente de AlertDialog reutilizable
+  const DeleteAlertDialog = () => (
+    <AlertDialog open={companyToDelete !== null} onOpenChange={() => setCompanyToDelete(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            ¿Eliminar empresa y todos sus documentos?
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-3">
+            <div>
+              Esta acción <strong className="text-destructive">NO se puede deshacer</strong>.
+            </div>
+            {companyToDelete && (
+              <>
+                <div className="p-3 bg-muted rounded">
+                  <div className="font-semibold">{companyToDelete.name}</div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    {companyToDelete.docCount === 0 
+                      ? 'No tiene documentos asociados'
+                      : `Tiene ${companyToDelete.docCount} documento(s) asociado(s)`
+                    }
+                  </div>
+                </div>
+                {companyToDelete.docCount > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      Se eliminarán <strong>{companyToDelete.docCount} documento(s)</strong> junto con la empresa de forma permanente.
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeleteCompany}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? 'Eliminando...' : 'Sí, eliminar todo'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   if (isLoading) {
+    return <Skeleton className="w-full h-10" />;
+  }
+
+  if (availableCompanies.length === 0) {
     return (
-      <div className="p-2 space-y-2">
-         <Skeleton className="h-4 w-1/4" />
-         <Skeleton className="h-10 w-full" />
-      </div>
+      <>
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">No hay empresas</div>
+          <div className="space-y-2">
+            <Input
+              placeholder="Nombre de empresa"
+              value={newCompany.name}
+              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
+            />
+            <Input
+              placeholder="Nombre fiscal (opcional)"
+              value={newCompany.nombreFiscal}
+              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
+            />
+            <Input
+              placeholder="CIF"
+              value={newCompany.cif}
+              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
+            />
+            <Button 
+              onClick={handleCreateCompany} 
+              disabled={isCreating}
+              className="w-full"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {isCreating ? 'Creando...' : 'Crear Primera Empresa'}
+            </Button>
+          </div>
+        </div>
+        <DeleteAlertDialog />
+      </>
     );
   }
 
-  if (error) {
-    return <div className="p-2 text-sm text-red-500">Error: {error}</div>;
-  }
-
-  // Si hay 5 o menos empresas, mostrar checkboxes CON DROP ZONES
   if (availableCompanies.length <= 5) {
     return (
-      <div className="p-2 space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium leading-none">
-            Empresas ({selectedCompanyIds.length} {selectedCompanyIds.length === 1 ? 'seleccionada' : 'seleccionadas'})
-          </label>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2">
-                <Plus className="h-4 w-4 mr-1" />
-                Nueva
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Crear Nueva Empresa</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreateCompany} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company-name">Nombre de la empresa *</Label>
-                  <Input
-                    id="company-name"
-                    type="text"
-                    placeholder="Ingresa el nombre de la empresa"
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    disabled={isCreating}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company-cif">CIF *</Label>
-                  <Input
-                    id="company-cif"
-                    type="text"
-                    placeholder="Ingresa el CIF"
-                    value={newCompanyCif}
-                    onChange={(e) => setNewCompanyCif(e.target.value)}
-                    disabled={isCreating}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company-fiscal">Nombre Fiscal (opcional)</Label>
-                  <Input
-                    id="company-fiscal"
-                    type="text"
-                    placeholder="Ingresa el nombre fiscal"
-                    value={newCompanyNombreFiscal}
-                    onChange={(e) => setNewCompanyNombreFiscal(e.target.value)}
-                    disabled={isCreating}
-                  />
-                </div>
-                {error && (
-                  <div className="text-sm text-red-500">{error}</div>
-                )}
-                <div className="flex justify-end space-x-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => {
-                      setIsDialogOpen(false);
-                      setError(null);
-                    }}
-                    disabled={isCreating}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={!newCompanyName.trim() || !newCompanyCif.trim() || isCreating}
-                  >
-                    {isCreating ? 'Creando...' : 'Crear Empresa'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-        
-        <div className="space-y-2 border rounded-md p-3">
-          {availableCompanies.map(company => (
+      <>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Empresas</span>
+          </div>
+          
+          {availableCompanies.map((company) => (
             <div
               key={company.id}
-              className={`flex items-center space-x-2 hover:bg-accent rounded-md p-2 transition-all ${
-                dragOverCompanyId === company.id ? 'bg-primary/20 border-2 border-primary border-dashed scale-105' : 'cursor-pointer'
-              }`}
-              onClick={() => handleToggleCompany(company.id)}
-              onDrop={(e) => handleDrop(e, company.id)}
+              className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
               onDragOver={(e) => handleDragOver(e, company.id)}
               onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, company.id)}
             >
               <Checkbox
                 id={`company-${company.id}`}
                 checked={selectedCompanyIds.includes(company.id)}
-                onCheckedChange={() => handleToggleCompany(company.id)}
+                onCheckedChange={() => toggleCompanyId(company.id)}
               />
-              <label
+              <Label 
                 htmlFor={`company-${company.id}`}
-                className="text-sm font-medium leading-none cursor-pointer flex-1"
+                className="flex-1 cursor-pointer text-sm"
               >
                 {company.name}
-              </label>
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('🖱️ [CompaniesSelector] Click en botón eliminar');
+                  handleDeleteClick(company.id, company.name);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           ))}
+
+          <p className="text-xs text-muted-foreground px-2">
+            {isDragging ? '🎯 Suelta el documento en una empresa' : '💡 Arrastra documentos aquí para moverlos de empresa'}
+          </p>
+
+          <div className="space-y-2 pt-2 border-t">
+            <Input
+              placeholder="Nombre de empresa"
+              value={newCompany.name}
+              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
+            />
+            <Input
+              placeholder="Nombre fiscal (opcional)"
+              value={newCompany.nombreFiscal}
+              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
+            />
+            <Input
+              placeholder="CIF"
+              value={newCompany.cif}
+              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
+            />
+            <Button 
+              onClick={handleCreateCompany} 
+              disabled={isCreating}
+              className="w-full"
+              size="sm"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {isCreating ? 'Creando...' : 'Nueva'}
+            </Button>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground px-2">
-          💡 Arrastra documentos aquí para moverlos de empresa
-        </p>
-      </div>
+        <DeleteAlertDialog />
+      </>
     );
   }
 
-  // Si hay más de 5 empresas, mostrar un Popover con checkboxes Y DROP ZONES
   return (
-    <div className="p-2 space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium leading-none">
-          Empresas ({selectedCompanyIds.length} {selectedCompanyIds.length === 1 ? 'seleccionada' : 'seleccionadas'})
-        </label>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 px-2">
-              <Plus className="h-4 w-4 mr-1" />
-              Nueva
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Crear Nueva Empresa</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateCompany} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="company-name">Nombre de la empresa *</Label>
-                <Input
-                  id="company-name"
-                  type="text"
-                  placeholder="Ingresa el nombre de la empresa"
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  disabled={isCreating}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="company-cif">CIF *</Label>
-                <Input
-                  id="company-cif"
-                  type="text"
-                  placeholder="Ingresa el CIF"
-                  value={newCompanyCif}
-                  onChange={(e) => setNewCompanyCif(e.target.value)}
-                  disabled={isCreating}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="company-fiscal">Nombre Fiscal (opcional)</Label>
-                <Input
-                  id="company-fiscal"
-                  type="text"
-                  placeholder="Ingresa el nombre fiscal"
-                  value={newCompanyNombreFiscal}
-                  onChange={(e) => setNewCompanyNombreFiscal(e.target.value)}
-                  disabled={isCreating}
-                />
-              </div>
-              {error && (
-                <div className="text-sm text-red-500">{error}</div>
-              )}
-              <div className="flex justify-end space-x-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsDialogOpen(false);
-                    setError(null);
-                  }}
-                  disabled={isCreating}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={!newCompanyName.trim() || !newCompanyCif.trim() || isCreating}
-                >
-                  {isCreating ? 'Creando...' : 'Crear Empresa'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Popover open={isPopoverOpen} onOpenChange={(open) => {
-        // No cerrar el popover si estamos arrastrando
-        if (!isDragging) {
-          setIsPopoverOpen(open);
-        }
-      }}>
+    <>
+      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
             aria-expanded={isPopoverOpen}
-            className={`w-full justify-between transition-all ${isDragging ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-            onClick={() => setIsPopoverOpen(!isPopoverOpen)}
+            className={`w-full justify-between transition-all ${isDragging ? 'ring-2 ring-primary ring-offset-2 animate-pulse' : ''}`}
           >
-            <span className="truncate">
-              {selectedCompanyIds.length === 0
-                ? 'Selecciona empresas...'
-                : selectedCompanyIds.length === availableCompanies.length
-                ? 'Todas las empresas'
-                : `${selectedCompanyIds.length} ${selectedCompanyIds.length === 1 ? 'empresa seleccionada' : 'empresas seleccionadas'}`}
-            </span>
+            {selectedCompanyIds.length === 0
+              ? 'Seleccionar empresas'
+              : selectedCompanyIds.length === availableCompanies.length
+              ? 'Todas las empresas'
+              : `${selectedCompanyIds.length} seleccionada(s)`}
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[300px] p-0" align="start" onInteractOutside={(e) => {
-          // Prevenir cierre si estamos arrastrando
-          if (isDragging) {
-            e.preventDefault();
-          }
-        }}>
-          <div className="max-h-[300px] overflow-y-auto p-2">
-            <div className="space-y-1">
-              {availableCompanies.map(company => (
-                <div
-                  key={company.id}
-                  className={`flex items-center space-x-2 hover:bg-accent rounded-md p-2 transition-all ${
-                    dragOverCompanyId === company.id ? 'bg-primary/20 border-2 border-primary border-dashed scale-105' : 'cursor-pointer'
-                  }`}
-                  onClick={() => handleToggleCompany(company.id)}
-                  onDrop={(e) => handleDrop(e, company.id)}
-                  onDragOver={(e) => handleDragOver(e, company.id)}
-                  onDragLeave={handleDragLeave}
+        <PopoverContent 
+          className="w-[300px] p-0" 
+          align="start"
+          onInteractOutside={(e) => {
+            if (isDragging) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
+            {availableCompanies.map((company) => (
+              <div
+                key={company.id}
+                className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
+                onDragOver={(e) => handleDragOver(e, company.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, company.id)}
+              >
+                <Checkbox
+                  id={`company-popover-${company.id}`}
+                  checked={selectedCompanyIds.includes(company.id)}
+                  onCheckedChange={() => toggleCompanyId(company.id)}
+                />
+                <Label 
+                  htmlFor={`company-popover-${company.id}`}
+                  className="flex-1 cursor-pointer text-sm"
                 >
-                  <Checkbox
-                    id={`company-dropdown-${company.id}`}
-                    checked={selectedCompanyIds.includes(company.id)}
-                    onCheckedChange={() => handleToggleCompany(company.id)}
-                  />
-                  <label
-                    htmlFor={`company-dropdown-${company.id}`}
-                    className="text-sm font-medium leading-none cursor-pointer flex-1"
-                  >
-                    {company.name}
-                  </label>
-                </div>
-              ))}
-            </div>
+                  {company.name}
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log('🖱️ [CompaniesSelector] Click en botón eliminar (popover)');
+                    handleDeleteClick(company.id, company.name);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
           </div>
+
+          <div className="border-t p-4 space-y-2">
+            <Input
+              placeholder="Nombre de empresa"
+              value={newCompany.name}
+              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
+            />
+            <Input
+              placeholder="Nombre fiscal (opcional)"
+              value={newCompany.nombreFiscal}
+              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
+            />
+            <Input
+              placeholder="CIF"
+              value={newCompany.cif}
+              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
+            />
+            <Button 
+              onClick={handleCreateCompany} 
+              disabled={isCreating}
+              className="w-full"
+              size="sm"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {isCreating ? 'Creando...' : 'Nueva Empresa'}
+            </Button>
+          </div>
+
           <p className="text-xs text-muted-foreground p-2 border-t">
-            💡 Arrastra documentos aquí para moverlos
+            {isDragging ? '🎯 Suelta el documento aquí' : '💡 Arrastra documentos aquí para moverlos'}
           </p>
         </PopoverContent>
       </Popover>
-    </div>
+      <DeleteAlertDialog />
+    </>
   );
 }

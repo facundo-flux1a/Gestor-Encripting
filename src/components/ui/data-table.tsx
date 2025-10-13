@@ -191,7 +191,7 @@ const DraggableTableHeader = <TData, TValue>({
 };
 
 
-// 🔥 Draggable Table Row for Documents - MODIFICADO PARA DRAG A EMPRESAS
+// 🔥 Draggable Table Row for Documents - CORREGIDO
 const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: number | null; numero_documento: string }>({
     row,
 }: {
@@ -216,13 +216,13 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
         zIndex: isDragging ? 1 : 0,
     };
 
-    // 🔥 Manejar drag hacia empresas (NUEVO)
+    // 🔥 Manejar drag hacia empresas - ✅ CORREGIDO
     const handleDragStart = (e: React.DragEvent) => {
         const doc = row.original;
         e.dataTransfer.setData('application/json', JSON.stringify({
-            documentId: doc.id_documento,
-            empresaId: doc.empresa_id,
-            numeroDocumento: doc.numero_documento,
+            id_documento: doc.id_documento,  // ✅ CORREGIDO: era "documentId"
+            empresa_id: doc.empresa_id,      // ✅ CORREGIDO: era "empresaId"
+            numero_documento: doc.numero_documento,  // ✅ CORREGIDO: era "numeroDocumento"
         }));
         e.dataTransfer.effectAllowed = 'move';
         console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Trash2 } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
@@ -12,6 +12,17 @@ import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,

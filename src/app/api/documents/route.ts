@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocuments } from '@/services/document-service';
+import { getDocuments, deleteDocument } from '@/services/document-service';
+import { getCurrentUser } from '@/services/user-service';
 
 export const dynamic = 'force-dynamic';
 
+// GET - Obtener documentos
 export async function GET(req: NextRequest) {
   try {
     console.log('🚀 [API-DOCUMENTS] Iniciando...');
@@ -41,5 +43,50 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : 'Error desconocido' 
     }, { status: 500 });
+  }
+}
+
+// DELETE - Eliminar documento
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    console.log('🗑️ [API-DELETE-DOCUMENT] Iniciando eliminación...');
+    
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      console.warn('⚠️ [API-DELETE-DOCUMENT] No hay usuario autenticado');
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+
+    const documentId = parseInt(params.id);
+    
+    if (isNaN(documentId)) {
+      return NextResponse.json({ error: 'ID de documento inválido' }, { status: 400 });
+    }
+
+    console.log('👤 [API-DELETE-DOCUMENT] Usuario:', user.id, 'Documento:', documentId);
+
+    const result = await deleteDocument(documentId, user.id);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    console.log('✅ [API-DELETE-DOCUMENT] Documento eliminado exitosamente');
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Documento eliminado correctamente'
+    });
+
+  } catch (error) {
+    console.error('❌ [API-DELETE-DOCUMENT] Error:', error);
+    return NextResponse.json(
+      { error: 'Error al eliminar el documento' },
+      { status: 500 }
+    );
   }
 }
