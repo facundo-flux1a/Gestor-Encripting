@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { deleteCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';    
 
 // DELETE - Eliminar empresa y todos sus documentos
 export async function DELETE(
