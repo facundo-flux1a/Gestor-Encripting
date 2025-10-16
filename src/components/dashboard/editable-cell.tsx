@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -127,8 +125,19 @@ export function EditableCell({
     return value;
   }
 
+  // ← NUEVO: Manejar click y prevenir propagación
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita que el click llegue a la fila
+    if (!isEditing && !isLoading) {
+      setIsEditing(true);
+    }
+  };
+
   return (
-    <div className="relative min-h-[24px]" onClick={() => !isEditing && !isLoading && setIsEditing(true)}>
+    <div 
+      className="relative min-h-[24px]" 
+      onClick={handleClick} // ← CAMBIADO: Usar la nueva función
+    >
       {isLoading && <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
       
       {!isEditing && !isLoading && (

@@ -69,6 +69,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   hiddenColumns?: string[];
   filename: string;
+  onRowClick?: (row: TData) => void; // ← NUEVO
 }
 
 
@@ -191,11 +192,13 @@ const DraggableTableHeader = <TData, TValue>({
 };
 
 
-// 🔥 Draggable Table Row for Documents - CORREGIDO
+// 🔥 Draggable Table Row for Documents - CON CLICK
 const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: number | null; numero_documento: string }>({
     row,
+    onRowClick,
 }: {
     row: Row<TData>,
+    onRowClick?: (row: TData) => void,
 }) => {
     const {
         attributes,
@@ -216,13 +219,12 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
         zIndex: isDragging ? 1 : 0,
     };
 
-    // 🔥 Manejar drag hacia empresas - ✅ CORREGIDO
     const handleDragStart = (e: React.DragEvent) => {
         const doc = row.original;
         e.dataTransfer.setData('application/json', JSON.stringify({
-            id_documento: doc.id_documento,  // ✅ CORREGIDO: era "documentId"
-            empresa_id: doc.empresa_id,      // ✅ CORREGIDO: era "empresaId"
-            numero_documento: doc.numero_documento,  // ✅ CORREGIDO: era "numeroDocumento"
+            id_documento: doc.id_documento,
+            empresa_id: doc.empresa_id,
+            numero_documento: doc.numero_documento,
         }));
         e.dataTransfer.effectAllowed = 'move';
         console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
@@ -232,15 +234,42 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
         console.log('🏁 [Drag End]');
     };
 
+    // ← NUEVO: Manejar click en la fila
+    const handleRowClick = (e: React.MouseEvent) => {
+        // Prevenir navegación si se hace click en elementos interactivos
+        const target = e.target as HTMLElement;
+        
+        // Verificar si es un elemento interactivo o está dentro de uno
+        const isInteractive = target.closest(
+            'button, a, input, textarea, select, ' +
+            '[role="button"], [role="checkbox"], ' +
+            '[contenteditable="true"], ' +
+            '.editable-cell, ' + // Clase para celdas editables
+            '[data-editable="true"]' // Atributo data para celdas editables
+        );
+        
+        // También verificar si el target mismo es editable
+        const isEditableElement = 
+            target.isContentEditable || 
+            target.hasAttribute('contenteditable') ||
+            target.classList.contains('editable-cell') ||
+            target.hasAttribute('data-editable');
+        
+        if (!isInteractive && !isEditableElement && onRowClick) {
+            onRowClick(row.original);
+        }
+    };
+
     return (
         <TableRow
             ref={setNodeRef}
             style={style}
             data-state={row.getIsSelected() && 'selected'}
-            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-move"
+            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer" // ← AGREGADO cursor-pointer
             draggable={true}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onClick={handleRowClick} // ← NUEVO
         >
              {row.getVisibleCells().map(cell => (
                 <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
@@ -291,7 +320,8 @@ export function DataTable<TData, TValue>({
   columns,
   data: initialData,
   hiddenColumns = [],
-  filename
+  filename,
+  onRowClick, // ← NUEVO
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
@@ -397,10 +427,15 @@ export function DataTable<TData, TValue>({
     useSensor(KeyboardSensor)
   );
 
+  // ← ACTUALIZADO: Pasar onRowClick
   const defaultRenderRow = (row: Row<TData>) => {
     const hasIdDocumento = 'id_documento' in row.original;
     if(hasIdDocumento) {
-        return <DraggableTableRow key={(row.original as any).id_documento} row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>} />;
+        return <DraggableTableRow 
+          key={(row.original as any).id_documento} 
+          row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>}
+          onRowClick={onRowClick}
+        />;
     }
     return <StandardTableRow key={row.id} row={row} />;
   }

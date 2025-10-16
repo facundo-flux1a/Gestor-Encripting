@@ -42,6 +42,7 @@ export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
     totalSpent: z.coerce.number(),
     totalDocuments: z.coerce.number(),
     uniqueProducts: z.coerce.number(),
+    empresaNombre: z.string().optional(), // ⬅️ AGREGADO
 });
 export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
 

@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { cookies } from 'next/headers';
@@ -18,7 +16,7 @@ export async function encrypt(payload: any) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('1d') // 1 day session
+    .setExpirationTime('1d')
     .sign(key);
 }
 
@@ -51,68 +49,90 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
   }
 }
 
-// Updated to accept a cookie value, making it more testable and decoupled
 export async function getSession(cookie?: string): Promise<SessionPayload | null> {
+    let sessionCookie = cookie;
     
-    // =========================================================================
-    // MODO DESARROLLO: Forzar sesión para el usuario 'tomas@flux1a.com.ar'
-    // Para desactivar y usar la lógica real, simplemente comenta o elimina este bloque.
-    // =========================================================================
-  
-    // =========================================================================
-    // FIN MODO DESARROLLO
-    // =========================================================================
-
-    const sessionCookie = cookie ?? cookies().get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) {
+      const cookieStore = await cookies();
+      sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+      console.log('🍪 [getSession] Intentando obtener cookie:', { 
+        existe: !!sessionCookie,
+        todas: cookieStore.getAll().map(c => c.name)
+      });
+    }
+    
     if (!sessionCookie) return null;
     
     const session = await decrypt(sessionCookie);
     if (!session) {
-      // If decryption fails, the cookie is invalid. Clear it.
-      cookies().delete(SESSION_COOKIE_NAME);
+      const cookieStore = await cookies();
+      cookieStore.delete(SESSION_COOKIE_NAME);
       return null;
     }
     
     return session;
 }
 
-
 export async function createSession(userId: number, email: string, nombre: string) {
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const session = await encrypt({ userId, email, nombre, expires });
 
-    cookies().set(SESSION_COOKIE_NAME, session, {
+    const cookieStore = await cookies();
+    cookieStore.set(SESSION_COOKIE_NAME, session, {
         expires,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         path: '/',
     });
+        console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/' });
+
 }
 
 export async function login(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
+  console.log('🔍 [login] Intentando login con:', { email: email?.trim(), passwordLength: password?.length });
+
   if (!email || !password) {
+    console.warn('⚠️ [login] Email o password vacíos');
     return redirect('/auth/login?error=invalid_credentials');
   }
 
   try {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM usuarios WHERE email = ? AND password = ?',
-      [email, password]
+      'SELECT * FROM usuarios WHERE email = ?',
+      [email.trim()]
     );
     
-    if (rows.length !== 1) {
-        return redirect('/auth/login?error=invalid_credentials');
+    console.log('📊 [login] Usuarios encontrados con ese email:', rows.length);
+    
+    if (rows.length === 0) {
+      console.warn('⚠️ [login] No existe usuario con email:', email.trim());
+      return redirect('/auth/login?error=invalid_credentials');
     }
 
     const user = rows[0] as User;
+    
+    console.log('👤 [login] Usuario encontrado:', {
+      id: user.id,
+      email: user.email,
+      passwordEnBD: user.password,
+      passwordIngresada: password,
+      coinciden: user.password === password.trim()
+    });
+    
+    if (user.password !== password.trim()) {
+      console.warn('❌ [login] Contraseña incorrecta');
+      return redirect('/auth/login?error=invalid_credentials');
+    }
 
+    console.log('✅ [login] Contraseña correcta, creando sesión');
+    
     await createSession(user.id, user.email, user.nombre);
     
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ [login] Error:', error);
     return redirect('/auth/login?error=server_error');
   }
 
@@ -167,20 +187,16 @@ export async function handleGoogleSignInOnServer(
     let user: User;
 
     if (existingUsers.length > 0) {
-      // User exists, use their data.
       user = existingUsers[0] as User;
     } else {
-      // User does not exist, create a new one.
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
-      // We don't store a password for Google-based users.
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email) VALUES (?, ?)',
-          [nombre, email]
+          'INSERT INTO usuarios (nombre, email, password) VALUES (?, ?, ?)',
+          [nombre, email, null]
       );
       user = { id: result.insertId, email, nombre };
     }
 
-    // Create session for the user (existing or new)
     await createSession(user.id, user.email, user.nombre);
     
     return { success: true };
@@ -191,10 +207,8 @@ export async function handleGoogleSignInOnServer(
   }
 }
 
-
 export async function logout() {
-  cookies().delete(SESSION_COOKIE_NAME);
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
   redirect('/auth/login');
 }
-
-

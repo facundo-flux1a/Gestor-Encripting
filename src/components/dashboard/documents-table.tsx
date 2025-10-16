@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useRouter } from 'next/navigation';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
@@ -36,9 +37,6 @@ const getColumns = (
         const doc = row.original;
         const actionsContent = (
           <>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/documento/${doc.id_documento}`}>Ver</Link>
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -103,15 +101,24 @@ const getColumns = (
     {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
-      cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('numero_documento')} fieldName="numero_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />;
+      cell: ({ row }) => {
+        const value = row.getValue('numero_documento') || '-';
+        return <div className="text-sm">{value}</div>;
       }
     },
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
-      cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_emision')} fieldName="fecha_emision" onUpdate={onUpdate} table={table} rowIndex={row.index} inputType='date' />;
+      cell: ({ row }) => {
+        const fecha = row.getValue('fecha_emision');
+        if (!fecha) return <span>-</span>;
+        const date = new Date(fecha as string);
+        const fechaStr = date.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+        return <div className="text-sm">{fechaStr}</div>;
       }
     },
     {
@@ -143,33 +150,28 @@ const getColumns = (
       },
       footer: () => null,
     },
-    // Columna fecha_vencimiento oculta (se mantiene el código por si se necesita en el futuro)
-    // {
-    //   accessorKey: 'fecha_vencimiento',
-    //   header: 'Fecha Documento',
-    //   cell: ({ row, table }) => {
-    //     return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('fecha_vencimiento')} fieldName="fecha_vencimiento" onUpdate={onUpdate} table={table} rowIndex={row.index} inputType='date' />;
-    //   }
-    // },
     {
       accessorKey: 'proveedor',
       header: 'Proveedor',
-      cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('proveedor')} fieldName="proveedor_nombre" onUpdate={onUpdate} table={table} rowIndex={row.index} />;
+      cell: ({ row }) => {
+        const value = row.getValue('proveedor') || '-';
+        return <div className="text-sm">{value}</div>;
       }
     },
     {
       accessorKey: 'cif',
       header: 'CIF',
-      cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('cif')} fieldName="proveedor_cif" onUpdate={onUpdate} table={table} rowIndex={row.index} />;
+      cell: ({ row }) => {
+        const value = row.getValue('cif') || '-';
+        return <div className="text-sm">{value}</div>;
       }
     },
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
-      cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('observaciones')} fieldName="observaciones" onUpdate={onUpdate} table={table} rowIndex={row.index} />;
+      cell: ({ row }) => {
+        const value = row.getValue('observaciones') || '-';
+        return <div className="text-sm">{value}</div>;
       }
     },
     {
@@ -285,6 +287,7 @@ const getColumns = (
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
+  const router = useRouter();
 
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
     // This function is now primarily for optimistic updates if needed
@@ -295,12 +298,22 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     setIsSummarizeOpen(true);
   };
 
+  const handleRowClick = useCallback((doc: Document) => {
+    router.push(`/documento/${doc.id_documento}`);
+  }, [router]);
+
   const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize), [handleUpdate]);
 
   return (
     <>
       <TooltipProvider>
-        <DataTable columns={columns} data={documents} hiddenColumns={hiddenColumns} filename={filename} />
+        <DataTable 
+          columns={columns} 
+          data={documents} 
+          hiddenColumns={hiddenColumns} 
+          filename={filename}
+          onRowClick={handleRowClick}
+        />
       </TooltipProvider>
       <SummarizeDialog 
         doc={selectedDocForSummary}

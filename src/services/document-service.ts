@@ -459,23 +459,49 @@ export async function getDocumentById(id: number): Promise<Document | null> {
         return null;
     }
 }
-export async function getIncidents(): Promise<Document[]> {
-    const [documentRows] = await db.query<DocumentPacket[]>(`
-        SELECT DISTINCT d.*
-        FROM documentos d
-        JOIN incidencias_documento i ON d.id = i.documento_id
-        WHERE i.validado = 0
-        ORDER BY d.fecha_emision DESC
-    `);
+export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
+    try {
+        const user = await getCurrentUser();
+        if (!user) {
+            console.warn('⚠️ [getIncidents] No hay usuario autenticado');
+            return [];
+        }
 
-    return mapDocumentPacketsToDocuments(documentRows);
+        let query = `
+            SELECT DISTINCT d.*,
+                e.nombre_de_empresa as empresa_nombre,
+                e.cif as empresa_cif
+            FROM documentos d
+            JOIN incidencias_documento i ON d.id = i.documento_id
+            LEFT JOIN empresas e ON d.id_de_empresa = e.id
+            WHERE i.validado = 0 
+              AND e.id_de_usuario = ?
+              AND d.id_de_empresa IS NOT NULL
+        `;
+        
+        const params: any[] = [user.id];
+        
+        // Si se especifican empresas, filtrar por ellas
+        if (empresaIds && empresaIds.length > 0) {
+            query += ' AND d.id_de_empresa IN (?)';
+            params.push(empresaIds);
+        }
+        
+        query += ' ORDER BY d.fecha_emision DESC';
+
+        console.log('📝 [getIncidents] Query:', query);
+        console.log('📝 [getIncidents] Params:', params);
+
+        const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+        console.log('📊 [getIncidents] Incidencias encontradas:', documentRows.length);
+
+        return mapDocumentPacketsToDocuments(documentRows);
+    } catch (error) {
+        console.error("❌ [getIncidents] Error:", error);
+        return [];
+    }
 }
-
-const isDateInCurrentQuarter = (date: Date): boolean => {
-    const now = new Date();
-    const getQuarter = (d: Date) => Math.floor(d.getMonth() / 3);
-    return date.getFullYear() === now.getFullYear() && getQuarter(date) === getQuarter(now);
-};
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
     const connection = await db.getConnection();
@@ -914,34 +940,126 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
     return JSON.parse(JSON.stringify(providers));
 }
 
-export async function getProvidersWithStats(): Promise<ProviderWithStats[]> {
-     const [providerRows] = await db.query<ProviderStatsPacket[]>(`
-        SELECT 
-            e.nombre,
-            e.identificador_fiscal,
-            SUM(d.importe_total) as totalSpent,
-            COUNT(DISTINCT d.id) as totalDocuments,
-            COUNT(DISTINCT ld.codigo) as uniqueProducts
-        FROM entidades_documento e
-        JOIN documentos d ON e.documento_id = d.id
-        LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
-        WHERE e.rol IN ('proveedor', 'emisor')
-          AND e.identificador_fiscal IS NOT NULL 
-          AND e.identificador_fiscal != ''
-        GROUP BY e.identificador_fiscal, e.nombre
-        ORDER BY totalSpent DESC;
-    `);
-    
-    const providers: ProviderWithStats[] = providerRows.map(p => ({
-        nombre: p.nombre,
-        identificador_fiscal: p.identificador_fiscal,
-        totalSpent: Number(p.totalSpent),
-        totalDocuments: Number(p.totalDocuments),
-        uniqueProducts: Number(p.uniqueProducts),
-        rol: 'proveedor', // Default value
-    }));
+export async function getProvidersWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
+  if (!companyIds || companyIds.length === 0) return [];
 
-    return JSON.parse(JSON.stringify(providers));
+  const placeholders = companyIds.map(() => '?').join(',');
+  const showCompanyName = companyIds.length > 1;
+
+  const [providerRows] = await db.query<any[]>(`
+    SELECT 
+        e.nombre,
+        e.rol,
+        e.identificador_fiscal,
+        e.direccion,
+        e.telefono,
+        e.email,
+        e.datos_extra,
+        e.fecha_creacion,
+        emp.nombre_de_empresa AS empresaNombre,
+        d.importe_total,
+        d.id as documento_id,
+        ld.codigo
+    FROM entidades_documento e
+    JOIN documentos d ON e.documento_id = d.id
+    LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
+    JOIN empresas emp ON d.id_de_empresa = emp.id
+    WHERE e.rol IN ('proveedor', 'emisor')
+      AND d.id_de_empresa IN (${placeholders})
+  `, companyIds);
+
+  // Agrupar por identificador_fiscal para consolidar duplicados
+  const providerMap = new Map<string, {
+    rol: string;
+    nombre: string;
+    direccion: string | null;
+    identificador_fiscal: string;
+    telefono: string | null;
+    email: string | null;
+    datos_extra: any;
+    fecha_creacion: string | null;
+    empresas: Set<string>;
+    totalSpent: number;
+    documentos: Set<number>;
+    productos: Set<string>;
+  }>();
+
+  providerRows.forEach(row => {
+    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+    
+    if (!providerMap.has(fiscalId)) {
+      providerMap.set(fiscalId, {
+        rol: row.rol,
+        nombre: row.nombre,
+        direccion: row.direccion,
+        identificador_fiscal: row.identificador_fiscal,
+        telefono: row.telefono,
+        email: row.email,
+        datos_extra: row.datos_extra,
+        fecha_creacion: row.fecha_creacion,
+        empresas: new Set(),
+        totalSpent: 0,
+        documentos: new Set(),
+        productos: new Set(),
+      });
+    }
+
+    const provider = providerMap.get(fiscalId)!;
+    
+    // Agregar empresa
+    if (row.empresaNombre) {
+      provider.empresas.add(row.empresaNombre);
+    }
+    
+    // Sumar gasto
+    provider.totalSpent += Number(row.importe_total || 0);
+    
+    // Contar documentos únicos
+    if (row.documento_id) {
+      provider.documentos.add(row.documento_id);
+    }
+    
+    // Contar productos únicos
+    if (row.codigo) {
+      provider.productos.add(row.codigo);
+    }
+  });
+
+  // Convertir Map a Array y formatear
+  const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+    let datosExtra = {};
+    try {
+      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+    } catch {}
+
+    const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
+    
+    // Convertir Set de empresas a string separado por comas
+    const empresasArray = Array.from(p.empresas);
+    const empresaNombre = showCompanyName && empresasArray.length > 0
+      ? empresasArray.join(', ')
+      : undefined;
+
+    return {
+      rol: p.rol || 'N/A',
+      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
+      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
+      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
+      email: p.email || empresaEmisora.EMAIL || 'N/A',
+      totalSpent: p.totalSpent,
+      totalDocuments: p.documentos.size,
+      uniqueProducts: p.productos.size,
+      datos_extra: p.datos_extra || null,
+      fecha_creacion: p.fecha_creacion || null,
+      empresaNombre: empresaNombre,
+    };
+  });
+
+  // Ordenar por gasto total descendente
+  providers.sort((a, b) => b.totalSpent - a.totalSpent);
+
+  return providers;
 }
 
 export async function getAllProducts(): Promise<number> {
@@ -1130,47 +1248,89 @@ export async function getProviderAnalytics(fiscalId: string): Promise<ProviderAn
     return JSON.parse(JSON.stringify(analyticsData));
 }
 
-export async function getIncidentsAnalytics(): Promise<IncidentsAnalyticsData> {
-    const [summary] = await db.query<RowDataPacket[]>(`
-        SELECT 
-            SUM(CASE WHEN validado = 0 THEN 1 ELSE 0 END) as totalOpen,
-            SUM(CASE WHEN validado = 1 THEN 1 ELSE 0 END) as totalValidated
-        FROM incidencias_documento
-    `);
+export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<IncidentsAnalyticsData> {
+    try {
+        const user = await getCurrentUser();
+        if (!user) {
+            console.warn('⚠️ [getIncidentsAnalytics] No hay usuario autenticado');
+            return {
+                totalOpen: 0,
+                totalValidated: 0,
+                byProvider: [],
+                byType: []
+            };
+        }
 
-    const [byProvider] = await db.query<RowDataPacket[]>(`
-        SELECT e.nombre, COUNT(i.id) as count
-        FROM incidencias_documento i
-        JOIN entidades_documento e ON i.documento_id = e.documento_id
-        WHERE i.validado = 0 AND (e.rol = 'proveedor' OR e.rol = 'emisor')
-        GROUP BY e.nombre
-        ORDER BY count DESC
-        LIMIT 5;
-    `);
+        // Preparar filtro de empresas
+        let whereEmpresa = 'AND e2.id_de_usuario = ?';
+        const params: any[] = [user.id];
+        
+        if (empresaIds && empresaIds.length > 0) {
+            whereEmpresa += ' AND d.id_de_empresa IN (?)';
+            params.push(empresaIds);
+        }
 
-    const [byType] = await db.query<RowDataPacket[]>(`
-        SELECT 
-            CASE 
-                WHEN descripcion LIKE '%duplicado%' THEN 'Duplicado'
-                WHEN descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
-                WHEN descripcion LIKE '%incompletos%' THEN 'Datos Incompletos'
-                ELSE 'Otro'
-            END as name,
-            COUNT(id) as count
-        FROM incidencias_documento
-        WHERE validado = 0
-        GROUP BY name
-        ORDER BY count DESC;
-    `);
-    
-    const analyticsData = {
-        totalOpen: Number(summary[0]?.totalOpen || 0),
-        totalValidated: Number(summary[0]?.totalValidated || 0),
-        byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
-        byType: byType.map(t => ({ name: t.name, count: t.count })),
-    };
+        const [summary] = await db.query<RowDataPacket[]>(`
+            SELECT 
+                SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
+                SUM(CASE WHEN i.validado = 1 THEN 1 ELSE 0 END) as totalValidated
+            FROM incidencias_documento i
+            JOIN documentos d ON i.documento_id = d.id
+            JOIN empresas e2 ON d.id_de_empresa = e2.id
+            WHERE 1=1 ${whereEmpresa}
+        `, params);
 
-    return JSON.parse(JSON.stringify(analyticsData));
+        const [byProvider] = await db.query<RowDataPacket[]>(`
+            SELECT e.nombre, COUNT(i.id) as count
+            FROM incidencias_documento i
+            JOIN documentos d ON i.documento_id = d.id
+            JOIN entidades_documento e ON i.documento_id = e.documento_id
+            JOIN empresas e2 ON d.id_de_empresa = e2.id
+            WHERE i.validado = 0 
+              AND (e.rol = 'proveedor' OR e.rol = 'emisor')
+              ${whereEmpresa}
+            GROUP BY e.nombre
+            ORDER BY count DESC
+            LIMIT 5
+        `, params);
+
+        const [byType] = await db.query<RowDataPacket[]>(`
+            SELECT 
+                CASE 
+                    WHEN i.descripcion LIKE '%duplicado%' THEN 'Duplicado'
+                    WHEN i.descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
+                    WHEN i.descripcion LIKE '%incompletos%' THEN 'Datos Incompletos'
+                    ELSE 'Otro'
+                END as name,
+                COUNT(i.id) as count
+            FROM incidencias_documento i
+            JOIN documentos d ON i.documento_id = d.id
+            JOIN empresas e2 ON d.id_de_empresa = e2.id
+            WHERE i.validado = 0
+              ${whereEmpresa}
+            GROUP BY name
+            ORDER BY count DESC
+        `, params);
+        
+        const analyticsData = {
+            totalOpen: Number(summary[0]?.totalOpen || 0),
+            totalValidated: Number(summary[0]?.totalValidated || 0),
+            byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
+            byType: byType.map(t => ({ name: t.name, count: t.count })),
+        };
+
+        console.log('📊 [getIncidentsAnalytics] Resultado:', analyticsData);
+
+        return JSON.parse(JSON.stringify(analyticsData));
+    } catch (error) {
+        console.error("❌ [getIncidentsAnalytics] Error:", error);
+        return {
+            totalOpen: 0,
+            totalValidated: 0,
+            byProvider: [],
+            byType: []
+        };
+    }
 }
 
 async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResult> {
@@ -1191,9 +1351,11 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             };
         }
         
-       const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
+        // ⬅️ CAMBIO: Ahora también obtenemos id_de_empresa
+        const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
             SELECT 
                 d.id,
+                d.id_de_empresa,
                 d.numero_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
@@ -1209,9 +1371,16 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         for (const doc of docsWithDetails) {
             if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
                 const description = `Datos incompletos o faltantes en el documento.`;
-                const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Datos incompletos%']);
+                const [existing] = await connection.query<RowDataPacket[]>(
+                    'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
+                    [doc.id, 'Datos incompletos%']
+                );
                 if (existing.length === 0) {
-                    await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                    // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
+                    await connection.query(
+                        'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
+                        [doc.id, doc.id_de_empresa, description]
+                    );
                     newIncidentsFound++;
                 }
             }
@@ -1220,23 +1389,32 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
 
         // Check for duplicates
-        const docMap = new Map<string, number[]>();
+        const docMap = new Map<string, Array<{id: number, id_de_empresa: number}>>();
         for (const doc of validDocsForAnalysis) {
             const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
             if (!docMap.has(key)) {
                 docMap.set(key, []);
             }
-            docMap.get(key)!.push(doc.id);
+            docMap.get(key)!.push({id: doc.id, id_de_empresa: doc.id_de_empresa});
         }
 
-        for (const [key, ids] of docMap.entries()) {
-            if (ids.length > 1) {
-                duplicates += ids.length;
+        for (const [key, docs] of docMap.entries()) {
+            if (docs.length > 1) {
+                duplicates += docs.length;
+                const ids = docs.map(d => d.id);
                 const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(0, 2).join(' - ')}. IDs: ${ids.join(', ')}`;
-                for (const id of ids) {
-                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [id, 'Documento duplicado%']);
+                
+                for (const doc of docs) {
+                    const [existing] = await connection.query<RowDataPacket[]>(
+                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
+                        [doc.id, 'Documento duplicado%']
+                    );
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [id, description]);
+                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
+                        await connection.query(
+                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
+                            [doc.id, doc.id_de_empresa, description]
+                        );
                         newIncidentsFound++;
                     }
                 }
@@ -1250,9 +1428,16 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                 if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
                     calculationErrors++;
                     const description = `Error de cálculo en el subtotal. La suma de las líneas (${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento (${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
-                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el subtotal%']);
+                    const [existing] = await connection.query<RowDataPacket[]>(
+                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
+                        [doc.id, 'Error de cálculo en el subtotal%']
+                    );
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
+                        await connection.query(
+                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
+                            [doc.id, doc.id_de_empresa, description]
+                        );
                         newIncidentsFound++;
                     }
                 }
@@ -1260,13 +1445,20 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
             // Check 2: Base Amount + Taxes vs Total Amount
             if (doc.sum_cuota_iva !== null) { 
-                 const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
-                if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) { // Tolerance for rounding
+                const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
+                if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) {
                     calculationErrors++;
                     const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
-                    const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', [doc.id, 'Error de cálculo en el total%']);
+                    const [existing] = await connection.query<RowDataPacket[]>(
+                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
+                        [doc.id, 'Error de cálculo en el total%']
+                    );
                     if (existing.length === 0) {
-                        await connection.query('INSERT INTO incidencias_documento (documento_id, descripcion) VALUES (?, ?)', [doc.id, description]);
+                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
+                        await connection.query(
+                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
+                            [doc.id, doc.id_de_empresa, description]
+                        );
                         newIncidentsFound++;
                     }
                 }
@@ -1274,6 +1466,12 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         }
 
         await connection.commit();
+
+        console.log('✅ [analyzeDocuments] Análisis completo:', {
+            newIncidentsFound,
+            duplicates,
+            calculationErrors
+        });
 
         return {
             newIncidentsFound,
@@ -1284,13 +1482,12 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
     } catch (error) {
         await connection.rollback();
-        console.error("Error running document analysis:", error);
+        console.error("❌ [analyzeDocuments] Error:", error);
         throw new Error('Falló el análisis de documentos en el servidor.');
     } finally {
         connection.release();
     }
 }
-
 export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
     const [allDocIds] = await db.query<RowDataPacket[]>('SELECT id FROM documentos');
     const docIds = allDocIds.map(row => row.id);

@@ -1,10 +1,8 @@
-
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle2, ShieldCheck, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History } from "lucide-react";
+import { AlertCircle, CheckCircle2, ShieldCheck, User, Building, Phone, Mail, FileText, Info, Trash2, PlusCircle, FileUp, Box, ChevronsRight, Tag, Percent, ArrowRight, Search, ChevronLeft, ChevronRight, Euro, History, ArrowLeft, X } from "lucide-react";
 import { format } from 'date-fns';
 import { type Document, type IvaDetail, type DocumentLine, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -18,6 +16,7 @@ import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect, KeyboardEvent } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useRouter } from 'next/navigation';
 
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
@@ -68,6 +67,8 @@ interface DocumentViewProps {
 const ITEMS_PER_PAGE = 5;
 
 export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
+    const router = useRouter();
+    
     const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({
         control: form.control,
         name: "lineas"
@@ -233,6 +234,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     
     return (
         <>
+            {/* Botón Volver */}
+            <div className="mb-4">
+                <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => router.back()}
+                    className="gap-2"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver
+                </Button>
+            </div>
+
             {/* General Information Card */}
             <Card>
                 <CardHeader>
