@@ -90,11 +90,22 @@ const getColumns = (
       footer: () => 'Totales',
     },
     {
-      accessorKey: 'empresa_nombre',
-      header: 'Empresa',
+      id: 'empresa_factura',
+      header: 'Cliente',
       cell: ({ row }) => {
-        const nombre = row.getValue('empresa_nombre') || 'Sin empresa';
+        // Buscar la entidad con rol 'cliente' o 'receptor' en la factura
+        const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const nombre = cliente?.nombre || 'Sin cliente';
         return <div className="font-medium text-sm">{nombre}</div>;
+      },
+      footer: () => null,
+    },
+    {
+      id: 'empresa_sistema',
+      header: 'Empresa (Sistema)',
+      cell: ({ row }) => {
+        const nombre = row.original.empresa_nombre || 'Sin empresa';
+        return <div className="text-sm text-muted-foreground">{nombre}</div>;
       },
       footer: () => null,
     },

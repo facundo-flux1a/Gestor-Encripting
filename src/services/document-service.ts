@@ -1500,15 +1500,9 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 export async function getDashboardAnalytics(empresaIds?: number[]): Promise<DashboardAnalytics> {
     const MY_COMPANY_FISCAL_ID = 'B97376321';
 
-    // Preparar parámetros
-    const params: any[] = [];
-    
-    // Filtro base para WHERE con múltiples empresas
-    let whereEmpresa = '';
-    if (empresaIds && empresaIds.length > 0) {
-        whereEmpresa = 'AND d.id_de_empresa IN (?)';
-        params.push(empresaIds);
-    }
+    // Construir parámetros una sola vez
+    const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
+    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
 
     const [kpiRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
@@ -1521,7 +1515,8 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
                 MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE 1=1 ${whereEmpresa}
+            WHERE 1=1 ${whereDocType}
+            ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             GROUP BY d.id
         )
         SELECT
@@ -1533,17 +1528,30 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento i 
            JOIN documentos d2 ON i.documento_id = d2.id 
-           WHERE i.validado = 0 ${whereEmpresa.replace('d.', 'd2.')}) as incidenciasAbiertas,
+           WHERE i.validado = 0 AND LOWER(d2.tipo_documento) LIKE '%factura%' AND LOWER(d2.tipo_documento) NOT LIKE '%(sin confirmar)%'
+           ${hasEmpresaFilter ? 'AND d2.id_de_empresa IN (?)' : ''}) as incidenciasAbiertas,
           (SELECT COUNT(DISTINCT identificador_fiscal) 
            FROM entidades_documento ed 
            JOIN documentos d3 ON ed.documento_id = d3.id 
-           WHERE ed.rol IN ('proveedor', 'emisor') AND ed.identificador_fiscal != ? ${whereEmpresa.replace('d.', 'd3.')}) as totalProveedores,
+           WHERE ed.rol IN ('proveedor', 'emisor') AND ed.identificador_fiscal != ? AND LOWER(d3.tipo_documento) LIKE '%factura%' AND LOWER(d3.tipo_documento) NOT LIKE '%(sin confirmar)%'
+           ${hasEmpresaFilter ? 'AND d3.id_de_empresa IN (?)' : ''}) as totalProveedores,
           (SELECT COUNT(DISTINCT ld.codigo) 
            FROM lineas_documento ld 
            JOIN documentos d4 ON ld.documento_id = d4.id 
-           WHERE ld.codigo IS NOT NULL AND ld.codigo != '' ${whereEmpresa.replace('d.', 'd4.')}) as totalProductos,
-          (SELECT COUNT(*) FROM documentos d5 WHERE 1=1 ${whereEmpresa.replace('d.', 'd5.')}) as totalDocs
-    `, [MY_COMPANY_FISCAL_ID, ...params, ...params, MY_COMPANY_FISCAL_ID, ...params, ...params, ...params]);
+           WHERE ld.codigo IS NOT NULL AND ld.codigo != '' AND LOWER(d4.tipo_documento) LIKE '%factura%' AND LOWER(d4.tipo_documento) NOT LIKE '%(sin confirmar)%'
+           ${hasEmpresaFilter ? 'AND d4.id_de_empresa IN (?)' : ''}) as totalProductos,
+          (SELECT COUNT(*) FROM documentos d5 
+           WHERE LOWER(d5.tipo_documento) LIKE '%factura%' AND LOWER(d5.tipo_documento) NOT LIKE '%(sin confirmar)%'
+           ${hasEmpresaFilter ? 'AND d5.id_de_empresa IN (?)' : ''}) as totalDocs
+    `, [
+        MY_COMPANY_FISCAL_ID,
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        MY_COMPANY_FISCAL_ID,
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasEmpresaFilter ? [empresaIds] : [])
+    ]);
 
     const kpis = kpiRows[0];
     const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
@@ -1559,7 +1567,8 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
                 MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE 1=1 ${whereEmpresa}
+            WHERE LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+            ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             GROUP BY d.id
         )
         SELECT
@@ -1569,7 +1578,7 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         FROM DocTypes dt
         WHERE YEAR(dt.fecha_emision) = YEAR(CURDATE())
         GROUP BY quarter
-    `, [MY_COMPANY_FISCAL_ID, ...params]);
+    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : [])]);
 
     const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
     quarterlyRows.forEach(r => {
@@ -1581,10 +1590,11 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
     const [distributionRows] = await db.query<RowDataPacket[]>(`
         SELECT tipo_documento as name, COUNT(*) as value
         FROM documentos
-        WHERE 1=1 ${whereEmpresa.replace('d.', '')}
+        WHERE LOWER(tipo_documento) LIKE '%factura%' AND LOWER(tipo_documento) NOT LIKE '%(sin confirmar)%'
+        ${hasEmpresaFilter ? 'AND id_de_empresa IN (?)' : ''}
         GROUP BY tipo_documento
         ORDER BY value DESC
-    `, params);
+    `, hasEmpresaFilter ? [empresaIds] : []);
 
     const [ivaRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
@@ -1593,7 +1603,8 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
                 MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE 1=1 ${whereEmpresa}
+            WHERE LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+            ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             GROUP BY d.id
         )
         SELECT
@@ -1604,9 +1615,10 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         JOIN impuestos_documento i ON d.id = i.documento_id
         JOIN DocTypes dt ON d.id = dt.id
         WHERE YEAR(d.fecha_emision) = YEAR(CURDATE()) AND i.tipo_impuesto NOT LIKE '%retencion%'
-        ${whereEmpresa}
+        AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+        ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         GROUP BY quarter
-    `, [MY_COMPANY_FISCAL_ID, ...params, ...params]);
+    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : []), ...(hasEmpresaFilter ? [empresaIds] : [])]);
 
     const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
     ivaRows.forEach(r => {
@@ -1619,12 +1631,13 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         SELECT e.nombre, e.identificador_fiscal, SUM(d.importe_total) as total
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
-        WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') AND e.identificador_fiscal != ?
-        ${whereEmpresa}
+        WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') AND e.identificador_fiscal != ? 
+        AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+        ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         GROUP BY e.nombre, e.identificador_fiscal
         ORDER BY total DESC
         LIMIT 5
-    `, [MY_COMPANY_FISCAL_ID, ...params]);
+    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : [])]);
 
     const analyticsData = {
         kpis: {
