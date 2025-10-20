@@ -42,7 +42,7 @@ export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
     totalSpent: z.coerce.number(),
     totalDocuments: z.coerce.number(),
     uniqueProducts: z.coerce.number(),
-    empresaNombre: z.string().optional(), // ⬅️ AGREGADO
+    empresaNombre: z.string().optional(),
 });
 export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
 
@@ -60,8 +60,8 @@ export const DocumentLineSchema = z.object({
     importe_linea: z.coerce.number(),
     datos_extra: z.any().nullable(),
     fecha_creacion: z.string().optional().nullable(),
-    fecha_emision: z.string().optional(), // for product listings
-    numero_documento: z.string().optional(), // for product history
+    fecha_emision: z.string().optional(),
+    numero_documento: z.string().optional(),
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
@@ -183,3 +183,14 @@ export type CreateDocumentPayload = {
   observaciones?: string | null;
   empresa_id: number;
 };
+
+// ⭐ HELPER: Calcular trimestre desde fecha
+export function calcularTrimestre(fecha: Date | string): number {
+  const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  const mes = date.getMonth() + 1; // 0-11 -> 1-12
+  
+  if (mes >= 1 && mes <= 3) return 1;
+  if (mes >= 4 && mes <= 6) return 2;
+  if (mes >= 7 && mes <= 9) return 3;
+  return 4;
+}

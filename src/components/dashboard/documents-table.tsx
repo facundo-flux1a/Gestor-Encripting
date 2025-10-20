@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { type Document } from '@/lib/types';
+import { type Document, calcularTrimestre } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -156,6 +156,39 @@ const getColumns = (
           <div className="text-sm whitespace-nowrap">
             <div>{fechaStr}</div>
             <div className="text-xs text-muted-foreground">{horaStr}</div>
+          </div>
+        );
+      },
+      footer: () => null,
+    },
+    {
+      id: 'trimestre',
+      header: 'Trimestre',
+      cell: ({ row }) => {
+        const fecha = row.getValue('fecha_creacion');
+        if (!fecha) {
+          return <span className="text-muted-foreground text-xs">Sin fecha</span>;
+        }
+        
+        const date = new Date(fecha as string);
+        const trimestre = calcularTrimestre(date);
+        const anio = date.getFullYear();
+        
+        // Colores diferentes para cada trimestre
+        const colorClasses = {
+          1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+          2: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+          3: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+          4: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+        };
+        
+        const colorClass = colorClasses[trimestre as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800';
+        
+        return (
+          <div className="text-sm">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${colorClass}`}>
+              Q{trimestre} {anio}
+            </span>
           </div>
         );
       },

@@ -778,49 +778,72 @@ export async function moveDocument(
   /**
  * Elimina un documento del usuario actual
  */
+/**
+ * Elimina un documento del usuario actual
+ */
+/**
+ * Elimina un documento del usuario actual
+ */
+/**
+ * Elimina un documento del usuario actual
+ */
+/**
+ * Elimina un documento del usuario actual
+ */
 export async function deleteDocument(
-    documentId: number,
-    userId: number
-  ): Promise<{ success: boolean; error?: string }> {
+    documentId: number
+): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log('🗑️ [deleteDocument] Iniciando eliminación de documento:', documentId);
-  
-      // Verificar que el documento pertenece a una empresa del usuario
-      const [docCheck] = await db.query<RowDataPacket[]>(
-        `SELECT d.id_documento 
-         FROM documentos d
-         INNER JOIN empresas e ON d.id_de_empresa = e.id
-         WHERE d.id_documento = ? AND e.id_de_usuario = ?`,
-        [documentId, userId]
-      );
-  
-      if (docCheck.length === 0) {
-        console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
-        return { success: false, error: 'Documento no encontrado' };
-      }
-  
-      // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
-      await db.query(
-        'DELETE FROM documentos WHERE id_documento = ?',
-        [documentId]
-      );
-  
-      console.log('✅ [deleteDocument] Documento eliminado correctamente');
-  
-      // Revalidar rutas
-      revalidatePath('/documents');
-      revalidatePath('/dashboard');
-  
-      return { success: true };
-  
+        console.log('🗑️ [deleteDocument] Iniciando eliminación de documento:', documentId);
+
+        // Obtener el usuario actual
+        const user = await getCurrentUser();
+        if (!user) {
+            console.error('❌ [deleteDocument] No hay usuario autenticado');
+            return { success: false, error: 'Usuario no autenticado' };
+        }
+
+        // Verificar que el documento pertenece a una empresa del usuario
+        const [docCheck] = await db.query<RowDataPacket[]>(
+            `SELECT d.id 
+             FROM documentos d
+             INNER JOIN empresas e ON d.id_de_empresa = e.id
+             WHERE d.id = ? AND e.id_de_usuario = ?`,
+            [documentId, user.id]
+        );
+
+        if (docCheck.length === 0) {
+            console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
+            return { success: false, error: 'Documento no encontrado' };
+        }
+
+        // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
+        const [result] = await db.query<OkPacket>(
+            'DELETE FROM documentos WHERE id = ?',
+            [documentId]
+        );
+
+        if (result.affectedRows === 0) {
+            console.error('❌ [deleteDocument] No se pudo eliminar el documento');
+            return { success: false, error: 'No se pudo eliminar el documento' };
+        }
+
+        console.log('✅ [deleteDocument] Documento eliminado correctamente');
+
+        // Revalidar rutas
+        revalidatePath('/documents');
+        revalidatePath('/dashboard');
+
+        return { success: true };
+
     } catch (error) {
-      console.error('❌ [deleteDocument] Error:', error);
-      return { 
-        success: false, 
-        error: 'Error al eliminar el documento' 
-      };
+        console.error('❌ [deleteDocument] Error:', error);
+        return { 
+            success: false, 
+            error: 'Error al eliminar el documento' 
+        };
     }
-  }
+}
   
   /**
    * Elimina una empresa y TODOS sus documentos asociados

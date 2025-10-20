@@ -1,8 +1,6 @@
-
-
 'use client';
 
-import { useEffect, useState, useMemo, KeyboardEvent } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { getDocumentById, updateDocument, deleteDocument, validateDocumentIncidents } from '@/services/document-service';
@@ -12,7 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DocumentView } from '@/components/dashboard/document-view';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, X, Save, ExternalLink, Trash2, ShieldCheck, Eye, Lock } from 'lucide-react';
+import { Loader2, Edit, X, Save, Trash2, ShieldCheck, Eye, Lock } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExportButton } from '@/components/dashboard/export-button';
@@ -122,12 +120,22 @@ export default function DocumentoPage() {
     if (!doc) return;
     setIsDeleting(true);
     try {
-        await deleteDocument(doc.id_documento);
-        toast({
-            title: "Documento Eliminado",
-            description: "El documento ha sido eliminado correctamente."
-        });
-        // The service function handles the redirect
+        const result = await deleteDocument(doc.id_documento);
+        
+        if (result.success) {
+            toast({
+                title: "Documento Eliminado",
+                description: "El documento ha sido eliminado correctamente."
+            });
+            // Redirigir manualmente desde el cliente
+            window.location.href = '/documents';
+        } else {
+            toast({
+                title: "Error",
+                description: result.error || "No se pudo eliminar el documento.",
+                variant: "destructive",
+            });
+        }
     } catch (error) {
         console.error("Failed to delete document", error);
         toast({
@@ -138,7 +146,7 @@ export default function DocumentoPage() {
     } finally {
         setIsDeleting(false);
     }
-  };
+};
 
   const handleValidate = async () => {
     if (!doc || !doc.incidencia) return;
