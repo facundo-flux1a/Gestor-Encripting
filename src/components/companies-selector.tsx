@@ -2,16 +2,24 @@
 
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider'; 
-import { Plus, ChevronDown, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +30,269 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+interface Company {
+  id: number;
+  name: string;
+  nombre_fiscal?: string;
+  CIF: string;
+  mail_de_carga?: string;
+}
+
+// Función de validación de email
+const isValidEmail = (email: string): boolean => {
+  if (!email.trim()) return true; // Email vacío es válido (campo opcional)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+};
+
+// Componente separado para el formulario de creación
+const CreateCompanyFormComponent = React.memo(({ 
+  onSubmit, 
+  isCreating 
+}: { 
+  onSubmit: (data: any) => void;
+  isCreating: boolean;
+}) => {
+  const nameRef = React.useRef<HTMLInputElement>(null);
+  const fiscalRef = React.useRef<HTMLInputElement>(null);
+  const cifRef = React.useRef<HTMLInputElement>(null);
+  const emailRef = React.useRef<HTMLInputElement>(null);
+  const [emailError, setEmailError] = React.useState<string>('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const email = emailRef.current?.value || '';
+    
+    // Validar email antes de enviar
+    if (email && !isValidEmail(email)) {
+      setEmailError('Formato de email inválido');
+      return;
+    }
+    
+    setEmailError('');
+    
+    onSubmit({
+      name: nameRef.current?.value || '',
+      nombreFiscal: fiscalRef.current?.value || '',
+      cif: cifRef.current?.value || '',
+      mailDeCarga: email,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="company-name" className="text-sm font-medium">
+            Nombre de empresa *
+          </Label>
+          <span title="El nombre de empresa que se mostrará" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          ref={nameRef}
+          id="company-name"
+          placeholder="Ej: Mi Empresa S.L."
+          autoComplete="off"
+          disabled={isCreating}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="company-fiscal" className="text-sm font-medium">
+            Nombre fiscal <span className="text-muted-foreground">(opcional)</span>
+          </Label>
+          <span title="Nombre Fiscal de la Empresa" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          ref={fiscalRef}
+          id="company-fiscal"
+          placeholder="Ej: Mi Empresa Sociedad Limitada"
+          autoComplete="off"
+          disabled={isCreating}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="company-cif" className="text-sm font-medium">
+            CIF *
+          </Label>
+          <span title="Nombre del sistema de identificación tributaria" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          ref={cifRef}
+          id="company-cif"
+          placeholder="Ej: B12345678"
+          autoComplete="off"
+          disabled={isCreating}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="company-email" className="text-sm font-medium">
+            Mail de carga <span className="text-muted-foreground">(opcional)</span>
+          </Label>
+          <span title="Dirección de correo electrónico desde el cual cargar documentos" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          ref={emailRef}
+          id="company-email"
+          type="email"
+          placeholder="Ej: documentos@miempresa.com"
+          autoComplete="off"
+          disabled={isCreating}
+          onChange={(e) => {
+            // Validar en tiempo real
+            if (e.target.value && !isValidEmail(e.target.value)) {
+              setEmailError('Formato de email inválido');
+            } else {
+              setEmailError('');
+            }
+          }}
+        />
+        {emailError && (
+          <p className="text-sm text-destructive">{emailError}</p>
+        )}
+      </div>
+    </form>
+  );
+});
+
+CreateCompanyFormComponent.displayName = 'CreateCompanyFormComponent';
+
+// ✅ Componente CORREGIDO para edición - CON VALUES y useEffect
+const EditCompanyFormComponent = React.memo(({ 
+  company,
+  onEmailValidation
+}: { 
+  company: Company;
+  onEmailValidation: (isValid: boolean) => void;
+}) => {
+  const [localName, setLocalName] = React.useState(company.name || '');
+  const [localFiscal, setLocalFiscal] = React.useState(company.nombre_fiscal ?? '');
+  const [localCIF, setLocalCIF] = React.useState(company.CIF || '');
+  const [localEmail, setLocalEmail] = React.useState(company.mail_de_carga ?? '');
+  const [emailError, setEmailError] = React.useState<string>('');
+
+  // ✅ AGREGADO: useEffect para actualizar valores cuando cambia la empresa
+  React.useEffect(() => {
+    setLocalName(company.name || '');
+    setLocalFiscal(company.nombre_fiscal || '');
+    setLocalCIF(company.CIF || '');
+    setLocalEmail(company.mail_de_carga || '');
+  }, [company]);
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalEmail(value);
+    
+    // Validar email
+    if (value && !isValidEmail(value)) {
+      setEmailError('Formato de email inválido');
+      onEmailValidation(false);
+    } else {
+      setEmailError('');
+      onEmailValidation(true);
+    }
+  };
+
+  return (
+    <form id={`edit-form-${company.id}`} className="space-y-4">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="edit-company-name" className="text-sm font-medium">
+            Nombre de empresa *
+          </Label>
+          <span title="El nombre de empresa que se mostrará" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          id="edit-company-name"
+          name="name"
+          value={localName}
+          onChange={(e) => setLocalName(e.target.value)}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="edit-company-fiscal" className="text-sm font-medium">
+            Nombre fiscal <span className="text-muted-foreground">(opcional)</span>
+          </Label>
+          <span title="Nombre Fiscal de la Empresa" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          id="edit-company-fiscal"
+          name="nombreFiscal"
+          placeholder="Ej: Mi Empresa Sociedad Limitada"
+          value={localFiscal}
+          onChange={(e) => setLocalFiscal(e.target.value)}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="edit-company-cif" className="text-sm font-medium">
+            CIF <span className="text-muted-foreground">(opcional)</span>
+          </Label>
+          <span title="Nombre del sistema de identificación tributaria" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          id="edit-company-cif"
+          name="cif"
+          placeholder="Ej: B12345678"
+          value={localCIF}
+          onChange={(e) => setLocalCIF(e.target.value)}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="edit-company-email" className="text-sm font-medium">
+            Mail de carga <span className="text-muted-foreground">(opcional)</span>
+          </Label>
+          <span title="Dirección de correo electrónico desde el cual cargar documentos" className="cursor-help">
+            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+          </span>
+        </div>
+        <Input
+          id="edit-company-email"
+          name="mailDeCarga"
+          type="email"
+          placeholder="Ej: documentos@miempresa.com"
+          value={localEmail}
+          onChange={handleEmailChange}
+          autoComplete="off"
+        />
+        {emailError && (
+          <p className="text-sm text-destructive">{emailError}</p>
+        )}
+      </div>
+    </form>
+  );
+});
+
+EditCompanyFormComponent.displayName = 'EditCompanyFormComponent';
 
 export function CompaniesSelector() {
   const { 
@@ -37,11 +308,11 @@ export function CompaniesSelector() {
   const [isCreating, setIsCreating] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [companyToDelete, setCompanyToDelete] = React.useState<{ id: number; name: string; docCount: number } | null>(null);
-  const [newCompany, setNewCompany] = React.useState({
-    name: '',
-    nombreFiscal: '',
-    cif: '',
-  });
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+  const [editingCompany, setEditingCompany] = React.useState<Company | null>(null);
+  const [originalCompany, setOriginalCompany] = React.useState<Company | null>(null);
+  const [isEmailValid, setIsEmailValid] = React.useState(true);
 
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -91,11 +362,21 @@ export function CompaniesSelector() {
     };
   }, []);
 
-  const handleCreateCompany = async () => {
-    if (!newCompany.name.trim() || !newCompany.cif.trim()) {
+  const handleCreateCompany = React.useCallback(async (data: any) => {
+    if (!data.name.trim() || !data.cif.trim()) {
       toast({
         title: "Error",
         description: "El nombre y CIF son obligatorios",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar email si se proporciona
+    if (data.mailDeCarga && !isValidEmail(data.mailDeCarga)) {
+      toast({
+        title: "Error",
+        description: "El formato del email es inválido",
         variant: "destructive",
       });
       return;
@@ -106,15 +387,15 @@ export function CompaniesSelector() {
       const response = await fetch('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCompany),
+        body: JSON.stringify(data),
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const updatedCompanies = [...availableCompanies, data.company];
+        const responseData = await response.json();
+        const updatedCompanies = [...availableCompanies, responseData.company];
         setAvailableCompanies(updatedCompanies);
         setCompanies(updatedCompanies);
-        setNewCompany({ name: '', nombreFiscal: '', cif: '' });
+        setIsCreateDialogOpen(false);
         toast({
           title: "Éxito",
           description: "Empresa creada correctamente",
@@ -136,30 +417,155 @@ export function CompaniesSelector() {
     } finally {
       setIsCreating(false);
     }
+  }, [availableCompanies, setCompanies, toast]);
+
+  const handleEditClick = (company: Company) => {
+    setEditingCompany(company);
+    setOriginalCompany({ ...company }); // Guardar valores originales
+    setIsEditDialogOpen(true);
+    setIsEmailValid(true);
+  };
+
+  const handleSaveCompany = async () => {
+    if (!editingCompany || !originalCompany) return;
+
+    try {
+      const formElement = document.getElementById(`edit-form-${editingCompany.id}`) as HTMLFormElement;
+      if (!formElement) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo leer el formulario',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const formData = new FormData(formElement);
+      const name = (formData.get('name') as string)?.trim();
+      const nombreFiscal = (formData.get('nombreFiscal') as string)?.trim();
+      const cif = (formData.get('cif') as string)?.trim();
+      const mailDeCarga = (formData.get('mailDeCarga') as string)?.trim();
+
+      // ✅ PASO 1: Detectar QUÉ cambió
+      const nameChanged = name !== originalCompany.name;
+      const fiscalChanged = nombreFiscal !== (originalCompany.nombre_fiscal || '');
+      const cifChanged = cif !== (originalCompany.CIF || '');
+      const emailChanged = mailDeCarga !== (originalCompany.mail_de_carga || '');
+
+      // ✅ PASO 2: Verificar si hay cambios ANTES de validar
+      if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged) {
+        toast({
+          title: 'Sin cambios',
+          description: 'No se detectaron cambios en la empresa',
+        });
+        setIsEditDialogOpen(false);
+        setEditingCompany(null);
+        setOriginalCompany(null);
+        return;
+      }
+
+      // ✅ PASO 3: Validar SOLO los campos que cambiaron
+      if (nameChanged && !name) {
+        toast({
+          title: 'Error',
+          description: 'El nombre no puede estar vacío',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (emailChanged && mailDeCarga && !isValidEmail(mailDeCarga)) {
+        toast({
+          title: 'Error',
+          description: 'El formato del email es inválido',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // ✅ PASO 4: Construir payload SOLO con campos que cambiaron
+      const payload: any = {};
+
+      if (nameChanged) {
+        payload.name = name;
+      }
+
+      if (fiscalChanged) {
+        payload.nombreFiscal = nombreFiscal || null;
+      }
+
+      if (cifChanged) {
+        payload.cif = cif || null;
+      }
+
+      if (emailChanged) {
+        payload.mailDeCarga = mailDeCarga || null;
+      }
+
+      console.log('📤 Enviando solo campos modificados:', payload);
+
+      setIsCreating(true);
+
+      const response = await fetch(`/api/companies/${editingCompany.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al actualizar la empresa');
+      }
+
+      if (data.company) {
+        setCompanies((prev) =>
+          prev.map((c) =>
+            c.id === editingCompany.id ? data.company : c
+          )
+        );
+        setAvailableCompanies((prev) =>
+          prev.map((c) =>
+            c.id === editingCompany.id ? data.company : c
+          )
+        );
+      }
+
+      toast({
+        title: 'Éxito',
+        description: 'Empresa actualizada correctamente',
+      });
+
+      setEditingCompany(null);
+      setOriginalCompany(null);
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Error al actualizar la empresa',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleDeleteClick = async (companyId: number, companyName: string) => {
-    console.log('🗑️ [CompaniesSelector] handleDeleteClick llamado:', { companyId, companyName });
-    
     try {
-      console.log('📡 [CompaniesSelector] Obteniendo documentos...');
-      const response = await fetch('/api/documents');
-      console.log('📡 [CompaniesSelector] Response status:', response.status);
+      const response = await fetch(`/api/companies/${companyId}`);
       
       if (response.ok) {
-        const documents = await response.json();
-        console.log('📄 [CompaniesSelector] Documentos obtenidos:', documents.length);
-        const docCount = documents.filter((doc: any) => doc.empresa_id === companyId).length;
-        console.log('📊 [CompaniesSelector] Documentos de esta empresa:', docCount);
+        const data = await response.json();
+        const docCount = data.count || 0;
         
-        console.log('✅ [CompaniesSelector] Abriendo diálogo de confirmación');
         setCompanyToDelete({ 
           id: companyId, 
           name: companyName,
           docCount 
         });
       } else {
-        console.error('❌ [CompaniesSelector] Error al obtener documentos:', response.status);
         setCompanyToDelete({ 
           id: companyId, 
           name: companyName,
@@ -167,7 +573,7 @@ export function CompaniesSelector() {
         });
       }
     } catch (error) {
-      console.error('❌ [CompaniesSelector] Error al contar documentos:', error);
+      console.error('Error al contar documentos:', error);
       setCompanyToDelete({ 
         id: companyId, 
         name: companyName,
@@ -179,7 +585,6 @@ export function CompaniesSelector() {
   const handleDeleteCompany = async () => {
     if (!companyToDelete) return;
 
-    console.log('🗑️ [CompaniesSelector] Iniciando eliminación:', companyToDelete);
     setIsDeleting(true);
     try {
       const response = await fetch(`/api/companies/${companyToDelete.id}`, {
@@ -187,7 +592,6 @@ export function CompaniesSelector() {
       });
 
       const data = await response.json();
-      console.log('📡 [CompaniesSelector] Respuesta del servidor:', data);
 
       if (response.ok) {
         const updatedCompanies = availableCompanies.filter(c => c.id !== companyToDelete.id);
@@ -198,6 +602,10 @@ export function CompaniesSelector() {
           toggleCompanyId(companyToDelete.id);
         }
 
+        setIsEditDialogOpen(false);
+        setEditingCompany(null);
+        setOriginalCompany(null);
+
         toast({
           title: "Éxito",
           description: data.documentsDeleted 
@@ -205,10 +613,8 @@ export function CompaniesSelector() {
             : "Empresa eliminada correctamente",
         });
         
-        console.log('✅ [CompaniesSelector] Recargando página...');
         window.location.reload();
       } else {
-        console.error('❌ [CompaniesSelector] Error del servidor:', data);
         toast({
           title: "Error",
           description: data.error || "Error al eliminar la empresa",
@@ -216,7 +622,6 @@ export function CompaniesSelector() {
         });
       }
     } catch (error) {
-      console.error('❌ [CompaniesSelector] Error en catch:', error);
       toast({
         title: "Error",
         description: "Error al eliminar la empresa",
@@ -245,7 +650,7 @@ export function CompaniesSelector() {
       const documentData = e.dataTransfer.getData('application/json');
       const document = JSON.parse(documentData);
 
-      if (document.empresa_id === empresaId) {
+      if (document.id_de_empresa === empresaId) {
         toast({
           title: "Sin cambios",
           description: "El documento ya pertenece a esta empresa",
@@ -284,7 +689,33 @@ export function CompaniesSelector() {
     }
   };
 
-  // Componente de AlertDialog reutilizable
+  // ✅ COMPONENTE CORREGIDO: Warning que verifica correctamente null/undefined/vacío
+  const CompanyWithWarning = ({ company, labelId }: { company: Company; labelId: string }) => {
+    const hasNoEmail = 
+      company.mail_de_carga === null || 
+      company.mail_de_carga === undefined || 
+      (typeof company.mail_de_carga === 'string' && company.mail_de_carga.trim() === '');
+    
+    return (
+      <div className="flex items-center gap-2 flex-1">
+        {hasNoEmail && (
+          <span 
+            title="Esta empresa no tiene configurado un mail de carga. No podrás subir documentos desde el correo electrónico."
+            className="cursor-help text-amber-500"
+          >
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+        )}
+        <Label 
+          htmlFor={labelId}
+          className="flex-1 cursor-pointer text-sm"
+        >
+          {company.name}
+        </Label>
+      </div>
+    );
+  };
+
   const DeleteAlertDialog = () => (
     <AlertDialog open={companyToDelete !== null} onOpenChange={() => setCompanyToDelete(null)}>
       <AlertDialogContent>
@@ -293,31 +724,33 @@ export function CompaniesSelector() {
             <AlertTriangle className="h-5 w-5" />
             ¿Eliminar empresa y todos sus documentos?
           </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-3">
-            <div>
-              Esta acción <strong className="text-destructive">NO se puede deshacer</strong>.
-            </div>
-            {companyToDelete && (
-              <>
-                <div className="p-3 bg-muted rounded">
-                  <div className="font-semibold">{companyToDelete.name}</div>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {companyToDelete.docCount === 0 
-                      ? 'No tiene documentos asociados'
-                      : `Tiene ${companyToDelete.docCount} documento(s) asociado(s)`
-                    }
-                  </div>
-                </div>
-                {companyToDelete.docCount > 0 && (
-                  <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      Se eliminarán <strong>{companyToDelete.docCount} documento(s)</strong> junto con la empresa de forma permanente.
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p>
+                Esta acción <strong className="text-destructive">NO se puede deshacer</strong>.
+              </p>
+              {companyToDelete && (
+                <>
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">{companyToDelete.name}</div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {companyToDelete.docCount === 0 
+                        ? 'No tiene documentos asociados'
+                        : `Tiene ${companyToDelete.docCount} documento(s) asociado(s)`
+                      }
                     </div>
                   </div>
-                )}
-              </>
-            )}
+                  {companyToDelete.docCount > 0 && (
+                    <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded">
+                      <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        Se eliminarán <strong>{companyToDelete.docCount} documento(s)</strong> junto con la empresa de forma permanente.
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -341,33 +774,49 @@ export function CompaniesSelector() {
   if (availableCompanies.length === 0) {
     return (
       <>
-        <div className="space-y-2">
+        <div className="space-y-4">
           <div className="text-sm text-muted-foreground">No hay empresas</div>
-          <div className="space-y-2">
-            <Input
-              placeholder="Nombre de empresa"
-              value={newCompany.name}
-              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
-            />
-            <Input
-              placeholder="Nombre fiscal (opcional)"
-              value={newCompany.nombreFiscal}
-              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
-            />
-            <Input
-              placeholder="CIF"
-              value={newCompany.cif}
-              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
-            />
-            <Button 
-              onClick={handleCreateCompany} 
-              disabled={isCreating}
-              className="w-full"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {isCreating ? 'Creando...' : 'Crear Primera Empresa'}
-            </Button>
-          </div>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full">
+                <Plus className="mr-2 h-4 w-4" />
+                Agregar Empresa
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Crear nueva empresa</DialogTitle>
+                <DialogDescription>
+                  Complete los datos de la nueva empresa
+                </DialogDescription>
+              </DialogHeader>
+              <CreateCompanyFormComponent 
+                onSubmit={handleCreateCompany}
+                isCreating={isCreating}
+              />
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                  disabled={isCreating}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    const form = document.querySelector('form');
+                    if (form) {
+                      const event = new Event('submit', { bubbles: true, cancelable: true });
+                      form.dispatchEvent(event);
+                    }
+                  }}
+                  disabled={isCreating}
+                >
+                  {isCreating ? 'Creando...' : 'Crear Empresa'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         <DeleteAlertDialog />
       </>
@@ -383,36 +832,31 @@ export function CompaniesSelector() {
           </div>
           
           {availableCompanies.map((company) => (
-            <div
-              key={company.id}
-              className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
-              onDragOver={(e) => handleDragOver(e, company.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, company.id)}
-            >
-              <Checkbox
-                id={`company-${company.id}`}
-                checked={selectedCompanyIds.includes(company.id)}
-                onCheckedChange={() => toggleCompanyId(company.id)}
-              />
-              <Label 
-                htmlFor={`company-${company.id}`}
-                className="flex-1 cursor-pointer text-sm"
+            <div key={company.id}>
+              <div
+                className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
+                onDragOver={(e) => handleDragOver(e, company.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, company.id)}
               >
-                {company.name}
-              </Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log('🖱️ [CompaniesSelector] Click en botón eliminar');
-                  handleDeleteClick(company.id, company.name);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Checkbox
+                  id={`company-${company.id}`}
+                  checked={selectedCompanyIds.includes(company.id)}
+                  onCheckedChange={() => toggleCompanyId(company.id)}
+                />
+                <CompanyWithWarning company={company} labelId={`company-${company.id}`} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-primary/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditClick(company);
+                  }}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
 
@@ -420,33 +864,103 @@ export function CompaniesSelector() {
             {isDragging ? '🎯 Suelta el documento en una empresa' : '💡 Arrastra documentos aquí para moverlos de empresa'}
           </p>
 
-          <div className="space-y-2 pt-2 border-t">
-            <Input
-              placeholder="Nombre de empresa"
-              value={newCompany.name}
-              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
-            />
-            <Input
-              placeholder="Nombre fiscal (opcional)"
-              value={newCompany.nombreFiscal}
-              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
-            />
-            <Input
-              placeholder="CIF"
-              value={newCompany.cif}
-              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
-            />
-            <Button 
-              onClick={handleCreateCompany} 
-              disabled={isCreating}
-              className="w-full"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {isCreating ? 'Creando...' : 'Nueva'}
-            </Button>
-          </div>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full" size="sm">
+                <Plus className="mr-2 h-4 w-4" />
+                Agregar Empresa
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Crear nueva empresa</DialogTitle>
+                <DialogDescription>
+                  Complete los datos de la nueva empresa
+                </DialogDescription>
+              </DialogHeader>
+              <CreateCompanyFormComponent 
+                onSubmit={handleCreateCompany}
+                isCreating={isCreating}
+              />
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                  disabled={isCreating}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    const form = document.querySelector('form');
+                    if (form) {
+                      const event = new Event('submit', { bubbles: true, cancelable: true });
+                      form.dispatchEvent(event);
+                    }
+                  }}
+                  disabled={isCreating}
+                >
+                  {isCreating ? 'Creando...' : 'Crear Empresa'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Configurar empresa</DialogTitle>
+              <DialogDescription>
+                Modifica los datos de la empresa o elimínala
+              </DialogDescription>
+            </DialogHeader>
+            {editingCompany && (
+              <EditCompanyFormComponent 
+                key={editingCompany.id}
+                company={editingCompany}
+                onEmailValidation={setIsEmailValid}
+              />
+            )}
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto sm:mr-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (editingCompany) {
+                    handleDeleteClick(editingCompany.id, editingCompany.name);
+                  }
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar Empresa
+              </Button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  className="flex-1 sm:flex-none"
+                  onClick={() => {
+                    setIsEditDialogOpen(false);
+                    setEditingCompany(null);
+                    setOriginalCompany(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="button"
+                  className="flex-1 sm:flex-none"
+                  onClick={handleSaveCompany}
+                  disabled={isCreating || !isEmailValid}
+                >
+                  {isCreating ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <DeleteAlertDialog />
       </>
     );
@@ -473,73 +987,80 @@ export function CompaniesSelector() {
         <PopoverContent 
           className="w-[300px] p-0" 
           align="start"
-          onInteractOutside={(e) => {
-            if (isDragging) {
-              e.preventDefault();
-            }
-          }}
         >
           <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
             {availableCompanies.map((company) => (
-              <div
-                key={company.id}
-                className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
-                onDragOver={(e) => handleDragOver(e, company.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, company.id)}
-              >
-                <Checkbox
-                  id={`company-popover-${company.id}`}
-                  checked={selectedCompanyIds.includes(company.id)}
-                  onCheckedChange={() => toggleCompanyId(company.id)}
-                />
-                <Label 
-                  htmlFor={`company-popover-${company.id}`}
-                  className="flex-1 cursor-pointer text-sm"
+              <div key={company.id}>
+                <div
+                  className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
+                  onDragOver={(e) => handleDragOver(e, company.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, company.id)}
                 >
-                  {company.name}
-                </Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log('🖱️ [CompaniesSelector] Click en botón eliminar (popover)');
-                    handleDeleteClick(company.id, company.name);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                  <Checkbox
+                    id={`company-popover-${company.id}`}
+                    checked={selectedCompanyIds.includes(company.id)}
+                    onCheckedChange={() => toggleCompanyId(company.id)}
+                  />
+                  <CompanyWithWarning company={company} labelId={`company-popover-${company.id}`} />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 hover:bg-primary/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditClick(company);
+                    }}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="border-t p-4 space-y-2">
-            <Input
-              placeholder="Nombre de empresa"
-              value={newCompany.name}
-              onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
-            />
-            <Input
-              placeholder="Nombre fiscal (opcional)"
-              value={newCompany.nombreFiscal}
-              onChange={(e) => setNewCompany({ ...newCompany, nombreFiscal: e.target.value })}
-            />
-            <Input
-              placeholder="CIF"
-              value={newCompany.cif}
-              onChange={(e) => setNewCompany({ ...newCompany, cif: e.target.value })}
-            />
-            <Button 
-              onClick={handleCreateCompany} 
-              disabled={isCreating}
-              className="w-full"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {isCreating ? 'Creando...' : 'Nueva Empresa'}
-            </Button>
+          <div className="border-t p-4">
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full" size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Agregar Empresa
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Crear nueva empresa</DialogTitle>
+                  <DialogDescription>
+                    Complete los datos de la nueva empresa
+                  </DialogDescription>
+                </DialogHeader>
+                <CreateCompanyFormComponent 
+                  onSubmit={handleCreateCompany}
+                  isCreating={isCreating}
+                />
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    disabled={isCreating}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      const form = document.querySelector('form');
+                      if (form) {
+                        const event = new Event('submit', { bubbles: true, cancelable: true });
+                        form.dispatchEvent(event);
+                      }
+                    }}
+                    disabled={isCreating}
+                  >
+                    {isCreating ? 'Creando...' : 'Crear Empresa'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <p className="text-xs text-muted-foreground p-2 border-t">
@@ -547,6 +1068,61 @@ export function CompaniesSelector() {
           </p>
         </PopoverContent>
       </Popover>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Configurar empresa</DialogTitle>
+            <DialogDescription>
+              Modifica los datos de la empresa o elimínala
+            </DialogDescription>
+          </DialogHeader>
+          {editingCompany && (
+            <EditCompanyFormComponent 
+              key={editingCompany.id}
+              company={editingCompany}
+              onEmailValidation={setIsEmailValid}
+            />
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="destructive"
+              className="w-full sm:w-auto sm:mr-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (editingCompany) {
+                  handleDeleteClick(editingCompany.id, editingCompany.name);
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar Empresa
+            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingCompany(null);
+                  setOriginalCompany(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="button"
+                className="flex-1 sm:flex-none"
+                onClick={handleSaveCompany}
+                disabled={isCreating || !isEmailValid}
+              >
+                {isCreating ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <DeleteAlertDialog />
     </>
   );

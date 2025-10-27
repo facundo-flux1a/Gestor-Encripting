@@ -331,12 +331,12 @@ export default function DocumentoPage() {
             </Form>
       </TooltipProvider>
       <DeleteConfirmationDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onConfirm={handleDelete}
-        documentNumber={doc.numero_factura}
-        isDeleting={isDeleting}
-      />
+  isOpen={isDeleteDialogOpen}
+  onClose={() => setIsDeleteDialogOpen(false)}
+  onConfirm={handleDelete}
+  documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
+  isDeleting={isDeleting}
+/>
       <DocumentPreviewDialog
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}

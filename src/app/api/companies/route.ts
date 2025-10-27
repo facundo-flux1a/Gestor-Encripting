@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCompanies, createCompany } from '@/services/document-service';
+import { createCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
+import db from '@/lib/db';
+import type { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
-//asdasdasds
-// GET - Obtener empresasssssssss
+
+// GET - Obtener empresas (CON mail_de_carga)
 export async function GET() {
   try {
     console.log('🏢 [API-COMPANIES] Iniciando GET...');
@@ -18,10 +20,24 @@ export async function GET() {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
     
-    const companies = await getCompanies();
+    // ✅ QUERY DIRECTA: Asegurar que traiga TODOS los campos incluido mail_de_carga
+    const [companies] = await db.query<RowDataPacket[]>(
+      `SELECT 
+        id,
+        nombre_de_empresa as name,
+        nombre_fiscal,
+        CIF,
+        mail_de_carga
+      FROM empresas 
+      WHERE id_de_usuario = ?
+      ORDER BY nombre_de_empresa ASC`,
+      [user.id]
+    );
     
     console.log('✅ [API-COMPANIES] Empresas obtenidas:', companies.length);
-    console.log('📋 [API-COMPANIES] Empresas:', companies);
+    console.log('📋 [API-COMPANIES] Empresas con mail_de_carga:', 
+      companies.map(c => ({ id: c.id, name: c.name, mail: c.mail_de_carga }))
+    );
     
     return NextResponse.json(companies);
     
@@ -47,9 +63,9 @@ export async function POST(request: NextRequest) {
     
     // Obtener datos del body
     const body = await request.json();
-    const { name, nombreFiscal, cif } = body;
+    const { name, nombreFiscal, cif, mailDeCarga } = body;
     
-    console.log('📝 [API-COMPANIES] Datos recibidos:', { name, nombreFiscal, cif });
+    console.log('📝 [API-COMPANIES] Datos recibidos:', { name, nombreFiscal, cif, mailDeCarga });
     
     // Validaciones
     if (!name || !name.trim()) {
@@ -68,11 +84,12 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Crear la empresa
+    // Crear la empresa con mail_de_carga opcional
     const newCompany = await createCompany({
       name: name.trim(),
       nombreFiscal: nombreFiscal?.trim() || null,
-      cif: cif.trim()
+      cif: cif.trim(),
+      mailDeCarga: mailDeCarga?.trim() || null
     });
     
     console.log('✅ [API-COMPANIES] Empresa creada:', newCompany);

@@ -301,10 +301,14 @@ export async function getCompanies(): Promise<Company[]> {
 /**
  * Crea una nueva empresa para el usuario actual
  */
+/**
+ * Crea una nueva empresa para el usuario actual
+ */
 export async function createCompany(data: {
     name: string;
     nombreFiscal?: string | null;
     cif: string;
+    mailDeCarga?: string | null;
   }): Promise<Company> {
     try {
       console.log('🏢 [createCompany] Iniciando creación de empresa:', data);
@@ -337,10 +341,28 @@ export async function createCompany(data: {
         throw new Error('Ya existe una empresa con este CIF');
       }
   
-      // Insertar la nueva empresa
+      // Si se proporciona email, verificar que sea único globalmente
+      if (data.mailDeCarga?.trim()) {
+        const [existingEmail] = await db.query<RowDataPacket[]>(
+          'SELECT id FROM empresas WHERE mail_de_carga = ?',
+          [data.mailDeCarga.trim()]
+        );
+  
+        if (existingEmail.length > 0) {
+          throw new Error('Ya existe una empresa con ese mail de carga');
+        }
+      }
+  
+      // Insertar la nueva empresa CON mail_de_carga
       const [result] = await db.query<OkPacket>(
-        'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, id_de_usuario) VALUES (?, ?, ?, ?)',
-        [data.name.trim(), data.nombreFiscal?.trim() || null, data.cif.trim(), user.id]
+        'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, id_de_usuario) VALUES (?, ?, ?, ?, ?)',
+        [
+          data.name.trim(), 
+          data.nombreFiscal?.trim() || null, 
+          data.cif.trim(), 
+          data.mailDeCarga?.trim() || null,
+          user.id
+        ]
       );
   
       console.log('✅ [createCompany] Empresa creada con ID:', result.insertId);

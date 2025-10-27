@@ -24,10 +24,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
+import { deleteDocument } from '@/services/document-service.ts';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
-    onSummarize: (doc: Document) => void
+    onSummarize: (doc: Document) => void,
+    onDelete: (doc: Document) => void
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     {
@@ -37,6 +39,17 @@ const getColumns = (
         const doc = row.original;
         const actionsContent = (
           <>
+            <Button 
+              variant="ghost" 
+              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(doc);
+              }}
+            >
+              <span className="sr-only">Eliminar</span>
+              <Trash2 className="h-4 w-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -331,7 +344,11 @@ const getColumns = (
 export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [docToDelete, setDocToDelete] = useState<Document | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
     // This function is now primarily for optimistic updates if needed
@@ -342,11 +359,50 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     setIsSummarizeOpen(true);
   };
 
+  const handleDeleteClick = (doc: Document) => {
+    setDocToDelete(doc);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!docToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      console.log('🗑️ Intentando eliminar documento:', docToDelete.id_documento);
+      
+      const result = await deleteDocument(docToDelete.id_documento);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Error al eliminar el documento');
+      }
+
+      toast({
+        title: 'Documento eliminado',
+        description: `El documento #${docToDelete.numero_documento || docToDelete.id_documento} ha sido eliminado correctamente.`,
+      });
+
+      // Recargar la página para actualizar la lista
+      router.refresh();
+    } catch (error) {
+      console.error('❌ Error al eliminar:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo eliminar el documento. Por favor, inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+      setDocToDelete(null);
+    }
+  };
+
   const handleRowClick = useCallback((doc: Document) => {
     router.push(`/documento/${doc.id_documento}`);
   }, [router]);
 
-  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize), [handleUpdate]);
+  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize, handleDeleteClick), [handleUpdate]);
 
   return (
     <>
@@ -359,11 +415,35 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
           onRowClick={handleRowClick}
         />
       </TooltipProvider>
+      
       <SummarizeDialog 
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
       />
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el documento
+              {docToDelete?.numero_documento && ` #${docToDelete.numero_documento}`} (ID: {docToDelete?.id_documento})
+              y todos sus datos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
