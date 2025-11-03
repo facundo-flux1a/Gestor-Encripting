@@ -986,126 +986,160 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
 }
 
 export async function getProvidersWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
-  if (!companyIds || companyIds.length === 0) return [];
-
-  const placeholders = companyIds.map(() => '?').join(',');
-  const showCompanyName = companyIds.length > 1;
-
-  const [providerRows] = await db.query<any[]>(`
-    SELECT 
-        e.nombre,
-        e.rol,
-        e.identificador_fiscal,
-        e.direccion,
-        e.telefono,
-        e.email,
-        e.datos_extra,
-        e.fecha_creacion,
-        emp.nombre_de_empresa AS empresaNombre,
-        d.importe_total,
-        d.id as documento_id,
-        ld.codigo
-    FROM entidades_documento e
-    JOIN documentos d ON e.documento_id = d.id
-    LEFT JOIN lineas_documento ld ON d.id = ld.documento_id
-    JOIN empresas emp ON d.id_de_empresa = emp.id
-    WHERE e.rol IN ('proveedor', 'emisor')
-      AND d.id_de_empresa IN (${placeholders})
-  `, companyIds);
-
-  // Agrupar por identificador_fiscal para consolidar duplicados
-  const providerMap = new Map<string, {
-    rol: string;
-    nombre: string;
-    direccion: string | null;
-    identificador_fiscal: string;
-    telefono: string | null;
-    email: string | null;
-    datos_extra: any;
-    fecha_creacion: string | null;
-    empresas: Set<string>;
-    totalSpent: number;
-    documentos: Set<number>;
-    productos: Set<string>;
-  }>();
-
-  providerRows.forEach(row => {
-    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+    if (!companyIds || companyIds.length === 0) return [];
+  
+    const placeholders = companyIds.map(() => '?').join(',');
+    const showCompanyName = companyIds.length > 1;
     
-    if (!providerMap.has(fiscalId)) {
-      providerMap.set(fiscalId, {
-        rol: row.rol,
-        nombre: row.nombre,
-        direccion: row.direccion,
-        identificador_fiscal: row.identificador_fiscal,
-        telefono: row.telefono,
-        email: row.email,
-        datos_extra: row.datos_extra,
-        fecha_creacion: row.fecha_creacion,
-        empresas: new Set(),
-        totalSpent: 0,
-        documentos: new Set(),
-        productos: new Set(),
-      });
-    }
-
-    const provider = providerMap.get(fiscalId)!;
+    // ✅ AGREGADO: Filtro de tipo de documento
+    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
+  
+    // ✅ PASO 1: Obtener proveedores y documentos (ahora con filtro de facturas)
+    const [providerRows] = await db.query<any[]>(`
+      SELECT 
+          e.nombre,
+          e.rol,
+          e.identificador_fiscal,
+          e.direccion,
+          e.telefono,
+          e.email,
+          e.datos_extra,
+          e.fecha_creacion,
+          emp.nombre_de_empresa AS empresaNombre,
+          d.id as documento_id,
+          d.importe_total
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE e.rol IN ('proveedor', 'emisor')
+        AND d.id_de_empresa IN (${placeholders})
+        ${whereDocType}
+    `, companyIds);
+  
+    console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
+  
+    // ✅ PASO 2: Obtener productos en query SEPARADA
+    const docIds = [...new Set(providerRows.map(r => r.documento_id))];
     
-    // Agregar empresa
-    if (row.empresaNombre) {
-      provider.empresas.add(row.empresaNombre);
-    }
-    
-    // Sumar gasto
-    provider.totalSpent += Number(row.importe_total || 0);
-    
-    // Contar documentos únicos
-    if (row.documento_id) {
-      provider.documentos.add(row.documento_id);
-    }
-    
-    // Contar productos únicos
-    if (row.codigo) {
-      provider.productos.add(row.codigo);
-    }
-  });
-
-  // Convertir Map a Array y formatear
-  const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
-    let datosExtra = {};
-    try {
-      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
-    } catch {}
-
-    const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
-    
-    // Convertir Set de empresas a string separado por comas
-    const empresasArray = Array.from(p.empresas);
-    const empresaNombre = showCompanyName && empresasArray.length > 0
-      ? empresasArray.join(', ')
-      : undefined;
-
-    return {
-      rol: p.rol || 'N/A',
-      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
-      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
-      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
-      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
-      email: p.email || empresaEmisora.EMAIL || 'N/A',
-      totalSpent: p.totalSpent,
-      totalDocuments: p.documentos.size,
-      uniqueProducts: p.productos.size,
-      datos_extra: p.datos_extra || null,
-      fecha_creacion: p.fecha_creacion || null,
-      empresaNombre: empresaNombre,
-    };
-  });
-
-  // Ordenar por gasto total descendente
-  providers.sort((a, b) => b.totalSpent - a.totalSpent);
-
-  return providers;
-}
+    const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
+      SELECT DISTINCT
+          documento_id,
+          codigo
+      FROM lineas_documento
+      WHERE documento_id IN (${docIds.map(() => '?').join(',')})
+        AND codigo IS NOT NULL
+        AND codigo != ''
+    `, docIds) : [[]];
+  
+    console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
+  
+    // ✅ PASO 3: Crear mapa de productos por documento
+    const productsByDoc = new Map<number, Set<string>>();
+    productRows.forEach(p => {
+      if (!productsByDoc.has(p.documento_id)) {
+        productsByDoc.set(p.documento_id, new Set());
+      }
+      productsByDoc.get(p.documento_id)!.add(p.codigo);
+    });
+  
+    // ✅ PASO 4: Agrupar por identificador_fiscal
+    const providerMap = new Map<string, {
+      rol: string;
+      nombre: string;
+      direccion: string | null;
+      identificador_fiscal: string;
+      telefono: string | null;
+      email: string | null;
+      datos_extra: any;
+      fecha_creacion: string | null;
+      empresas: Set<string>;
+      totalSpent: number;
+      documentos: Set<number>;
+      productos: Set<string>;
+    }>();
+  
+    providerRows.forEach(row => {
+      const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+      
+      if (!providerMap.has(fiscalId)) {
+        providerMap.set(fiscalId, {
+          rol: row.rol,
+          nombre: row.nombre,
+          direccion: row.direccion,
+          identificador_fiscal: row.identificador_fiscal,
+          telefono: row.telefono,
+          email: row.email,
+          datos_extra: row.datos_extra,
+          fecha_creacion: row.fecha_creacion,
+          empresas: new Set(),
+          totalSpent: 0,
+          documentos: new Set(),
+          productos: new Set(),
+        });
+      }
+  
+      const provider = providerMap.get(fiscalId)!;
+      
+      // Agregar empresa
+      if (row.empresaNombre) {
+        provider.empresas.add(row.empresaNombre);
+      }
+      
+      // ✅ CRÍTICO: Solo sumar UNA VEZ cada documento
+      if (!provider.documentos.has(row.documento_id)) {
+        provider.totalSpent += Number(row.importe_total || 0);
+        provider.documentos.add(row.documento_id);
+        
+        console.log(`💰 [${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR (Total: ${provider.totalSpent.toFixed(2)})`);
+      }
+      
+      // Agregar productos de este documento
+      const docProducts = productsByDoc.get(row.documento_id);
+      if (docProducts) {
+        docProducts.forEach(codigo => provider.productos.add(codigo));
+      }
+    });
+  
+    // ✅ PASO 5: Convertir Map a Array
+    const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+      let datosExtra = {};
+      try {
+        datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+      } catch {}
+  
+      const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
+      
+      const empresasArray = Array.from(p.empresas);
+      const empresaNombre = showCompanyName && empresasArray.length > 0
+        ? empresasArray.join(', ')
+        : undefined;
+  
+      return {
+        rol: p.rol || 'N/A',
+        nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
+        direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
+        identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+        telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
+        email: p.email || empresaEmisora.EMAIL || 'N/A',
+        totalSpent: p.totalSpent,
+        totalDocuments: p.documentos.size,
+        uniqueProducts: p.productos.size,
+        datos_extra: p.datos_extra || null,
+        fecha_creacion: p.fecha_creacion || null,
+        empresaNombre: empresaNombre,
+      };
+    });
+  
+    // Ordenar por gasto total descendente
+    providers.sort((a, b) => b.totalSpent - a.totalSpent);
+  
+    console.log('✅ [getProvidersWithStats] Proveedores procesados:', providers.length);
+    providers.slice(0, 5).forEach(p => {
+      console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR (${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
+    });
+  
+    return providers;
+  }
 
 export async function getAllProducts(): Promise<number> {
     const [lineaRows] = await db.query<RowDataPacket[]>(`
@@ -1306,6 +1340,9 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             };
         }
 
+        // ✅ AGREGADO: Filtro de tipo de documento
+        const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
+        
         // Preparar filtro de empresas
         let whereEmpresa = 'AND e2.id_de_usuario = ?';
         const params: any[] = [user.id];
@@ -1322,7 +1359,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             FROM incidencias_documento i
             JOIN documentos d ON i.documento_id = d.id
             JOIN empresas e2 ON d.id_de_empresa = e2.id
-            WHERE 1=1 ${whereEmpresa}
+            WHERE 1=1 ${whereDocType} ${whereEmpresa}
         `, params);
 
         const [byProvider] = await db.query<RowDataPacket[]>(`
@@ -1333,6 +1370,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             JOIN empresas e2 ON d.id_de_empresa = e2.id
             WHERE i.validado = 0 
               AND (e.rol = 'proveedor' OR e.rol = 'emisor')
+              ${whereDocType}
               ${whereEmpresa}
             GROUP BY e.nombre
             ORDER BY count DESC
@@ -1352,6 +1390,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             JOIN documentos d ON i.documento_id = d.id
             JOIN empresas e2 ON d.id_de_empresa = e2.id
             WHERE i.validado = 0
+              ${whereDocType}
               ${whereEmpresa}
             GROUP BY name
             ORDER BY count DESC
