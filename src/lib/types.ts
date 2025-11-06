@@ -102,7 +102,7 @@ export type Document = {
   base_imponible: number;
   iva: number;
   total: number;
-  
+  is_new: number; // ⬅️ YA ESTABA - PERFECTO ✅
   entidades: DocumentEntity[];
   lineas: DocumentLine[];
   iva_details: IvaDetail[];

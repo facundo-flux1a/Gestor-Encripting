@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
-import { deleteDocument } from '@/services/document-service.ts';
+import { deleteDocument } from '@/services/document-service';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
@@ -86,6 +86,7 @@ const getColumns = (
         return <div className="flex items-center gap-2">{checkboxContent}</div>;
       },
       cell: ({ row }) => {
+        const doc = row.original;
         const cellContent = (
           <>
             <Checkbox
@@ -94,7 +95,15 @@ const getColumns = (
               aria-label="Select row"
               onClick={(e) => e.stopPropagation()}
             />
-            <span>{row.original.id_documento}</span>
+            <div className="flex items-center gap-2">
+              <span>{doc.id_documento}</span>
+              {/* ⬅️ BADGE "NUEVO" CON GRADIENTE VIOLETA - YA ESTÁ ✅ */}
+              {doc.is_new === 1 && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/50 animate-pulse">
+                  ✨ Nuevo
+                </span>
+              )}
+            </div>
           </>
         );
         return <div className="flex items-center gap-2">{cellContent}</div>;
@@ -106,7 +115,6 @@ const getColumns = (
       id: 'empresa_factura',
       header: 'Cliente',
       cell: ({ row }) => {
-        // Buscar la entidad con rol 'cliente' o 'receptor' en la factura
         const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
         return <div className="font-medium text-sm">{nombre}</div>;
@@ -187,7 +195,6 @@ const getColumns = (
         const trimestre = calcularTrimestre(date);
         const anio = date.getFullYear();
         
-        // Colores diferentes para cada trimestre
         const colorClasses = {
           1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
           2: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -350,6 +357,13 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   const router = useRouter();
   const { toast } = useToast();
 
+  // ⬅️ DEBUG: Log para verificar qué documentos tienen is_new = 1 - YA ESTÁ ✅
+  console.log('🔍 [DocumentsTable] Documentos con is_new:', documents.filter(d => d.is_new === 1).map(d => ({
+    id: d.id_documento,
+    numero: d.numero_documento,
+    is_new: d.is_new
+  })));
+
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
     // This function is now primarily for optimistic updates if needed
   }, []);
@@ -382,7 +396,6 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
         description: `El documento #${docToDelete.numero_documento || docToDelete.id_documento} ha sido eliminado correctamente.`,
       });
 
-      // Recargar la página para actualizar la lista
       router.refresh();
     } catch (error) {
       console.error('❌ Error al eliminar:', error);
@@ -398,9 +411,43 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     }
   };
 
-  const handleRowClick = useCallback((doc: Document) => {
-    router.push(`/documento/${doc.id_documento}`);
+  // ⬅️ FUNCIÓN PARA MARCAR COMO LEÍDO - YA ESTÁ ✅
+  const handleMarkAsRead = useCallback(async (documentId: number) => {
+    try {
+      console.log('👁️ [handleMarkAsRead] Marcando documento como leído:', documentId);
+      
+      const response = await fetch(`/api/documents/${documentId}/mark-read`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al marcar como leído');
+      }
+
+      const result = await response.json();
+      console.log('✅ Documento marcado como leído:', result);
+      
+      // Refrescar la página para actualizar el badge
+      router.refresh();
+    } catch (error) {
+      console.error('❌ Error al marcar como leído:', error);
+    }
   }, [router]);
+
+  // ⬅️ handleRowClick marca como leído - YA ESTÁ ✅
+  const handleRowClick = useCallback((doc: Document) => {
+    console.log('🖱️ [handleRowClick] Click en documento:', { id: doc.id_documento, is_new: doc.is_new });
+    
+    // Si el documento es nuevo, marcarlo como leído
+    if (doc.is_new === 1) {
+      handleMarkAsRead(doc.id_documento);
+    }
+    
+    router.push(`/documento/${doc.id_documento}`);
+  }, [router, handleMarkAsRead]);
 
   const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize, handleDeleteClick), [handleUpdate]);
 

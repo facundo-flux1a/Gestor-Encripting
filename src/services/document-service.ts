@@ -25,6 +25,7 @@ interface DocumentPacket extends RowDataPacket {
     id_de_empresa: number | null;
     empresa_nombre?: string | null;  // ⬅️ AGREGAR
     empresa_cif?: string | null; 
+    is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
 }
 
 interface ArchivoPacket extends RowDataPacket {
@@ -219,7 +220,6 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
         const pendientes = incidencias.filter(i => !i.validado).length;
         const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
 
-        // ⬇️ AQUÍ ESTÁ EL CAMBIO - AGREGA LAS ÚLTIMAS 2 LÍNEAS
         return {
             id_documento: doc.id,
             numero_documento: doc.numero_documento,
@@ -244,8 +244,9 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
             cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
             empresa_id: doc.id_de_empresa,
-            empresa_nombre: doc.empresa_nombre || 'Sin empresa',  // ⬅️ NUEVO
-            empresa_cif: doc.empresa_cif || null,                 // ⬅️ NUEVO
+            empresa_nombre: doc.empresa_nombre || 'Sin empresa',
+            empresa_cif: doc.empresa_cif || null,
+            is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
         };
     });
     
@@ -406,7 +407,19 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
 
         let query = `
             SELECT 
-                d.*,
+                d.id,
+                d.tipo_documento,
+                d.numero_documento,
+                d.fecha_emision,
+                d.fecha_vencimiento,
+                d.importe_total,
+                d.importe_sin_impuestos,
+                d.moneda,
+                d.observaciones,
+                d.datos_extra,
+                d.fecha_creacion,
+                d.id_de_empresa,
+                d.is_new,
                 e.nombre_de_empresa as empresa_nombre,
                 e.cif as empresa_cif
             FROM documentos d
@@ -416,7 +429,6 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
         
         const params: any[] = [user.id];
         
-        // Si se especifican empresas, filtrar por ellas
         if (empresaIds && empresaIds.length > 0) {
             query += ' AND d.id_de_empresa IN (?)';
             params.push(empresaIds);
@@ -430,6 +442,15 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
         const [documentRows] = await db.query<DocumentPacket[]>(query, params);
         
         console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
+        
+        // ⬅️ DEBUG: Ver is_new en los datos RAW
+        if (documentRows.length > 0) {
+            console.log('🔍 [document-service] Primer documento RAW:', {
+                id: documentRows[0].id,
+                is_new: documentRows[0].is_new,
+                numero: documentRows[0].numero_documento
+            });
+        }
         
         const result = await mapDocumentPacketsToDocuments(documentRows);
         
@@ -454,7 +475,19 @@ export async function getDocumentById(id: number): Promise<Document | null> {
 
         const query = `
             SELECT 
-                d.*,
+                d.id,
+                d.tipo_documento,
+                d.numero_documento,
+                d.fecha_emision,
+                d.fecha_vencimiento,
+                d.importe_total,
+                d.importe_sin_impuestos,
+                d.moneda,
+                d.observaciones,
+                d.datos_extra,
+                d.fecha_creacion,
+                d.id_de_empresa,
+                d.is_new,
                 e.nombre_de_empresa as empresa_nombre,
                 e.cif as empresa_cif
             FROM documentos d
@@ -1572,6 +1605,31 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         connection.release();
     }
 }
+// En src/services/document-service.ts
+
+export async function markDocumentAsRead(documentId: number) {
+    try {
+      console.log('🔄 [MARK-READ] Marcando documento como leído:', documentId);
+      
+      const [result] = await db.query<OkPacket>(
+        'UPDATE documentos SET is_new = 0 WHERE id = ? AND is_new = 1',
+        [documentId]
+      );
+  
+      console.log('✅ [MARK-READ] Resultado:', { affectedRows: result.affectedRows });
+  
+      return {
+        success: true,
+        updated: result.affectedRows > 0
+      };
+    } catch (error) {
+      console.error('❌ [MARK-READ] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      };
+    }
+  }
 export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
     const [allDocIds] = await db.query<RowDataPacket[]>('SELECT id FROM documentos');
     const docIds = allDocIds.map(row => row.id);
