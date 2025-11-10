@@ -1,310 +1,218 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileUp, FileText, X, CheckCircle, AlertCircle, Rocket } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, X } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
-import { useCompanyContext } from '@/context/CompanyProvider';
+import { UploadProgressCard } from '@/components/upload/upload-progress-card';
 
-interface UploadDocumentDialogProps {
+interface UploadDialogProps {
   isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  onUploadSuccess: () => void;
+  onClose: () => void;
+  companies: Array<{ id: number; nombre: string }>;
+  onUploadComplete?: () => void;
 }
 
-type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
-
-interface UploadableFile {
-    file: File;
-    status: FileStatus;
-    message?: string;
+interface UploadingFile {
+  uploadId: string;
+  fileName: string;
+  file: File;
 }
 
-export function UploadDocumentDialog({ isOpen, setIsOpen, onUploadSuccess }: UploadDocumentDialogProps) {
-  const [uploadableFiles, setUploadableFiles] = useState<UploadableFile[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedCompanyForUpload, setSelectedCompanyForUpload] = useState<number | null>(null);
-  const { toast } = useToast();
-  const { companies } = useCompanyContext();
+export function UploadDialog({ 
+  isOpen, 
+  onClose, 
+  companies,
+  onUploadComplete 
+}: UploadDialogProps) {
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
-  console.log('🔍 [UploadDialog] Estado:', {
-    empresasTotal: companies.length,
-    empresaSeleccionada: selectedCompanyForUpload,
-    archivosEnCola: uploadableFiles.length
-  });
-
-  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
-    const newFiles: UploadableFile[] = acceptedFiles.map(file => ({
-      file,
-      status: 'pending',
-    }));
-    setUploadableFiles(prev => [...prev, ...newFiles]);
-
-    if (fileRejections.length > 0) {
-      toast({
-        title: 'Algunos archivos no fueron aceptados',
-        description: `${fileRejections.length} archivo(s) no se pudieron agregar.`,
-        variant: 'destructive',
-      });
-    }
-  }, [toast]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: true,
-  });
-
-  const removeFile = (fileName: string) => {
-    setUploadableFiles(files => files.filter(f => f.file.name !== fileName));
-  };
-
-  const updateFileStatus = (fileName: string, status: FileStatus, message?: string) => {
-    setUploadableFiles(prev => prev.map(uf => 
-      uf.file.name === fileName ? { ...uf, status, message } : uf
-    ));
-  };
-  
-  const processFile = async (uploadableFile: UploadableFile): Promise<boolean> => {
-    if (uploadableFile.status !== 'pending') return true;
-
-    const { file } = uploadableFile;
-    try {
-      updateFileStatus(file.name, 'uploading', 'Subiendo archivo...');
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      if (selectedCompanyForUpload) {
-        formData.append('empresaId', selectedCompanyForUpload.toString());
-        console.log('📤 [UploadDialog] Enviando archivo con empresaId:', selectedCompanyForUpload);
-      } else {
-        throw new Error('No hay empresa seleccionada');
-      }
-
-      await uploadDocument(formData);
-      
-      updateFileStatus(file.name, 'success', 'Archivo enviado para análisis.');
-      return true;
-
-    } catch (error: any) {
-      console.error(`Error procesando ${file.name}:`, error);
-      updateFileStatus(file.name, 'error', error.message || 'Error desconocido al subir.');
-      return false;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files));
     }
   };
 
   const handleUpload = async () => {
-    // Validar empresa seleccionada
-    if (!selectedCompanyForUpload) {
-      toast({
-        title: 'Empresa no seleccionada',
-        description: 'Por favor selecciona una empresa antes de subir los documentos.',
-        variant: 'destructive',
-      });
+    if (!selectedCompanyId || files.length === 0) {
+      alert('Por favor selecciona una empresa y al menos un archivo');
       return;
     }
 
-    const filesToUpload = uploadableFiles.filter(f => f.status === 'pending');
-    if (filesToUpload.length === 0) {
-      toast({
-        title: 'Sin archivos',
-        description: 'No hay archivos pendientes para subir.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    setIsUploading(true);
 
-    setIsProcessing(true);
-    setIsOpen(false); 
+    // Preparar los archivos para subir
+    const filesToUpload: UploadingFile[] = files.map(file => ({
+      uploadId: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      fileName: file.name,
+      file: file
+    }));
 
-    const { id: toastId, update } = toast({
-      title: "Iniciando subida...",
-      description: `Enviando ${filesToUpload.length} archivo(s) en paralelo.`,
-    });
+    setUploadingFiles(filesToUpload);
 
-    const uploadPromises = filesToUpload.map(file => processFile(file));
+    // Procesar cada archivo
+    for (const fileData of filesToUpload) {
+      try {
+        console.log('📤 [UploadDialog] Subiendo:', fileData.fileName, 'uploadId:', fileData.uploadId);
+        
+        const formData = new FormData();
+        formData.append('file', fileData.file);
+        formData.append('empresaId', selectedCompanyId);
+        formData.append('uploadId', fileData.uploadId);
 
-    await Promise.all(uploadPromises);
-    
-    setIsProcessing(false);
-    
-    const currentFiles = uploadableFiles;
-    const successCount = currentFiles.filter(f => f.status === 'success').length;
-    const errorCount = currentFiles.filter(f => f.status === 'error').length;
-    
-    update({
-      id: toastId,
-      title: "Proceso de subida finalizado",
-      description: `${successCount} archivo(s) enviados. ${errorCount > 0 ? `${errorCount} con error.` : ''}`,
-      variant: errorCount > 0 ? "destructive" : "default",
-    });
-    
-    if(successCount > 0) {
-      onUploadSuccess();
-    }
-    
-    setUploadableFiles([]);
-    setSelectedCompanyForUpload(null);
-  };
-
-  const handleOpenChange = (open: boolean) => {
-    if (isProcessing) return;
-    if (!open) {
-      setUploadableFiles([]);
-      setSelectedCompanyForUpload(null);
-    }
-    setIsOpen(open);
-  };
-  
-  const getStatusIcon = (status: FileStatus) => {
-      switch (status) {
-          case 'pending': return <FileText className="h-5 w-5 text-muted-foreground" />;
-          case 'uploading': return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
-          case 'success': return <CheckCircle className="h-5 w-5 text-green-500" />;
-          case 'error': return <AlertCircle className="h-5 w-5 text-destructive" />;
+        // Subir el archivo (esto dispara el flujo de n8n)
+        await uploadDocument(formData);
+        
+      } catch (error) {
+        console.error('❌ [UploadDialog] Error subiendo:', fileData.fileName, error);
       }
-  }
+    }
 
-  const filesPending = uploadableFiles.some(f => f.status === 'pending');
-  const hasCompanies = companies.length > 0;
-  const canUpload = filesPending && selectedCompanyForUpload && !isProcessing;
+    // Limpiar selección de archivos
+    setFiles([]);
+    setIsUploading(false);
+  };
+
+  const handleProgressComplete = (uploadId: string) => {
+    console.log('✅ [UploadDialog] Archivo completado:', uploadId);
+    
+    // Remover de la lista de uploads activos
+    setUploadingFiles(prev => prev.filter(f => f.uploadId !== uploadId));
+    
+    // Si ya no hay archivos subiendo, actualizar la lista de documentos
+    if (uploadingFiles.length === 1) {
+      onUploadComplete?.();
+    }
+  };
+
+  const handleProgressError = (uploadId: string, error: string) => {
+    console.error('❌ [UploadDialog] Error en archivo:', uploadId, error);
+    
+    // Remover de la lista de uploads activos
+    setUploadingFiles(prev => prev.filter(f => f.uploadId !== uploadId));
+  };
+
+  const handleClose = () => {
+    // Solo permitir cerrar si no hay uploads activos
+    if (uploadingFiles.length === 0) {
+      setFiles([]);
+      setSelectedCompanyId('');
+      onClose();
+    }
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[525px]">
-        <DialogHeader>
-          <DialogTitle>Subir Nuevos Documentos</DialogTitle>
-          <DialogDescription>
-            {!hasCompanies 
-              ? '⚠️ No tienes empresas creadas. Crea una empresa primero desde el selector lateral.'
-              : 'Selecciona la empresa destino y arrastra los documentos a subir.'
-            }
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="py-4 space-y-4">
-          {/* Selector de empresa - SIEMPRE VISIBLE */}
-          <div className="space-y-2">
-            <Label htmlFor="company">
-              Empresa destino <span className="text-red-500">*</span>
-            </Label>
-            <Select
-              value={selectedCompanyForUpload?.toString() || ''}
-              onValueChange={(value) => {
-                const id = parseInt(value, 10);
-                setSelectedCompanyForUpload(id);
-                console.log('✅ [UploadDialog] Empresa seleccionada:', id);
-              }}
-              disabled={!hasCompanies}
-            >
-              <SelectTrigger id="company">
-                <SelectValue placeholder={hasCompanies ? "Selecciona una empresa" : "No hay empresas disponibles"} />
-              </SelectTrigger>
-              <SelectContent>
-                {companies.map((company) => (
-                  <SelectItem key={company.id} value={company.id.toString()}>
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!hasCompanies && (
-              <p className="text-xs text-muted-foreground">
-                💡 Tip: Crea una empresa usando el botón "+ Nueva" en el selector lateral
-              </p>
-            )}
-          </div>
+    <>
+      {/* Dialog principal para seleccionar archivos */}
+      <Dialog open={isOpen && uploadingFiles.length === 0} onOpenChange={handleClose}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Subir Nuevos Documentos</DialogTitle>
+          </DialogHeader>
 
-          {/* Dropzone */}
-          <div
-            {...getRootProps()}
-            className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-              isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
-            } ${!hasCompanies || isProcessing ? 'pointer-events-none opacity-50' : ''}`}
-          >
-            <input {...getInputProps()} disabled={!hasCompanies || isProcessing} />
-            <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
-            {isDragActive ? (
-              <p>Suelta los archivos aquí...</p>
-            ) : (
-              <p className="text-center">
-                {!hasCompanies
-                  ? 'Crea una empresa primero'
-                  : 'Arrastra y suelta archivos aquí, o haz clic para seleccionar'
-                }
-              </p>
-            )}
-          </div>
-          
-          {uploadableFiles.length > 0 && (
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                <h4 className="text-sm font-medium">Archivos en cola ({uploadableFiles.length}):</h4>
-                {uploadableFiles.map(({file, status, message}) => (
-                     <div key={file.name} className="flex items-center justify-between p-2 bg-muted rounded-md gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                           {getStatusIcon(status)}
-                            <div className="min-w-0">
-                                <p className="text-sm font-medium truncate block" title={file.name}>{file.name}</p>
-                                <p className="text-xs text-muted-foreground truncate" title={message}>
-                                    {status === 'pending' ? `${(file.size / 1024).toFixed(1)} KB` : message || status}
-                                </p>
-                            </div>
-                        </div>
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-6 w-6 flex-shrink-0" 
-                            onClick={() => removeFile(file.name)} 
-                            disabled={isProcessing || status !== 'pending'}
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </div>
-                ))}
+          <div className="space-y-4">
+            {/* Selector de empresa */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Empresa destino <span className="text-red-500">*</span>
+              </label>
+              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </div>
-        
-        <DialogFooter>
-          <DialogClose asChild>
-              <Button variant="outline" disabled={isProcessing}>
+
+            {/* Drop zone */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <p className="text-sm text-gray-600 mb-2">
+                Arrastra y suelta archivos aquí, o haz clic para seleccionar
+              </p>
+              <input
+                type="file"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+                id="file-upload"
+              />
+              <label htmlFor="file-upload">
+                <Button variant="outline" className="cursor-pointer" asChild>
+                  <span>Seleccionar archivos</span>
+                </Button>
+              </label>
+            </div>
+
+            {/* Lista de archivos seleccionados */}
+            {files.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  Archivos seleccionados ({files.length})
+                </p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {files.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-gray-50 p-2 rounded"
+                    >
+                      <span className="text-sm truncate">{file.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Botones de acción */}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
-          </DialogClose>
-          <Button 
-            onClick={handleUpload} 
-            disabled={!canUpload}
-          >
-            {isProcessing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <Rocket className="mr-2 h-4 w-4" />
-            )}
-            <span>
-                {isProcessing ? 'Procesando...' : `Subir ${uploadableFiles.filter(f=>f.status === 'pending').length} archivo(s)`}
-            </span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              <Button
+                onClick={handleUpload}
+                disabled={!selectedCompanyId || files.length === 0 || isUploading}
+              >
+                {isUploading ? 'Subiendo...' : `Subir ${files.length} archivo(s)`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cards de progreso flotantes */}
+      {uploadingFiles.length > 0 && (
+        <div className="fixed bottom-4 right-4 space-y-2 z-50 max-h-[80vh] overflow-y-auto">
+          {uploadingFiles.map((fileData) => (
+            <UploadProgressCard
+              key={fileData.uploadId}
+              uploadId={fileData.uploadId}
+              fileName={fileData.fileName}
+              onComplete={() => handleProgressComplete(fileData.uploadId)}
+              onError={(error) => handleProgressError(fileData.uploadId, error)}
+              onClose={() => handleProgressComplete(fileData.uploadId)}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }

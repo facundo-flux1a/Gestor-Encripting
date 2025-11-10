@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import connection from '@/lib/db';
-import JSZip from 'jszip'; // ⭐ Cambiar a jszip
+import JSZip from 'jszip';
 
 const UploadResponseSchema = z.object({
   success: z.boolean(),
@@ -58,13 +58,10 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
   const zipContent = await zip.loadAsync(Buffer.from(fileBuffer));
   const fileHashes: { [fileName: string]: string } = {};
 
-  // Procesar cada archivo en el ZIP
   for (const [fileName, zipEntry] of Object.entries(zipContent.files)) {
-    if (!zipEntry.dir) { // Solo procesar archivos, no carpetas
-      // Obtener el contenido del archivo como ArrayBuffer
+    if (!zipEntry.dir) {
       const fileData = await zipEntry.async('arraybuffer');
       
-      // Calcular hash SHA-256
       const hash = crypto.createHash('sha256');
       hash.update(Buffer.from(fileData));
       const fileHash = hash.digest('hex');
@@ -85,9 +82,11 @@ export async function uploadDocument(
 ): Promise<z.infer<typeof UploadResponseSchema>> {
   const file = formData.get('file') as File | null;
   const empresaId = formData.get('empresaId') as string | null;
+  const uploadId = formData.get('uploadId') as string | null; // ⬅️ NUEVO
 
   console.log('📤 [UploadService] Recibido archivo:', file?.name);
   console.log('📤 [UploadService] EmpresaId:', empresaId);
+  console.log('📤 [UploadService] UploadId:', uploadId); // ⬅️ NUEVO
 
   if (!file) {
     throw new Error('No se ha proporcionado ningún archivo.');
@@ -110,16 +109,13 @@ export async function uploadDocument(
   }
 
   try {
-    // 1. Convertir archivo a buffer
     console.log(`[${originalFileName}] Leyendo archivo (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = await file.arrayBuffer();
 
-    // 2. Calcular hash SHA-256 del archivo COMPLETO
     console.log(`[${originalFileName}] Calculando hash SHA-256...`);
     const mainFileHash = await calculateFileHash(fileBuffer);
     console.log(`[${originalFileName}] Hash del archivo: ${mainFileHash}`);
 
-    // 3. Obtener CIF de la empresa
     console.log(`[${originalFileName}] Consultando CIF para empresaId: ${empresaId}`);
     
     const [rows] = await connection.query(
@@ -136,7 +132,6 @@ export async function uploadDocument(
     const cif = empresaData[0].CIF;
     console.log(`[${originalFileName}] CIF: ${cif}`);
 
-    // 4. ⭐ SI ES ZIP, EXTRAER Y HASHEAR CADA ARCHIVO INDIVIDUAL
     let individualFileHashes: { [fileName: string]: string } = {};
     let isCompressedFile = false;
     
@@ -147,7 +142,6 @@ export async function uploadDocument(
       individualFileHashes = await extractAndHashZipFiles(fileBuffer);
       console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
     } else {
-      // 5. Para archivos NO comprimidos, validar duplicados AHORA
       console.log(`[${originalFileName}] Verificando si ya existe este archivo...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
 
@@ -174,7 +168,6 @@ export async function uploadDocument(
       console.log(`[${originalFileName}] ✓ No se encontraron duplicados. Procediendo con la subida...`);
     }
 
-    // 6. Generar nombre único con timestamp
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
     const fileNameWithoutExt = originalFileName.includes('.') 
@@ -187,7 +180,6 @@ export async function uploadDocument(
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
     const filePath = `archivos/${uniqueFileName}`;
 
-    // 7. Subir archivo a MinIO
     console.log(`[${originalFileName}] Subiendo a MinIO: ${filePath}`);
     const s3Client = new S3Client({
       region: process.env.MINIO_REGION || "us-east-1",
@@ -210,19 +202,19 @@ export async function uploadDocument(
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // 8. ⭐ PREPARAR PAYLOAD CON HASHES INDIVIDUALES
+    // 8. ⭐ PREPARAR PAYLOAD CON HASHES INDIVIDUALES Y UPLOADID
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
       fileHash: mainFileHash,
+      uploadId: uploadId, // ⬅️ NUEVO
       fileName: originalFileName,
       fileSize: fileSize,
       publicUrl: publicUrl,
       isCompressedFile: isCompressedFile,
     };
 
-    // ⭐ SI ES ZIP, INCLUIR MAPA DE HASHES INDIVIDUALES
     if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
       webhookPayload.individualFileHashes = individualFileHashes;
       console.log(`[${originalFileName}] ⚠️ Enviando ${Object.keys(individualFileHashes).length} hashes individuales al webhook`);
@@ -230,6 +222,7 @@ export async function uploadDocument(
     }
 
     console.log(`[${originalFileName}] Notificando a webhook de n8n...`);
+    console.log(`[${originalFileName}] 🆔 Enviando uploadId: ${uploadId}`); // ⬅️ NUEVO LOG
 
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',

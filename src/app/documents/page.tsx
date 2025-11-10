@@ -6,11 +6,11 @@ import { Document } from '@/lib/types'
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
 import { DocumentsTable } from '@/components/dashboard/documents-table'
 import { Button } from '@/components/ui/button'
-import { UploadDocumentDialog } from '@/components/dashboard/upload-dialog'
+import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function DocumentsPageContent() {
-  const { selectedCompanyIds } = useCompanyContext();
+  const { selectedCompanyIds, companies } = useCompanyContext();
   
   const [documents, setDocuments] = React.useState<Document[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -19,11 +19,12 @@ function DocumentsPageContent() {
   const [key, setKey] = React.useState(0);
   
   // ✅ Estado para mantener el tab activo
-  const [activeTab, setActiveTab] = React.useState('facturas');
+  const [activeTab, setActiveTab] = React.useState('sin-confirmar');
 
   console.log('🏢 [DocumentsPage] selectedCompanyIds actual:', selectedCompanyIds);
 
-  const handleUploadSuccess = () => {
+  const handleUploadComplete = () => {
+    console.log('✅ [DocumentsPage] Upload completado, recargando documentos');
     setKey(prevKey => prevKey + 1);
   };
 
@@ -106,6 +107,14 @@ function DocumentsPageContent() {
     'retencion', 'base_imponible', 'iva', 'total'
   ];
 
+  // ✅ Transformar companies al formato esperado por UploadDialog
+  const companiesForUpload = React.useMemo(() => {
+    return companies.map(company => ({
+      id: company.id,
+      nombre: company.name || company.nombre || `Empresa ${company.id}`
+    }));
+  }, [companies]);
+
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>
@@ -125,11 +134,12 @@ function DocumentsPageContent() {
           </div>
         </div>
         
-        {/* ✅ DIÁLOGO DISPONIBLE SIEMPRE */}
-        <UploadDocumentDialog 
-          isOpen={isUploadOpen} 
-          setIsOpen={setIsUploadOpen} 
-          onUploadSuccess={handleUploadSuccess}
+        {/* ✅ NUEVO COMPONENTE UploadDialog */}
+        <UploadDialog 
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+          companies={companiesForUpload}
+          onUploadComplete={handleUploadComplete}
         />
       </>
     );
@@ -180,10 +190,13 @@ function DocumentsPageContent() {
           </Tabs>
         )}
       </div>
-      <UploadDocumentDialog 
-        isOpen={isUploadOpen} 
-        setIsOpen={setIsUploadOpen} 
-        onUploadSuccess={handleUploadSuccess}
+      
+      {/* ✅ NUEVO COMPONENTE UploadDialog */}
+      <UploadDialog 
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        companies={companiesForUpload}
+        onUploadComplete={handleUploadComplete}
       />
     </>
   );
