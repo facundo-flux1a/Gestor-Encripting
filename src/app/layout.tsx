@@ -2,9 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/layout/theme-provider';
-
-// 🛑 MODIFICACIÓN CLAVE: Usamos el nombre de archivo Company-Provider.
 import { CompanyProvider } from '@/context/CompanyProvider'; 
+import { UploadProgressManager } from '@/components/upload/upload-progress-card'; // 👈 AGREGAR
 
 export const metadata: Metadata = {
   title: 'Gestor Documental',
@@ -33,6 +32,7 @@ export default function RootLayout({
           <CompanyProvider> 
             {children}
             <Toaster />
+            <UploadProgressManager /> {/* 👈 AGREGAR AQUÍ */}
           </CompanyProvider>
         </ThemeProvider>
       </body>
