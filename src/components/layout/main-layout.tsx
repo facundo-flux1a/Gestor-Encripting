@@ -24,6 +24,7 @@ import {
   LogOut,
   ShieldCheck,
   LogIn,
+  Activity, // 🆕 Icono para Actividad
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -173,6 +174,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
+    { href: '/dashboard/actividad', label: 'Actividad', icon: Activity }, // 🆕 NUEVA SECCIÓN
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Proveedores', icon: Users }
   ];

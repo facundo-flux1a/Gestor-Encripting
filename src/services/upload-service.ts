@@ -75,6 +75,38 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
 }
 
 /**
+ * Registra la actividad inicial en la base de datos
+ */
+async function createActivityRecord(
+  uploadId: string,
+  empresaId: string,
+  fileName: string,
+  fileType: string
+): Promise<void> {
+  try {
+    await connection.query(
+      `INSERT INTO erp49.actividad 
+        (upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uploadId,
+        empresaId,
+        fileName,
+        fileType,
+        'iniciando',
+        'Iniciando el flujo',
+        0,
+        'Archivo recibido, preparando para procesamiento'
+      ]
+    );
+    console.log(`[${fileName}] ✅ Registro de actividad creado en BD`);
+  } catch (error) {
+    console.error(`[${fileName}] ❌ Error al crear registro de actividad:`, error);
+    // No lanzamos error para no interrumpir el flujo principal
+  }
+}
+
+/**
  * Gestiona la subida de un documento a S3 con validación de duplicados
  */
 export async function uploadDocument(
@@ -82,11 +114,11 @@ export async function uploadDocument(
 ): Promise<z.infer<typeof UploadResponseSchema>> {
   const file = formData.get('file') as File | null;
   const empresaId = formData.get('empresaId') as string | null;
-  const uploadId = formData.get('uploadId') as string | null; // ⬅️ NUEVO
+  const uploadId = formData.get('uploadId') as string | null;
 
   console.log('📤 [UploadService] Recibido archivo:', file?.name);
   console.log('📤 [UploadService] EmpresaId:', empresaId);
-  console.log('📤 [UploadService] UploadId:', uploadId); // ⬅️ NUEVO
+  console.log('📤 [UploadService] UploadId:', uploadId);
 
   if (!file) {
     throw new Error('No se ha proporcionado ningún archivo.');
@@ -96,11 +128,15 @@ export async function uploadDocument(
     throw new Error('No se ha proporcionado el ID de empresa.');
   }
 
+  if (!uploadId) {
+    throw new Error('No se ha proporcionado el Upload ID.');
+  }
+
   const originalFileName = file.name;
   const fileSize = file.size;
   const fileExtension = originalFileName.toLowerCase().split('.').pop();
 
-  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf3';
+  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf33';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!N8N_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
@@ -202,13 +238,21 @@ export async function uploadDocument(
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // 8. ⭐ PREPARAR PAYLOAD CON HASHES INDIVIDUALES Y UPLOADID
+    // 🆕 REGISTRAR ACTIVIDAD INICIAL EN LA BD
+    await createActivityRecord(
+      uploadId,
+      empresaId,
+      originalFileName,
+      fileExtension || 'unknown'
+    );
+
+    // PREPARAR PAYLOAD CON HASHES INDIVIDUALES Y UPLOADID
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
       fileHash: mainFileHash,
-      uploadId: uploadId, // ⬅️ NUEVO
+      uploadId: uploadId,
       fileName: originalFileName,
       fileSize: fileSize,
       publicUrl: publicUrl,
@@ -221,8 +265,8 @@ export async function uploadDocument(
       console.log(`[${originalFileName}] Mapa de hashes:`, individualFileHashes);
     }
 
-    console.log(`[${originalFileName}] Notificando a webhook de n8n...`);
-    console.log(`[${originalFileName}] 🆔 Enviando uploadId: ${uploadId}`); // ⬅️ NUEVO LOG
+    console.log(`[${originalFileName}] Notificando a webhook...`);
+    console.log(`[${originalFileName}] 🆔 Enviando uploadId: ${uploadId}`);
 
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
@@ -233,7 +277,7 @@ export async function uploadDocument(
     if (!webhookResponse.ok) {
       const errorText = await webhookResponse.text();
       console.warn(`[${originalFileName}] ⚠️ Webhook respondió con error (${webhookResponse.status}): ${errorText}`);
-      throw new Error(`Error al procesar el documento en n8n`);
+      throw new Error(`Error al procesar el documento`);
     }
 
     let webhookResult: any = null;

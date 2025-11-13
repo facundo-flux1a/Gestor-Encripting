@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { CheckCircle2, Loader2, AlertCircle, X, WifiOff, Minimize2, Maximize2 } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface UploadProgressData {
-  status: 'processing' | 'analyzing' | 'saving' | 'completed' | 'failed';
+  status: 'processing' | 'analyzing' | 'saving' | 'completed' | 'failed' | 'waiting';
   step: string;
   progress: number;
   message: string;
@@ -23,22 +23,23 @@ interface UploadItem {
   uploadId: string;
   fileName: string;
   progressData: UploadProgressData;
-  connectionStatus: 'connecting' | 'connected' | 'error';
+  connectionStatus: 'polling' | 'error' | 'completed';
   isMinimized: boolean;
-  eventSource: EventSource | null;
 }
 
 // ============================================
-// UPLOAD PROGRESS MANAGER
-// Sistema de gestión de múltiples uploads
-// con tarjetas minimizables
+// UPLOAD PROGRESS MANAGER - POLLING VERSION
+// Usa polling simple en lugar de SSE
 // ============================================
 
 export function UploadProgressManager() {
   const [uploads, setUploads] = useState<Map<string, UploadItem>>(new Map());
+  const pollIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   // Función para agregar un nuevo upload
   const addUpload = useCallback((uploadId: string, fileName: string) => {
+    console.log('➕ [Manager] Agregando upload:', uploadId, fileName);
+    
     setUploads(prev => {
       const newUploads = new Map(prev);
       if (!newUploads.has(uploadId)) {
@@ -46,14 +47,13 @@ export function UploadProgressManager() {
           uploadId,
           fileName,
           progressData: {
-            status: 'processing',
+            status: 'waiting',
             step: 'Iniciando...',
             progress: 0,
-            message: 'Preparando archivo para subir'
+            message: 'Preparando archivo...'
           },
-          connectionStatus: 'connecting',
-          isMinimized: false,
-          eventSource: null
+          connectionStatus: 'polling',
+          isMinimized: false
         });
       }
       return newUploads;
@@ -62,12 +62,17 @@ export function UploadProgressManager() {
 
   // Función para eliminar un upload
   const removeUpload = useCallback((uploadId: string) => {
+    console.log('➖ [Manager] Eliminando upload:', uploadId);
+    
+    // Limpiar intervalo de polling
+    const interval = pollIntervalsRef.current.get(uploadId);
+    if (interval) {
+      clearInterval(interval);
+      pollIntervalsRef.current.delete(uploadId);
+    }
+    
     setUploads(prev => {
       const newUploads = new Map(prev);
-      const upload = newUploads.get(uploadId);
-      if (upload?.eventSource) {
-        upload.eventSource.close();
-      }
       newUploads.delete(uploadId);
       return newUploads;
     });
@@ -86,7 +91,7 @@ export function UploadProgressManager() {
     });
   }, []);
 
-  // Exponer funciones globalmente para que otros componentes puedan usarlas
+  // Exponer funciones globalmente
   useEffect(() => {
     (window as any).__uploadProgressManager = {
       addUpload,
@@ -95,82 +100,111 @@ export function UploadProgressManager() {
 
     return () => {
       delete (window as any).__uploadProgressManager;
+      // Limpiar todos los intervalos
+      pollIntervalsRef.current.forEach(interval => clearInterval(interval));
+      pollIntervalsRef.current.clear();
     };
   }, [addUpload, removeUpload]);
 
-  // Conectar SSE para cada upload
+  // ============================================
+  // POLLING - Consultar estado cada 1 segundo
+  // ============================================
   useEffect(() => {
     uploads.forEach((upload) => {
-      if (!upload.eventSource && upload.connectionStatus !== 'error') {
-        const eventSource = new EventSource(`/api/upload-progress?uploadId=${encodeURIComponent(upload.uploadId)}`);
-
-        eventSource.onopen = () => {
-          setUploads(prev => {
-            const newUploads = new Map(prev);
-            const current = newUploads.get(upload.uploadId);
-            if (current) {
-              current.connectionStatus = 'connected';
-              newUploads.set(upload.uploadId, current);
-            }
-            return newUploads;
-          });
-        };
-
-        eventSource.onmessage = (event) => {
+      // Solo hacer polling si está activo y no hay intervalo
+      if (upload.connectionStatus === 'polling' && !pollIntervalsRef.current.has(upload.uploadId)) {
+        console.log('🔄 [Manager] Iniciando polling para:', upload.uploadId);
+        
+        let consecutiveErrors = 0;
+        const maxErrors = 5;
+        
+        const poll = async () => {
           try {
-            if (event.data === 'heartbeat' || event.data === '{}' || event.data === '') {
-              return;
-            }
-
-            const data: UploadProgressData = JSON.parse(event.data);
-            
-            setUploads(prev => {
-              const newUploads = new Map(prev);
-              const current = newUploads.get(upload.uploadId);
-              if (current) {
-                current.progressData = data;
-                
-                // Cerrar conexión si completó o falló
-                if (data.status === 'completed' || data.status === 'failed') {
-                  current.eventSource?.close();
-                  current.eventSource = null;
-                }
-                
-                newUploads.set(upload.uploadId, current);
+            const response = await fetch(
+              `/api/upload-progress?uploadId=${encodeURIComponent(upload.uploadId)}`,
+              {
+                method: 'GET',
+                headers: { 'Cache-Control': 'no-cache' }
               }
-              return newUploads;
-            });
-          } catch (err) {
-            console.error('❌ Error parseando datos:', err);
-          }
-        };
-
-        eventSource.onerror = () => {
-          setUploads(prev => {
-            const newUploads = new Map(prev);
-            const current = newUploads.get(upload.uploadId);
-            if (current) {
-              current.connectionStatus = 'error';
-              current.eventSource?.close();
-              current.eventSource = null;
-              newUploads.set(upload.uploadId, current);
+            );
+            
+            if (response.ok) {
+              const data: UploadProgressData = await response.json();
+              
+              console.log('📊 [Manager] Estado:', upload.uploadId, data.step, data.progress);
+              
+              consecutiveErrors = 0; // Reset contador de errores
+              
+              setUploads(prev => {
+                const newUploads = new Map(prev);
+                const current = newUploads.get(upload.uploadId);
+                
+                if (current) {
+                  current.progressData = data;
+                  
+                  // Si completó o falló, detener polling
+                  if (data.status === 'completed' || data.status === 'failed') {
+                    console.log('🛑 [Manager] Deteniendo polling por estado final:', upload.uploadId);
+                    current.connectionStatus = 'completed';
+                    
+                    const interval = pollIntervalsRef.current.get(upload.uploadId);
+                    if (interval) {
+                      clearInterval(interval);
+                      pollIntervalsRef.current.delete(upload.uploadId);
+                    }
+                  }
+                  
+                  newUploads.set(upload.uploadId, current);
+                }
+                return newUploads;
+              });
+            } else {
+              throw new Error(`HTTP ${response.status}`);
             }
-            return newUploads;
-          });
-        };
-
-        setUploads(prev => {
-          const newUploads = new Map(prev);
-          const current = newUploads.get(upload.uploadId);
-          if (current) {
-            current.eventSource = eventSource;
-            newUploads.set(upload.uploadId, current);
+          } catch (error) {
+            console.error('❌ [Manager] Error en polling:', upload.uploadId, error);
+            consecutiveErrors++;
+            
+            // Si hay muchos errores consecutivos, marcar como error
+            if (consecutiveErrors >= maxErrors) {
+              console.error('💥 [Manager] Demasiados errores, deteniendo:', upload.uploadId);
+              
+              setUploads(prev => {
+                const newUploads = new Map(prev);
+                const current = newUploads.get(upload.uploadId);
+                
+                if (current) {
+                  current.connectionStatus = 'error';
+                  current.progressData = {
+                    status: 'failed',
+                    step: 'Error',
+                    progress: 0,
+                    message: 'Error de conexión con el servidor',
+                    error: 'No se pudo obtener el estado del procesamiento'
+                  };
+                  newUploads.set(upload.uploadId, current);
+                }
+                return newUploads;
+              });
+              
+              const interval = pollIntervalsRef.current.get(upload.uploadId);
+              if (interval) {
+                clearInterval(interval);
+                pollIntervalsRef.current.delete(upload.uploadId);
+              }
+            }
           }
-          return newUploads;
-        });
+        };
+        
+        // Hacer primera consulta inmediatamente
+        poll();
+        
+        // Luego consultar cada 1 segundo
+        const intervalId = setInterval(poll, 1000);
+        pollIntervalsRef.current.set(upload.uploadId, intervalId);
       }
     });
-  }, [uploads.size]);
+  }, [uploads]);
 
   if (uploads.size === 0) return null;
 
@@ -261,14 +295,6 @@ function UploadCard({
             </Button>
           </div>
         </div>
-        
-        {/* Indicador de conexión */}
-        {upload.connectionStatus === 'connecting' && upload.progressData.status !== 'completed' && (
-          <div className="flex items-center gap-1 text-xs text-orange-500 mt-1">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Conectando...</span>
-          </div>
-        )}
       </CardHeader>
       
       {!upload.isMinimized && (
@@ -301,7 +327,7 @@ function UploadCard({
                     Error de conexión
                   </p>
                   <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                    No se pudo conectar al servidor.
+                    No se pudo conectar al servidor
                   </p>
                 </div>
               </div>
