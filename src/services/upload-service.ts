@@ -81,15 +81,17 @@ async function createActivityRecord(
   uploadId: string,
   empresaId: string,
   fileName: string,
-  fileType: string
+  fileType: string,
+  parentUploadId?: string
 ): Promise<void> {
   try {
     await connection.query(
       `INSERT INTO erp49.actividad 
-        (upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (upload_id, parent_upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uploadId,
+        parentUploadId || null,
         empresaId,
         fileName,
         fileType,
@@ -99,7 +101,7 @@ async function createActivityRecord(
         'Archivo recibido, preparando para procesamiento'
       ]
     );
-    console.log(`[${fileName}] ✅ Registro de actividad creado en BD`);
+    console.log(`[${fileName}] ✅ Registro de actividad creado en BD (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''})`);
   } catch (error) {
     console.error(`[${fileName}] ❌ Error al crear registro de actividad:`, error);
     // No lanzamos error para no interrumpir el flujo principal
@@ -136,7 +138,7 @@ export async function uploadDocument(
   const fileSize = file.size;
   const fileExtension = originalFileName.toLowerCase().split('.').pop();
 
-  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf33';
+  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!N8N_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
@@ -169,15 +171,48 @@ export async function uploadDocument(
     console.log(`[${originalFileName}] CIF: ${cif}`);
 
     let individualFileHashes: { [fileName: string]: string } = {};
+    let individualUploadIds: { [fileName: string]: string } = {};
     let isCompressedFile = false;
     
-    if (fileExtension === 'zip') {
+    // 🔒 SOLO PARA ARCHIVOS ZIP O RAR
+    if (fileExtension === 'zip' || fileExtension === 'rar') {
       isCompressedFile = true;
-      console.log(`[${originalFileName}] ⚠️ Detectado archivo ZIP. Calculando hashes individuales...`);
+      console.log(`[${originalFileName}] ⚠️ Detectado archivo comprimido (${fileExtension.toUpperCase()}). Calculando hashes individuales...`);
       
       individualFileHashes = await extractAndHashZipFiles(fileBuffer);
       console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
+      
+      // 🆕 GENERAR UPLOAD IDS INDIVIDUALES SOLO PARA ARCHIVOS COMPRIMIDOS
+      console.log(`[${originalFileName}] 🆔 Generando uploadIds individuales para archivos del ${fileExtension.toUpperCase()}...`);
+      for (const fileName of Object.keys(individualFileHashes)) {
+        const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+        individualUploadIds[fileName] = childUploadId;
+        
+        // 🆕 REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO (con parent_upload_id)
+        await createActivityRecord(
+          childUploadId,                              // uploadId del hijo
+          empresaId,
+          fileName,
+          fileName.split('.').pop() || 'unknown',
+          uploadId                                    // 🔒 parentUploadId (SOLO para hijos de ZIP/RAR)
+        );
+        
+        console.log(`  [${fileExtension.toUpperCase()}] ${fileName} → UploadId: ${childUploadId}`);
+      }
+      
+      console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales`);
+      
+      // 🆕 REGISTRAR EL ARCHIVO COMPRIMIDO PADRE (SIN parent_upload_id porque ES el padre)
+      await createActivityRecord(
+        uploadId,
+        empresaId,
+        originalFileName,
+        fileExtension || 'unknown'
+        // 🔒 NO se pasa parentUploadId aquí (es el archivo padre)
+      );
+      
     } else {
+      // 🔒 ARCHIVOS NORMALES (NO COMPRIMIDOS)
       console.log(`[${originalFileName}] Verificando si ya existe este archivo...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
 
@@ -202,6 +237,15 @@ export async function uploadDocument(
       }
 
       console.log(`[${originalFileName}] ✓ No se encontraron duplicados. Procediendo con la subida...`);
+      
+      // 🆕 REGISTRAR ARCHIVO NORMAL (SIN parent_upload_id porque no es hijo de ZIP)
+      await createActivityRecord(
+        uploadId,
+        empresaId,
+        originalFileName,
+        fileExtension || 'unknown'
+        // 🔒 NO se pasa parentUploadId (archivo normal, no hijo de comprimido)
+      );
     }
 
     const now = new Date();
@@ -238,21 +282,13 @@ export async function uploadDocument(
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // 🆕 REGISTRAR ACTIVIDAD INICIAL EN LA BD
-    await createActivityRecord(
-      uploadId,
-      empresaId,
-      originalFileName,
-      fileExtension || 'unknown'
-    );
-
-    // PREPARAR PAYLOAD CON HASHES INDIVIDUALES Y UPLOADID
+    // PREPARAR PAYLOAD CON HASHES INDIVIDUALES, UPLOAD IDS Y UPLOADID PADRE
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
       fileHash: mainFileHash,
-      uploadId: uploadId,
+      uploadId: uploadId,  // 🆔 ID padre del ZIP (o del archivo único)
       fileName: originalFileName,
       fileSize: fileSize,
       publicUrl: publicUrl,
@@ -261,12 +297,15 @@ export async function uploadDocument(
 
     if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
       webhookPayload.individualFileHashes = individualFileHashes;
-      console.log(`[${originalFileName}] ⚠️ Enviando ${Object.keys(individualFileHashes).length} hashes individuales al webhook`);
-      console.log(`[${originalFileName}] Mapa de hashes:`, individualFileHashes);
+      webhookPayload.individualUploadIds = individualUploadIds;  // 🆕 NUEVO: IDs individuales
+      
+      console.log(`[${originalFileName}] ⚠️ Enviando ${Object.keys(individualFileHashes).length} archivos individuales al webhook`);
+      console.log(`[${originalFileName}] 📋 Mapa de hashes:`, individualFileHashes);
+      console.log(`[${originalFileName}] 🆔 Mapa de uploadIds:`, individualUploadIds);
     }
 
     console.log(`[${originalFileName}] Notificando a webhook...`);
-    console.log(`[${originalFileName}] 🆔 Enviando uploadId: ${uploadId}`);
+    console.log(`[${originalFileName}] 🆔 Enviando uploadId padre: ${uploadId}`);
 
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
