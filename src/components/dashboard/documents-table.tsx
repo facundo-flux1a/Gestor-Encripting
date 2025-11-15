@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, calcularTrimestre } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback } from 'react';
 import { Checkbox } from '../ui/checkbox';
@@ -25,11 +25,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
 import { deleteDocument } from '@/services/document-service';
+import { confirmDocument } from '@/services/document-client-service';
 
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
     onSummarize: (doc: Document) => void,
-    onDelete: (doc: Document) => void
+    onDelete: (doc: Document) => void,
+    onConfirm: (doc: Document) => void,
+    showConfirmButton: boolean = false
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     {
@@ -37,35 +40,64 @@ const getColumns = (
       header: 'Acciones',
       cell: ({ row }) => {
         const doc = row.original;
-        const actionsContent = (
-          <>
-            <Button 
-              variant="ghost" 
-              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(doc);
-              }}
-            >
-              <span className="sr-only">Eliminar</span>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+        return (
+          <div className="flex items-center gap-2 relative z-10">
+            {/* ✅ BOTÓN CONFIRMAR - Solo visible si showConfirmButton es true */}
+            {showConfirmButton && (
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-950 relative z-20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfirm(doc);
+                    }}
+                  >
+                    <span className="sr-only">Confirmar</span>
+                    <CheckCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={5} className="z-[9999]">
+                  <p>Confirmar documento</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(doc);
+                  }}
+                >
+                  <span className="sr-only">Eliminar</span>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={5} className="z-[9999]">
+                <p>Eliminar documento</p>
+              </TooltipContent>
+            </Tooltip>
+            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-8 w-8 p-0 relative z-20">
                   <span className="sr-only">Ver más</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="z-[9999]">
                 <DropdownMenuItem onClick={() => onSummarize(doc)}>
                   Resumir con IA
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </>
+          </div>
         );
-        return <div className="flex items-center gap-2">{actionsContent}</div>;
       },
       footer: () => null,
       enableHiding: false,
@@ -97,7 +129,6 @@ const getColumns = (
             />
             <div className="flex items-center gap-2">
               <span>{doc.id_documento}</span>
-              {/* ⬅️ BADGE "NUEVO" CON GRADIENTE VIOLETA - YA ESTÁ ✅ */}
               {doc.is_new === 1 && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/50 animate-pulse">
                   ✨ Nuevo
@@ -348,16 +379,30 @@ const getColumns = (
   return columns;
 }
 
-export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage = false, filename = 'documentos' }: { documents: Document[], hiddenColumns?: string[], isIncidentsPage?: boolean, filename?: string }) {
+export function DocumentsTable({ 
+  documents, 
+  hiddenColumns = [], 
+  isIncidentsPage = false, 
+  filename = 'documentos',
+  showConfirmButton = false 
+}: { 
+  documents: Document[], 
+  hiddenColumns?: string[], 
+  isIncidentsPage?: boolean, 
+  filename?: string,
+  showConfirmButton?: boolean
+}) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [docToDelete, setDocToDelete] = useState<Document | null>(null);
+  const [docToConfirm, setDocToConfirm] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
-  // ⬅️ DEBUG: Log para verificar qué documentos tienen is_new = 1 - YA ESTÁ ✅
   console.log('🔍 [DocumentsTable] Documentos con is_new:', documents.filter(d => d.is_new === 1).map(d => ({
     id: d.id_documento,
     numero: d.numero_documento,
@@ -376,6 +421,44 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
   const handleDeleteClick = (doc: Document) => {
     setDocToDelete(doc);
     setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmClick = (doc: Document) => {
+    setDocToConfirm(doc);
+    setIsConfirmDialogOpen(true);
+  };
+
+  const handleConfirmDocument = async () => {
+    if (!docToConfirm) return;
+
+    setIsConfirming(true);
+    try {
+      console.log('✅ Intentando confirmar documento:', docToConfirm.id_documento);
+      
+      const result = await confirmDocument(docToConfirm.id_documento);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Error al confirmar el documento');
+      }
+
+      toast({
+        title: 'Documento confirmado',
+        description: `El documento #${docToConfirm.numero_documento || docToConfirm.id_documento} ha sido confirmado. Tipo actualizado: "${result.tipo_nuevo}"`,
+      });
+
+      router.refresh();
+    } catch (error) {
+      console.error('❌ Error al confirmar:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo confirmar el documento. Por favor, inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsConfirming(false);
+      setIsConfirmDialogOpen(false);
+      setDocToConfirm(null);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -411,7 +494,6 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     }
   };
 
-  // ⬅️ FUNCIÓN PARA MARCAR COMO LEÍDO - YA ESTÁ ✅
   const handleMarkAsRead = useCallback(async (documentId: number) => {
     try {
       console.log('👁️ [handleMarkAsRead] Marcando documento como leído:', documentId);
@@ -430,18 +512,15 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
       const result = await response.json();
       console.log('✅ Documento marcado como leído:', result);
       
-      // Refrescar la página para actualizar el badge
       router.refresh();
     } catch (error) {
       console.error('❌ Error al marcar como leído:', error);
     }
   }, [router]);
 
-  // ⬅️ handleRowClick marca como leído - YA ESTÁ ✅
   const handleRowClick = useCallback((doc: Document) => {
     console.log('🖱️ [handleRowClick] Click en documento:', { id: doc.id_documento, is_new: doc.is_new });
     
-    // Si el documento es nuevo, marcarlo como leído
     if (doc.is_new === 1) {
       handleMarkAsRead(doc.id_documento);
     }
@@ -449,7 +528,13 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
     router.push(`/documento/${doc.id_documento}`);
   }, [router, handleMarkAsRead]);
 
-  const columns = useMemo(() => getColumns(handleUpdate as any, handleSummarize, handleDeleteClick), [handleUpdate]);
+  const columns = useMemo(() => getColumns(
+    handleUpdate as any, 
+    handleSummarize, 
+    handleDeleteClick, 
+    handleConfirmClick,
+    showConfirmButton
+  ), [handleUpdate, showConfirmButton]);
 
   return (
     <>
@@ -469,6 +554,36 @@ export function DocumentsTable({ documents, hiddenColumns = [], isIncidentsPage 
         setIsOpen={setIsSummarizeOpen}
       />
 
+      {/* Dialog para CONFIRMAR documento */}
+      <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar documento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a confirmar el documento
+              {docToConfirm?.numero_documento && ` #${docToConfirm.numero_documento}`} (ID: {docToConfirm?.id_documento}).
+              <br /><br />
+              Tipo actual: <strong>{docToConfirm?.tipo_documento}</strong>
+              <br />
+              Tipo después de confirmar: <strong>{docToConfirm?.tipo_documento?.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim()}</strong>
+              <br /><br />
+              Esta acción moverá el documento de "Sin Confirmar" a su categoría correspondiente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isConfirming}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDocument}
+              disabled={isConfirming}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              {isConfirming ? 'Confirmando...' : 'Confirmar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog para ELIMINAR documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

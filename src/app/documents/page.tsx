@@ -5,6 +5,7 @@ import { useCompanyContext } from '@/context/CompanyProvider'
 import { Document } from '@/lib/types'
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout'
 import { DocumentsTable } from '@/components/dashboard/documents-table'
+import { GroupedDocumentsView } from '@/components/dashboard/grouped-documents-view'
 import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -174,14 +175,20 @@ function DocumentsPageContent() {
               <TabsTrigger value="facturas">Facturas ({facturas.length})</TabsTrigger>
               <TabsTrigger value="otros">Otros Documentos ({otrosDocumentos.length})</TabsTrigger>
             </TabsList>
-            <TabsContent value="sin-confirmar" className="space-y-4">
-              <DocumentsTable documents={sinConfirmar} filename="documentos_sin_confirmar" />
-            </TabsContent>
+            
+  <TabsContent value="sin-confirmar" className="space-y-4">
+  <DocumentsTable 
+    documents={sinConfirmar} 
+    filename="documentos_sin_confirmar"
+    showConfirmButton={true}  
+  />
+</TabsContent>
             <TabsContent value="facturas" className="space-y-4">
               <DocumentsTable documents={facturas} filename="facturas" />
             </TabsContent>
             <TabsContent value="otros" className="space-y-4">
-              <DocumentsTable 
+              {/* ✅ USAR GroupedDocumentsView EN VEZ DE DocumentsTable */}
+              <GroupedDocumentsView 
                 documents={otrosDocumentos} 
                 filename="otros_documentos"
                 hiddenColumns={otherDocsHiddenColumns} 

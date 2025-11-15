@@ -10,6 +10,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 
+
 interface DocumentPacket extends RowDataPacket {
     id: number;
     tipo_documento: string;
