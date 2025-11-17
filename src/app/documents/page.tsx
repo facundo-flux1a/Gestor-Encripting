@@ -125,7 +125,6 @@ function DocumentsPageContent() {
               Documentos
             </h1>
           </div>
-          {/* ✅ BOTÓN SIEMPRE DISPONIBLE */}
           <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
         </MainLayoutHeader>
         
@@ -135,7 +134,6 @@ function DocumentsPageContent() {
           </div>
         </div>
         
-        {/* ✅ NUEVO COMPONENTE UploadDialog */}
         <UploadDialog 
           isOpen={isUploadOpen}
           onClose={() => setIsUploadOpen(false)}
@@ -159,7 +157,6 @@ function DocumentsPageContent() {
             )}
           </h1>
         </div>
-        {/* ✅ BOTÓN SIEMPRE DISPONIBLE (sin restricción) */}
         <Button onClick={() => setIsUploadOpen(true)}>Subir Documento</Button>
       </MainLayoutHeader>
       
@@ -176,29 +173,38 @@ function DocumentsPageContent() {
               <TabsTrigger value="otros">Otros Documentos ({otrosDocumentos.length})</TabsTrigger>
             </TabsList>
             
-  <TabsContent value="sin-confirmar" className="space-y-4">
-  <DocumentsTable 
-    documents={sinConfirmar} 
-    filename="documentos_sin_confirmar"
-    showConfirmButton={true}  
-  />
-</TabsContent>
-            <TabsContent value="facturas" className="space-y-4">
-              <DocumentsTable documents={facturas} filename="facturas" />
+            <TabsContent value="sin-confirmar" className="space-y-4">
+              <DocumentsTable 
+                documents={sinConfirmar} 
+                filename="documentos_sin_confirmar"
+                showConfirmButton={true}  
+                viewId="documentos-sin-confirmar" 
+                enableColumnPersistence={true}
+              />
             </TabsContent>
+            
+            <TabsContent value="facturas" className="space-y-4">
+              <DocumentsTable 
+                documents={facturas} 
+                filename="facturas" 
+                viewId="documentos-facturas"
+                enableColumnPersistence={true}
+              />
+            </TabsContent>
+            
             <TabsContent value="otros" className="space-y-4">
-              {/* ✅ USAR GroupedDocumentsView EN VEZ DE DocumentsTable */}
               <GroupedDocumentsView 
                 documents={otrosDocumentos} 
                 filename="otros_documentos"
                 hiddenColumns={otherDocsHiddenColumns} 
+                viewId="documentos-otros"
+                enableColumnPersistence={true}
               />
             </TabsContent>
           </Tabs>
         )}
       </div>
       
-      {/* ✅ NUEVO COMPONENTE UploadDialog */}
       <UploadDialog 
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}

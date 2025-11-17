@@ -4,11 +4,13 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { IncidentsAnalytics } from "@/components/incidents/incidents-analytics";
 import { AnalyzeDocumentsCard } from "@/components/incidents/analyze-documents-card";
+import { AIIncidentsTable } from "@/components/incidents/ai-incidents-table";
 import { useCompanyContext } from "@/context/CompanyProvider";
 import { useState, useEffect } from "react";
 import type { Document } from "@/lib/types";
 import type { IncidentsAnalyticsData } from "@/components/incidents/incidents-analytics";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 
 export default function IncidentsPage() {
     const { selectedCompanyIds } = useCompanyContext();
@@ -80,6 +82,7 @@ export default function IncidentsPage() {
                     <div className="space-y-6">
                         <Skeleton className="h-[300px] w-full" />
                         <Skeleton className="h-[400px] w-full" />
+                        <Skeleton className="h-[400px] w-full" />
                     </div>
                 </div>
             </MainLayout>
@@ -97,7 +100,9 @@ export default function IncidentsPage() {
                         </p>
                     </div>
                 </MainLayoutHeader>
+                
                 <div className="space-y-6">
+                    {/* Analytics y Card de Análisis */}
                     <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
                         <div className="lg:col-span-2">
                             <IncidentsAnalytics data={analyticsData} />
@@ -107,11 +112,27 @@ export default function IncidentsPage() {
                         </div>
                     </div>
 
+                    <Separator className="my-6" />
+
+                    {/* ✅ NUEVA: Tabla de Incidencias de IA */}
+                    <AIIncidentsTable 
+                        empresaIds={selectedCompanyIds} 
+                        onRefresh={handleAnalysisComplete}
+                    />
+
+                    <Separator className="my-6" />
+
+                    {/* Tabla de Documentos con Incidencias (existente) */}
                     <div>
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-2xl font-semibold tracking-tight">
-                                Documentos con Incidencias Pendientes
-                            </h3>
+                            <div>
+                                <h3 className="text-2xl font-semibold tracking-tight">
+                                    Documentos con Incidencias Pendientes
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Incidencias manuales y de validación
+                                </p>
+                            </div>
                         </div>
                         <DocumentsTable 
                             documents={docs} 

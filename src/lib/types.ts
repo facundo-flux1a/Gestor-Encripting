@@ -4,6 +4,7 @@ export const UserSchema = z.object({
   id: z.number(),
   nombre: z.string(),
   email: z.string(),
+  password: z.string().nullable().optional(), // ⬅️ AGREGADO
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -102,7 +103,7 @@ export type Document = {
   base_imponible: number;
   iva: number;
   total: number;
-  is_new: number; // ⬅️ YA ESTABA - PERFECTO ✅
+  is_new: number;
   entidades: DocumentEntity[];
   lineas: DocumentLine[];
   iva_details: IvaDetail[];
@@ -169,7 +170,7 @@ export type Company = {
   id: number;
   name: string;
   nombreFiscal?: string | null;
-  cif?: string;
+  cif?: string ;
 };
 
 export type CreateDocumentPayload = {

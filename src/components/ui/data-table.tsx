@@ -58,10 +58,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import { Skeleton } from './skeleton';
+import { useColumnOrder } from '@/hooks/use-column-order'; // 🆕 NUEVO
 
 
 interface DataTableProps<TData, TValue> {
@@ -69,7 +70,10 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   hiddenColumns?: string[];
   filename: string;
-  onRowClick?: (row: TData) => void; // ← NUEVO
+  onRowClick?: (row: TData) => void;
+  // 🆕 NUEVAS PROPS PARA PERSISTENCIA
+  viewId?: string; // Identificador único de la vista (ej: "documentos-sin-confirmar")
+  enableColumnPersistence?: boolean; // Activar/desactivar persistencia
 }
 
 
@@ -234,21 +238,17 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
         console.log('🏁 [Drag End]');
     };
 
-    // ← NUEVO: Manejar click en la fila
     const handleRowClick = (e: React.MouseEvent) => {
-        // Prevenir navegación si se hace click en elementos interactivos
         const target = e.target as HTMLElement;
         
-        // Verificar si es un elemento interactivo o está dentro de uno
         const isInteractive = target.closest(
             'button, a, input, textarea, select, ' +
             '[role="button"], [role="checkbox"], ' +
             '[contenteditable="true"], ' +
-            '.editable-cell, ' + // Clase para celdas editables
-            '[data-editable="true"]' // Atributo data para celdas editables
+            '.editable-cell, ' +
+            '[data-editable="true"]'
         );
         
-        // También verificar si el target mismo es editable
         const isEditableElement = 
             target.isContentEditable || 
             target.hasAttribute('contenteditable') ||
@@ -265,11 +265,11 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
             ref={setNodeRef}
             style={style}
             data-state={row.getIsSelected() && 'selected'}
-            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer" // ← AGREGADO cursor-pointer
+            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer"
             draggable={true}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            onClick={handleRowClick} // ← NUEVO
+            onClick={handleRowClick}
         >
              {row.getVisibleCells().map(cell => (
                 <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
@@ -321,7 +321,9 @@ export function DataTable<TData, TValue>({
   data: initialData,
   hiddenColumns = [],
   filename,
-  onRowClick, // ← NUEVO
+  onRowClick,
+  viewId, // 🆕 NUEVO
+  enableColumnPersistence = false, // 🆕 NUEVO
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
@@ -329,12 +331,35 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
-  const [columnOrder, setColumnOrder] = React.useState<string[]>(() =>
-    columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean)
+  // 🆕 NUEVO: Orden por defecto de las columnas
+  const defaultColumnOrder = React.useMemo(
+    () => columns.map((c) => (c as any).accessorKey || c.id!).filter(Boolean),
+    [columns]
   );
+
+  // 🆕 NUEVO: Hook para persistencia de columnas
+  const {
+    columnOrder: savedColumnOrder,
+    setColumnOrder: saveColumnOrder,
+    isLoading: isLoadingColumnOrder,
+    resetOrder,
+  } = useColumnOrder(
+    viewId || 'default',
+    defaultColumnOrder
+  );
+
+  // 🆕 NUEVO: Estado local de columnOrder
+  const [columnOrder, setColumnOrder] = React.useState<string[]>(defaultColumnOrder);
+
+  // 🆕 NUEVO: Sincronizar orden guardado con estado local
+  React.useEffect(() => {
+    if (enableColumnPersistence && savedColumnOrder.length > 0 && !isLoadingColumnOrder) {
+      console.log('🔄 [DataTable] Aplicando orden guardado:', savedColumnOrder);
+      setColumnOrder(savedColumnOrder);
+    }
+  }, [savedColumnOrder, enableColumnPersistence, isLoadingColumnOrder]);
   
   React.useEffect(() => {
     setData(initialData);
@@ -357,13 +382,26 @@ export function DataTable<TData, TValue>({
       sorting,
       columnFilters,
       columnVisibility,
-      columnOrder,
+      columnOrder, // 🆕 AGREGADO
       globalFilter,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnOrderChange: setColumnOrder,
+    onColumnOrderChange: (updater) => {
+      // 🆕 NUEVO: Callback mejorado para guardar en Redis
+      const newOrder = typeof updater === 'function' 
+        ? updater(columnOrder) 
+        : updater;
+      
+      console.log('📝 [DataTable] Orden actualizado:', newOrder);
+      setColumnOrder(newOrder);
+      
+      // Guardar en Redis si está habilitado
+      if (enableColumnPersistence) {
+        saveColumnOrder(newOrder);
+      }
+    },
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -397,19 +435,29 @@ export function DataTable<TData, TValue>({
         return headerDef;
     }
     return col.id;
-};
+  };
   
+  // 🆕 MODIFICADO: Guardar en Redis cuando se arrastra
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
         if(active.id.toString().startsWith('column-')) {
             const oldId = active.id.toString().replace('column-', '');
             const newId = over.id.toString().replace('column-', '');
-            setColumnOrder((items) => {
-                const oldIndex = items.indexOf(oldId);
-                const newIndex = items.indexOf(newId);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+            
+            const newColumnOrder = arrayMove(
+              columnOrder, 
+              columnOrder.indexOf(oldId), 
+              columnOrder.indexOf(newId)
+            );
+            
+            console.log('🎯 [DataTable] Columna arrastrada:', { oldId, newId, newOrder: newColumnOrder });
+            setColumnOrder(newColumnOrder);
+            
+            // Guardar en Redis si está habilitado
+            if (enableColumnPersistence) {
+              saveColumnOrder(newColumnOrder);
+            }
         } else if(active.id.toString().startsWith('row-')) {
             setData((items) => {
                 const oldIndex = items.findIndex(item => (item as any).id_documento === rowIds[active.data.current!.sortable.index]);
@@ -427,7 +475,6 @@ export function DataTable<TData, TValue>({
     useSensor(KeyboardSensor)
   );
 
-  // ← ACTUALIZADO: Pasar onRowClick
   const defaultRenderRow = (row: Row<TData>) => {
     const hasIdDocumento = 'id_documento' in row.original;
     if(hasIdDocumento) {
@@ -540,6 +587,23 @@ export function DataTable<TData, TValue>({
             </div>
         </div>
         <div className="flex items-center gap-2">
+            {/* 🆕 NUEVO: Botón para resetear columnas */}
+            {enableColumnPersistence && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  console.log('🔄 [DataTable] Reseteando columnas...');
+                  resetOrder();
+                }}
+                className="h-10"
+                title="Resetear orden de columnas"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Resetear
+              </Button>
+            )}
+            
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="ml-auto">

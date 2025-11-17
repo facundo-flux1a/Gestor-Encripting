@@ -58,7 +58,13 @@ const getColumns = (
                     <CheckCircle className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={5} className="z-[9999]">
+                <TooltipContent 
+                  side="bottom" 
+                  sideOffset={5} 
+                  className="z-[99999]"
+                  avoidCollisions={true}
+                  collisionPadding={10}
+                >
                   <p>Confirmar documento</p>
                 </TooltipContent>
               </Tooltip>
@@ -78,7 +84,13 @@ const getColumns = (
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={5} className="z-[9999]">
+              <TooltipContent 
+                side="bottom" 
+                sideOffset={5} 
+                className="z-[99999]"
+                avoidCollisions={true}
+                collisionPadding={10}
+              >
                 <p>Eliminar documento</p>
               </TooltipContent>
             </Tooltip>
@@ -90,7 +102,7 @@ const getColumns = (
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="z-[9999]">
+              <DropdownMenuContent align="end" className="z-[99999]">
                 <DropdownMenuItem onClick={() => onSummarize(doc)}>
                   Resumir con IA
                 </DropdownMenuItem>
@@ -384,13 +396,17 @@ export function DocumentsTable({
   hiddenColumns = [], 
   isIncidentsPage = false, 
   filename = 'documentos',
-  showConfirmButton = false 
+  showConfirmButton = false,
+  viewId, // 🆕 NUEVO: Identificador de la vista
+  enableColumnPersistence = true, // 🆕 NUEVO: Activar persistencia por defecto
 }: { 
   documents: Document[], 
   hiddenColumns?: string[], 
   isIncidentsPage?: boolean, 
   filename?: string,
-  showConfirmButton?: boolean
+  showConfirmButton?: boolean,
+  viewId?: string, // 🆕 NUEVO
+  enableColumnPersistence?: boolean, // 🆕 NUEVO
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -545,6 +561,8 @@ export function DocumentsTable({
           hiddenColumns={hiddenColumns} 
           filename={filename}
           onRowClick={handleRowClick}
+          viewId={viewId} // 🆕 NUEVO: Pasar viewId
+          enableColumnPersistence={enableColumnPersistence} // 🆕 NUEVO: Pasar enableColumnPersistence
         />
       </TooltipProvider>
       

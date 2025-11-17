@@ -11,6 +11,26 @@ import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 
 
+function calcularTrimestre(fecha: Date): number {
+  const mes = fecha.getMonth() + 1; // 0-11 -> 1-12
+  
+  if (mes >= 1 && mes <= 3) return 1;
+  if (mes >= 4 && mes <= 6) return 2;
+  if (mes >= 7 && mes <= 9) return 3;
+  return 4;
+}
+
+function isDateInCurrentQuarter(date: Date): boolean {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentQuarter = calcularTrimestre(now);
+  
+  const docYear = date.getFullYear();
+  const docQuarter = calcularTrimestre(date);
+  
+  return docYear === currentYear && docQuarter === currentQuarter;
+}
+
 interface DocumentPacket extends RowDataPacket {
     id: number;
     tipo_documento: string;
@@ -27,6 +47,16 @@ interface DocumentPacket extends RowDataPacket {
     empresa_nombre?: string | null;  // ⬅️ AGREGAR
     empresa_cif?: string | null; 
     is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
+}
+interface DatosExtra {
+  EMPRESA_EMISORA?: {
+    NOMBRE?: string;
+    DIRECCION?: string;
+    CIF?: string;
+    TELEFONO?: string;
+    EMAIL?: string;
+  };
+  datos_originales?: any;
 }
 
 interface ArchivoPacket extends RowDataPacket {
@@ -523,6 +553,12 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
             return [];
         }
 
+        // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
+        if (!empresaIds || empresaIds.length === 0) {
+            console.log('ℹ️ [getIncidents] No hay empresas seleccionadas');
+            return [];
+        }
+
         let query = `
             SELECT DISTINCT d.*,
                 e.nombre_de_empresa as empresa_nombre,
@@ -533,15 +569,10 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
             WHERE i.validado = 0 
               AND e.id_de_usuario = ?
               AND d.id_de_empresa IS NOT NULL
+              AND d.id_de_empresa IN (?)
         `;
         
-        const params: any[] = [user.id];
-        
-        // Si se especifican empresas, filtrar por ellas
-        if (empresaIds && empresaIds.length > 0) {
-            query += ' AND d.id_de_empresa IN (?)';
-            params.push(empresaIds);
-        }
+        const params: any[] = [user.id, empresaIds];
         
         query += ' ORDER BY d.fecha_emision DESC';
 
@@ -558,6 +589,7 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
         return [];
     }
 }
+
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
     const connection = await db.getConnection();
@@ -612,21 +644,31 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 }
 
+// ✅ ARREGLADO: Tipado de connection como PoolConnection
 async function recalculateDocumentTotals(docId: number, connection: any) {
     // Recalculate base_imponible from lines
-    const [lineSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?', [docId]);
+    const [lineSumResult] = await connection.query(
+        'SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?', 
+        [docId]
+    ) as [RowDataPacket[], any];
     const baseImponible = Number(lineSumResult[0].total_lines) || 0;
     
     // Recalculate total_iva from taxes (excluding retentions)
-    const [taxSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(cuota) as total_tax FROM impuestos_documento WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [docId, '%retencion%']);
+    const [taxSumResult] = await connection.query(
+        'SELECT SUM(cuota) as total_tax FROM impuestos_documento WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', 
+        [docId, '%retencion%']
+    ) as [RowDataPacket[], any];
     const totalIva = Number(taxSumResult[0].total_tax) || 0;
     
     // Get total retentions
-    const [retentionSumResult] = await connection.query<RowDataPacket[]>('SELECT SUM(cuota) as total_retention FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [docId, '%retencion%']);
+    const [retentionSumResult] = await connection.query(
+        'SELECT SUM(cuota) as total_retention FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', 
+        [docId, '%retencion%']
+    ) as [RowDataPacket[], any];
     const totalRetention = Number(retentionSumResult[0].total_retention) || 0;
     
     // The total is base + taxes - retentions
-    const total = baseImponible + totalIva + totalRetention; // Note: retentions are often negative, so adding works.
+    const total = baseImponible + totalIva + totalRetention;
 
     await connection.query(
         'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
@@ -1136,7 +1178,7 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   
     // ✅ PASO 5: Convertir Map a Array
     const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
-      let datosExtra = {};
+     let datosExtra: DatosExtra = {};
       try {
         datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
       } catch {}
@@ -1374,17 +1416,23 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             };
         }
 
-        // ✅ AGREGADO: Filtro de tipo de documento
+        // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
+        if (!empresaIds || empresaIds.length === 0) {
+            console.log('ℹ️ [getIncidentsAnalytics] No hay empresas seleccionadas');
+            return {
+                totalOpen: 0,
+                totalValidated: 0,
+                byProvider: [],
+                byType: []
+            };
+        }
+
+        // ✅ Filtro de tipo de documento
         const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
         
-        // Preparar filtro de empresas
-        let whereEmpresa = 'AND e2.id_de_usuario = ?';
-        const params: any[] = [user.id];
-        
-        if (empresaIds && empresaIds.length > 0) {
-            whereEmpresa += ' AND d.id_de_empresa IN (?)';
-            params.push(empresaIds);
-        }
+        // ✅ Filtro de empresas (ahora siempre presente)
+        const whereEmpresa = 'AND e2.id_de_usuario = ? AND d.id_de_empresa IN (?)';
+        const params: any[] = [user.id, empresaIds];
 
         const [summary] = await db.query<RowDataPacket[]>(`
             SELECT 

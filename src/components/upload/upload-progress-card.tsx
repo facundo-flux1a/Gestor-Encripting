@@ -22,8 +22,8 @@ interface UploadProgressData {
   progress: number;
   message: string;
   error?: string;
-  isCompressed?: boolean;  // 🆕 Indica si es ZIP
-  children?: ChildProgress[];  // 🆕 Archivos hijos
+  isCompressed?: boolean;
+  children?: ChildProgress[];
   data?: {
     error?: string;
     message?: string;
@@ -36,7 +36,7 @@ interface UploadItem {
   progressData: UploadProgressData;
   connectionStatus: 'polling' | 'error' | 'completed';
   isMinimized: boolean;
-  isExpanded: boolean;  // 🆕 Para expandir/colapsar lista de archivos
+  isExpanded: boolean;
 }
 
 export function UploadProgressManager() {
@@ -62,7 +62,7 @@ export function UploadProgressManager() {
           },
           connectionStatus: 'polling',
           isMinimized: false,
-          isExpanded: true  // 🆕 Expandido por defecto
+          isExpanded: true
         });
       }
       return newUploads;
@@ -97,7 +97,6 @@ export function UploadProgressManager() {
     });
   }, []);
 
-  // 🆕 Toggle para expandir/colapsar lista de archivos
   const toggleExpand = useCallback((uploadId: string) => {
     setUploads(prev => {
       const newUploads = new Map(prev);
@@ -155,7 +154,6 @@ export function UploadProgressManager() {
                 if (current) {
                   current.progressData = data;
                   
-                  // Normalizar estados
                   const normalizedStatus = data.status.toLowerCase();
                   if (normalizedStatus === 'completado' || data.status === 'completed' || 
                       normalizedStatus === 'fallido' || data.status === 'failed') {
@@ -251,7 +249,7 @@ function UploadCard({
     if (normalizedStatus === 'completado' || status === 'completed') {
       return <CheckCircle2 className="h-5 w-5 text-green-500" />;
     }
-    if (normalizedStatus === 'fallido' || status === 'failed') {
+    if (normalizedStatus === 'fallido' || status === 'failed' || normalizedStatus === 'interrumpido') {
       return <AlertCircle className="h-5 w-5 text-red-500" />;
     }
     return <Loader2 className="h-5 w-5 animate-spin text-violet-600" />;
@@ -263,7 +261,7 @@ function UploadCard({
     if (normalizedStatus === 'completado' || status === 'completed') {
       return 'bg-green-500';
     }
-    if (normalizedStatus === 'fallido' || status === 'failed') {
+    if (normalizedStatus === 'fallido' || status === 'failed' || normalizedStatus === 'interrumpido') {
       return 'bg-red-500';
     }
     return 'bg-violet-600';
@@ -324,7 +322,6 @@ function UploadCard({
       
       {!upload.isMinimized && (
         <CardContent className="space-y-3">
-          {/* Barra de progreso general */}
           <div className="space-y-1">
             <Progress 
               value={upload.progressData.progress} 
@@ -337,12 +334,10 @@ function UploadCard({
             </div>
           </div>
 
-          {/* Mensaje descriptivo */}
           <p className="text-sm text-muted-foreground">
             {upload.progressData.message}
           </p>
 
-          {/* 🆕 LISTA DE ARCHIVOS INDIVIDUALES (si es ZIP) */}
           {isCompressed && (
             <div className="border border-violet-200 dark:border-violet-700 rounded-md overflow-hidden">
               <button
@@ -361,38 +356,51 @@ function UploadCard({
               
               {upload.isExpanded && (
                 <div className="max-h-48 overflow-y-auto divide-y divide-violet-100 dark:divide-violet-800">
-                  {upload.progressData.children!.map((child) => (
-                    <div key={child.uploadId} className="p-2 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors">
-                      <div className="flex items-start gap-2">
-                        <FileText className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {child.fileName}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <Progress 
-                              value={child.progress} 
-                              className="h-1 flex-1"
-                              indicatorClassName={getStatusColor(child.status)}
-                            />
-                            <span className="text-[10px] font-medium text-muted-foreground shrink-0">
-                              {child.progress}%
-                            </span>
+                  {upload.progressData.children!.map((child) => {
+                    const childNormalizedStatus = child.status?.toLowerCase() || '';
+                    const isChildCompleted = childNormalizedStatus === 'completado' || child.status === 'completed';
+                    const isChildFailed = childNormalizedStatus === 'fallido' || child.status === 'failed' || childNormalizedStatus === 'interrumpido';
+                    
+                    return (
+                      <div key={child.uploadId} className="p-2 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors">
+                        <div className="flex items-start gap-2">
+                          <FileText className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                              {child.fileName}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Progress 
+                                value={child.progress} 
+                                className="h-1 flex-1"
+                                indicatorClassName={getStatusColor(child.status)}
+                              />
+                              <span className="text-[10px] font-medium text-muted-foreground shrink-0">
+                                {child.progress}%
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {child.step}
+                            </p>
                           </div>
-                          <p className="text-[10px] text-muted-foreground truncate">
-                            {child.step}
-                          </p>
+                          <div className="shrink-0">
+                            {isChildCompleted ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : isChildFailed ? (
+                              <X className="h-4 w-4 text-red-500" />
+                            ) : (
+                              <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+                            )}
+                          </div>
                         </div>
-                        {getStatusIcon(child.status)}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* Error de conexión */}
           {upload.connectionStatus === 'error' && upload.progressData.status !== 'failed' && upload.progressData.status !== 'completed' && (
             <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-md p-3">
               <div className="flex items-start gap-2">
@@ -409,7 +417,6 @@ function UploadCard({
             </div>
           )}
 
-          {/* Error de procesamiento */}
           {upload.progressData.status === 'failed' && (
             <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-3">
               <div className="flex items-start gap-2">
@@ -426,7 +433,6 @@ function UploadCard({
             </div>
           )}
 
-          {/* Mensaje de éxito */}
           {(upload.progressData.status === 'completed' || upload.progressData.status === 'Completado') && (
             <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md p-3">
               <div className="flex items-center gap-2">

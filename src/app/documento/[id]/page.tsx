@@ -33,9 +33,16 @@ const isDateInCurrentQuarter = (dateString: string | null): boolean => {
 
         const now = new Date();
 
+        // Calcular trimestre (0-3)
         const getQuarter = (d: Date) => Math.floor(d.getMonth() / 3);
 
-        return docDate.getFullYear() === now.getFullYear() && getQuarter(docDate) === getQuarter(now);
+        const docYear = docDate.getFullYear();
+        const docQuarter = getQuarter(docDate);
+        
+        const currentYear = now.getFullYear();
+        const currentQuarter = getQuarter(now);
+
+        return docYear === currentYear && docQuarter === currentQuarter;
     } catch {
         return false;
     }
@@ -53,7 +60,7 @@ export default function DocumentoPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
-  const [key, setKey] = useState(0); // Key to force re-render
+  const [key, setKey] = useState(0);
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
@@ -127,7 +134,6 @@ export default function DocumentoPage() {
                 title: "Documento Eliminado",
                 description: "El documento ha sido eliminado correctamente."
             });
-            // Redirigir manualmente desde el cliente
             window.location.href = '/documents';
         } else {
             toast({
@@ -157,7 +163,7 @@ export default function DocumentoPage() {
             title: "Incidencias Validadas",
             description: "Las incidencias del documento han sido marcadas como resueltas."
         });
-        setKey(prevKey => prevKey + 1); // Refresh data
+        setKey(prevKey => prevKey + 1);
     } catch (error) {
         console.error("Failed to validate incidents", error);
         toast({
@@ -203,8 +209,7 @@ export default function DocumentoPage() {
       resetFormWithDocData(doc);
   }
 
-  const isEditable = useMemo(() => isDateInCurrentQuarter(doc?.fecha_emision ?? null), [doc]);
-
+ const isEditable = useMemo(() => isDateInCurrentQuarter(doc?.fecha_creacion ?? null), [doc]);
 
   if (isLoading) {
     return (
@@ -221,7 +226,7 @@ export default function DocumentoPage() {
   }
 
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
-  const exportData = doc ? [doc] : []; // ExportButton expects an array
+  const exportData = doc ? [doc] : [];
 
   return (
     <MainLayout>
@@ -331,12 +336,12 @@ export default function DocumentoPage() {
             </Form>
       </TooltipProvider>
       <DeleteConfirmationDialog
-  isOpen={isDeleteDialogOpen}
-  onClose={() => setIsDeleteDialogOpen(false)}
-  onConfirm={handleDelete}
-  documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
-  isDeleting={isDeleting}
-/>
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
+        isDeleting={isDeleting}
+      />
       <DocumentPreviewDialog
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}

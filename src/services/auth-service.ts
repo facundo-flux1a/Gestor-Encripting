@@ -88,6 +88,25 @@ export async function createSession(userId: number, email: string, nombre: strin
 
 }
 
+/**
+ * Crea la configuración de IA por defecto para un nuevo usuario
+ */
+async function createDefaultAIConfig(userId: number) {
+  try {
+    await db.query(
+      `INSERT INTO erp49.ai_user_config 
+       (user_id, use_own_key, daily_limit_openai, daily_limit_gemini, is_unlimited)
+       VALUES (?, FALSE, 5, 50, FALSE)
+       ON DUPLICATE KEY UPDATE user_id = user_id`,
+      [userId]
+    );
+    console.log('✅ [createDefaultAIConfig] Config de IA creada para usuario:', userId);
+  } catch (error) {
+    console.error('❌ [createDefaultAIConfig] Error creando config:', error);
+    // No fallar el registro si esto falla
+  }
+}
+
 export async function login(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
@@ -160,6 +179,10 @@ export async function register(formData: FormData) {
         );
 
         const newUserId = result.insertId;
+        
+        // Crear configuración de IA por defecto
+        await createDefaultAIConfig(newUserId);
+        
         await createSession(newUserId, email, nombre);
 
     } catch (error) {
@@ -195,6 +218,9 @@ export async function handleGoogleSignInOnServer(
           [nombre, email, null]
       );
       user = { id: result.insertId, email, nombre };
+      
+      // Crear configuración de IA por defecto para nuevo usuario
+      await createDefaultAIConfig(user.id);
     }
 
     await createSession(user.id, user.email, user.nombre);

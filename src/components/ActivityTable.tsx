@@ -26,6 +26,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { DeleteActivityDialog } from '@/components/DeleteActivityDialog';
 
 interface Activity {
   id: number;
@@ -45,7 +46,6 @@ interface Activity {
   completed_at: string | null;
   nombre_de_empresa: string;
   CIF: string;
-  // Campos adicionales del documento
   tipo_documento?: string;
   numero_documento?: string;
   empresa_emisora?: string;
@@ -82,6 +82,11 @@ export default function ActivityTable({
     offset: 0,
     hasMore: false,
   });
+
+  // Estado para el modal de eliminación
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filtros
   const [filters, setFilters] = useState<Filters>({
@@ -184,11 +189,17 @@ export default function ActivityTable({
     }
   };
 
-  const deleteActivity = async (activityId: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta actividad?')) return;
+  const handleDeleteClick = (activity: Activity) => {
+    setActivityToDelete(activity);
+    setDeleteDialogOpen(true);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!activityToDelete) return;
+
+    setIsDeleting(true);
     try {
-      const response = await fetch(`/api/activity/${activityId}`, {
+      const response = await fetch(`/api/activity/${activityToDelete.id}`, {
         method: 'DELETE',
       });
 
@@ -197,9 +208,13 @@ export default function ActivityTable({
       }
 
       await fetchActivities();
+      setDeleteDialogOpen(false);
+      setActivityToDelete(null);
     } catch (err: any) {
       console.error('Error al eliminar:', err);
       alert('Error al eliminar la actividad');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -393,7 +408,7 @@ export default function ActivityTable({
 
         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => deleteActivity(activity.id)}
+            onClick={() => handleDeleteClick(activity)}
             className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
             title="Eliminar actividad"
           >
@@ -499,7 +514,7 @@ export default function ActivityTable({
 
           <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => deleteActivity(zipActivity.id)}
+              onClick={() => handleDeleteClick(zipActivity)}
               className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
               title="Eliminar actividad"
             >
@@ -554,254 +569,264 @@ export default function ActivityTable({
   const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 gap-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-700/50 hover:bg-violet-700 text-violet-100 rounded-lg transition-all duration-200 backdrop-blur-sm border border-violet-500/30"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver</span>
-          </button>
+    <>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-700/50 hover:bg-violet-700 text-violet-100 rounded-lg transition-all duration-200 backdrop-blur-sm border border-violet-500/30"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Volver</span>
+            </button>
+            
+            <p className="text-sm text-violet-300">
+              Mostrando <span className="font-semibold text-violet-200">{activities.length}</span> de{' '}
+              <span className="font-semibold text-violet-200">{pagination.total}</span> actividades
+            </p>
+          </div>
           
-          <p className="text-sm text-violet-300">
-            Mostrando <span className="font-semibold text-violet-200">{activities.length}</span> de{' '}
-            <span className="font-semibold text-violet-200">{pagination.total}</span> actividades
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          {/* Botón Filtros */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border ${
-              showFilters || activeFiltersCount > 0
-                ? 'bg-violet-600 text-white border-violet-500'
-                : 'bg-violet-700/50 text-violet-100 border-violet-500/30 hover:bg-violet-700'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            <span>Filtros</span>
-            {activeFiltersCount > 0 && (
-              <span className="bg-violet-400 text-violet-900 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                {activeFiltersCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Botón Filtros */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border ${
+                showFilters || activeFiltersCount > 0
+                  ? 'bg-violet-600 text-white border-violet-500'
+                  : 'bg-violet-700/50 text-violet-100 border-violet-500/30 hover:bg-violet-700'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span>Filtros</span>
+              {activeFiltersCount > 0 && (
+                <span className="bg-violet-400 text-violet-900 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
 
-          {/* Auto-refresh */}
-          <div className="relative">
-            <div className="flex items-center gap-2 bg-violet-800/40 backdrop-blur-sm border border-violet-600/30 rounded-lg px-3 py-2">
-              <button
-                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-                  autoRefreshEnabled 
-                    ? 'text-violet-200' 
-                    : 'text-violet-400'
-                }`}
-              >
-                {autoRefreshEnabled ? (
-                  <Zap className="w-4 h-4 text-green-400" />
-                ) : (
-                  <ZapOff className="w-4 h-4" />
+            {/* Auto-refresh */}
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-violet-800/40 backdrop-blur-sm border border-violet-600/30 rounded-lg px-3 py-2">
+                <button
+                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                  className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                    autoRefreshEnabled 
+                      ? 'text-violet-200' 
+                      : 'text-violet-400'
+                  }`}
+                >
+                  {autoRefreshEnabled ? (
+                    <Zap className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <ZapOff className="w-4 h-4" />
+                  )}
+                  <span>Auto</span>
+                </button>
+                
+                {autoRefreshEnabled && (
+                  <>
+                    <div className="w-px h-4 bg-violet-600/50" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowIntervalMenu(!showIntervalMenu);
+                      }}
+                      className="text-sm text-violet-200 hover:text-violet-100 font-medium px-2 py-0.5 rounded hover:bg-violet-700/30 transition-colors"
+                    >
+                      {intervalOptions.find(opt => opt.value === refreshInterval)?.label}
+                    </button>
+                  </>
                 )}
-                <span>Auto</span>
-              </button>
+              </div>
               
-              {autoRefreshEnabled && (
+              {showIntervalMenu && autoRefreshEnabled && (
                 <>
-                  <div className="w-px h-4 bg-violet-600/50" />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowIntervalMenu(!showIntervalMenu);
-                    }}
-                    className="text-sm text-violet-200 hover:text-violet-100 font-medium px-2 py-0.5 rounded hover:bg-violet-700/30 transition-colors"
-                  >
-                    {intervalOptions.find(opt => opt.value === refreshInterval)?.label}
-                  </button>
+                  <div 
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowIntervalMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 bg-violet-900 border border-violet-700 rounded-lg shadow-xl z-20 py-1 min-w-[100px]">
+                    {intervalOptions.map(option => (
+                      <button
+                        key={option.value}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRefreshInterval(option.value);
+                          setShowIntervalMenu(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                          refreshInterval === option.value
+                            ? 'bg-violet-700 text-violet-100 font-medium'
+                            : 'text-violet-200 hover:bg-violet-800/50'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
-            
-            {showIntervalMenu && autoRefreshEnabled && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowIntervalMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-2 bg-violet-900 border border-violet-700 rounded-lg shadow-xl z-20 py-1 min-w-[100px]">
-                  {intervalOptions.map(option => (
-                    <button
-                      key={option.value}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRefreshInterval(option.value);
-                        setShowIntervalMenu(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                        refreshInterval === option.value
-                          ? 'bg-violet-700 text-violet-100 font-medium'
-                          : 'text-violet-200 hover:bg-violet-800/50'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+
+            {/* Refresh manual */}
+            <button
+              onClick={() => fetchActivities()}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Actualizar</span>
+            </button>
           </div>
-
-          {/* Refresh manual */}
-          <button
-            onClick={() => fetchActivities()}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Actualizar</span>
-          </button>
         </div>
-      </div>
 
-      {/* Panel de Filtros */}
-      {showFilters && (
-        <div className="bg-violet-900/40 border border-violet-700/50 rounded-lg p-4 backdrop-blur-sm">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Estado */}
-            <div>
-              <label className="block text-sm font-medium text-violet-200 mb-2">
-                Estado
-              </label>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
-              >
-                {statusOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Fecha desde */}
-            <div>
-              <label className="block text-sm font-medium text-violet-200 mb-2">
-                Desde
-              </label>
-              <input
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-
-            {/* Fecha hasta */}
-            <div>
-              <label className="block text-sm font-medium text-violet-200 mb-2">
-                Hasta
-              </label>
-              <input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-
-            {/* Búsqueda */}
-            <div>
-              <label className="block text-sm font-medium text-violet-200 mb-2">
-                Buscar
-              </label>
-              <input
-                type="text"
-                value={filters.searchText}
-                onChange={(e) => setFilters(prev => ({ ...prev, searchText: e.target.value }))}
-                placeholder="Nombre, CIF, documento..."
-                className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 placeholder-violet-400 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-          </div>
-
-          {activeFiltersCount > 0 && (
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-violet-300">
-                {activeFiltersCount} filtro{activeFiltersCount !== 1 ? 's' : ''} activo{activeFiltersCount !== 1 ? 's' : ''}
-              </span>
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-2 px-3 py-1 text-sm text-violet-200 hover:text-violet-100 hover:bg-violet-700/30 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-                Limpiar filtros
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tabla */}
-      <div className="bg-gradient-to-br from-violet-950/90 via-violet-900/80 to-violet-950/90 border border-violet-700/50 rounded-lg overflow-hidden shadow-xl backdrop-blur-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto">
-            <thead className="bg-violet-800/60 backdrop-blur-sm border-b border-violet-700/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+        {/* Panel de Filtros */}
+        {showFilters && (
+          <div className="bg-violet-900/40 border border-violet-700/50 rounded-lg p-4 backdrop-blur-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Estado */}
+              <div>
+                <label className="block text-sm font-medium text-violet-200 mb-2">
                   Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
-                  Documento
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
-                  Empresa
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
-                  Fecha
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
-                  Progreso
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-violet-800/30">
-              {zipFiles.map(zipActivity => {
-                const children = childrenMap.get(zipActivity.upload_id) || [];
-                return renderZipRow(zipActivity, children);
-              })}
-              
-              {regularFiles.map(activity => renderActivityRow(activity))}
-            </tbody>
-          </table>
+                </label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
+                >
+                  {statusOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Fecha desde */}
+              <div>
+                <label className="block text-sm font-medium text-violet-200 mb-2">
+                  Desde
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                  className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              {/* Fecha hasta */}
+              <div>
+                <label className="block text-sm font-medium text-violet-200 mb-2">
+                  Hasta
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                  className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              {/* Búsqueda */}
+              <div>
+                <label className="block text-sm font-medium text-violet-200 mb-2">
+                  Buscar
+                </label>
+                <input
+                  type="text"
+                  value={filters.searchText}
+                  onChange={(e) => setFilters(prev => ({ ...prev, searchText: e.target.value }))}
+                  placeholder="Nombre, CIF, documento..."
+                  className="w-full px-3 py-2 bg-violet-950/50 border border-violet-700 rounded-lg text-violet-100 placeholder-violet-400 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+            </div>
+{activeFiltersCount > 0 && (
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-sm text-violet-300">
+                  {activeFiltersCount} filtro{activeFiltersCount !== 1 ? 's' : ''} activo{activeFiltersCount !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-2 px-3 py-1 text-sm text-violet-200 hover:text-violet-100 hover:bg-violet-700/30 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                  Limpiar filtros
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tabla */}
+        <div className="bg-gradient-to-br from-violet-950/90 via-violet-900/80 to-violet-950/90 border border-violet-700/50 rounded-lg overflow-hidden shadow-xl backdrop-blur-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto">
+              <thead className="bg-violet-800/60 backdrop-blur-sm border-b border-violet-700/50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Documento
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Empresa
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Progreso
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-violet-800/30">
+                {zipFiles.map(zipActivity => {
+                  const children = childrenMap.get(zipActivity.upload_id) || [];
+                  return renderZipRow(zipActivity, children);
+                })}
+                
+                {regularFiles.map(activity => renderActivityRow(activity))}
+              </tbody>
+            </table>
+          </div>
         </div>
+
+        {/* Paginación */}
+        {pagination.hasMore && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
+              disabled={loading}
+              className="px-6 py-2.5 font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 active:bg-violet-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Cargando...</span>
+                </>
+              ) : (
+                <span>Cargar más</span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Paginación */}
-      {pagination.hasMore && (
-        <div className="flex justify-center mt-6">
-          <button
-            onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
-            disabled={loading}
-            className="px-6 py-2.5 font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 active:bg-violet-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Cargando...</span>
-              </>
-            ) : (
-              <span>Cargar más</span>
-            )}
-          </button>
-        </div>
-      )}
-    </div>
+      {/* Modal de confirmación de eliminación */}
+      <DeleteActivityDialog
+        isOpen={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        activityName={activityToDelete?.documento_nombre || ''}
+        isDeleting={isDeleting}
+      />
+    </>
   );
 }
