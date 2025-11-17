@@ -145,12 +145,12 @@ export function UploadDialog({
   };
 
   const handleClose = () => {
-    if (!isUploading) {
-      setFiles([]);
-      setSelectedCompanyId('');
-      onClose();
-    }
-  };
+  // Siempre limpiar estado y cerrar (incluso si está uploading)
+  setFiles([]);
+  setSelectedCompanyId('');
+  setIsUploading(false); // 🆕 Resetear también isUploading
+  onClose();
+};
 
   const handleRemoveFile = (index: number) => {
     setFiles(files.filter((_, i) => i !== index));
@@ -161,7 +161,11 @@ export function UploadDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+  if (!open) {
+    handleClose(); // Solo ejecutar handleClose cuando se intenta cerrar
+  }
+}}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>
