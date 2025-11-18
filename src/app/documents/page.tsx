@@ -9,6 +9,7 @@ import { GroupedDocumentsView } from '@/components/dashboard/grouped-documents-v
 import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useDocumentEvents } from '@/hooks/useDocumentEvents' // ✅ NUEVO
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
@@ -19,8 +20,13 @@ function DocumentsPageContent() {
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const [key, setKey] = React.useState(0);
   
-  // ✅ Estado para mantener el tab activo
   const [activeTab, setActiveTab] = React.useState('sin-confirmar');
+
+  // ✅ NUEVO: Escuchar eventos de actualización
+  useDocumentEvents(() => {
+    console.log('🔔 [DocumentsPage] Recargando documentos por evento externo');
+    setKey(prevKey => prevKey + 1);
+  });
 
   console.log('🏢 [DocumentsPage] selectedCompanyIds actual:', selectedCompanyIds);
 
@@ -61,7 +67,6 @@ function DocumentsPageContent() {
         
         const data = await response.json();
         
-        // Mostrar información de debug
         if (data.debug) {
           console.log('🔍 [DEBUG] Información del servidor:', data.debug);
         }
@@ -108,7 +113,6 @@ function DocumentsPageContent() {
     'retencion', 'base_imponible', 'iva', 'total'
   ];
 
-  // ✅ Transformar companies al formato esperado por UploadDialog
   const companiesForUpload = React.useMemo(() => {
     return companies.map(company => ({
       id: company.id,

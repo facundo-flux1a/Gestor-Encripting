@@ -282,6 +282,39 @@ const getColumns = (
       }
     },
     {
+  id: 'incidencia_motivo',
+  header: 'Motivo Incidencia',
+  cell: ({ row }) => {
+    const doc = row.original;
+    
+    // Si no hay incidencia, mostrar "Sin incidencias"
+    if (!doc.incidencia || !doc.incidencia_razon) {
+      return (
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <span className="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+          Sin incidencias
+        </div>
+      );
+    }
+    
+    // Si hay incidencia, mostrar el motivo
+    return (
+      <div className="flex items-center gap-2 max-w-md">
+        <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+        <div className="flex-1">
+          <div 
+            className="text-sm font-medium line-clamp-2 text-red-600 dark:text-red-400 cursor-help" 
+            title={doc.incidencia_razon}
+          >
+            {doc.incidencia_razon}
+          </div>
+        </div>
+      </div>
+    );
+  },
+  footer: () => null,
+},
+    {
       accessorKey: 'tipo_documento',
       header: 'Tipo Documento',
       cell: ({ row, table }) => {

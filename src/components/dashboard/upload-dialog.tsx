@@ -229,7 +229,7 @@ export function UploadDialog({
               Seleccionar archivos
             </Button>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-              PDF, Word, Excel, Imágenes, ZIP, RAR
+              PDF - ZIP
             </p>
           </div>
 
