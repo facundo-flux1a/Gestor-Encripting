@@ -84,8 +84,7 @@ export async function createSession(userId: number, email: string, nombre: strin
         secure: process.env.NODE_ENV === 'production',
         path: '/',
     });
-        console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/' });
-
+    console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/' });
 }
 
 /**
@@ -233,8 +232,14 @@ export async function handleGoogleSignInOnServer(
   }
 }
 
+/**
+ * Cierra sesión y retorna información para que el cliente limpie el localStorage
+ */
 export async function logout() {
+  console.log('🚪 [logout] Cerrando sesión del servidor');
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
-  redirect('/auth/login');
+  
+  // Redirigir con query param para que el cliente sepa que debe limpiar storage
+  redirect('/auth/login?logout=true');
 }

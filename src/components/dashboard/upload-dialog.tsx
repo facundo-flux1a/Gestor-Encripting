@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
+import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function UploadDialog({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -82,17 +84,27 @@ export function UploadDialog({
     }
 
     if (droppedFiles.length > validFiles.length) {
-      alert('Algunos archivos no tienen un formato válido y fueron ignorados');
+      toast({
+        title: "Archivos no válidos",
+        description: "Algunos archivos no tienen un formato válido y fueron ignorados",
+        variant: "destructive",
+      });
     }
   };
 
   const handleUpload = async () => {
     if (!selectedCompanyId || files.length === 0) {
-      alert('Por favor selecciona una empresa y al menos un archivo');
+      toast({
+        title: "Datos incompletos",
+        description: "Por favor selecciona una empresa y al menos un archivo",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsUploading(true);
+    let successCount = 0;
+    let errorCount = 0;
 
     try {
       // Procesar cada archivo
@@ -116,17 +128,31 @@ export function UploadDialog({
 
           // Subir el archivo (esto dispara el flujo de n8n)
           await uploadDocument(formData);
+          successCount++;
           
         } catch (error: any) {
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
+          errorCount++;
           
-          // Si el error es de tamaño, mostrar mensaje específico
-          if (error.message?.includes('413') || error.message?.includes('Body exceeded')) {
-            alert(`El archivo "${file.name}" es demasiado grande. Límite: 10MB`);
-          } else {
-            alert(`Error al subir "${file.name}": ${error.message || 'Error desconocido'}`);
-          }
+          // Mostrar toast en lugar de alert
+          const errorMessage = error.message?.includes('413') || error.message?.includes('Body exceeded')
+            ? `El archivo "${file.name}" es demasiado grande. Límite: 10MB`
+            : `Error al subir "${file.name}"`;
+
+          toast({
+            title: "Error al subir archivo",
+            description: errorMessage,
+            variant: "destructive",
+          });
         }
+      }
+
+      // Mostrar resumen si hubo éxitos
+      if (successCount > 0) {
+        toast({
+          title: "Archivos enviados",
+          description: `${successCount} archivo(s) en procesamiento${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
+        });
       }
     } finally {
       // Limpiar estado y cerrar SIEMPRE (incluso si hubo errores)
@@ -145,12 +171,12 @@ export function UploadDialog({
   };
 
   const handleClose = () => {
-  // Siempre limpiar estado y cerrar (incluso si está uploading)
-  setFiles([]);
-  setSelectedCompanyId('');
-  setIsUploading(false); // 🆕 Resetear también isUploading
-  onClose();
-};
+    // Siempre limpiar estado y cerrar (incluso si está uploading)
+    setFiles([]);
+    setSelectedCompanyId('');
+    setIsUploading(false);
+    onClose();
+  };
 
   const handleRemoveFile = (index: number) => {
     setFiles(files.filter((_, i) => i !== index));
@@ -162,10 +188,10 @@ export function UploadDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-  if (!open) {
-    handleClose(); // Solo ejecutar handleClose cuando se intenta cerrar
-  }
-}}>
+      if (!open) {
+        handleClose();
+      }
+    }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Subir Nuevos Documentos</DialogTitle>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFormStatus } from 'react-dom';
@@ -16,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
+import { LogoutDetector } from '@/components/auth/LogoutDetector'; // 👈 NUEVO IMPORT
 
 
 function LoginButton() {
@@ -123,6 +123,11 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+      {/* 🆕 AGREGAR DETECTOR DE LOGOUT */}
+      <Suspense fallback={null}>
+        <LogoutDetector />
+      </Suspense>
+
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>

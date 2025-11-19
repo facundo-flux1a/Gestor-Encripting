@@ -59,6 +59,7 @@
     "mysql2": "^3.10.1",
     "next": "15.3.3",
     "next-themes": "^0.3.0",
+    "node-unrar-js": "^2.0.2",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -68,6 +69,7 @@
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "unrar-js": "^0.2.3",
     "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },

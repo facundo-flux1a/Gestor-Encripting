@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DeleteActivityDialog } from '@/components/DeleteActivityDialog';
+import { DeleteAllActivitiesDialog } from '@/components/DeleteAllActivitiesDialog';
 
 interface Activity {
   id: number;
@@ -83,10 +84,14 @@ export default function ActivityTable({
     hasMore: false,
   });
 
-  // Estado para el modal de eliminación
+  // Estado para el modal de eliminación individual
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Estado para el modal de eliminación masiva
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   // Filtros
   const [filters, setFilters] = useState<Filters>({
@@ -215,6 +220,39 @@ export default function ActivityTable({
       alert('Error al eliminar la actividad');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteAllClick = () => {
+    setDeleteAllDialogOpen(true);
+  };
+
+  const handleConfirmDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      const response = await fetch('/api/activity/delete-all', {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar todas las actividades');
+      }
+
+      const result = await response.json();
+      
+      // Resetear todo
+      await fetchActivities();
+      setPagination(prev => ({ ...prev, offset: 0 }));
+      setDeleteAllDialogOpen(false);
+      
+      // Mostrar mensaje de éxito
+      alert(`✅ ${result.deleted.activities} actividades y ${result.deleted.documents} documentos eliminados correctamente`);
+      
+    } catch (err: any) {
+      console.error('Error al eliminar todas las actividades:', err);
+      alert('Error al eliminar todas las actividades');
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -589,6 +627,18 @@ export default function ActivityTable({
           </div>
           
           <div className="flex items-center gap-3">
+            {/* Botón Eliminar Todo - Solo se muestra si hay actividades */}
+            {pagination.total > 0 && (
+              <button
+                onClick={handleDeleteAllClick}
+                disabled={isDeletingAll}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all duration-200 backdrop-blur-sm border border-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Eliminar todo</span>
+              </button>
+            )}
+
             {/* Botón Filtros */}
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -743,7 +793,8 @@ export default function ActivityTable({
                 />
               </div>
             </div>
-{activeFiltersCount > 0 && (
+
+            {activeFiltersCount > 0 && (
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-sm text-violet-300">
                   {activeFiltersCount} filtro{activeFiltersCount !== 1 ? 's' : ''} activo{activeFiltersCount !== 1 ? 's' : ''}
@@ -819,13 +870,22 @@ export default function ActivityTable({
         )}
       </div>
 
-      {/* Modal de confirmación de eliminación */}
+      {/* Modal de confirmación de eliminación individual */}
       <DeleteActivityDialog
         isOpen={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         activityName={activityToDelete?.documento_nombre || ''}
         isDeleting={isDeleting}
+      />
+
+      {/* Modal de confirmación de eliminación masiva */}
+      <DeleteAllActivitiesDialog
+        isOpen={deleteAllDialogOpen}
+        onOpenChange={setDeleteAllDialogOpen}
+        onConfirm={handleConfirmDeleteAll}
+        activityCount={pagination.total}
+        isDeleting={isDeletingAll}
       />
     </>
   );

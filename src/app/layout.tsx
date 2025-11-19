@@ -3,18 +3,23 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/layout/theme-provider';
 import { CompanyProvider } from '@/context/CompanyProvider'; 
-import { UploadProgressManager } from '@/components/upload/upload-progress-card'; // 👈 AGREGAR
+import { UploadProgressManager } from '@/components/upload/upload-progress-card';
+import { getSession } from '@/services/auth-service';
 
 export const metadata: Metadata = {
   title: 'Gestor Documental',
   description: 'Intelligent Document Management',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 🔐 Obtener sesión para pasar userId al manager
+  const session = await getSession();
+  const userId = session?.userId ?? null;
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
@@ -32,7 +37,8 @@ export default function RootLayout({
           <CompanyProvider> 
             {children}
             <Toaster />
-            <UploadProgressManager /> {/* 👈 AGREGAR AQUÍ */}
+            {/* 🆕 PASAR userId AL MANAGER */}
+            <UploadProgressManager userId={userId} />
           </CompanyProvider>
         </ThemeProvider>
       </body>

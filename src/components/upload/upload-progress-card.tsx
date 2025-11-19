@@ -37,15 +37,159 @@ interface UploadItem {
   connectionStatus: 'polling' | 'error' | 'completed';
   isMinimized: boolean;
   isExpanded: boolean;
+  timestamp: number;
 }
 
-export function UploadProgressManager() {
-  const [uploads, setUploads] = useState<Map<string, UploadItem>>(new Map());
+interface StorageData {
+  userId: number;
+  uploads: [string, UploadItem][];
+}
+
+const STORAGE_KEY = 'active_uploads';
+const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutos
+
+function saveToStorage(uploads: Map<string, UploadItem>, userId: number | null) {
+  if (!userId) return;
+  
+  try {
+    const serialized = Array.from(uploads.entries());
+    const data: StorageData = {
+      userId,
+      uploads: serialized
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    console.log('💾 [Storage] Guardados', serialized.length, 'uploads para userId:', userId);
+  } catch (error) {
+    console.error('❌ [Storage] Error guardando:', error);
+  }
+}
+
+function loadFromStorage(userId: number | null): Map<string, UploadItem> {
+  if (!userId) return new Map();
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return new Map();
+
+    const data: StorageData = JSON.parse(stored);
+    
+    if (data.userId !== userId) {
+      console.log('🧹 [Storage] userId diferente, limpiando storage anterior');
+      localStorage.removeItem(STORAGE_KEY);
+      return new Map();
+    }
+
+    const uploads = new Map(data.uploads);
+    console.log('📂 [Storage] Cargados', uploads.size, 'uploads para userId:', userId);
+    return uploads;
+  } catch (error) {
+    console.error('❌ [Storage] Error cargando:', error);
+    return new Map();
+  }
+}
+
+function cleanOldUploads(uploads: Map<string, UploadItem>): Map<string, UploadItem> {
+  const now = Date.now();
+  const cleaned = new Map<string, UploadItem>();
+
+  for (const [uploadId, upload] of uploads.entries()) {
+    const normalizedStatus = upload.progressData.status?.toLowerCase() || '';
+    const isFinished = 
+      normalizedStatus === 'completado' || 
+      upload.progressData.status === 'completed' ||
+      normalizedStatus === 'fallido' || 
+      upload.progressData.status === 'failed';
+
+    const age = now - upload.timestamp;
+
+    if (isFinished && age > MAX_AGE_MS) {
+      console.log('🧹 [Storage] Limpiando upload antiguo:', uploadId, `(${Math.round(age / 60000)}min)`);
+      continue;
+    }
+
+    cleaned.set(uploadId, upload);
+  }
+
+  return cleaned;
+}
+
+export function clearUploadStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    console.log('🧹 [Storage] Storage limpiado al cerrar sesión');
+  } catch (error) {
+    console.error('❌ [Storage] Error limpiando:', error);
+  }
+}
+
+interface UploadProgressManagerProps {
+  userId: number | null;
+}
+
+export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
+  // 🚀 Cargar desde localStorage INMEDIATAMENTE en la inicialización
+  const [uploads, setUploads] = useState<Map<string, UploadItem>>(() => {
+    if (userId) {
+      const stored = loadFromStorage(userId);
+      const cleaned = cleanOldUploads(stored);
+      console.log('🎬 [Manager] Inicialización - Cargados', cleaned.size, 'uploads');
+      return cleaned;
+    }
+    return new Map();
+  });
   const pollIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const prevUserIdRef = useRef<number | null>(userId); // Inicializar con userId actual
+  const hasLoadedRef = useRef(userId ? true : false); // Ya cargó si hay userId
+
+  // 🧹 EFECTO 1: Detectar cambio/cierre de sesión y limpiar
+  useEffect(() => {
+    const prevUserId = prevUserIdRef.current;
+
+    // Solo limpiar si había un usuario DIFERENTE antes
+    if (prevUserId !== null && prevUserId !== userId) {
+      console.log('🧹 [Manager] Usuario cambió o cerró sesión, limpiando estado:', { prevUserId, newUserId: userId });
+      
+      // Detener todos los pollings
+      pollIntervalsRef.current.forEach(interval => clearInterval(interval));
+      pollIntervalsRef.current.clear();
+      
+      // Limpiar estado
+      setUploads(new Map());
+      hasLoadedRef.current = false;
+    }
+
+    // Actualizar la referencia DESPUÉS de la limpieza
+    prevUserIdRef.current = userId;
+  }, [userId]);
+
+  // 🚀 EFECTO 2: Cargar uploads cuando hay usuario
+  useEffect(() => {
+    if (userId && !hasLoadedRef.current) {
+      console.log('🚀 [Manager] Cargando uploads para userId:', userId);
+      hasLoadedRef.current = true;
+      
+      const storedUploads = loadFromStorage(userId);
+      const cleanedUploads = cleanOldUploads(storedUploads);
+
+      if (cleanedUploads.size > 0) {
+        console.log('📥 [Manager] Restaurando', cleanedUploads.size, 'uploads');
+        setUploads(cleanedUploads);
+      }
+    }
+  }, [userId]);
+
+  // 💾 GUARDAR EN LOCALSTORAGE CADA VEZ QUE CAMBIA
+  useEffect(() => {
+    if (uploads.size > 0 && userId) {
+      saveToStorage(uploads, userId);
+    } else if (uploads.size === 0 && userId) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [uploads, userId]);
 
   const addUpload = useCallback((uploadId: string, fileName: string) => {
     console.log('➕ [Manager] Agregando upload:', uploadId, fileName);
-    
+
     setUploads(prev => {
       const newUploads = new Map(prev);
       if (!newUploads.has(uploadId)) {
@@ -62,7 +206,8 @@ export function UploadProgressManager() {
           },
           connectionStatus: 'polling',
           isMinimized: false,
-          isExpanded: true
+          isExpanded: true,
+          timestamp: Date.now()
         });
       }
       return newUploads;
@@ -71,13 +216,13 @@ export function UploadProgressManager() {
 
   const removeUpload = useCallback((uploadId: string) => {
     console.log('➖ [Manager] Eliminando upload:', uploadId);
-    
+
     const interval = pollIntervalsRef.current.get(uploadId);
     if (interval) {
       clearInterval(interval);
       pollIntervalsRef.current.delete(uploadId);
     }
-    
+
     setUploads(prev => {
       const newUploads = new Map(prev);
       newUploads.delete(uploadId);
@@ -122,14 +267,15 @@ export function UploadProgressManager() {
     };
   }, [addUpload, removeUpload]);
 
+  // 🔄 POLLING AUTOMÁTICO
   useEffect(() => {
     uploads.forEach((upload) => {
       if (upload.connectionStatus === 'polling' && !pollIntervalsRef.current.has(upload.uploadId)) {
         console.log('🔄 [Manager] Iniciando polling para:', upload.uploadId);
-        
+
         let consecutiveErrors = 0;
         const maxErrors = 5;
-        
+
         const poll = async () => {
           try {
             const response = await fetch(
@@ -139,34 +285,31 @@ export function UploadProgressManager() {
                 headers: { 'Cache-Control': 'no-cache' }
               }
             );
-            
+
             if (response.ok) {
               const data: UploadProgressData = await response.json();
-              
-              console.log('📊 [Manager] Estado:', upload.uploadId, data.step, data.progress, data.children?.length || 0, 'hijos');
-              
               consecutiveErrors = 0;
-              
+
               setUploads(prev => {
                 const newUploads = new Map(prev);
                 const current = newUploads.get(upload.uploadId);
-                
+
                 if (current) {
                   current.progressData = data;
-                  
+
                   const normalizedStatus = data.status.toLowerCase();
                   if (normalizedStatus === 'completado' || data.status === 'completed' || 
                       normalizedStatus === 'fallido' || data.status === 'failed') {
                     console.log('🛑 [Manager] Deteniendo polling por estado final:', upload.uploadId);
                     current.connectionStatus = 'completed';
-                    
+
                     const interval = pollIntervalsRef.current.get(upload.uploadId);
                     if (interval) {
                       clearInterval(interval);
                       pollIntervalsRef.current.delete(upload.uploadId);
                     }
                   }
-                  
+
                   newUploads.set(upload.uploadId, current);
                 }
                 return newUploads;
@@ -175,16 +318,16 @@ export function UploadProgressManager() {
               throw new Error(`HTTP ${response.status}`);
             }
           } catch (error) {
-            console.error('❌ [Manager] Error en polling:', upload.uploadId, error);
             consecutiveErrors++;
-            
+            console.warn('⚠️ [Manager] Error en polling:', error);
+
             if (consecutiveErrors >= maxErrors) {
-              console.error('💥 [Manager] Demasiados errores, deteniendo:', upload.uploadId);
+              console.error('❌ [Manager] Demasiados errores consecutivos, deteniendo polling');
               
               setUploads(prev => {
                 const newUploads = new Map(prev);
                 const current = newUploads.get(upload.uploadId);
-                
+
                 if (current) {
                   current.connectionStatus = 'error';
                   current.progressData = {
@@ -198,7 +341,7 @@ export function UploadProgressManager() {
                 }
                 return newUploads;
               });
-              
+
               const interval = pollIntervalsRef.current.get(upload.uploadId);
               if (interval) {
                 clearInterval(interval);
@@ -207,7 +350,7 @@ export function UploadProgressManager() {
             }
           }
         };
-        
+
         poll();
         const intervalId = setInterval(poll, 1000);
         pollIntervalsRef.current.set(upload.uploadId, intervalId);
@@ -245,7 +388,7 @@ function UploadCard({
 }) {
   const getStatusIcon = (status: string) => {
     const normalizedStatus = status?.toLowerCase() || '';
-    
+
     if (normalizedStatus === 'completado' || status === 'completed') {
       return <CheckCircle2 className="h-5 w-5 text-green-500" />;
     }
@@ -257,7 +400,7 @@ function UploadCard({
 
   const getStatusColor = (status: string) => {
     const normalizedStatus = status?.toLowerCase() || '';
-    
+
     if (normalizedStatus === 'completado' || status === 'completed') {
       return 'bg-green-500';
     }
@@ -319,7 +462,7 @@ function UploadCard({
           </div>
         </div>
       </CardHeader>
-      
+
       {!upload.isMinimized && (
         <CardContent className="space-y-3">
           <div className="space-y-1">
@@ -353,14 +496,14 @@ function UploadCard({
                   <ChevronDown className="h-4 w-4 text-violet-600" />
                 )}
               </button>
-              
+
               {upload.isExpanded && (
                 <div className="max-h-48 overflow-y-auto divide-y divide-violet-100 dark:divide-violet-800">
                   {upload.progressData.children!.map((child) => {
                     const childNormalizedStatus = child.status?.toLowerCase() || '';
                     const isChildCompleted = childNormalizedStatus === 'completado' || child.status === 'completed';
                     const isChildFailed = childNormalizedStatus === 'fallido' || child.status === 'failed' || childNormalizedStatus === 'interrumpido';
-                    
+
                     return (
                       <div key={child.uploadId} className="p-2 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors">
                         <div className="flex items-start gap-2">
