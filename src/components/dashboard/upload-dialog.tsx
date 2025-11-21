@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, X } from 'lucide-react';
+import { Upload, X, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/upload-service';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,6 +14,8 @@ interface UploadDialogProps {
   companies: Array<{ id: number; nombre: string }>;
   onUploadComplete?: () => void;
 }
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB en bytes
 
 export function UploadDialog({ 
   isOpen, 
@@ -28,9 +30,26 @@ export function UploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const validateFileSize = (file: File): boolean => {
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: "❌ Archivo demasiado grande",
+        description: `"${file.name}" excede el límite de 10 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      const selectedFiles = Array.from(e.target.files);
+      const validFiles = selectedFiles.filter(file => validateFileSize(file));
+      
+      if (validFiles.length > 0) {
+        setFiles(prevFiles => [...prevFiles, ...validFiles]);
+      }
     }
   };
 
@@ -74,18 +93,27 @@ export function UploadDialog({
       'application/vnd.rar',
     ];
     
-    // Filtrar solo archivos aceptados
+    // Filtrar archivos por tipo y tamaño
     const validFiles = droppedFiles.filter(file => {
-      return acceptedTypes.includes(file.type);
+      const isValidType = acceptedTypes.includes(file.type);
+      const isValidSize = validateFileSize(file);
+      
+      if (!isValidType) {
+        return false;
+      }
+      
+      return isValidSize;
     });
 
     if (validFiles.length > 0) {
       setFiles(prevFiles => [...prevFiles, ...validFiles]);
     }
 
-    if (droppedFiles.length > validFiles.length) {
+    // Mostrar mensaje si hubo archivos rechazados por tipo
+    const invalidTypeFiles = droppedFiles.filter(file => !acceptedTypes.includes(file.type));
+    if (invalidTypeFiles.length > 0) {
       toast({
-        title: "Archivos no válidos",
+        title: "⚠️ Archivos no válidos",
         description: "Algunos archivos no tienen un formato válido y fueron ignorados",
         variant: "destructive",
       });
@@ -95,8 +123,19 @@ export function UploadDialog({
   const handleUpload = async () => {
     if (!selectedCompanyId || files.length === 0) {
       toast({
-        title: "Datos incompletos",
+        title: "⚠️ Datos incompletos",
         description: "Por favor selecciona una empresa y al menos un archivo",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar tamaño de todos los archivos antes de subir
+    const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      toast({
+        title: "❌ Archivos demasiado grandes",
+        description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
         variant: "destructive",
       });
       return;
@@ -134,13 +173,13 @@ export function UploadDialog({
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
           errorCount++;
           
-          // Mostrar toast en lugar de alert
+          // Mostrar toast con error específico
           const errorMessage = error.message?.includes('413') || error.message?.includes('Body exceeded')
             ? `El archivo "${file.name}" es demasiado grande. Límite: 10MB`
-            : `Error al subir "${file.name}"`;
+            : `Error al subir "${file.name}": ${error.message || 'Error desconocido'}`;
 
           toast({
-            title: "Error al subir archivo",
+            title: "❌ Error al subir archivo",
             description: errorMessage,
             variant: "destructive",
           });
@@ -150,7 +189,7 @@ export function UploadDialog({
       // Mostrar resumen si hubo éxitos
       if (successCount > 0) {
         toast({
-          title: "Archivos enviados",
+          title: "✅ Archivos enviados",
           description: `${successCount} archivo(s) en procesamiento${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
         });
       }
@@ -185,6 +224,9 @@ export function UploadDialog({
   const handleSelectFilesClick = () => {
     fileInputRef.current?.click();
   };
+
+  // Verificar si hay archivos que exceden el tamaño
+  const hasOversizedFiles = files.some(file => file.size > MAX_FILE_SIZE);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -255,9 +297,24 @@ export function UploadDialog({
               Seleccionar archivos
             </Button>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-              PDF - ZIP
+              PDF - ZIP (máx. 10 MB por archivo)
             </p>
           </div>
+
+          {/* Alerta de archivos grandes */}
+          {hasOversizedFiles && (
+            <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                  Archivos demasiado grandes detectados
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                  Algunos archivos exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Lista de archivos seleccionados */}
           {files.length > 0 && (
@@ -266,28 +323,49 @@ export function UploadDialog({
                 Archivos seleccionados ({files.length})
               </p>
               <div className="max-h-40 overflow-y-auto space-y-1">
-                {files.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm truncate block">{file.name}</span>
-                      <span className="text-xs text-gray-500">
-                        {(file.size / 1024).toFixed(2)} KB
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={() => handleRemoveFile(index)}
-                      disabled={isUploading}
+                {files.map((file, index) => {
+                  const isOversized = file.size > MAX_FILE_SIZE;
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center justify-between p-2 rounded ${
+                        isOversized 
+                          ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800' 
+                          : 'bg-gray-50 dark:bg-gray-800'
+                      }`}
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {isOversized && (
+                          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm truncate block ${
+                            isOversized ? 'text-red-800 dark:text-red-200 font-medium' : ''
+                          }`}>
+                            {file.name}
+                          </span>
+                          <span className={`text-xs ${
+                            isOversized 
+                              ? 'text-red-600 dark:text-red-400 font-medium' 
+                              : 'text-gray-500'
+                          }`}>
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                            {isOversized && ' - Excede 10 MB'}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => handleRemoveFile(index)}
+                        disabled={isUploading}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -303,7 +381,7 @@ export function UploadDialog({
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={!selectedCompanyId || files.length === 0 || isUploading}
+              disabled={!selectedCompanyId || files.length === 0 || isUploading || hasOversizedFiles}
             >
               {isUploading ? 'Subiendo...' : `Subir ${files.length} archivo(s)`}
             </Button>

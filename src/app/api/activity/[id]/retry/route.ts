@@ -1,189 +1,159 @@
 import { NextResponse } from 'next/server';
 import connection from '@/lib/db';
 import { getSession } from '@/services/auth-service';
-import crypto from 'crypto';
+import { RowDataPacket } from 'mysql2';
+
+const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333';
 
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const conn = await connection.getConnection();
+  
   try {
+    await conn.beginTransaction();
+    
     const session = await getSession();
     
     if (!session) {
+      await conn.rollback();
+      conn.release();
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
     const activityId = params.id;
 
-    // 1️⃣ Obtener actividad original
-    const [rows] = await connection.query(
+    // 1️⃣ Obtener datos de la actividad desde la BD
+    const [rows] = await conn.query<RowDataPacket[]>(
       `SELECT 
-        a.*,
-        e.CIF
-       FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id = ? AND u.id = ?`,
+        a.upload_id,
+        a.id_de_empresa,
+        a.file_path,
+        a.file_hash,
+        a.cif,
+        a.documento_nombre,
+        a.retry_count
+      FROM erp49.actividad a
+      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
+      WHERE a.id = ? AND u.id = ?`,
       [activityId, session.userId]
     );
 
-    const activities = rows as any[];
-
-    if (activities.length === 0) {
-      return NextResponse.json({ error: 'Actividad no encontrada' }, { status: 404 });
+    if (!rows || rows.length === 0) {
+      await conn.rollback();
+      conn.release();
+      return NextResponse.json(
+        { error: 'Actividad no encontrada' },
+        { status: 404 }
+      );
     }
 
-    const originalActivity = activities[0];
+    const activity = rows[0];
 
-    // 2️⃣ Validar que el status permita retry
-    const allowedStatuses = ['Fallido', 'Interrumpido', 'Error'];
-    if (!allowedStatuses.some(s => originalActivity.status.toLowerCase().includes(s.toLowerCase()))) {
-      return NextResponse.json({ 
-        error: `No se puede reintentar. Estado actual: ${originalActivity.status}`,
-        allowedStatuses 
-      }, { status: 400 });
-    }
-
-    // 3️⃣ Parsear webhook_payload
-    let webhookPayload: any;
-    try {
-      webhookPayload = JSON.parse(originalActivity.webhook_payload);
-    } catch (error) {
-      return NextResponse.json({ 
-        error: 'Error al leer datos originales del archivo. El payload no es válido.' 
-      }, { status: 500 });
-    }
-
-    // 4️⃣ Generar nuevo upload_id
-    const timestamp = Date.now();
-    const randomSuffix = crypto.randomBytes(4).toString('hex');
-    const newUploadId = `upload_${timestamp}_retry_${randomSuffix}`;
-
-    console.log('🔄 [Retry] Iniciando reintento:', {
+    console.log('🔄 [RETRY] Datos obtenidos de la BD:', {
       activityId,
-      originalUploadId: originalActivity.upload_id,
-      newUploadId,
-      fileName: originalActivity.documento_nombre,
+      uploadId: activity.upload_id,
+      hasFilePath: !!activity.file_path,
+      hasFileHash: !!activity.file_hash,
+      hasCif: !!activity.cif,
+      empresaId: activity.id_de_empresa,
+      retryCount: activity.retry_count
     });
 
-    // 5️⃣ Crear nueva entrada en actividad (el retry)
-    await connection.query(
-      `INSERT INTO erp49.actividad (
-        upload_id,
-        parent_upload_id,
-        id_de_empresa,
-        documento_nombre,
-        documento_tipo,
-        status,
-        step,
-        progress,
-        mensaje,
-        file_path,
-        file_hash,
-        cif,
-        retry_count,
-        webhook_payload,
-        is_retry,
-        original_upload_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        newUploadId,
-        originalActivity.parent_upload_id, // Mantener el parent si existe
-        originalActivity.id_de_empresa,
-        originalActivity.documento_nombre,
-        originalActivity.documento_tipo,
-        'Iniciando',
-        'Reintentando procesamiento',
-        0,
-        `Reintento #${(originalActivity.retry_count || 0) + 1}`,
-        originalActivity.file_path,
-        originalActivity.file_hash,
-        originalActivity.cif,
-        (originalActivity.retry_count || 0) + 1,
-        originalActivity.webhook_payload,
-        true, // is_retry
-        originalActivity.upload_id, // original_upload_id
-      ]
-    );
+    // 2️⃣ Validar que tengamos los datos mínimos necesarios
+    if (!activity.file_path || !activity.file_hash || !activity.id_de_empresa) {
+      await conn.rollback();
+      conn.release();
+      return NextResponse.json(
+        { error: 'Datos insuficientes para reintentar. Faltan: file_path, file_hash o id_de_empresa.' },
+        { status: 400 }
+      );
+    }
 
-    // 6️⃣ Preparar payload para N8N
-    const retryPayload = {
-      ...webhookPayload,
-      
-      // 🔑 FLAGS DE RETRY
-      isRetry: true,
-      isIndividualRetry: true,
-      
-      // 🆔 IDs
-      uploadId: newUploadId,
-      originalUploadId: originalActivity.upload_id,
-      
-      // 📄 Info del archivo
-      fileName: originalActivity.documento_nombre,
-      text: originalActivity.file_path, // Path en MinIO
-      fileHash: originalActivity.file_hash,
-      
-      // 🏢 Empresa
-      empresaId: originalActivity.id_de_empresa.toString(),
-      cif: originalActivity.cif,
-      
-      // 📊 Metadata
-      retryCount: (originalActivity.retry_count || 0) + 1,
-      retryReason: 'manual_retry',
-      originalError: originalActivity.error_detalle,
-      
-      // 🔗 URL del webhook (la misma del original)
-      webhookUrl: webhookPayload.webhookUrl || 
-        'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf3334',
+    // 3️⃣ Construir el payload para el webhook usando el upload_id ORIGINAL
+    const webhookPayload = {
+      text: activity.file_path,
+      empresaId: activity.id_de_empresa,
+      cif: activity.cif || null,
+      fileHash: activity.file_hash,
+      uploadId: activity.upload_id,
+      fileName: activity.documento_nombre,
+      isCompressedFile: false,
     };
 
-    console.log('📤 [Retry] Enviando a N8N:', {
-      newUploadId,
-      fileName: retryPayload.fileName,
-      filePath: retryPayload.text,
-      retryCount: retryPayload.retryCount,
+    console.log('🔄 [RETRY] Payload construido:', {
+      uploadId: activity.upload_id,
+      fileName: webhookPayload.fileName,
+      filePath: webhookPayload.text,
+      empresaId: webhookPayload.empresaId
     });
 
-    // 7️⃣ Llamar al webhook de N8N
-    const webhookUrl = retryPayload.webhookUrl;
-    const webhookResponse = await fetch(webhookUrl, {
+    // 4️⃣ Actualizar el registro existente para resetear el estado
+    await conn.query(
+      `UPDATE erp49.actividad 
+       SET 
+         status = 'Reintentando',
+         step = 'Iniciando reintento',
+         progress = 0,
+         mensaje = 'Reenviando documento al agente',
+         error_detalle = NULL,
+         retry_count = retry_count + 1,
+         updated_at = NOW(),
+         completed_at = NULL
+       WHERE id = ?`,
+      [activityId]
+    );
+
+    // ✅ COMMIT ANTES de llamar al webhook
+    await conn.commit();
+    conn.release();
+
+    console.log('✅ [RETRY] Registro actualizado en BD');
+
+    // 5️⃣ 🔥 FIRE AND FORGET - NO ESPERAR RESPUESTA DE N8N
+    // Disparamos el webhook pero NO esperamos que termine
+    fetch(WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(retryPayload),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(webhookPayload),
+    }).then(response => {
+      if (!response.ok) {
+        console.error('❌ [RETRY] Webhook error (async):', response.status);
+        // Opcionalmente actualizar estado a fallido en background
+        // Pero n8n debería manejar esto con su propio callback
+      } else {
+        console.log('✅ [RETRY] Webhook enviado correctamente');
+      }
+    }).catch(err => {
+      console.error('❌ [RETRY] Webhook fetch error (async):', err);
     });
 
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.error('❌ [Retry] Error en webhook:', errorText);
-      
-      // Actualizar la actividad con el error
-      await connection.query(
-        `UPDATE erp49.actividad 
-         SET status = 'Fallido', 
-             mensaje = 'Error al reintentar',
-             error_detalle = ?
-         WHERE upload_id = ?`,
-        [`Error del webhook: ${errorText}`, newUploadId]
-      );
-      
-      throw new Error(`Error al reintentar: ${webhookResponse.status}`);
-    }
-
-    console.log('✅ [Retry] Webhook llamado exitosamente');
+    // 6️⃣ RESPONDER INMEDIATAMENTE al cliente
+    console.log('✅ [RETRY] Respondiendo inmediatamente al cliente:', { 
+      uploadId: activity.upload_id,
+      activityId
+    });
 
     return NextResponse.json({
       success: true,
-      message: `Reintento iniciado exitosamente`,
-      newUploadId,
-      retryCount: retryPayload.retryCount,
-      fileName: originalActivity.documento_nombre,
+      message: 'Reintento iniciado correctamente',
+      uploadId: activity.upload_id,
+      activityId,
     });
 
   } catch (error: any) {
-    console.error('❌ [Retry] Error:', error);
+    await conn.rollback();
+    conn.release();
+    console.error('❌ [RETRY] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Error al reintentar la actividad' },
+      { 
+        error: 'Error al reintentar',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
       { status: 500 }
     );
   }

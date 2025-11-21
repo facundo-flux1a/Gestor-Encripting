@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const dateTo = searchParams.get('dateTo');
     const search = searchParams.get('search');
 
-    // Query con LEFT JOIN para traer info del documento
+    // Query con LEFT JOIN para traer info del documento - AHORA INCLUYE is_new
     let query = `
       SELECT 
         a.id,
@@ -40,6 +40,7 @@ export async function GET(request: Request) {
         a.created_at,
         a.updated_at,
         a.completed_at,
+        a.is_new,
         e.nombre_de_empresa,
         e.CIF,
         d.tipo_documento,
@@ -178,7 +179,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Extraer ID de la URL (ej: /api/activity/123)
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/');
     const activityId = pathSegments[pathSegments.length - 1];
@@ -187,7 +187,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID de actividad requerido' }, { status: 400 });
     }
 
-    // Verificar que la actividad pertenece al usuario
     const [checkRows] = await connection.query(
       `SELECT a.id 
        FROM erp49.actividad a
@@ -201,7 +200,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Actividad no encontrada' }, { status: 404 });
     }
 
-    // Eliminar actividad
     await connection.query(
       'DELETE FROM erp49.actividad WHERE id = ?',
       [activityId]

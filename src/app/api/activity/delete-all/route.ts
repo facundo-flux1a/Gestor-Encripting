@@ -17,11 +17,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    console.log('🗑️ [DELETE ALL] Iniciando eliminación masiva para usuario:', session.userId);
+    console.log('🗑️ [DELETE ALL] Iniciando eliminación de actividades para usuario:', session.userId);
 
-    // 1️⃣ Obtener TODAS las actividades del usuario (con sus upload_ids)
-    const [allActivities] = await conn.query(
-      `SELECT a.id, a.upload_id, a.documento_id, a.parent_upload_id, a.documento_nombre
+    // 1️⃣ Contar actividades antes de eliminar
+    const [countResult] = await conn.query(
+      `SELECT COUNT(*) as total
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
        INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
@@ -29,44 +29,21 @@ export async function DELETE(request: Request) {
       [session.userId]
     );
 
-    const activitiesArray = allActivities as any[];
+    const totalActivities = (countResult as any[])[0]?.total || 0;
 
-    if (activitiesArray.length === 0) {
+    if (totalActivities === 0) {
       await conn.rollback();
       conn.release();
       return NextResponse.json({
         success: true,
         message: 'No hay actividades para eliminar',
-        deleted: { activities: 0, documents: 0 }
+        deleted: { activities: 0 }
       });
     }
 
-    console.log('📊 [DELETE ALL] Actividades encontradas:', activitiesArray.length);
+    console.log('📊 [DELETE ALL] Actividades a eliminar:', totalActivities);
 
-    // 2️⃣ Recopilar todos los documento_id únicos
-    const allDocumentIds = Array.from(
-      new Set(
-        activitiesArray
-          .map(a => a.documento_id)
-          .filter(id => id !== null && id !== undefined)
-      )
-    );
-
-    console.log('📄 [DELETE ALL] Documentos únicos a eliminar:', allDocumentIds.length);
-
-    // 3️⃣ Eliminar TODOS los documentos en la tabla documentos
-    if (allDocumentIds.length > 0) {
-      const placeholders = allDocumentIds.map(() => '?').join(',');
-      
-      await conn.query(
-        `DELETE FROM erp49.documentos WHERE id IN (${placeholders})`,
-        allDocumentIds
-      );
-      
-      console.log('✅ [DELETE ALL] Documentos eliminados:', allDocumentIds.length);
-    }
-
-    // 4️⃣ Eliminar TODAS las actividades del usuario
+    // 2️⃣ Eliminar SOLO las actividades (NO los documentos)
     await conn.query(
       `DELETE a FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
@@ -75,22 +52,21 @@ export async function DELETE(request: Request) {
       [session.userId]
     );
 
-    console.log('✅ [DELETE ALL] Todas las actividades eliminadas:', activitiesArray.length);
+    console.log('✅ [DELETE ALL] Actividades eliminadas:', totalActivities);
 
     await conn.commit();
     conn.release();
 
-    // 5️⃣ Revalidar rutas
+    // 3️⃣ Revalidar rutas
     revalidatePath('/documents');
     revalidatePath('/dashboard');
     revalidatePath('/activity');
 
     return NextResponse.json({
       success: true,
-      message: 'Todas las actividades y documentos relacionados fueron eliminados correctamente',
+      message: 'Todas las actividades fueron eliminadas correctamente',
       deleted: {
-        activities: activitiesArray.length,
-        documents: allDocumentIds.length
+        activities: totalActivities
       }
     });
 
@@ -99,7 +75,7 @@ export async function DELETE(request: Request) {
     conn.release();
     console.error('❌ [DELETE ALL] Error:', error);
     return NextResponse.json(
-      { error: 'Error al eliminar todas las actividades' },
+      { error: 'Error al eliminar las actividades' },
       { status: 500 }
     );
   }

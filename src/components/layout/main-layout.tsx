@@ -24,7 +24,8 @@ import {
   LogOut,
   ShieldCheck,
   LogIn,
-  Activity, // 🆕 Icono para Actividad
+  Activity,
+  Sparkles,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -156,6 +157,7 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = React.useState<User | null>(null);
+  const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
 
   React.useEffect(() => {
     getSession().then(session => {
@@ -171,10 +173,39 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     });
   }, [pathname]);
 
+  // Fetch de actividades no leídas
+  const fetchUnreadCount = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/activity/unread-count');
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadActivity({
+          total: data.totalUnread || 0,
+          hasErrors: (data.unreadFailed || 0) > 0,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching unread count:', err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000); // Refresh cada 30s
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  // Refetch cuando se sale de la página de actividad
+  React.useEffect(() => {
+    if (pathname !== '/dashboard/actividad') {
+      fetchUnreadCount();
+    }
+  }, [pathname, fetchUnreadCount]);
+
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
-    { href: '/dashboard/actividad', label: 'Actividad', icon: Activity }, // 🆕 NUEVA SECCIÓN
+    { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Proveedores', icon: Users }
   ];
@@ -207,6 +238,24 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     <span className="group-data-[collapsible=icon]:hidden">
                       {item.label}
                     </span>
+                    {/* Badge de actividades no leídas */}
+                    {item.href === '/dashboard/actividad' && unreadActivity.total > 0 && (
+                      <span
+                        className={cn(
+                          "ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium group-data-[collapsible=icon]:hidden",
+                          unreadActivity.hasErrors
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "bg-violet-500/20 text-violet-400 border border-violet-500/30"
+                        )}
+                      >
+                        {unreadActivity.hasErrors ? (
+                          <AlertCircle className="w-3 h-3" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        {unreadActivity.total}
+                      </span>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
