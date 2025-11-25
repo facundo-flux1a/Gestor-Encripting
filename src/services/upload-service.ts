@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { calcularTrimestre } from '@/lib/types';
 import crypto from 'crypto';
 import connection from '@/lib/db';
 import JSZip from 'jszip';
@@ -18,6 +19,64 @@ const UploadResponseSchema = z.object({
     empresaId: z.string(),
   }).optional(),
 });
+
+/**
+ * Normaliza el tipo de archivo basándose en el MIME type y la extensión
+ * Retorna un valor consistente independientemente de las variaciones
+ */
+function getNormalizedFileType(mimeType: string, extension?: string): string {
+  const mime = mimeType.toLowerCase();
+  const ext = extension?.toLowerCase() || '';
+
+  // Archivos comprimidos
+  if (mime === 'application/zip' || ext === 'zip') {
+    return 'zip';
+  }
+  if (
+    mime === 'application/x-rar-compressed' ||
+    mime === 'application/vnd.rar' ||
+    mime === 'application/x-rar' ||
+    ext === 'rar'
+  ) {
+    return 'rar';
+  }
+
+  // PDF
+  if (mime === 'application/pdf' || ext === 'pdf') {
+    return 'pdf';
+  }
+
+  // Imágenes
+  if (mime === 'image/jpeg' || mime === 'image/jpg' || ext === 'jpg' || ext === 'jpeg') {
+    return 'jpeg';
+  }
+  if (mime === 'image/png' || ext === 'png') {
+    return 'png';
+  }
+
+  // Word
+  if (
+    mime === 'application/msword' ||
+    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    ext === 'doc' ||
+    ext === 'docx'
+  ) {
+    return 'word';
+  }
+
+  // Excel
+  if (
+    mime === 'application/vnd.ms-excel' ||
+    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    ext === 'xls' ||
+    ext === 'xlsx'
+  ) {
+    return 'excel';
+  }
+
+  // Default: retornar la extensión o "unknown"
+  return ext || 'unknown';
+}
 
 /**
  * Calcula el hash SHA-256 del archivo
@@ -52,6 +111,7 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
 
 /**
  * Descomprime un ZIP y calcula el hash SHA-256 de cada archivo individual
+ * ⚠️ SOLO FUNCIONA CON ARCHIVOS ZIP (JSZip no soporta RAR)
  */
 async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileName: string]: string }> {
   const zip = new JSZip();
@@ -111,6 +171,9 @@ async function createActivityRecord(
 /**
  * Gestiona la subida de un documento a S3 con validación de duplicados
  */
+/**
+ * Gestiona la subida de un documento a S3 con validación de duplicados
+ */
 export async function uploadDocument(
   formData: FormData
 ): Promise<z.infer<typeof UploadResponseSchema>> {
@@ -136,7 +199,13 @@ export async function uploadDocument(
 
   const originalFileName = file.name;
   const fileSize = file.size;
+  const fileMimeType = file.type;
   const fileExtension = originalFileName.toLowerCase().split('.').pop();
+  const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
+
+  console.log(`📤 [UploadService] MIME Type: ${fileMimeType}`);
+  console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
+  console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
   const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
@@ -174,42 +243,62 @@ export async function uploadDocument(
     let individualUploadIds: { [fileName: string]: string } = {};
     let isCompressedFile = false;
     
-    // 🔒 SOLO PARA ARCHIVOS ZIP O RAR
-    if (fileExtension === 'zip' || fileExtension === 'rar') {
+    // 🔒 SOLO DESCOMPRIMIR Y HASHEAR ARCHIVOS ZIP
+    if (normalizedFileType === 'zip') {
       isCompressedFile = true;
-      console.log(`[${originalFileName}] ⚠️ Detectado archivo comprimido (${fileExtension.toUpperCase()}). Calculando hashes individuales...`);
+      console.log(`[${originalFileName}] 📦 Detectado archivo ZIP. Calculando hashes individuales...`);
       
-      individualFileHashes = await extractAndHashZipFiles(fileBuffer);
-      console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
-      
-      // 🆕 GENERAR UPLOAD IDS INDIVIDUALES SOLO PARA ARCHIVOS COMPRIMIDOS
-      console.log(`[${originalFileName}] 🆔 Generando uploadIds individuales para archivos del ${fileExtension.toUpperCase()}...`);
-      for (const fileName of Object.keys(individualFileHashes)) {
-        const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
-        individualUploadIds[fileName] = childUploadId;
+      try {
+        individualFileHashes = await extractAndHashZipFiles(fileBuffer);
+        console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
         
-        // 🆕 REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO (con parent_upload_id)
+        // 🆕 GENERAR UPLOAD IDS INDIVIDUALES PARA ARCHIVOS DEL ZIP
+        console.log(`[${originalFileName}] 🆔 Generando uploadIds individuales para archivos del ZIP...`);
+        for (const fileName of Object.keys(individualFileHashes)) {
+          const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+          individualUploadIds[fileName] = childUploadId;
+          
+          // 🆕 REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
+          await createActivityRecord(
+            childUploadId,
+            empresaId,
+            fileName,
+            fileName.split('.').pop() || 'unknown',
+            uploadId  // parentUploadId
+          );
+          
+          console.log(`  [ZIP] ${fileName} → UploadId: ${childUploadId}`);
+        }
+        
+        console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales`);
+        
+        // 🆕 REGISTRAR EL ZIP PADRE
         await createActivityRecord(
-          childUploadId,                              // uploadId del hijo
+          uploadId,
           empresaId,
-          fileName,
-          fileName.split('.').pop() || 'unknown',
-          uploadId                                    // 🔒 parentUploadId (SOLO para hijos de ZIP/RAR)
+          originalFileName,
+          normalizedFileType
         );
         
-        console.log(`  [${fileExtension.toUpperCase()}] ${fileName} → UploadId: ${childUploadId}`);
+      } catch (zipError: any) {
+        console.error(`[${originalFileName}] ❌ Error al extraer ZIP:`, zipError.message);
+        throw new Error(`No se pudo procesar el archivo ZIP: ${zipError.message}`);
       }
       
-      console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales`);
+    } else if (normalizedFileType === 'rar') {
+      // 🔒 ARCHIVOS RAR - MARCAR COMO COMPRIMIDO PERO NO EXTRAER
+      isCompressedFile = true;
+      console.log(`[${originalFileName}] 📦 Detectado archivo RAR. Se enviará completo a n8n para procesamiento.`);
       
-      // 🆕 REGISTRAR EL ARCHIVO COMPRIMIDO PADRE (SIN parent_upload_id porque ES el padre)
+      // 🆕 REGISTRAR EL RAR COMO ARCHIVO PADRE
       await createActivityRecord(
         uploadId,
         empresaId,
         originalFileName,
-        fileExtension || 'unknown'
-        // 🔒 NO se pasa parentUploadId aquí (es el archivo padre)
+        normalizedFileType
       );
+      
+      console.log(`[${originalFileName}] ℹ️ El RAR será descomprimido y hasheado por el microservicio de n8n`);
       
     } else {
       // 🔒 ARCHIVOS NORMALES (NO COMPRIMIDOS)
@@ -238,13 +327,12 @@ export async function uploadDocument(
 
       console.log(`[${originalFileName}] ✓ No se encontraron duplicados. Procediendo con la subida...`);
       
-      // 🆕 REGISTRAR ARCHIVO NORMAL (SIN parent_upload_id porque no es hijo de ZIP)
+      // 🆕 REGISTRAR ARCHIVO NORMAL
       await createActivityRecord(
         uploadId,
         empresaId,
         originalFileName,
-        fileExtension || 'unknown'
-        // 🔒 NO se pasa parentUploadId (archivo normal, no hijo de comprimido)
+        normalizedFileType
       );
     }
 
@@ -275,37 +363,54 @@ export async function uploadDocument(
       Bucket: MINIO_BUCKET_NAME,
       Key: filePath,
       Body: Buffer.from(fileBuffer),
-      ContentType: file.type,
+      ContentType: fileMimeType,
       ACL: 'public-read',
     }));
     
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // PREPARAR PAYLOAD CON HASHES INDIVIDUALES, UPLOAD IDS Y UPLOADID PADRE
+    // 🆕 CALCULAR TRIMESTRE (reutilizando la variable 'now' del timestamp)
+    const añoTrimestre = now.getFullYear();
+    const numTrimestre = calcularTrimestre(now);
+    
+    console.log(`[${originalFileName}] ✅ Trimestre calculado: ${añoTrimestre}Q${numTrimestre} (Fecha: ${now.toISOString()})`);
+
+    // PREPARAR PAYLOAD CON TIPO NORMALIZADO + TRIMESTRE
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
       fileHash: mainFileHash,
-      uploadId: uploadId,  // 🆔 ID padre del ZIP (o del archivo único)
+      uploadId: uploadId,
       fileName: originalFileName,
       fileSize: fileSize,
       publicUrl: publicUrl,
       isCompressedFile: isCompressedFile,
+      mimeType: fileMimeType,
+      normalizedFileType: normalizedFileType,
+      fileExtension: fileExtension,
+      // 🆕 AGREGAR DATOS DE TRIMESTRE
+      añoTrimestre: añoTrimestre,
+      numTrimestre: numTrimestre,
     };
 
-    if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
+    // 🔒 SOLO AGREGAR HASHES INDIVIDUALES SI ES ZIP (no RAR)
+    if (normalizedFileType === 'zip' && Object.keys(individualFileHashes).length > 0) {
       webhookPayload.individualFileHashes = individualFileHashes;
-      webhookPayload.individualUploadIds = individualUploadIds;  // 🆕 NUEVO: IDs individuales
+      webhookPayload.individualUploadIds = individualUploadIds;
       
-      console.log(`[${originalFileName}] ⚠️ Enviando ${Object.keys(individualFileHashes).length} archivos individuales al webhook`);
+      console.log(`[${originalFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales del ZIP al webhook`);
       console.log(`[${originalFileName}] 📋 Mapa de hashes:`, individualFileHashes);
       console.log(`[${originalFileName}] 🆔 Mapa de uploadIds:`, individualUploadIds);
+    } else if (normalizedFileType === 'rar') {
+      console.log(`[${originalFileName}] 📦 Enviando RAR completo. n8n se encargará de descomprimirlo.`);
     }
 
     console.log(`[${originalFileName}] Notificando a webhook...`);
     console.log(`[${originalFileName}] 🆔 Enviando uploadId padre: ${uploadId}`);
+    console.log(`[${originalFileName}] 📦 Tipo normalizado: ${normalizedFileType}`);
+    console.log(`[${originalFileName}] 🔢 Trimestre: ${añoTrimestre}Q${numTrimestre}`);
 
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',

@@ -209,7 +209,16 @@ export default function DocumentoPage() {
       resetFormWithDocData(doc);
   }
 
- const isEditable = useMemo(() => isDateInCurrentQuarter(doc?.fecha_creacion ?? null), [doc]);
+  // ✅ ARREGLADO: Ahora usa fecha_emision y verifica trimestre_cerrado
+  const isEditable = useMemo(() => {
+    if (!doc) return false;
+    
+    // Si el trimestre está cerrado, NO es editable
+    if (doc.trimestre_cerrado) return false;
+    
+    // Si el trimestre NO está cerrado, verificar que sea del trimestre actual
+    return isDateInCurrentQuarter(doc.fecha_emision);
+  }, [doc]);
 
   if (isLoading) {
     return (
@@ -291,7 +300,11 @@ export default function DocumentoPage() {
                                     </TooltipTrigger>
                                     {!isEditable && (
                                         <TooltipContent>
-                                            <p>Solo se pueden editar documentos del trimestre actual.</p>
+                                            <p>
+                                              {doc.trimestre_cerrado 
+                                                ? 'El trimestre de este documento está cerrado.' 
+                                                : 'Solo se pueden editar documentos del trimestre actual.'}
+                                            </p>
                                         </TooltipContent>
                                     )}
                                 </Tooltip>

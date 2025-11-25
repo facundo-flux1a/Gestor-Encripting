@@ -10,6 +10,9 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 
+import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
+
+
 
 function calcularTrimestre(fecha: Date): number {
   const mes = fecha.getMonth() + 1; // 0-11 -> 1-12
@@ -47,6 +50,7 @@ interface DocumentPacket extends RowDataPacket {
     empresa_nombre?: string | null;  // ⬅️ AGREGAR
     empresa_cif?: string | null; 
     is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
+     trimestre_cerrado: number;
 }
 interface DatosExtra {
   EMPRESA_EMISORA?: {
@@ -278,6 +282,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             empresa_nombre: doc.empresa_nombre || 'Sin empresa',
             empresa_cif: doc.empresa_cif || null,
             is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
+                trimestre_cerrado: doc.trimestre_cerrado || false, 
         };
     });
     
@@ -1688,13 +1693,42 @@ export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
 export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
     return analyzeDocuments([documentId]);
 }
-export async function getDashboardAnalytics(empresaIds?: number[]): Promise<DashboardAnalytics> {
-    const MY_COMPANY_FISCAL_ID = 'B97376321';
+export async function getDashboardAnalytics(
+  empresaIds?: number[],
+  año?: number,
+  trimestre?: number
+): Promise<DashboardAnalytics> {
+    console.log('🔥 [getDashboardAnalytics] Parámetros recibidos:', { empresaIds, año, trimestre });
+    
+    // Obtener CIFs dinámicamente
+    let MY_COMPANY_FISCAL_IDS: string[] = [];
+    
+    if (empresaIds && empresaIds.length > 0) {
+        const [empresasInfo] = await db.query<RowDataPacket[]>(
+            'SELECT cif FROM empresas WHERE id IN (?)',
+            [empresaIds]
+        );
+        MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+    }
+    
+    console.log('🏢 [getDashboardAnalytics] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
 
-    // Construir parámetros una sola vez
     const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
-    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
+    const hasTrimestreFilter = año !== undefined && trimestre !== undefined;
+    
+    console.log('🎯 [getDashboardAnalytics] Filtros:', { hasEmpresaFilter, hasTrimestreFilter });
+    
+    // ✅ ARREGLADO: Sin filtro de "sin confirmar"
+    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%'`;
+    
+    const whereTrimestreFilter = hasTrimestreFilter 
+      ? `AND d.\`año_trimestre\` = ? AND d.\`num_trimestre\` = ?`
+      : '';
 
+    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
+        ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+        : "'NEVER_MATCH'";
+    
     const [kpiRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
@@ -1703,11 +1737,12 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
                 d.importe_sin_impuestos,
                 (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id AND di.tipo_impuesto NOT LIKE '%retencion%') as total_iva,
                 (SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id AND di.tipo_impuesto LIKE '%retencion%') as total_retencion,
-                MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             WHERE 1=1 ${whereDocType}
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+            ${whereTrimestreFilter}
             GROUP BY d.id
         )
         SELECT
@@ -1719,29 +1754,38 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento i 
            JOIN documentos d2 ON i.documento_id = d2.id 
-           WHERE i.validado = 0 AND LOWER(d2.tipo_documento) LIKE '%factura%' AND LOWER(d2.tipo_documento) NOT LIKE '%(sin confirmar)%'
-           ${hasEmpresaFilter ? 'AND d2.id_de_empresa IN (?)' : ''}) as incidenciasAbiertas,
+           WHERE i.validado = 0 AND LOWER(d2.tipo_documento) LIKE '%factura%'
+           ${hasEmpresaFilter ? 'AND d2.id_de_empresa IN (?)' : ''}
+           ${whereTrimestreFilter.replace(/d\./g, 'd2.')}) as incidenciasAbiertas,
           (SELECT COUNT(DISTINCT identificador_fiscal) 
            FROM entidades_documento ed 
            JOIN documentos d3 ON ed.documento_id = d3.id 
-           WHERE ed.rol IN ('proveedor', 'emisor') AND ed.identificador_fiscal != ? AND LOWER(d3.tipo_documento) LIKE '%factura%' AND LOWER(d3.tipo_documento) NOT LIKE '%(sin confirmar)%'
-           ${hasEmpresaFilter ? 'AND d3.id_de_empresa IN (?)' : ''}) as totalProveedores,
+           WHERE ed.rol IN ('proveedor', 'emisor') AND ed.identificador_fiscal NOT IN (${cifPlaceholders}) AND LOWER(d3.tipo_documento) LIKE '%factura%'
+           ${hasEmpresaFilter ? 'AND d3.id_de_empresa IN (?)' : ''}
+           ${whereTrimestreFilter.replace(/d\./g, 'd3.')}) as totalProveedores,
           (SELECT COUNT(DISTINCT ld.codigo) 
            FROM lineas_documento ld 
            JOIN documentos d4 ON ld.documento_id = d4.id 
-           WHERE ld.codigo IS NOT NULL AND ld.codigo != '' AND LOWER(d4.tipo_documento) LIKE '%factura%' AND LOWER(d4.tipo_documento) NOT LIKE '%(sin confirmar)%'
-           ${hasEmpresaFilter ? 'AND d4.id_de_empresa IN (?)' : ''}) as totalProductos,
+           WHERE ld.codigo IS NOT NULL AND ld.codigo != '' AND LOWER(d4.tipo_documento) LIKE '%factura%'
+           ${hasEmpresaFilter ? 'AND d4.id_de_empresa IN (?)' : ''}
+           ${whereTrimestreFilter.replace(/d\./g, 'd4.')}) as totalProductos,
           (SELECT COUNT(*) FROM documentos d5 
-           WHERE LOWER(d5.tipo_documento) LIKE '%factura%' AND LOWER(d5.tipo_documento) NOT LIKE '%(sin confirmar)%'
-           ${hasEmpresaFilter ? 'AND d5.id_de_empresa IN (?)' : ''}) as totalDocs
+           WHERE LOWER(d5.tipo_documento) LIKE '%factura%'
+           ${hasEmpresaFilter ? 'AND d5.id_de_empresa IN (?)' : ''}
+           ${whereTrimestreFilter.replace(/d\./g, 'd5.')}) as totalDocs
     `, [
-        MY_COMPANY_FISCAL_ID,
+        ...MY_COMPANY_FISCAL_IDS,
         ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
         ...(hasEmpresaFilter ? [empresaIds] : []),
-        MY_COMPANY_FISCAL_ID,
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
+        ...MY_COMPANY_FISCAL_IDS,
         ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
         ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : [])
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : [])
     ]);
 
     const kpis = kpiRows[0];
@@ -1749,17 +1793,24 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
     const beneficio = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
     const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
 
+    console.log('💰 [getDashboardAnalytics] KPIs calculados:', {
+        totalIngresos: kpis.totalIngresos,
+        totalGastos: kpis.totalGastos,
+        totalDocs: kpis.totalDocs
+    });
+
     const [quarterlyRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
                 d.importe_sin_impuestos,
                 d.fecha_emision,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+            WHERE LOWER(d.tipo_documento) LIKE '%factura%'
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+            ${whereTrimestreFilter}
             GROUP BY d.id
         )
         SELECT
@@ -1767,9 +1818,14 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
           SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as ingresos,
           SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END) as gastos
         FROM DocTypes dt
-        WHERE YEAR(dt.fecha_emision) = YEAR(CURDATE())
+        WHERE YEAR(dt.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'}
         GROUP BY quarter
-    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : [])]);
+    `, [
+        ...MY_COMPANY_FISCAL_IDS, 
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
+        ...(hasTrimestreFilter ? [año] : [])
+    ]);
 
     const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
     quarterlyRows.forEach(r => {
@@ -1781,21 +1837,26 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
     const [distributionRows] = await db.query<RowDataPacket[]>(`
         SELECT tipo_documento as name, COUNT(*) as value
         FROM documentos
-        WHERE LOWER(tipo_documento) LIKE '%factura%' AND LOWER(tipo_documento) NOT LIKE '%(sin confirmar)%'
+        WHERE LOWER(tipo_documento) LIKE '%factura%'
         ${hasEmpresaFilter ? 'AND id_de_empresa IN (?)' : ''}
+        ${whereTrimestreFilter.replace(/d\./g, '')}
         GROUP BY tipo_documento
         ORDER BY value DESC
-    `, hasEmpresaFilter ? [empresaIds] : []);
+    `, [
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : [])
+    ]);
 
     const [ivaRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal = ? THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+            WHERE LOWER(d.tipo_documento) LIKE '%factura%'
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+            ${whereTrimestreFilter}
             GROUP BY d.id
         )
         SELECT
@@ -1805,11 +1866,19 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         FROM documentos d
         JOIN impuestos_documento i ON d.id = i.documento_id
         JOIN DocTypes dt ON d.id = dt.id
-        WHERE YEAR(d.fecha_emision) = YEAR(CURDATE()) AND i.tipo_impuesto NOT LIKE '%retencion%'
-        AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+        WHERE YEAR(d.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'} AND i.tipo_impuesto NOT LIKE '%retencion%'
+        AND LOWER(d.tipo_documento) LIKE '%factura%'
         ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+        ${whereTrimestreFilter}
         GROUP BY quarter
-    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : []), ...(hasEmpresaFilter ? [empresaIds] : [])]);
+    `, [
+        ...MY_COMPANY_FISCAL_IDS, 
+        ...(hasEmpresaFilter ? [empresaIds] : []), 
+        ...(hasTrimestreFilter ? [año, trimestre] : []),
+        ...(hasTrimestreFilter ? [año] : []),
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : [])
+    ]);
 
     const ivaSummary = { T1: { repercutido: 0, soportado: 0 }, T2: { repercutido: 0, soportado: 0 }, T3: { repercutido: 0, soportado: 0 }, T4: { repercutido: 0, soportado: 0 } };
     ivaRows.forEach(r => {
@@ -1822,13 +1891,18 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         SELECT e.nombre, e.identificador_fiscal, SUM(d.importe_total) as total
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
-        WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') AND e.identificador_fiscal != ? 
-        AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+        WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') AND e.identificador_fiscal NOT IN (${cifPlaceholders}) 
+        AND LOWER(d.tipo_documento) LIKE '%factura%'
         ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+        ${whereTrimestreFilter}
         GROUP BY e.nombre, e.identificador_fiscal
         ORDER BY total DESC
         LIMIT 5
-    `, [MY_COMPANY_FISCAL_ID, ...(hasEmpresaFilter ? [empresaIds] : [])]);
+    `, [
+        ...MY_COMPANY_FISCAL_IDS, 
+        ...(hasEmpresaFilter ? [empresaIds] : []),
+        ...(hasTrimestreFilter ? [año, trimestre] : [])
+    ]);
 
     const analyticsData = {
         kpis: {
@@ -1852,5 +1926,364 @@ export async function getDashboardAnalytics(empresaIds?: number[]): Promise<Dash
         topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
     };
 
+    console.log('📊 [getDashboardAnalytics] Resultado final:', analyticsData.kpis);
+
     return JSON.parse(JSON.stringify(analyticsData));
+}
+// =====================================
+// 🆕 AGREGAR AL FINAL DE src/services/document-service.ts
+// =====================================
+
+
+/**
+ * Obtiene todos los trimestres con estadísticas
+ */
+export async function getTrimestresList(
+  userId: number,
+  filters?: TrimestreFilters
+): Promise<Trimestre[]> {
+  const conn = await db.getConnection();
+  
+  try {
+    let whereConditions = ['e.id_de_usuario = ?'];
+    const params: any[] = [userId];
+
+    // Filtro por empresa
+    if (filters?.empresa_id) {
+      whereConditions.push('d.id_de_empresa = ?');
+      params.push(filters.empresa_id);
+    }
+
+    // Filtro por año
+    if (filters?.año) {
+      whereConditions.push('d.año_trimestre = ?');
+      params.push(filters.año);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    const query = `
+      SELECT 
+        d.año_trimestre as año,
+        d.num_trimestre as trimestre,
+        d.id_de_empresa as empresa_id,
+        e.nombre_de_empresa as empresa_nombre,
+        COUNT(d.id) as total_documentos,
+        SUM(d.importe_sin_impuestos) as total_base,
+        SUM(d.importe_total) as total_con_iva,
+        SUM(CASE WHEN i.tipo_impuesto NOT LIKE '%retencion%' THEN i.cuota ELSE 0 END) as iva_total,
+        MAX(d.trimestre_cerrado) as cerrado,
+        MAX(d.fecha_cierre_trimestre) as fecha_cierre
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      LEFT JOIN impuestos_documento i ON d.id = i.documento_id
+      WHERE ${whereClause}
+      GROUP BY d.año_trimestre, d.num_trimestre, d.id_de_empresa, e.nombre_de_empresa
+      ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
+    `;
+
+    const [rows] = await conn.query<RowDataPacket[]>(query, params);
+
+    let trimestres = rows.map(row => ({
+      año: row.año,
+      trimestre: row.trimestre,
+      empresa_id: row.empresa_id,
+      empresa_nombre: row.empresa_nombre || 'Sin empresa',
+      total_documentos: Number(row.total_documentos),
+      total_ingresos: Number(row.total_base || 0),
+      total_gastos: 0, // Calculamos después si necesitas distinguir
+      iva_repercutido: Number(row.iva_total || 0),
+      iva_soportado: 0, // Calculamos después si necesitas distinguir
+      cerrado: Boolean(row.cerrado),
+      fecha_cierre: row.fecha_cierre || null,
+    }));
+
+    // Si no se pidió mostrar vacíos, filtrar
+    if (!filters?.mostrar_vacios) {
+      trimestres = trimestres.filter(t => t.total_documentos > 0);
+    }
+
+    return trimestres;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Obtiene documentos de un trimestre específico
+ */
+export async function getDocumentosByTrimestre(
+  userId: number,
+  año: number,
+  trimestre: number,
+  empresaId?: number | null
+): Promise<Document[]> {
+  try {
+    let whereConditions = [
+      'e.id_de_usuario = ?',
+      'd.año_trimestre = ?',
+      'd.num_trimestre = ?'
+    ];
+    const params: any[] = [userId, año, trimestre];
+
+    if (empresaId) {
+      whereConditions.push('d.id_de_empresa = ?');
+      params.push(empresaId);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    const query = `
+      SELECT 
+        d.id,
+        d.tipo_documento,
+        d.numero_documento,
+        d.fecha_emision,
+        d.fecha_vencimiento,
+        d.importe_total,
+        d.importe_sin_impuestos,
+        d.moneda,
+        d.observaciones,
+        d.datos_extra,
+        d.fecha_creacion,
+        d.id_de_empresa,
+        d.is_new,
+        e.nombre_de_empresa as empresa_nombre,
+        e.cif as empresa_cif
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE ${whereClause}
+      ORDER BY d.fecha_emision DESC
+    `;
+
+    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+    return mapDocumentPacketsToDocuments(documentRows);
+  } catch (error) {
+    console.error('❌ [getDocumentosByTrimestre] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Cierra un trimestre (bloqueo permanente)
+ */
+export async function cerrarTrimestre(
+  userId: number,
+  payload: CerrarTrimestrePayload
+): Promise<{ affected: number }> {
+  const conn = await db.getConnection();
+  
+  try {
+    await conn.beginTransaction();
+
+    let whereConditions = [
+      'e.id_de_usuario = ?',
+      'd.año_trimestre = ?',
+      'd.num_trimestre = ?',
+      'd.trimestre_cerrado = 0'
+    ];
+    const params: any[] = [userId, payload.año, payload.trimestre];
+
+    // Si se especifica empresa, cerrar solo esa empresa
+    if (payload.empresa_id !== null) {
+      whereConditions.push('d.id_de_empresa = ?');
+      params.push(payload.empresa_id);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    const query = `
+      UPDATE documentos d
+      JOIN empresas e ON d.id_de_empresa = e.id
+      SET 
+        d.trimestre_cerrado = 1,
+        d.fecha_cierre_trimestre = NOW()
+      WHERE ${whereClause}
+    `;
+
+    const [result] = await conn.query<OkPacket>(query, params);
+
+    await conn.commit();
+
+    return { affected: result.affectedRows };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+/**
+ * Verifica si un documento pertenece a un trimestre cerrado
+ */
+export async function isTrimestreCerrado(documentId: number): Promise<boolean> {
+  try {
+    const query = `
+      SELECT trimestre_cerrado 
+      FROM documentos 
+      WHERE id = ?
+    `;
+
+    const [rows] = await db.query<RowDataPacket[]>(query, [documentId]);
+
+    return rows.length > 0 ? Boolean(rows[0].trimestre_cerrado) : false;
+  } catch (error) {
+    console.error('❌ [isTrimestreCerrado] Error:', error);
+    return false;
+  }
+}
+/**
+ * Crea un registro de exportación
+ */
+export async function createExport(payload: {
+  userId: number;
+  tipoExport: string;
+  añoFiltro?: number | null;
+  trimestreFiltro?: number | null;
+  empresasIds?: number[];
+  documentoIds?: number[];
+  filtrosAplicados?: any;
+}): Promise<{ success: boolean; exportId?: number; error?: string }> {
+  try {
+    const [result] = await db.query<OkPacket>(
+      `INSERT INTO exports 
+       (id_de_usuario, tipo_export, año_filtro, trimestre_filtro, empresas_ids, documento_ids, total_documentos, filtros_aplicados, estado) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        payload.userId,
+        payload.tipoExport,
+        payload.añoFiltro || null,
+        payload.trimestreFiltro || null,
+        payload.empresasIds ? JSON.stringify(payload.empresasIds) : null,
+        payload.documentoIds ? JSON.stringify(payload.documentoIds) : null,
+        payload.documentoIds?.length || 0,
+        payload.filtrosAplicados ? JSON.stringify(payload.filtrosAplicados) : null
+      ]
+    );
+
+    return { success: true, exportId: result.insertId };
+  } catch (error) {
+    console.error('❌ [createExport] Error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Error al crear exportación' 
+    };
+  }
+}
+
+/**
+ * Actualiza un export cuando el webhook de n8n responde
+ */
+export async function updateExportStatus(
+  exportId: number,
+  status: 'processing' | 'completed' | 'failed',
+  urlArchivo?: string,
+  nombreArchivo?: string,
+  errorMensaje?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const fechaCompletado = status === 'completed' ? 'NOW()' : 'NULL';
+    
+    await db.query<OkPacket>(
+      `UPDATE exports 
+       SET estado = ?, 
+           url_archivo = ?, 
+           nombre_archivo = ?,
+           error_mensaje = ?,
+           fecha_completado = ${fechaCompletado}
+       WHERE id = ?`,
+      [status, urlArchivo || null, nombreArchivo || null, errorMensaje || null, exportId]
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [updateExportStatus] Error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Error al actualizar exportación' 
+    };
+  }
+}
+
+/**
+ * Obtiene los exports del usuario
+ */
+export async function getUserExports(userId: number): Promise<any[]> {
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT * FROM exports 
+       WHERE id_de_usuario = ? 
+       ORDER BY fecha_generacion DESC 
+       LIMIT 50`,
+      [userId]
+    );
+
+    return rows;
+  } catch (error) {
+    console.error('❌ [getUserExports] Error:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene datos del dashboard para exportar
+ */
+export async function getDashboardExportData(
+  empresaIds?: number[],
+  año?: number,
+  trimestre?: number
+): Promise<{
+  analytics: DashboardAnalytics;
+  documentIds: number[];
+  metadata: any;
+}> {
+  try {
+    console.log('📊 [getDashboardExportData] Iniciando con:', { empresaIds, año, trimestre });
+    
+    // Obtener analytics
+    const analytics = await getDashboardAnalytics(empresaIds, año, trimestre);
+    
+    console.log('✅ [getDashboardExportData] Analytics:', JSON.stringify(analytics.kpis));
+
+    // ✅ ARREGLADO: Query simple sin filtros extra
+    const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
+    
+    let query = `SELECT d.id FROM documentos d WHERE 1=1`;
+    const params: any[] = [];
+    
+    if (hasEmpresaFilter) {
+      query += ` AND d.id_de_empresa IN (?)`;
+      params.push(empresaIds);
+    }
+    
+    // ✅ SOLO agregar filtro de trimestre si está especificado
+    if (año !== null && año !== undefined && trimestre !== null && trimestre !== undefined) {
+      query += ` AND d.año_trimestre = ? AND d.num_trimestre = ?`;
+      params.push(año, trimestre);
+    }
+
+    console.log('📝 [getDashboardExportData] Query:', query);
+    console.log('📝 [getDashboardExportData] Params:', params);
+
+    const [docs] = await db.query<RowDataPacket[]>(query, params);
+    const documentIds = docs.map(d => d.id);
+
+    console.log('📊 [getDashboardExportData] IDs encontrados:', documentIds);
+
+    return {
+      analytics,
+      documentIds,
+      metadata: {
+        empresaIds,
+        año,
+        trimestre,
+        totalDocumentos: documentIds.length,
+        fechaGeneracion: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    console.error('❌ [getDashboardExportData] Error:', error);
+    throw error;
+  }
 }

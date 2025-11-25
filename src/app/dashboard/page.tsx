@@ -9,7 +9,7 @@ import { DocumentStatusChart } from '@/components/dashboard/document-status-char
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
-import { FileText, Users, AlertTriangle, Package, ArrowUpRight, ArrowDownLeft, Scale, Banknote, Trash2, Loader2, RefreshCcw } from 'lucide-react';
+import { FileText, Users, AlertTriangle, Package, ArrowUpRight, ArrowDownLeft, Scale, Banknote, Loader2, RefreshCcw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
@@ -31,11 +38,32 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCleaningDB, setIsCleaningDB] = useState(false);
+  
+  const [selectedAño, setSelectedAño] = useState<number | null>(null);
+  const [selectedTrimestre, setSelectedTrimestre] = useState<number | null>(null);
+  
+  // ✅ Estados para export con polling
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{
+    exportId: number | null;
+    status: string;
+    urlArchivo: string | null;
+    nombreArchivo: string | null;
+  }>({
+    exportId: null,
+    status: 'idle',
+    urlArchivo: null,
+    nombreArchivo: null
+  });
+  
   const { toast } = useToast();
 
   useEffect(() => {
     async function loadAnalytics() {
+      console.log('🔍 [Dashboard] selectedCompanyIds:', selectedCompanyIds); // ✅ Debug log
+      
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+        console.log('⚠️ [Dashboard] No hay empresas seleccionadas, limpiando analytics');
         setAnalytics(null);
         setIsLoading(false);
         return;
@@ -45,7 +73,16 @@ export default function DashboardPage() {
         setIsLoading(true);
         setError(null);
         const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
-        const data = await getDashboardAnalytics(companyIdsAsNumbers);
+        
+        console.log('📊 [Dashboard] Cargando analytics para empresas:', companyIdsAsNumbers);
+        
+        const data = await getDashboardAnalytics(
+          companyIdsAsNumbers,
+          selectedAño ?? undefined,
+          selectedTrimestre ?? undefined
+        );
+        
+        console.log('✅ [Dashboard] Analytics cargadas:', data);
         setAnalytics(data);
       } catch (err) {
         console.error('Error loading analytics:', err);
@@ -56,7 +93,176 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyIds]);
+  }, [selectedCompanyIds, selectedAño, selectedTrimestre]);
+
+  // ✅ Función para hacer polling del estado del export
+  const checkExportStatus = async (exportId: number): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/check-export?exportId=${exportId}`);
+      const data = await response.json();
+
+      console.log('🔍 [Frontend] Respuesta de check-export:', data);
+      console.log('🔍 [Frontend] Estado detectado:', data.status, '| Esperaba: completed');
+
+      // ✅ Actualizar estado local
+      setExportStatus({
+        exportId,
+        status: data.status,
+        urlArchivo: data.urlArchivo,
+        nombreArchivo: data.nombreArchivo
+      });
+
+      if (data.status === 'completed') {
+        setIsExporting(false);
+        
+        console.log('🎉 Export completado! Iniciando descarga...', {
+          status: data.status,
+          urlArchivo: data.urlArchivo,
+          nombreArchivo: data.nombreArchivo
+        });
+        
+        toast({
+          title: "✅ PDF Generado",
+          description: `Descargando: ${data.nombreArchivo}`,
+          className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
+        });
+        
+        if (data.urlArchivo) {
+          // ✅ Extraer solo el nombre del archivo de la URL completa
+          // Ejemplo: "https://...ngrok.../api/files/Reporte_Dashboard_xxx.pdf" → "Reporte_Dashboard_xxx.pdf"
+          const filename = data.nombreArchivo || data.urlArchivo.split('/').pop() || 'reporte.pdf';
+          
+          // ✅ Usar la API route interna en lugar de la URL externa
+          const downloadUrl = `/api/files/${filename}`;
+          
+          console.log('📥 [Frontend] Descargando desde API interna:', downloadUrl);
+          console.log('📄 [Frontend] Nombre del archivo:', filename);
+          
+          // ✅ Crear link temporal y forzar descarga
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = filename;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          
+          console.log('🔗 [Frontend] Link creado:', {
+            href: link.href,
+            download: link.download
+          });
+          
+          link.click();
+          
+          // Limpiar después de un pequeño delay
+          setTimeout(() => {
+            document.body.removeChild(link);
+            console.log('✅ [Frontend] Descarga iniciada, link removido');
+          }, 100);
+        }
+        return true;
+      } else if (data.status === 'failed') {
+        setIsExporting(false);
+        toast({
+          variant: "destructive",
+          title: "Error al generar PDF",
+          description: "Ocurrió un error al generar el PDF",
+        });
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('❌ [Frontend] Error checking export status:', error);
+      return false;
+    }
+  };
+
+  // ✅ Función para iniciar polling
+  const startPolling = (exportId: number) => {
+    const intervalId = setInterval(async () => {
+      const shouldStop = await checkExportStatus(exportId);
+      if (shouldStop) {
+        clearInterval(intervalId);
+        clearTimeout(timeoutId); // ✅ Limpiar timeout cuando termina exitosamente
+      }
+    }, 3000); // Revisar cada 3 segundos
+
+    // Timeout después de 2 minutos
+    const timeoutId = setTimeout(() => {
+      clearInterval(intervalId);
+      setIsExporting(false);
+      toast({
+        variant: "destructive",
+        title: "Timeout",
+        description: "El PDF está tardando más de lo esperado. Por favor, intenta nuevamente.",
+      });
+    }, 120000);
+  };
+
+  // ✅ Función para exportar
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportStatus({
+      exportId: null,
+      status: 'pending',
+      urlArchivo: null,
+      nombreArchivo: null
+    });
+    
+    try {
+      const response = await fetch('/api/export-dashboard', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          empresaIds: selectedCompanyIds.map(id => Number(id)),
+          año: selectedAño,
+          trimestre: selectedTrimestre
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast({
+          variant: "destructive",
+          title: "Error al exportar",
+          description: result.error || "No se pudo iniciar la exportación",
+        });
+        setIsExporting(false);
+        return;
+      }
+
+      if (result.success && result.exportId) {
+        console.log('Export iniciado:', result.exportId);
+        
+        // Iniciar polling
+        startPolling(result.exportId);
+        
+        toast({
+          title: "📄 Generando PDF",
+          description: "Tu reporte se está generando. Te notificaremos cuando esté listo.",
+          className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white",
+        });
+      } else {
+        setIsExporting(false);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudo iniciar la exportación",
+        });
+      }
+
+    } catch (error) {
+      console.error('Error exporting:', error);
+      setIsExporting(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Ocurrió un error al exportar",
+      });
+    }
+  };
 
   const handleCleanDatabase = async () => {
     setIsCleaningDB(true);
@@ -107,7 +313,6 @@ export default function DashboardPage() {
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
-  // Botón unificado que se muestra siempre arriba a la derecha
   const CleanButton = () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -176,8 +381,6 @@ export default function DashboardPage() {
     </AlertDialog>
   );
 
-
-
   if (isLoading) {
     return (
       <MainLayout>
@@ -185,7 +388,13 @@ export default function DashboardPage() {
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
               <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-              <CleanButton />
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </Button>
+                <CleanButton />
+              </div>
             </div>
           </MainLayoutHeader>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -209,7 +418,13 @@ export default function DashboardPage() {
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
               <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-              <CleanButton />
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </Button>
+                <CleanButton />
+              </div>
             </div>
           </MainLayoutHeader>
           <div className="flex h-[400px] items-center justify-center text-red-500">
@@ -227,7 +442,13 @@ export default function DashboardPage() {
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
               <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-              <CleanButton />
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </Button>
+                <CleanButton />
+              </div>
             </div>
           </MainLayoutHeader>
           <div className="flex h-[400px] items-center justify-center text-muted-foreground text-lg">
@@ -257,15 +478,87 @@ export default function DashboardPage() {
       <div className="flex-1 space-y-4 p-8 pt-6">
         <MainLayoutHeader>
           <div className="flex items-center justify-between w-full">
-            <h2 className="text-3xl font-bold tracking-tight">
-              Dashboard
-              {selectedCompanyIds.length > 1 && (
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({selectedCompanyIds.length} empresas seleccionadas)
-                </span>
-              )}
-            </h2>
-            <CleanButton />
+            <div className="flex items-center gap-4">
+              <h2 className="text-3xl font-bold tracking-tight">
+                Dashboard
+                {selectedCompanyIds.length > 1 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({selectedCompanyIds.length} empresas seleccionadas)
+                  </span>
+                )}
+              </h2>
+              
+              <div className="flex items-center gap-2">
+                <Select
+                  value={selectedAño?.toString() || 'all'}
+                  onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Año" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="2025">2025</SelectItem>
+                    <SelectItem value="2024">2024</SelectItem>
+                    <SelectItem value="2023">2023</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={selectedTrimestre?.toString() || 'all'}
+                  onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
+                  disabled={!selectedAño}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Trimestre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="1">T1</SelectItem>
+                    <SelectItem value="2">T2</SelectItem>
+                    <SelectItem value="3">T3</SelectItem>
+                    <SelectItem value="4">T4</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {(selectedAño || selectedTrimestre) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedAño(null);
+                      setSelectedTrimestre(null);
+                    }}
+                  >
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {/* ✅ Botones de acción con estado de export */}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExport}
+                disabled={isExporting || !selectedCompanyIds.length}
+                className="gap-2"
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generando PDF...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    Exportar PDF
+                  </>
+                )}
+              </Button>
+              <CleanButton />
+            </div>
           </div>
         </MainLayoutHeader>
 

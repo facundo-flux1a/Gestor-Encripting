@@ -4,7 +4,7 @@ export const UserSchema = z.object({
   id: z.number(),
   nombre: z.string(),
   email: z.string(),
-  password: z.string().nullable().optional(), // ⬅️ AGREGADO
+  password: z.string().nullable().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -24,7 +24,6 @@ export const IvaDetailSchema = z.object({
   cuota: z.coerce.number(),
 });
 export type IvaDetail = z.infer<typeof IvaDetailSchema>;
-
 
 export const DocumentEntitySchema = z.object({
     id: z.number().optional(),
@@ -46,7 +45,6 @@ export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
     empresaNombre: z.string().optional(),
 });
 export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
-
 
 export const DocumentLineSchema = z.object({
     id: z.number().optional(),
@@ -89,7 +87,6 @@ export const IncidentSchema = z.object({
 });
 export type Incident = z.infer<typeof IncidentSchema>;
 
-
 export type Document = {
   id_documento: number;
   numero_documento: string | null;
@@ -110,14 +107,12 @@ export type Document = {
   archivos: DocumentFile[];
   incidencias: Incident[];
   
-  // Flattened for table display
   proveedor: string;
   cif: string;
   incidencia: boolean;
   verificado: boolean;
   incidencia_razon?: string | null;
   
-  // Campos de empresa
   empresa_id: number | null;
   empresa_nombre?: string;
   empresa_cif?: string;
@@ -138,7 +133,6 @@ export const DocumentUpdateSchema = z.object({
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;
-
 
 export const IncidentAnalysisResultSchema = z.object({
   newIncidentsFound: z.number().describe('The number of new incidents created.'),
@@ -185,13 +179,55 @@ export type CreateDocumentPayload = {
   empresa_id: number;
 };
 
-// ⭐ HELPER: Calcular trimestre desde fecha
 export function calcularTrimestre(fecha: Date | string): number {
   const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
-  const mes = date.getMonth() + 1; // 0-11 -> 1-12
+  const mes = date.getMonth() + 1;
   
   if (mes >= 1 && mes <= 3) return 1;
   if (mes >= 4 && mes <= 6) return 2;
   if (mes >= 7 && mes <= 9) return 3;
   return 4;
 }
+
+// =====================================
+// TIPOS DE TRIMESTRES
+// =====================================
+
+/**
+ * Representa un trimestre con sus estadísticas
+ */
+export const TrimestreSchema = z.object({
+  año: z.number(),
+  trimestre: z.number().min(1).max(4),
+  empresa_id: z.number().nullable(),
+  empresa_nombre: z.string().nullable(),
+  total_documentos: z.number(),
+  total_ingresos: z.number(),
+  total_gastos: z.number(),
+  iva_repercutido: z.number(),
+  iva_soportado: z.number(),
+  cerrado: z.boolean(),
+  fecha_cierre: z.string().nullable(),
+});
+export type Trimestre = z.infer<typeof TrimestreSchema>;
+
+/**
+ * Payload para cerrar un trimestre
+ */
+export const CerrarTrimestrePayloadSchema = z.object({
+  año: z.number(),
+  trimestre: z.number().min(1).max(4),
+  empresa_id: z.number().nullable(),
+});
+export type CerrarTrimestrePayload = z.infer<typeof CerrarTrimestrePayloadSchema>;
+
+/**
+ * Filtros para listar trimestres
+ * ✅ Soporta filtro múltiple de empresas
+ */
+export const TrimestreFiltersSchema = z.object({
+  empresa_id: z.union([z.number(), z.array(z.number())]).nullable().optional(),
+  año: z.number().optional(),
+  mostrar_vacios: z.boolean().optional().default(false),
+});
+export type TrimestreFilters = z.infer<typeof TrimestreFiltersSchema>;
