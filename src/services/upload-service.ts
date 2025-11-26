@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { calcularTrimestre } from '@/lib/types';
+// Los imports de trimestre ya no son necesarios - el cálculo se hace en n8n
 import crypto from 'crypto';
 import connection from '@/lib/db';
 import JSZip from 'jszip';
@@ -168,9 +168,6 @@ async function createActivityRecord(
   }
 }
 
-/**
- * Gestiona la subida de un documento a S3 con validación de duplicados
- */
 /**
  * Gestiona la subida de un documento a S3 con validación de duplicados
  */
@@ -370,13 +367,12 @@ export async function uploadDocument(
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // 🆕 CALCULAR TRIMESTRE (reutilizando la variable 'now' del timestamp)
-    const añoTrimestre = now.getFullYear();
-    const numTrimestre = calcularTrimestre(now);
-    
-    console.log(`[${originalFileName}] ✅ Trimestre calculado: ${añoTrimestre}Q${numTrimestre} (Fecha: ${now.toISOString()})`);
+    // ℹ️ El trimestre será calculado por n8n basándose en la fecha de emisión
+    const fechaSubida = now; // Fecha de subida (necesaria para validar plazo en n8n)
+    console.log(`[${originalFileName}] ⏰ Fecha de subida: ${fechaSubida.toISOString()}`);
+    console.log(`[${originalFileName}] ℹ️ El trimestre será calculado por n8n usando la fecha de emisión del documento`);
 
-    // PREPARAR PAYLOAD CON TIPO NORMALIZADO + TRIMESTRE
+    // PREPARAR PAYLOAD CON FECHA DE SUBIDA (trimestre se calcula en n8n)
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
@@ -390,9 +386,8 @@ export async function uploadDocument(
       mimeType: fileMimeType,
       normalizedFileType: normalizedFileType,
       fileExtension: fileExtension,
-      // 🆕 AGREGAR DATOS DE TRIMESTRE
-      añoTrimestre: añoTrimestre,
-      numTrimestre: numTrimestre,
+      fechaSubida: fechaSubida.toISOString(), // ⬅️ n8n usará esta fecha para validar plazo
+      // ❌ NO enviamos añoTrimestre ni numTrimestre (se calculan en n8n)
     };
 
     // 🔒 SOLO AGREGAR HASHES INDIVIDUALES SI ES ZIP (no RAR)
@@ -410,7 +405,6 @@ export async function uploadDocument(
     console.log(`[${originalFileName}] Notificando a webhook...`);
     console.log(`[${originalFileName}] 🆔 Enviando uploadId padre: ${uploadId}`);
     console.log(`[${originalFileName}] 📦 Tipo normalizado: ${normalizedFileType}`);
-    console.log(`[${originalFileName}] 🔢 Trimestre: ${añoTrimestre}Q${numTrimestre}`);
 
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',

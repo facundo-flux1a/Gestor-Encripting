@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { MoreHorizontal, Trash2, CheckCircle } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { type Document, calcularTrimestre } from '@/lib/types';
+import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -42,7 +42,6 @@ const getColumns = (
         const doc = row.original;
         return (
           <div className="flex items-center gap-2 relative z-10">
-            {/* ✅ BOTÓN CONFIRMAR - Solo visible si showConfirmButton es true */}
             {showConfirmButton && (
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -176,24 +175,36 @@ const getColumns = (
     {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
-      cell: ({ row }) => {
-        const value = row.getValue('numero_documento') || '-';
-        return <div className="text-sm">{value}</div>;
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('numero_documento')} 
+            fieldName="numero_documento" 
+            onUpdate={onUpdate} 
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
-      cell: ({ row }) => {
-        const fecha = row.getValue('fecha_emision');
-        if (!fecha) return <span>-</span>;
-        const date = new Date(fecha as string);
-        const fechaStr = date.toLocaleDateString('es-ES', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        return <div className="text-sm">{fechaStr}</div>;
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('fecha_emision')} 
+            fieldName="fecha_emision" 
+            onUpdate={onUpdate} 
+            inputType="date"
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     {
@@ -229,14 +240,14 @@ const getColumns = (
       id: 'trimestre',
       header: 'Trimestre',
       cell: ({ row }) => {
-        const fecha = row.getValue('fecha_creacion');
-        if (!fecha) {
-          return <span className="text-muted-foreground text-xs">Sin fecha</span>;
-        }
+        // ✅ Obtener año y trimestre directamente de la BD
+        const anio = row.original.año_trimestre;
+        const trimestre = row.original.num_trimestre;
         
-        const date = new Date(fecha as string);
-        const trimestre = calcularTrimestre(date);
-        const anio = date.getFullYear();
+        // Si no hay datos de trimestre en BD, mostrar mensaje
+        if (!anio || !trimestre) {
+          return <span className="text-muted-foreground text-xs">Sin trimestre</span>;
+        }
         
         const colorClasses = {
           1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -260,65 +271,100 @@ const getColumns = (
     {
       accessorKey: 'proveedor',
       header: 'Proveedor',
-      cell: ({ row }) => {
-        const value = row.getValue('proveedor') || '-';
-        return <div className="text-sm">{value}</div>;
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('proveedor')} 
+            fieldName="proveedor" 
+            onUpdate={onUpdate} 
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     {
       accessorKey: 'cif',
       header: 'CIF',
-      cell: ({ row }) => {
-        const value = row.getValue('cif') || '-';
-        return <div className="text-sm">{value}</div>;
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('cif')} 
+            fieldName="cif" 
+            onUpdate={onUpdate} 
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
-      cell: ({ row }) => {
-        const value = row.getValue('observaciones') || '-';
-        return <div className="text-sm">{value}</div>;
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('observaciones')} 
+            fieldName="observaciones" 
+            onUpdate={onUpdate} 
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     {
-  id: 'incidencia_motivo',
-  header: 'Motivo Incidencia',
-  cell: ({ row }) => {
-    const doc = row.original;
-    
-    // Si no hay incidencia, mostrar "Sin incidencias"
-    if (!doc.incidencia || !doc.incidencia_razon) {
-      return (
-        <div className="flex items-center gap-2 text-muted-foreground text-xs">
-          <span className="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-          Sin incidencias
-        </div>
-      );
-    }
-    
-    // Si hay incidencia, mostrar el motivo
-    return (
-      <div className="flex items-center gap-2 max-w-md">
-        <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
-        <div className="flex-1">
-          <div 
-            className="text-sm font-medium line-clamp-2 text-red-600 dark:text-red-400 cursor-help" 
-            title={doc.incidencia_razon}
-          >
-            {doc.incidencia_razon}
+      id: 'incidencia_motivo',
+      header: 'Motivo Incidencia',
+      cell: ({ row }) => {
+        const doc = row.original;
+        
+        if (!doc.incidencia || !doc.incidencia_razon) {
+          return (
+            <div className="flex items-center gap-2 text-muted-foreground text-xs">
+              <span className="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+              Sin incidencias
+            </div>
+          );
+        }
+        
+        return (
+          <div className="flex items-center gap-2 max-w-md">
+            <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+            <div className="flex-1">
+              <div 
+                className="text-sm font-medium line-clamp-2 text-red-600 dark:text-red-400 cursor-help" 
+                title={doc.incidencia_razon}
+              >
+                {doc.incidencia_razon}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    );
-  },
-  footer: () => null,
-},
+        );
+      },
+      footer: () => null,
+    },
     {
       accessorKey: 'tipo_documento',
       header: 'Tipo Documento',
       cell: ({ row, table }) => {
-        return <EditableCell docId={row.original.id_documento} initialValue={row.getValue('tipo_documento')} fieldName="tipo_documento" onUpdate={onUpdate} table={table} rowIndex={row.index} />;
+        return (
+          <EditableCell 
+            docId={row.original.id_documento} 
+            initialValue={row.getValue('tipo_documento')} 
+            fieldName="tipo_documento" 
+            onUpdate={onUpdate} 
+            table={table} 
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
       }
     },
     ...[21, 10, 4, 0].flatMap(rate => ([
@@ -430,16 +476,16 @@ export function DocumentsTable({
   isIncidentsPage = false, 
   filename = 'documentos',
   showConfirmButton = false,
-  viewId, // 🆕 NUEVO: Identificador de la vista
-  enableColumnPersistence = true, // 🆕 NUEVO: Activar persistencia por defecto
+  viewId,
+  enableColumnPersistence = true,
 }: { 
   documents: Document[], 
   hiddenColumns?: string[], 
   isIncidentsPage?: boolean, 
   filename?: string,
   showConfirmButton?: boolean,
-  viewId?: string, // 🆕 NUEVO
-  enableColumnPersistence?: boolean, // 🆕 NUEVO
+  viewId?: string,
+  enableColumnPersistence?: boolean,
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -451,12 +497,6 @@ export function DocumentsTable({
   const [isConfirming, setIsConfirming] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-
-  console.log('🔍 [DocumentsTable] Documentos con is_new:', documents.filter(d => d.is_new === 1).map(d => ({
-    id: d.id_documento,
-    numero: d.numero_documento,
-    is_new: d.is_new
-  })));
 
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
     // This function is now primarily for optimistic updates if needed
@@ -482,8 +522,6 @@ export function DocumentsTable({
 
     setIsConfirming(true);
     try {
-      console.log('✅ Intentando confirmar documento:', docToConfirm.id_documento);
-      
       const result = await confirmDocument(docToConfirm.id_documento);
 
       if (!result.success) {
@@ -515,8 +553,6 @@ export function DocumentsTable({
 
     setIsDeleting(true);
     try {
-      console.log('🗑️ Intentando eliminar documento:', docToDelete.id_documento);
-      
       const result = await deleteDocument(docToDelete.id_documento);
 
       if (!result.success) {
@@ -545,8 +581,6 @@ export function DocumentsTable({
 
   const handleMarkAsRead = useCallback(async (documentId: number) => {
     try {
-      console.log('👁️ [handleMarkAsRead] Marcando documento como leído:', documentId);
-      
       const response = await fetch(`/api/documents/${documentId}/mark-read`, {
         method: 'PATCH',
         headers: {
@@ -558,9 +592,6 @@ export function DocumentsTable({
         throw new Error('Error al marcar como leído');
       }
 
-      const result = await response.json();
-      console.log('✅ Documento marcado como leído:', result);
-      
       router.refresh();
     } catch (error) {
       console.error('❌ Error al marcar como leído:', error);
@@ -568,8 +599,6 @@ export function DocumentsTable({
   }, [router]);
 
   const handleRowClick = useCallback((doc: Document) => {
-    console.log('🖱️ [handleRowClick] Click en documento:', { id: doc.id_documento, is_new: doc.is_new });
-    
     if (doc.is_new === 1) {
       handleMarkAsRead(doc.id_documento);
     }
@@ -594,8 +623,8 @@ export function DocumentsTable({
           hiddenColumns={hiddenColumns} 
           filename={filename}
           onRowClick={handleRowClick}
-          viewId={viewId} // 🆕 NUEVO: Pasar viewId
-          enableColumnPersistence={enableColumnPersistence} // 🆕 NUEVO: Pasar enableColumnPersistence
+          viewId={viewId}
+          enableColumnPersistence={enableColumnPersistence}
         />
       </TooltipProvider>
       
@@ -605,7 +634,6 @@ export function DocumentsTable({
         setIsOpen={setIsSummarizeOpen}
       />
 
-      {/* Dialog para CONFIRMAR documento */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -634,7 +662,6 @@ export function DocumentsTable({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog para ELIMINAR documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

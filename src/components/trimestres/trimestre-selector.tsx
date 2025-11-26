@@ -34,12 +34,23 @@ export function TrimestreSelector({
   mostrarVacios,
   onToggleMostrarVacios,
 }: TrimestreSelectorProps) {
-  // Obtener años únicos ordenados descendentemente
+  // ✅ ARREGLADO: Incluir años futuros
   const años = React.useMemo(() => {
     const añoActual = new Date().getFullYear();
-    const años = [añoActual, añoActual - 1, añoActual - 2]; // 2025, 2024, 2023
-    return años;
-  }, []);
+    const añosBase = [
+      añoActual + 2,  // 2027
+      añoActual + 1,  // 2026
+      añoActual,      // 2025
+      añoActual - 1,  // 2024
+      añoActual - 2   // 2023
+    ];
+    
+    // Agregar años que tengan datos pero no estén en la lista
+    const añosConDatos = Array.from(new Set(trimestres.map(t => t.año)));
+    const todosLosAños = new Set([...añosBase, ...añosConDatos]);
+    
+    return Array.from(todosLosAños).sort((a, b) => b - a);
+  }, [trimestres]);
 
   // Filtrar trimestres del año seleccionado
   const trimestresDelAño = React.useMemo(() => {

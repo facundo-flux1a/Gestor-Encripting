@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { FileText, Lock, Building2 } from 'lucide-react';
 import {
   Table,
@@ -26,6 +27,19 @@ export function TrimestreTable({
   onDocumentClick,
   className,
 }: TrimestreTableProps) {
+  const router = useRouter();
+
+  // ✅ Handler para navegar al documento
+  const handleRowClick = (doc: Document) => {
+    // Si hay un handler personalizado, usarlo
+    if (onDocumentClick) {
+      onDocumentClick(doc);
+    } else {
+      // Por defecto, navegar a la vista detallada
+      router.push(`/documento/${doc.id_documento}`);
+    }
+  };
+
   if (documentos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -56,12 +70,12 @@ export function TrimestreTable({
         </TableHeader>
         <TableBody>
           {documentos.map((doc) => {
-            // ✅ Usar las propiedades correctas del tipo Document
+            // Usar las propiedades correctas del tipo Document
             const baseImponible = doc.base_imponible || 0;
             const ivaTotal = doc.iva || 0;
             const total = doc.total || 0;
             
-            // ✅ Manejar fecha null
+            // Manejar fecha null
             const fechaEmision = doc.fecha_emision 
               ? new Date(doc.fecha_emision).toLocaleDateString('es-ES')
               : '-';
@@ -70,9 +84,9 @@ export function TrimestreTable({
               <TableRow
                 key={doc.id_documento}
                 className={cn(
-                  'cursor-pointer hover:bg-muted/50'
+                  'cursor-pointer hover:bg-muted/50 transition-colors'
                 )}
-                onClick={() => onDocumentClick?.(doc)}
+                onClick={() => handleRowClick(doc)}
               >
                 <TableCell>
                   <Badge variant="secondary">

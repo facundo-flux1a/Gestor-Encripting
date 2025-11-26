@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { moveDocument } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
+import db from '@/lib/db'; // ← CORREGIDO: default export
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,27 @@ export async function PATCH(
       return NextResponse.json(
         { error: 'ID de documento inválido' },
         { status: 400 }
+      );
+    }
+    
+    // ← VERIFICAR si el trimestre está cerrado
+    const [docCheck] = await db.query<any[]>(
+      'SELECT trimestre_cerrado FROM documentos WHERE id = ?',
+      [documentId]
+    );
+    
+    if (!docCheck || docCheck.length === 0) {
+      return NextResponse.json(
+        { error: 'Documento no encontrado' },
+        { status: 404 }
+      );
+    }
+    
+    if (docCheck[0].trimestre_cerrado === 1) {
+      console.warn('⚠️ [API-MOVE-DOCUMENT] Intento de mover documento con trimestre cerrado');
+      return NextResponse.json(
+        { error: 'No se pueden mover documentos de trimestres cerrados' },
+        { status: 403 }
       );
     }
     

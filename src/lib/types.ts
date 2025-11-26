@@ -116,6 +116,10 @@ export type Document = {
   empresa_id: number | null;
   empresa_nombre?: string;
   empresa_cif?: string;
+   año_trimestre?: number;
+  num_trimestre?: number;
+    trimestre_cerrado?: number;  // Ya lo tienes en el service
+
 };
 
 export const DocumentUpdateSchema = z.object({

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { updateDocumentField } from '@/services/document-service';
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
 import type { Table } from '@tanstack/react-table';
 import type { Document } from '@/lib/types';
 
@@ -19,6 +19,7 @@ interface EditableCellProps {
   isCurrency?: boolean;
   table: Table<Document>;
   rowIndex: number;
+  trimestre_cerrado?: number; // ← NUEVO: Recibir el estado del trimestre
 }
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
@@ -33,8 +34,6 @@ const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
         const d = new Date(dateString);
-        // This is crucial: to avoid timezone issues, treat the date as UTC.
-        // The time part is irrelevant for display.
         const utcDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         return new Intl.DateTimeFormat('es-ES', {
             year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
@@ -52,13 +51,17 @@ export function EditableCell({
   inputType = 'text',
   isCurrency = false,
   table,
-  rowIndex
+  rowIndex,
+  trimestre_cerrado = 0 // ← NUEVO: Por defecto 0 (no cerrado)
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ← NUEVO: Verificar si el trimestre está cerrado
+  const isTrimesterClosed = trimestre_cerrado === 1;
 
   useEffect(() => {
     setValue(initialValue);
@@ -84,7 +87,6 @@ export function EditableCell({
     try {
       const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
-        // Optimistically update the table's internal state
         table.options.meta?.updateData(rowIndex, fieldName, processedValue);
         toast({
             title: 'Campo Actualizado',
@@ -95,7 +97,7 @@ export function EditableCell({
       }
     } catch (error: any) {
       console.error('Failed to update field:', error);
-      setValue(initialValue); // Revert value on error
+      setValue(initialValue);
       toast({
         title: 'Error al Actualizar',
         description: error.message || 'No se pudo guardar el campo.',
@@ -125,9 +127,19 @@ export function EditableCell({
     return value;
   }
 
-  // ← NUEVO: Manejar click y prevenir propagación
   const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Evita que el click llegue a la fila
+    e.stopPropagation();
+    
+    // ← NUEVO: Bloquear edición si el trimestre está cerrado
+    if (isTrimesterClosed) {
+      toast({
+        title: 'Trimestre Cerrado',
+        description: 'No se pueden editar documentos de trimestres cerrados.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     if (!isEditing && !isLoading) {
       setIsEditing(true);
     }
@@ -135,13 +147,24 @@ export function EditableCell({
 
   return (
     <div 
-      className="relative min-h-[24px]" 
-      onClick={handleClick} // ← CAMBIADO: Usar la nueva función
+      className={cn(
+        "relative min-h-[24px]",
+        isTrimesterClosed && "cursor-not-allowed opacity-60" // ← NUEVO: Estilo visual
+      )}
+      onClick={handleClick}
     >
       {isLoading && <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
       
+      {/* ← NUEVO: Mostrar ícono de candado si está cerrado */}
+      {isTrimesterClosed && !isLoading && (
+        <Lock className="absolute top-1/2 right-2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+      )}
+      
       {!isEditing && !isLoading && (
-        <span className="truncate block cursor-pointer">
+        <span className={cn(
+          "truncate block",
+          !isTrimesterClosed && "cursor-pointer" // ← NUEVO: Solo cursor pointer si NO está cerrado
+        )}>
           {displayValue()}
         </span>
       )}

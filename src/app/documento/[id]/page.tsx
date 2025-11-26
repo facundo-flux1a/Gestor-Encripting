@@ -23,32 +23,6 @@ import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
 
 
-// Helper function to check if a date is in the current quarter
-const isDateInCurrentQuarter = (dateString: string | null): boolean => {
-    if (!dateString) return false;
-    
-    try {
-        const docDate = new Date(dateString);
-        if (isNaN(docDate.getTime())) return false;
-
-        const now = new Date();
-
-        // Calcular trimestre (0-3)
-        const getQuarter = (d: Date) => Math.floor(d.getMonth() / 3);
-
-        const docYear = docDate.getFullYear();
-        const docQuarter = getQuarter(docDate);
-        
-        const currentYear = now.getFullYear();
-        const currentQuarter = getQuarter(now);
-
-        return docYear === currentYear && docQuarter === currentQuarter;
-    } catch {
-        return false;
-    }
-};
-
-
 export default function DocumentoPage() {
   const params = useParams();
   const [doc, setDoc] = useState<Document | null>(null);
@@ -209,15 +183,12 @@ export default function DocumentoPage() {
       resetFormWithDocData(doc);
   }
 
-  // ✅ ARREGLADO: Ahora usa fecha_emision y verifica trimestre_cerrado
+  // ✅ ARREGLADO: Solo verificar si el trimestre está cerrado
   const isEditable = useMemo(() => {
     if (!doc) return false;
     
-    // Si el trimestre está cerrado, NO es editable
-    if (doc.trimestre_cerrado) return false;
-    
-    // Si el trimestre NO está cerrado, verificar que sea del trimestre actual
-    return isDateInCurrentQuarter(doc.fecha_emision);
+    // Solo verificar si el trimestre está cerrado
+    return !doc.trimestre_cerrado;
   }, [doc]);
 
   if (isLoading) {
@@ -300,11 +271,7 @@ export default function DocumentoPage() {
                                     </TooltipTrigger>
                                     {!isEditable && (
                                         <TooltipContent>
-                                            <p>
-                                              {doc.trimestre_cerrado 
-                                                ? 'El trimestre de este documento está cerrado.' 
-                                                : 'Solo se pueden editar documentos del trimestre actual.'}
-                                            </p>
+                                            <p>El trimestre de este documento está cerrado.</p>
                                         </TooltipContent>
                                     )}
                                 </Tooltip>

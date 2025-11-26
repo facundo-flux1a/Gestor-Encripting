@@ -51,6 +51,8 @@ interface DocumentPacket extends RowDataPacket {
     empresa_cif?: string | null; 
     is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
      trimestre_cerrado: number;
+       año_trimestre?: number;        // ✅ AGREGAR
+    num_trimestre?: number; 
 }
 interface DatosExtra {
   EMPRESA_EMISORA?: {
@@ -283,6 +285,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
             empresa_cif: doc.empresa_cif || null,
             is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
                 trimestre_cerrado: doc.trimestre_cerrado || false, 
+                    año_trimestre: doc.año_trimestre || null,      // ✅ AGREGAR
+          num_trimestre: doc.num_trimestre || null, 
         };
     });
     
@@ -456,6 +460,9 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
                 d.fecha_creacion,
                 d.id_de_empresa,
                 d.is_new,
+                d.trimestre_cerrado,  -- ⬅️ AGREGADO
+                d.año_trimestre,        
+                d.num_trimestre,  
                 e.nombre_de_empresa as empresa_nombre,
                 e.cif as empresa_cif
             FROM documentos d
@@ -479,11 +486,12 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
         
         console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
         
-        // ⬅️ DEBUG: Ver is_new en los datos RAW
+        // ⬅️ DEBUG: Ver trimestre_cerrado en los datos RAW
         if (documentRows.length > 0) {
             console.log('🔍 [document-service] Primer documento RAW:', {
                 id: documentRows[0].id,
                 is_new: documentRows[0].is_new,
+                trimestre_cerrado: documentRows[0].trimestre_cerrado,  // ⬅️ AGREGADO
                 numero: documentRows[0].numero_documento
             });
         }
@@ -524,6 +532,9 @@ export async function getDocumentById(id: number): Promise<Document | null> {
                 d.fecha_creacion,
                 d.id_de_empresa,
                 d.is_new,
+                d.trimestre_cerrado,  -- ⬅️ AGREGADO
+                d.año_trimestre,        -- ✅ AGREGAR
+                d.num_trimestre,  
                 e.nombre_de_empresa as empresa_nombre,
                 e.cif as empresa_cif
             FROM documentos d
@@ -540,7 +551,10 @@ export async function getDocumentById(id: number): Promise<Document | null> {
             return null;
         }
 
-        console.log('✅ [document-service] Documento encontrado:', documentRows[0].id);
+        console.log('✅ [document-service] Documento encontrado:', {
+            id: documentRows[0].id,
+            trimestre_cerrado: documentRows[0].trimestre_cerrado  // ⬅️ DEBUG
+        });
         
         const documents = await mapDocumentPacketsToDocuments(documentRows);
         
@@ -550,6 +564,7 @@ export async function getDocumentById(id: number): Promise<Document | null> {
         return null;
     }
 }
+
 export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
     try {
         const user = await getCurrentUser();
@@ -601,14 +616,18 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     await connection.beginTransaction();
 
     try {
-        const [docRows] = await connection.query<DocumentPacket[]>('SELECT fecha_emision FROM documentos WHERE id = ?', [id]);
+        // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
+        const [docRows] = await connection.query<DocumentPacket[]>(
+            'SELECT trimestre_cerrado FROM documentos WHERE id = ?', 
+            [id]
+        );
+        
         if (docRows.length === 0) {
             throw new Error('Documento no encontrado.');
         }
         
-        const docDate = new Date(docRows[0].fecha_emision);
-        if (!isDateInCurrentQuarter(docDate)) {
-            throw new Error('No se pueden editar documentos fuera del trimestre actual.');
+        if (docRows[0].trimestre_cerrado === 1) {
+            throw new Error('No se pueden editar documentos de trimestres cerrados.');
         }
 
         const { numero_documento, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
@@ -686,14 +705,18 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     try {
         await connection.beginTransaction();
 
-        const [docRows] = await connection.query<DocumentPacket[]>('SELECT fecha_emision FROM documentos WHERE id = ?', [id]);
+        // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
+        const [docRows] = await connection.query<DocumentPacket[]>(
+            'SELECT trimestre_cerrado FROM documentos WHERE id = ?', 
+            [id]
+        );
+        
         if (docRows.length === 0) {
             throw new Error('Documento no encontrado.');
         }
 
-        const docDate = new Date(docRows[0].fecha_emision);
-        if (!isDateInCurrentQuarter(docDate)) {
-             throw new Error('No se pueden editar campos de documentos fuera del trimestre actual.');
+        if (docRows[0].trimestre_cerrado === 1) {
+            throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
         }
 
         const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
@@ -733,7 +756,6 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
              if (existing.length > 0) {
                 await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
             } else {
-                // Assuming a default percentage if none, or you might need to specify one.
                 await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
             }
         } else {
@@ -2011,12 +2033,13 @@ export async function getTrimestresList(
 
 /**
  * Obtiene documentos de un trimestre específico
+ * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
  */
 export async function getDocumentosByTrimestre(
   userId: number,
   año: number,
   trimestre: number,
-  empresaId?: number | null
+  empresaIds?: number[] | null  // ✅ CAMBIO: De number | null a number[] | null
 ): Promise<Document[]> {
   try {
     let whereConditions = [
@@ -2026,9 +2049,10 @@ export async function getDocumentosByTrimestre(
     ];
     const params: any[] = [userId, año, trimestre];
 
-    if (empresaId) {
-      whereConditions.push('d.id_de_empresa = ?');
-      params.push(empresaId);
+    // ✅ CAMBIO: Aceptar array de empresas
+    if (empresaIds && empresaIds.length > 0) {
+      whereConditions.push('d.id_de_empresa IN (?)');
+      params.push(empresaIds);
     }
 
     const whereClause = whereConditions.join(' AND ');
@@ -2048,6 +2072,9 @@ export async function getDocumentosByTrimestre(
         d.fecha_creacion,
         d.id_de_empresa,
         d.is_new,
+        d.trimestre_cerrado,
+        d.año_trimestre,        
+        d.num_trimestre,        
         e.nombre_de_empresa as empresa_nombre,
         e.cif as empresa_cif
       FROM documentos d
@@ -2056,7 +2083,12 @@ export async function getDocumentosByTrimestre(
       ORDER BY d.fecha_emision DESC
     `;
 
+    console.log('📝 [getDocumentosByTrimestre] Query:', query);
+    console.log('📝 [getDocumentosByTrimestre] Params:', params);
+
     const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+    console.log('✅ [getDocumentosByTrimestre] Documentos encontrados:', documentRows.length);
 
     return mapDocumentPacketsToDocuments(documentRows);
   } catch (error) {

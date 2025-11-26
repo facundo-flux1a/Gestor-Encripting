@@ -45,7 +45,7 @@ export default function TrimestresPage() {
   // Cargar lista de trimestres cuando cambian las empresas o el toggle
   React.useEffect(() => {
     loadTrimestres();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño]); // ✅ Agregado selectedAño para recargar al cambiar año
+  }, [selectedCompanyIds, mostrarVacios, selectedAño]);
 
   // Cargar documentos cuando cambia la selección de trimestre o empresas
   React.useEffect(() => {
@@ -60,14 +60,12 @@ export default function TrimestresPage() {
       
       const params = new URLSearchParams();
       
-      // ✅ Agregar múltiples empresa_id si hay seleccionadas
       if (selectedCompanyIds.length > 0) {
         selectedCompanyIds.forEach(id => {
           params.append('empresa_id', id.toString());
         });
       }
       
-      // Siempre pedir con mostrar_vacios=false a la BD (solo traer lo que tiene datos)
       params.append('mostrar_vacios', 'false');
 
       console.log('📡 [loadTrimestres] Fetching con params:', params.toString());
@@ -83,25 +81,20 @@ export default function TrimestresPage() {
       const dataFromDB = await response.json();
       console.log('✅ Trimestres de BD:', dataFromDB);
 
-      // ✅ GENERAR TRIMESTRES VACÍOS SI EL TOGGLE ESTÁ ACTIVADO
       let trimestresFinales = dataFromDB;
 
       if (mostrarVacios) {
-        // Usar el año seleccionado o el actual si no hay ninguno
         const añoParaGenerar = selectedAño || new Date().getFullYear();
         const trimestresCompletos: Trimestre[] = [];
 
-        // Generar todos los trimestres del año seleccionado
         for (let trimestre = 1; trimestre <= 4; trimestre++) {
           const existeEnBD = dataFromDB.find(
             (t: Trimestre) => t.año === añoParaGenerar && t.trimestre === trimestre
           );
 
           if (existeEnBD) {
-            // Si existe en BD, usar esos datos
             trimestresCompletos.push(existeEnBD);
           } else {
-            // Si NO existe, crear uno vacío
             trimestresCompletos.push({
               año: añoParaGenerar,
               trimestre,
@@ -123,7 +116,6 @@ export default function TrimestresPage() {
 
       setTrimestres(trimestresFinales);
 
-      // Seleccionar el trimestre más reciente automáticamente solo la primera vez
       if (trimestresFinales.length > 0 && !selectedAño) {
         const reciente = trimestresFinales[0];
         setSelectedAño(reciente.año);
@@ -152,7 +144,6 @@ export default function TrimestresPage() {
         trimestre: selectedTrimestre.toString(),
       });
 
-      // ✅ Agregar múltiples empresa_id
       if (selectedCompanyIds.length > 0) {
         selectedCompanyIds.forEach(id => {
           params.append('empresa_id', id.toString());
@@ -182,7 +173,7 @@ export default function TrimestresPage() {
   const handleSelectAño = (año: number) => {
     console.log('🔄 Año seleccionado:', año);
     setSelectedAño(año);
-    setSelectedTrimestre(1); // Seleccionar T1 por defecto al cambiar año
+    setSelectedTrimestre(1);
   };
 
   const handleCerrarTrimestre = async (empresaId: number | null) => {
@@ -203,7 +194,6 @@ export default function TrimestresPage() {
 
       const result = await response.json();
 
-      // Recargar datos
       await loadTrimestres();
       await loadDocumentos();
 
@@ -223,7 +213,6 @@ export default function TrimestresPage() {
     }
   };
 
-  // ✅ Calcular estadísticas agregadas si hay múltiples empresas
   const trimestreAgregado = React.useMemo(() => {
     if (!selectedAño || !selectedTrimestre) return null;
 
@@ -233,12 +222,10 @@ export default function TrimestresPage() {
 
     if (trimestresDelPeriodo.length === 0) return null;
 
-    // Si hay una sola empresa o es agregado (empresa_id === null), mostrar directo
     if (trimestresDelPeriodo.length === 1) {
       return trimestresDelPeriodo[0];
     }
 
-    // Agregar múltiples empresas
     return {
       año: selectedAño,
       trimestre: selectedTrimestre,
@@ -254,7 +241,6 @@ export default function TrimestresPage() {
     };
   }, [trimestres, selectedAño, selectedTrimestre]);
 
-  // ✅ Preparar lista para el selector (sin duplicados de año-trimestre)
   const trimestresParaSelector = React.useMemo(() => {
     const unique = new Map<string, Trimestre>();
     
@@ -267,7 +253,6 @@ export default function TrimestresPage() {
           empresa_nombre: null,
         });
       } else {
-        // Si alguno está cerrado, marcar como cerrado
         const existing = unique.get(key)!;
         if (t.cerrado) {
           existing.cerrado = true;
@@ -290,7 +275,6 @@ export default function TrimestresPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Toggle mostrar vacíos */}
           <div className="flex items-center space-x-2">
             <Switch
               id="mostrar-vacios"
@@ -307,7 +291,6 @@ export default function TrimestresPage() {
       </MainLayoutHeader>
 
       <div className="space-y-6 p-6">
-        {/* Selector de Trimestre */}
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (
@@ -346,7 +329,6 @@ export default function TrimestresPage() {
           </div>
         )}
 
-        {/* Stats Cards */}
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[...Array(4)].map((_, i) => (
@@ -384,7 +366,7 @@ export default function TrimestresPage() {
           </div>
         ) : null}
 
-        {/* Tabla de Documentos */}
+        {/* ✅ Tabla sin handler personalizado - navegará automáticamente */}
         {isLoadingDocs ? (
           <Skeleton className="h-96 w-full" />
         ) : (
@@ -392,7 +374,6 @@ export default function TrimestresPage() {
         )}
       </div>
 
-      {/* Dialog de Cierre */}
       <CloseQuarterDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

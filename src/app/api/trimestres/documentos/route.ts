@@ -22,10 +22,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Convertir a números o null
+    console.log('📥 [API-TRIMESTRES-DOCS] Parámetros recibidos:', {
+      año,
+      trimestre,
+      empresaIds: empresaIdsParam
+    });
+
+    // ✅ CAMBIO: Convertir a array de números (o undefined si está vacío)
     const empresaIds = empresaIdsParam.length > 0 
-      ? empresaIdsParam.map(id => parseInt(id))
-      : null;
+      ? empresaIdsParam.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
+      : undefined;
+
+    console.log('🔍 [API-TRIMESTRES-DOCS] Llamando getDocumentosByTrimestre con:', {
+      userId: session.userId,
+      año: parseInt(año),
+      trimestre: parseInt(trimestre),
+      empresaIds
+    });
 
     const documentos = await getDocumentosByTrimestre(
       session.userId,
@@ -34,11 +47,13 @@ export async function GET(req: NextRequest) {
       empresaIds
     );
 
+    console.log('✅ [API-TRIMESTRES-DOCS] Documentos encontrados:', documentos.length);
+
     return NextResponse.json(documentos);
   } catch (error) {
     console.error('❌ Error en GET /api/trimestres/documentos:', error);
     return NextResponse.json(
-      { error: 'Error al obtener documentos' },
+      { error: error instanceof Error ? error.message : 'Error al obtener documentos' },
       { status: 500 }
     );
   }
