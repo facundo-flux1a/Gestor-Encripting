@@ -8,7 +8,7 @@ import { TrimestreStatsCard } from '@/components/trimestres/trimestre-stats-card
 import { TrimestreTable } from '@/components/trimestres/trimestres-table';
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
-import { CompaniesSelector } from '@/components/companies-selector';
+import { CompaniesHeaderSelector } from '@/components/companies-header-selector'; // ✅ NUEVO
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -24,7 +24,7 @@ import {
 import type { Document, Trimestre } from '@/lib/types';
 
 export default function TrimestresPage() {
-  const { selectedCompanyIds } = useCompanyContext();
+  const { selectedCompanyIds } = useCompanyContext(); // ✅ Usa el contexto global
   const { toast } = useToast();
 
   // Estados
@@ -34,9 +34,9 @@ export default function TrimestresPage() {
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
   const [mostrarVacios, setMostrarVacios] = React.useState(false);
   
-  // Trimestre seleccionado
-  const [selectedAño, setSelectedAño] = React.useState<number | null>(null);
-  const [selectedTrimestre, setSelectedTrimestre] = React.useState<number | null>(null);
+  // Trimestre seleccionado - ✅ Inicializar con valores por defecto
+  const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
+  const [selectedTrimestre, setSelectedTrimestre] = React.useState<number>(1);
   
   // Dialog de cierre
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -49,9 +49,7 @@ export default function TrimestresPage() {
 
   // Cargar documentos cuando cambia la selección de trimestre o empresas
   React.useEffect(() => {
-    if (selectedAño && selectedTrimestre) {
-      loadDocumentos();
-    }
+    loadDocumentos();
   }, [selectedAño, selectedTrimestre, selectedCompanyIds]);
 
   const loadTrimestres = async () => {
@@ -84,7 +82,7 @@ export default function TrimestresPage() {
       let trimestresFinales = dataFromDB;
 
       if (mostrarVacios) {
-        const añoParaGenerar = selectedAño || new Date().getFullYear();
+        const añoParaGenerar = selectedAño; // ✅ Ya no puede ser null
         const trimestresCompletos: Trimestre[] = [];
 
         for (let trimestre = 1; trimestre <= 4; trimestre++) {
@@ -116,10 +114,15 @@ export default function TrimestresPage() {
 
       setTrimestres(trimestresFinales);
 
-      if (trimestresFinales.length > 0 && !selectedAño) {
-        const reciente = trimestresFinales[0];
-        setSelectedAño(reciente.año);
-        setSelectedTrimestre(reciente.trimestre);
+      // ✅ Solo actualizar si hay trimestres y el año actual no está en ellos
+      if (trimestresFinales.length > 0) {
+        const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
+        
+        if (!tieneAñoActual) {
+          const reciente = trimestresFinales[0];
+          setSelectedAño(reciente.año);
+          setSelectedTrimestre(reciente.trimestre);
+        }
       }
     } catch (error) {
       console.error('❌ Error loading trimestres:', error);
@@ -134,8 +137,7 @@ export default function TrimestresPage() {
   };
 
   const loadDocumentos = async () => {
-    if (!selectedAño || !selectedTrimestre) return;
-
+    // ✅ selectedAño y selectedTrimestre ya no pueden ser null
     try {
       setIsLoadingDocs(true);
 
@@ -214,8 +216,7 @@ export default function TrimestresPage() {
   };
 
   const trimestreAgregado = React.useMemo(() => {
-    if (!selectedAño || !selectedTrimestre) return null;
-
+    // ✅ selectedAño y selectedTrimestre siempre tienen valor
     const trimestresDelPeriodo = trimestres.filter(
       t => t.año === selectedAño && t.trimestre === selectedTrimestre
     );
@@ -274,6 +275,7 @@ export default function TrimestresPage() {
             Visualiza y cierra los trimestres fiscales
           </p>
         </div>
+        {/* ✅ NUEVO SELECTOR HORIZONTAL */}
         <div className="flex items-center gap-4">
           <div className="flex items-center space-x-2">
             <Switch
@@ -286,7 +288,7 @@ export default function TrimestresPage() {
             </Label>
           </div>
 
-          <CompaniesSelector />
+          <CompaniesHeaderSelector />
         </div>
       </MainLayoutHeader>
 
@@ -366,7 +368,6 @@ export default function TrimestresPage() {
           </div>
         ) : null}
 
-        {/* ✅ Tabla sin handler personalizado - navegará automáticamente */}
         {isLoadingDocs ? (
           <Skeleton className="h-96 w-full" />
         ) : (

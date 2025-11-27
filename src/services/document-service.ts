@@ -1960,6 +1960,10 @@ export async function getDashboardAnalytics(
 /**
  * Obtiene todos los trimestres con estadísticas
  */
+/**
+ * Obtiene todos los trimestres con estadísticas
+ * ✅ ARREGLADO: Acepta array de empresas
+ */
 export async function getTrimestresList(
   userId: number,
   filters?: TrimestreFilters
@@ -1970,10 +1974,20 @@ export async function getTrimestresList(
     let whereConditions = ['e.id_de_usuario = ?'];
     const params: any[] = [userId];
 
-    // Filtro por empresa
+    // ✅ FIX: Filtro por múltiples empresas usando IN
     if (filters?.empresa_id) {
-      whereConditions.push('d.id_de_empresa = ?');
-      params.push(filters.empresa_id);
+      // Si empresa_id es un array
+      if (Array.isArray(filters.empresa_id)) {
+        if (filters.empresa_id.length > 0) {
+          const placeholders = filters.empresa_id.map(() => '?').join(', ');
+          whereConditions.push(`d.id_de_empresa IN (${placeholders})`);
+          params.push(...filters.empresa_id);
+        }
+      } else {
+        // Si es un número individual
+        whereConditions.push('d.id_de_empresa = ?');
+        params.push(filters.empresa_id);
+      }
     }
 
     // Filtro por año
@@ -2004,6 +2018,9 @@ export async function getTrimestresList(
       ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
     `;
 
+    console.log('📝 [getTrimestresList] Query:', query);
+    console.log('📝 [getTrimestresList] Params:', params);
+
     const [rows] = await conn.query<RowDataPacket[]>(query, params);
 
     let trimestres = rows.map(row => ({
@@ -2013,9 +2030,9 @@ export async function getTrimestresList(
       empresa_nombre: row.empresa_nombre || 'Sin empresa',
       total_documentos: Number(row.total_documentos),
       total_ingresos: Number(row.total_base || 0),
-      total_gastos: 0, // Calculamos después si necesitas distinguir
+      total_gastos: 0,
       iva_repercutido: Number(row.iva_total || 0),
-      iva_soportado: 0, // Calculamos después si necesitas distinguir
+      iva_soportado: 0,
       cerrado: Boolean(row.cerrado),
       fecha_cierre: row.fecha_cierre || null,
     }));
@@ -2024,6 +2041,8 @@ export async function getTrimestresList(
     if (!filters?.mostrar_vacios) {
       trimestres = trimestres.filter(t => t.total_documentos > 0);
     }
+
+    console.log('✅ [getTrimestresList] Trimestres encontrados:', trimestres.length);
 
     return trimestres;
   } finally {

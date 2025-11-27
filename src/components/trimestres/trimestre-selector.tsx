@@ -34,7 +34,7 @@ export function TrimestreSelector({
   mostrarVacios,
   onToggleMostrarVacios,
 }: TrimestreSelectorProps) {
-  // ✅ ARREGLADO: Incluir años futuros
+  // ✅ ARREGLADO: Incluir años futuros y filtrar nulls
   const años = React.useMemo(() => {
     const añoActual = new Date().getFullYear();
     const añosBase = [
@@ -45,8 +45,15 @@ export function TrimestreSelector({
       añoActual - 2   // 2023
     ];
     
-    // Agregar años que tengan datos pero no estén en la lista
-    const añosConDatos = Array.from(new Set(trimestres.map(t => t.año)));
+    // ✅ FILTRAR nulls antes de agregar años con datos
+    const añosConDatos = Array.from(
+      new Set(
+        trimestres
+          .map(t => t.año)
+          .filter((año): año is number => año !== null && año !== undefined)
+      )
+    );
+    
     const todosLosAños = new Set([...añosBase, ...añosConDatos]);
     
     return Array.from(todosLosAños).sort((a, b) => b - a);
@@ -66,7 +73,7 @@ export function TrimestreSelector({
       <div className="flex items-center gap-2 min-w-[160px]">
         <Calendar className="h-4 w-4 text-muted-foreground" />
         <Select
-          value={selectedAño?.toString() || ''}
+          value={selectedAño ? selectedAño.toString() : ''}
           onValueChange={(value) => onSelectAño(parseInt(value))}
         >
           <SelectTrigger className="w-[130px]">
