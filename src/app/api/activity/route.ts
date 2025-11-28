@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const dateTo = searchParams.get('dateTo');
     const search = searchParams.get('search');
 
-    // Query con LEFT JOIN para traer info del documento - AHORA INCLUYE is_new
+    // Query con LEFT JOIN - INCLUYE is_new y dashboard-correo
     let query = `
       SELECT 
         a.id,
@@ -41,6 +41,7 @@ export async function GET(request: Request) {
         a.updated_at,
         a.completed_at,
         a.is_new,
+        a.\`dashboard-correo\`,
         e.nombre_de_empresa,
         e.CIF,
         d.tipo_documento,

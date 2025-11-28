@@ -116,10 +116,9 @@ export type Document = {
   empresa_id: number | null;
   empresa_nombre?: string;
   empresa_cif?: string;
-   año_trimestre?: number;
+  año_trimestre?: number;
   num_trimestre?: number;
-    trimestre_cerrado?: number;  // Ya lo tienes en el service
-
+  trimestre_cerrado?: number;
 };
 
 export const DocumentUpdateSchema = z.object({
@@ -168,7 +167,7 @@ export type Company = {
   id: number;
   name: string;
   nombreFiscal?: string | null;
-  cif?: string ;
+  cif?: string;
 };
 
 export type CreateDocumentPayload = {
@@ -197,9 +196,6 @@ export function calcularTrimestre(fecha: Date | string): number {
 // TIPOS DE TRIMESTRES
 // =====================================
 
-/**
- * Representa un trimestre con sus estadísticas
- */
 export const TrimestreSchema = z.object({
   año: z.number(),
   trimestre: z.number().min(1).max(4),
@@ -215,9 +211,6 @@ export const TrimestreSchema = z.object({
 });
 export type Trimestre = z.infer<typeof TrimestreSchema>;
 
-/**
- * Payload para cerrar un trimestre
- */
 export const CerrarTrimestrePayloadSchema = z.object({
   año: z.number(),
   trimestre: z.number().min(1).max(4),
@@ -225,13 +218,39 @@ export const CerrarTrimestrePayloadSchema = z.object({
 });
 export type CerrarTrimestrePayload = z.infer<typeof CerrarTrimestrePayloadSchema>;
 
-/**
- * Filtros para listar trimestres
- * ✅ Soporta filtro múltiple de empresas
- */
 export const TrimestreFiltersSchema = z.object({
   empresa_id: z.union([z.number(), z.array(z.number())]).nullable().optional(),
   año: z.number().optional(),
   mostrar_vacios: z.boolean().optional().default(false),
 });
 export type TrimestreFilters = z.infer<typeof TrimestreFiltersSchema>;
+
+// =====================================
+// 🆕 TIPO ACTIVITY CON DASHBOARD-CORREO
+// =====================================
+
+export interface Activity {
+  id: number;
+  upload_id: string;
+  parent_upload_id: string | null;
+  id_de_empresa: number;
+  documento_id: number | null;
+  documento_nombre: string;
+  documento_tipo: string;
+  status: string;
+  step: string;
+  progress: number;
+  mensaje: string;
+  error_detalle: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  nombre_de_empresa: string;
+  CIF: string;
+  tipo_documento?: string;
+  numero_documento?: string;
+  empresa_emisora?: string;
+  cliente?: string;
+  is_new?: number;
+  'dashboard-correo'?: 'dashboard' | 'correo' | null;  // 🆕 NUEVO CAMPO
+}
