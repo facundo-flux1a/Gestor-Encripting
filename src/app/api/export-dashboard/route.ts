@@ -16,11 +16,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { empresaIds, año, trimestre } = body;
+    const { empresaIds, año, trimestre, analytics } = body;
 
     console.log('📤 [export-dashboard] Iniciando exportación:', { empresaIds, año, trimestre });
+    console.log('📊 [export-dashboard] Analytics recibidas:', analytics?.kpis);
 
-    // ✅ Obtener documentos directamente con toda su info (SOLO FACTURAS)
+    // ✅ Obtener documentos para el detalle
     let query = `
       SELECT 
         d.id,
@@ -78,23 +79,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Calcular totales simples
-    let totalIngresos = 0;
-    let totalGastos = 0;
-    let totalIva = 0;
+    // ✅ USAR LOS TOTALES QUE VIENEN DEL FRONTEND
+    const totalIngresos = analytics?.kpis?.totalIngresos || 0;
+    const totalGastos = analytics?.kpis?.totalGastos || 0;
+    const totalIva = analytics?.kpis?.resultadoIva || 0;
+    const beneficio = analytics?.kpis?.beneficio || 0;
+    const totalDocs = analytics?.kpis?.totalDocs || documentos.length;
 
-    documentos.forEach(doc => {
-      const importe = Number(doc.importe_sin_impuestos || 0);
-      const emisorCif = doc.datos_extra?.EMPRESA_EMISORA?.CIF;
-      
-      // Si el emisor es la empresa, es ingreso, sino es gasto
-      if (emisorCif === doc.empresa_cif) {
-        totalIngresos += importe;
-      } else {
-        totalGastos += importe;
-      }
-      
-      totalIva += Number(doc.importe_total || 0) - Number(doc.importe_sin_impuestos || 0);
+    console.log('💰 [export-dashboard] Totales a enviar:', {
+      totalIngresos,
+      totalGastos,
+      totalIva,
+      beneficio,
+      totalDocs
     });
 
     // ✅ Generar nombre descriptivo del archivo
@@ -131,13 +128,13 @@ export async function POST(request: NextRequest) {
         año,
         trimestre
       },
-      // ✅ Datos calculados simples
+      // ✅ USAR LAS MÉTRICAS QUE VIENEN DEL FRONTEND
       resumen: {
-        totalDocumentos: documentos.length,
+        totalDocumentos: totalDocs,
         totalIngresos,
         totalGastos,
         totalIva,
-        beneficio: totalIngresos - totalGastos
+        beneficio
       },
       // ✅ Lista completa de documentos
       documentos: documentos.map(d => ({
@@ -159,8 +156,10 @@ export async function POST(request: NextRequest) {
 
     console.log('🚀 [export-dashboard] Enviando a n8n:', {
       documentos: documentos.length,
+      totalIngresos,
       totalGastos,
-      totalIngresos
+      totalIva,
+      beneficio: totalIngresos - totalGastos
     });
 
     // Enviar a n8n

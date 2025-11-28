@@ -217,7 +217,8 @@ export default function DashboardPage() {
         body: JSON.stringify({
           empresaIds: selectedCompanyIds.map(id => Number(id)),
           año: selectedAño,
-          trimestre: selectedTrimestre
+          trimestre: selectedTrimestre,
+          analytics: analytics
         })
       });
 
