@@ -5,8 +5,8 @@ import React from 'react';
 import { getSession } from '@/services/auth-service';
 import {
   HelpCircle,
-   Monitor, // ✅ AGREGAR
-  Mail,    // ✅ AGREGAR
+  Monitor,
+  Mail,
   Info, 
   CheckCircle2,
   XCircle,
@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   FolderOpen,
   Folder,
   Zap,
@@ -113,6 +114,14 @@ export default function ActivityTable({
     dateFrom: '',
     dateTo: '',
     searchText: '',
+  });
+
+  const [sortConfig, setSortConfig] = useState<{
+    key: 'status' | 'documento' | 'empresa' | 'fecha' | 'progreso' | null;
+    direction: 'asc' | 'desc';
+  }>({
+    key: 'fecha',
+    direction: 'desc',
   });
 
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
@@ -335,7 +344,6 @@ export default function ActivityTable({
       });
     }
   };
-
   const handleSuccessActivityClick = async (activity: Activity) => {
     if (activity.documento_id) {
       if (activity.is_new === 1) {
@@ -401,26 +409,85 @@ export default function ActivityTable({
     setPagination(prev => ({ ...prev, offset: 0 }));
   };
 
-  const organizeActivities = () => {
-    const childFiles = activities.filter(a => a.parent_upload_id);
-    const zipUploadIds = new Set(childFiles.map(a => a.parent_upload_id).filter(Boolean));
-    const parentFiles = activities.filter(a => !a.parent_upload_id);
-    const zipFiles = parentFiles.filter(a => zipUploadIds.has(a.upload_id));
-    const regularFiles = parentFiles.filter(a => !zipUploadIds.has(a.upload_id));
-
-    const childrenMap = new Map<string, Activity[]>();
-    childFiles.forEach(child => {
-      if (!child.parent_upload_id) return;
-      if (!childrenMap.has(child.parent_upload_id)) {
-        childrenMap.set(child.parent_upload_id, []);
-      }
-      childrenMap.get(child.parent_upload_id)!.push(child);
-    });
-
-    return { zipFiles, regularFiles, childrenMap };
+  const handleSort = (key: 'status' | 'documento' | 'empresa' | 'fecha' | 'progreso') => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
   };
 
-  // ✅ MODIFICADO: Simplificado sin marcar como leído
+  const getSortIcon = (key: string) => {
+    if (sortConfig.key !== key) return <ChevronUp className="w-4 h-4 opacity-0" />;
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp className="w-4 h-4" />
+      : <ChevronDown className="w-4 h-4" />;
+  };
+
+  const sortActivities = (activities: Activity[]) => {
+  if (!sortConfig.key) return activities;
+
+  const sorted = [...activities].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortConfig.key) {
+      case 'status':
+        const statusOrder = { 'completado': 1, 'fallido': 2, 'interrumpido': 3 };
+        aValue = statusOrder[a.status?.toLowerCase() as keyof typeof statusOrder] || 999;
+        bValue = statusOrder[b.status?.toLowerCase() as keyof typeof statusOrder] || 999;
+        break;
+      case 'documento':
+        aValue = (a.documento_nombre || '').toLowerCase();
+        bValue = (b.documento_nombre || '').toLowerCase();
+        break;
+      case 'empresa':
+        aValue = (a.nombre_de_empresa || '').toLowerCase();
+        bValue = (b.nombre_de_empresa || '').toLowerCase();
+        break;
+      case 'fecha':
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+        break;
+      case 'progreso':
+        aValue = a.progress || 0;
+        bValue = b.progress || 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  return sorted;
+};
+
+const organizeActivities = () => {
+  const sortedActivities = sortActivities(activities);
+  const childFiles = sortedActivities.filter(a => a.parent_upload_id);
+  const zipUploadIds = new Set(childFiles.map(a => a.parent_upload_id).filter(Boolean));
+  const parentFiles = sortedActivities.filter(a => !a.parent_upload_id);
+
+  const childrenMap = new Map<string, Activity[]>();
+  childFiles.forEach(child => {
+    if (!child.parent_upload_id) return;
+    if (!childrenMap.has(child.parent_upload_id)) {
+      childrenMap.set(child.parent_upload_id, []);
+    }
+    childrenMap.get(child.parent_upload_id)!.push(child);
+  });
+
+  // Ordenar los hijos de cada ZIP también
+  childrenMap.forEach((children, parentId) => {
+    childrenMap.set(parentId, sortActivities(children));
+  });
+
+  // ✅ Retornar parentFiles completo en lugar de separar
+  return { parentFiles, childrenMap, zipUploadIds };
+};
+
   const toggleZip = (uploadId: string) => {
     setExpandedZips(prev => {
       const newSet = new Set(prev);
@@ -460,44 +527,42 @@ export default function ActivityTable({
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
     }).format(date);
   };
+
   const getSourceIcon = (source?: string) => {
-  const sourceMap: Record<string, { icon: JSX.Element; label: string; color: string }> = {
-    'dashboard': { 
-      icon: <Monitor className="w-4 h-4" />, 
-      label: 'Dashboard', 
-      color: 'text-blue-400' 
-    },
-    'correo': { 
-      icon: <Mail className="w-4 h-4" />, 
-      label: 'Correo', 
-      color: 'text-green-400' 
-    },
+    const sourceMap: Record<string, { icon: JSX.Element; label: string; color: string }> = {
+      'dashboard': { 
+        icon: <Monitor className="w-4 h-4" />, 
+        label: 'Dashboard', 
+        color: 'text-blue-400' 
+      },
+      'correo': { 
+        icon: <Mail className="w-4 h-4" />, 
+        label: 'Correo', 
+        color: 'text-green-400' 
+      },
+    };
+
+    const config = source && sourceMap[source.toLowerCase()] 
+      ? sourceMap[source.toLowerCase()]
+      : { 
+          icon: <HelpCircle className="w-4 h-4" />, 
+          label: 'Origen desconocido', 
+          color: 'text-gray-400' 
+        };
+
+    return (
+      <div 
+        className="flex items-center gap-1.5"
+        title={`Origen: ${config.label}`}
+      >
+        <div className={`${config.color} opacity-70`}>
+          {config.icon}
+        </div>
+      </div>
+    );
   };
 
-  // ✅ Si no hay source o no está en el map, mostrar icono de interrogación
-  const config = source && sourceMap[source.toLowerCase()] 
-    ? sourceMap[source.toLowerCase()]
-    : { 
-        icon: <HelpCircle className="w-4 h-4" />, 
-        label: 'Origen desconocido', 
-        color: 'text-gray-400' 
-      };
-
-  return (
-    <div 
-      className="flex items-center gap-1.5"
-      title={`Origen: ${config.label}`}
-    >
-      <div className={`${config.color} opacity-70`}>
-        {config.icon}
-      </div>
-    </div>
-  );
-};
-
-  // ✅ MODIFICADO: Badge basado en hijos para ZIPs
   const renderNewBadge = (activity: Activity, children?: Activity[]) => {
-    // Si es un ZIP (tiene hijos), verificar si algún hijo es nuevo
     if (children && children.length > 0) {
       const hasUnreadChildren = children.some(child => child.is_new === 1);
       if (!hasUnreadChildren) return null;
@@ -523,7 +588,6 @@ export default function ActivityTable({
       );
     }
 
-    // Comportamiento original para archivos individuales
     if (activity.is_new !== 1) return null;
 
     const status = activity.status.toLowerCase();
@@ -638,150 +702,35 @@ export default function ActivityTable({
           </div>
         </td>
         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-  <div className="flex items-center gap-2">
-    {/* ✅ Icono de origen (dashboard/correo) */}
-    {getSourceIcon(activity['dashboard-correo'])}
-    
-    {/* Marcar como leído */}
-    {activity.is_new === 1 && (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          markActivityAsRead(activity.id);
-        }}
-        className="p-2 hover:bg-violet-500/20 rounded-lg transition-colors"
-        title="Marcar como leído"
-      >
-        <CheckCircle2 className="w-4 h-4 text-violet-400" />
-      </button>
-    )}
-    
-    {/* Reintentar */}
-    {canRetry && (
-      <button
-        onClick={(e) => handleRetry(activity, e)}
-        disabled={retrying.has(activity.id)}
-        className="p-2 hover:bg-violet-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Reintentar procesamiento"
-      >
-        <RotateCw className={`w-4 h-4 text-violet-400 ${retrying.has(activity.id) ? 'animate-spin' : ''}`} />
-      </button>
-    )}
-    
-    {/* Eliminar */}
-    <button
-      onClick={() => handleDeleteClick(activity)}
-      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-      title="Eliminar actividad"
-    >
-      <Trash2 className="w-4 h-4 text-red-400" />
-    </button>
-  </div>
-</td>
-      </tr>
-    );
-  };
-
-const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
-  const isExpanded = expandedZips.has(zipActivity.upload_id);
-  const canRetry = ['fallido', 'interrumpido', 'error'].includes(zipActivity.status.toLowerCase());
-
-  return (
-    <React.Fragment key={zipActivity.upload_id}>
-      <tr
-        className={`transition-colors duration-150 cursor-pointer ${
-          isExpanded ? 'bg-violet-600/35 hover:bg-violet-500/45' : 'hover:bg-violet-600/25'
-        }`}
-        onClick={() => toggleZip(zipActivity.upload_id)}
-      >
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="flex items-center gap-3">
-            {getStatusIcon(zipActivity.status)}
-            {getStatusBadge(zipActivity.status)}
-            {/* ✅ MODIFICADO: Pasar children como segundo parámetro */}
-            {renderNewBadge(zipActivity, children)}
-          </div>
-        </td>
-        <td className="px-6 py-4">
-          <div className="flex items-start gap-3">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {isExpanded ? (
-                <>
-                  <ChevronDown className="w-4 h-4 text-violet-300" />
-                  <FolderOpen className="w-5 h-5 text-violet-400 mt-0.5" />
-                </>
-              ) : (
-                <>
-                  <ChevronRight className="w-4 h-4 text-violet-300" />
-                  <Folder className="w-5 h-5 text-violet-400 mt-0.5" />
-                </>
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-violet-100 flex items-center gap-2">
-                {zipActivity.documento_nombre}
-                <span className="text-xs text-violet-300 font-normal">
-                  ({children.length} archivo{children.length !== 1 ? 's' : ''})
-                </span>
-              </p>
-              <p className="text-xs text-violet-300 mt-1">{zipActivity.step}</p>
-              {zipActivity.mensaje && (
-                <p className="text-xs text-violet-200 mt-1 max-w-md">{zipActivity.mensaje}</p>
-              )}
-            </div>
-          </div>
-        </td>
-        <td className="px-6 py-4">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-violet-300" />
-            <div>
-              <p className="text-sm text-violet-100 font-medium">{zipActivity.nombre_de_empresa}</p>
-              <p className="text-xs text-violet-300">{zipActivity.CIF}</p>
-            </div>
-          </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-violet-300" />
-            <p className="text-sm text-violet-200">{formatDate(zipActivity.created_at)}</p>
-          </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="flex items-center gap-3">
-            <div className="w-24 bg-violet-900/50 rounded-full h-2.5 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  zipActivity.status.toLowerCase() === 'completado'
-                    ? 'bg-violet-400'
-                    : zipActivity.status.toLowerCase() === 'fallido'
-                    ? 'bg-red-400'
-                    : 'bg-violet-500'
-                }`}
-                style={{ width: `${zipActivity.progress}%` }}
-              />
-            </div>
-            <span className="text-sm font-medium text-violet-200 min-w-[45px]">
-              {zipActivity.progress}%
-            </span>
-          </div>
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-2">
-            {/* ✅ AGREGADO: Icono de origen (dashboard/correo) */}
-            {getSourceIcon(zipActivity['dashboard-correo'])}
+            {getSourceIcon(activity['dashboard-correo'])}
+            
+            {activity.is_new === 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  markActivityAsRead(activity.id);
+                }}
+                className="p-2 hover:bg-violet-500/20 rounded-lg transition-colors"
+                title="Marcar como leído"
+              >
+                <CheckCircle2 className="w-4 h-4 text-violet-400" />
+              </button>
+            )}
             
             {canRetry && (
               <button
-                onClick={(e) => handleRetry(zipActivity, e)}
-                disabled={retrying.has(zipActivity.id)}
+                onClick={(e) => handleRetry(activity, e)}
+                disabled={retrying.has(activity.id)}
                 className="p-2 hover:bg-violet-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Reintentar procesamiento"
               >
-                <RotateCw className={`w-4 h-4 text-violet-400 ${retrying.has(zipActivity.id) ? 'animate-spin' : ''}`} />
+                <RotateCw className={`w-4 h-4 text-violet-400 ${retrying.has(activity.id) ? 'animate-spin' : ''}`} />
               </button>
             )}
+            
             <button
-              onClick={() => handleDeleteClick(zipActivity)}
+              onClick={() => handleDeleteClick(activity)}
               className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
               title="Eliminar actividad"
             >
@@ -790,12 +739,119 @@ const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
           </div>
         </td>
       </tr>
-      {isExpanded && children.map(child => renderActivityRow(child, true))}
-    </React.Fragment>
-  );
-};
-      
+    );
+  };
 
+  const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
+    const isExpanded = expandedZips.has(zipActivity.upload_id);
+    const canRetry = ['fallido', 'interrumpido', 'error'].includes(zipActivity.status.toLowerCase());
+
+    return (
+      <React.Fragment key={zipActivity.upload_id}>
+        <tr
+          className={`transition-colors duration-150 cursor-pointer ${
+            isExpanded ? 'bg-violet-600/35 hover:bg-violet-500/45' : 'hover:bg-violet-600/25'
+          }`}
+          onClick={() => toggleZip(zipActivity.upload_id)}
+        >
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center gap-3">
+              {getStatusIcon(zipActivity.status)}
+              {getStatusBadge(zipActivity.status)}
+              {renderNewBadge(zipActivity, children)}
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex items-start gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isExpanded ? (
+                  <>
+                    <ChevronDown className="w-4 h-4 text-violet-300" />
+                    <FolderOpen className="w-5 h-5 text-violet-400 mt-0.5" />
+                  </>
+                ) : (
+                  <>
+                    <ChevronRight className="w-4 h-4 text-violet-300" />
+                    <Folder className="w-5 h-5 text-violet-400 mt-0.5" />
+                  </>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-violet-100 flex items-center gap-2">
+                  {zipActivity.documento_nombre}
+                  <span className="text-xs text-violet-300 font-normal">
+                    ({children.length} archivo{children.length !== 1 ? 's' : ''})
+                  </span>
+                </p>
+                <p className="text-xs text-violet-300 mt-1">{zipActivity.step}</p>
+                {zipActivity.mensaje && (
+                  <p className="text-xs text-violet-200 mt-1 max-w-md">{zipActivity.mensaje}</p>
+                )}
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-violet-300" />
+              <div>
+                <p className="text-sm text-violet-100 font-medium">{zipActivity.nombre_de_empresa}</p>
+                <p className="text-xs text-violet-300">{zipActivity.CIF}</p>
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-violet-300" />
+              <p className="text-sm text-violet-200">{formatDate(zipActivity.created_at)}</p>
+            </div>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center gap-3">
+              <div className="w-24 bg-violet-900/50 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    zipActivity.status.toLowerCase() === 'completado'
+                      ? 'bg-violet-400'
+                      : zipActivity.status.toLowerCase() === 'fallido'
+                      ? 'bg-red-400'
+                      : 'bg-violet-500'
+                  }`}
+                  style={{ width: `${zipActivity.progress}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium text-violet-200 min-w-[45px]">
+                {zipActivity.progress}%
+              </span>
+            </div>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              {getSourceIcon(zipActivity['dashboard-correo'])}
+              
+              {canRetry && (
+                <button
+                  onClick={(e) => handleRetry(zipActivity, e)}
+                  disabled={retrying.has(zipActivity.id)}
+                  className="p-2 hover:bg-violet-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Reintentar procesamiento"
+                >
+                  <RotateCw className={`w-4 h-4 text-violet-400 ${retrying.has(zipActivity.id) ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+              <button
+                onClick={() => handleDeleteClick(zipActivity)}
+                className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                title="Eliminar actividad"
+              >
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </button>
+            </div>
+          </td>
+        </tr>
+        {isExpanded && children.map(child => renderActivityRow(child, true))}
+      </React.Fragment>
+    );
+  };
   if (loading && activities.length === 0) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -831,7 +887,7 @@ const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
     );
   }
 
-  const { zipFiles, regularFiles, childrenMap } = organizeActivities();
+  const { parentFiles, childrenMap, zipUploadIds } = organizeActivities();
   const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
   const unreadCount = activities.filter(a => a.is_new === 1).length;
 
@@ -1018,21 +1074,63 @@ const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
             <table className="w-full table-auto">
               <thead className="bg-violet-800/60 backdrop-blur-sm border-b border-violet-700/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Estado</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Documento</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Empresa</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Fecha</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Progreso</th>
+                  <th 
+                    onClick={() => handleSort('status')}
+                    className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider cursor-pointer hover:bg-violet-700/30 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      Estado
+                      {getSortIcon('status')}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('documento')}
+                    className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider cursor-pointer hover:bg-violet-700/30 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      Documento
+                      {getSortIcon('documento')}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('empresa')}
+                    className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider cursor-pointer hover:bg-violet-700/30 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      Empresa
+                      {getSortIcon('empresa')}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('fecha')}
+                    className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider cursor-pointer hover:bg-violet-700/30 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      Fecha
+                      {getSortIcon('fecha')}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('progreso')}
+                    className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider cursor-pointer hover:bg-violet-700/30 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      Progreso
+                      {getSortIcon('progreso')}
+                    </div>
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-violet-200 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-violet-800/30">
-                {zipFiles.map(zipActivity => {
-                  const children = childrenMap.get(zipActivity.upload_id) || [];
-                  return renderZipRow(zipActivity, children);
-                })}
-                {regularFiles.map(activity => renderActivityRow(activity))}
-              </tbody>
+  {parentFiles.map(activity => {
+    if (zipUploadIds.has(activity.upload_id)) {
+      const children = childrenMap.get(activity.upload_id) || [];
+      return renderZipRow(activity, children);
+    }
+    return renderActivityRow(activity);
+  })}
+</tbody>
             </table>
           </div>
         </div>
