@@ -9,7 +9,7 @@ import { GroupedDocumentsView } from '@/components/dashboard/grouped-documents-v
 import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useDocumentEvents } from '@/hooks/useDocumentEvents' // ✅ NUEVO
+import { useDocumentEvents } from '@/hooks/useDocumentEvents'
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
@@ -22,13 +22,18 @@ function DocumentsPageContent() {
   
   const [activeTab, setActiveTab] = React.useState('sin-confirmar');
 
-  // ✅ NUEVO: Escuchar eventos de actualización
   useDocumentEvents(() => {
     console.log('🔔 [DocumentsPage] Recargando documentos por evento externo');
     setKey(prevKey => prevKey + 1);
   });
 
   console.log('🏢 [DocumentsPage] selectedCompanyIds actual:', selectedCompanyIds);
+
+  // 🔥 CALLBACK PARA CUANDO SE ELIMINA O CONFIRMA UN DOCUMENTO
+  const handleDocumentChanged = React.useCallback(() => {
+    console.log('✅ [DocumentsPage] Documento modificado, recargando...');
+    setKey(prevKey => prevKey + 1);
+  }, []);
 
   const handleUploadComplete = () => {
     console.log('✅ [DocumentsPage] Upload completado, recargando documentos');
@@ -56,7 +61,12 @@ function DocumentsPageContent() {
         
         console.log('🌐 [DocumentsPage] URL completa:', url);
         
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          cache: 'no-store', // 🔥 Forzar no caché
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
         console.log('📡 [DocumentsPage] Response status:', response.status);
         
         if (!response.ok) {
@@ -184,6 +194,7 @@ function DocumentsPageContent() {
                 showConfirmButton={true}  
                 viewId="documentos-sin-confirmar" 
                 enableColumnPersistence={true}
+                onDocumentChanged={handleDocumentChanged}
               />
             </TabsContent>
             
@@ -193,6 +204,7 @@ function DocumentsPageContent() {
                 filename="facturas" 
                 viewId="documentos-facturas"
                 enableColumnPersistence={true}
+                onDocumentChanged={handleDocumentChanged}
               />
             </TabsContent>
             

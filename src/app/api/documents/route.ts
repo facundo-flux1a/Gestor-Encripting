@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocuments, deleteDocument } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
+import { revalidatePath } from 'next/cache'; // ⬅️ IMPORTAR ESTO
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,14 @@ export async function DELETE(
     }
 
     console.log('✅ [API-DELETE-DOCUMENT] Documento eliminado exitosamente');
+
+    // 🔥 REVALIDAR TODAS LAS RUTAS QUE MUESTRAN DOCUMENTOS
+    revalidatePath('/documentos', 'page');           // Página principal de documentos
+    revalidatePath('/incidencias', 'page');          // Si tienes página de incidencias
+    revalidatePath('/documento/[id]', 'page');       // Página de detalle de documento
+    revalidatePath('/api/documents', 'layout');      // Revalidar el API route también
+    
+    console.log('🔄 [API-DELETE-DOCUMENT] Cache revalidado');
 
     return NextResponse.json({ 
       success: true,

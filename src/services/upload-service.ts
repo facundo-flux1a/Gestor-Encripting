@@ -135,6 +135,60 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
 }
 
 /**
+ * 🆕 Extrae archivos RAR usando el microservicio de Railway
+ * Retorna los hashes y uploadIds individuales de cada archivo
+ */
+async function extractAndHashRarFiles(
+  fileBuffer: ArrayBuffer, 
+  parentUploadId: string
+): Promise<{ 
+  fileHashes: { [fileName: string]: string }, 
+  uploadIds: { [fileName: string]: string } 
+}> {
+  const RAILWAY_RAR_SERVICE = 'https://rar-extractor-production.up.railway.app/api/extract-rar';
+  
+  console.log(`  [RAR] 🔄 Llamando al microservicio de Railway...`);
+  console.log(`  [RAR] 🆔 parentUploadId: ${parentUploadId}`);
+
+  // Crear FormData con el archivo RAR y el parentUploadId
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: 'application/vnd.rar' });
+  formData.append('file', blob, 'archive.rar');
+  formData.append('parentUploadId', parentUploadId);
+
+  try {
+    const response = await fetch(RAILWAY_RAR_SERVICE, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Railway RAR service error: ${errorText}`);
+    }
+
+    const result = await response.json();
+    
+    console.log(`  [RAR] ✅ Respuesta del microservicio:`, result);
+    console.log(`  [RAR] 📋 Archivos extraídos: ${result.totalFiles}`);
+
+    if (!result.success || !result.fileHashes || !result.uploadIds) {
+      throw new Error('Respuesta inválida del microservicio RAR');
+    }
+
+    // Devolver los hashes y uploadIds generados por el microservicio
+    return {
+      fileHashes: result.fileHashes,
+      uploadIds: result.uploadIds
+    };
+
+  } catch (error: any) {
+    console.error(`  [RAR] ❌ Error al extraer RAR:`, error.message);
+    throw new Error(`No se pudo procesar el archivo RAR: ${error.message}`);
+  }
+}
+
+/**
  * Registra la actividad inicial en la base de datos
  */
 async function createActivityRecord(
@@ -240,7 +294,7 @@ export async function uploadDocument(
     let individualUploadIds: { [fileName: string]: string } = {};
     let isCompressedFile = false;
     
-    // 🔒 SOLO DESCOMPRIMIR Y HASHEAR ARCHIVOS ZIP
+    // 🔥 PROCESAR ARCHIVOS COMPRIMIDOS (ZIP O RAR)
     if (normalizedFileType === 'zip') {
       isCompressedFile = true;
       console.log(`[${originalFileName}] 📦 Detectado archivo ZIP. Calculando hashes individuales...`);
@@ -249,13 +303,13 @@ export async function uploadDocument(
         individualFileHashes = await extractAndHashZipFiles(fileBuffer);
         console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
         
-        // 🆕 GENERAR UPLOAD IDS INDIVIDUALES PARA ARCHIVOS DEL ZIP
+        // GENERAR UPLOAD IDS INDIVIDUALES PARA ARCHIVOS DEL ZIP
         console.log(`[${originalFileName}] 🆔 Generando uploadIds individuales para archivos del ZIP...`);
         for (const fileName of Object.keys(individualFileHashes)) {
           const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
           individualUploadIds[fileName] = childUploadId;
           
-          // 🆕 REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
+          // REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
           await createActivityRecord(
             childUploadId,
             empresaId,
@@ -269,7 +323,7 @@ export async function uploadDocument(
         
         console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales`);
         
-        // 🆕 REGISTRAR EL ZIP PADRE
+        // REGISTRAR EL ZIP PADRE
         await createActivityRecord(
           uploadId,
           empresaId,
@@ -283,22 +337,50 @@ export async function uploadDocument(
       }
       
     } else if (normalizedFileType === 'rar') {
-      // 🔒 ARCHIVOS RAR - MARCAR COMO COMPRIMIDO PERO NO EXTRAER
+      // 🆕 ARCHIVOS RAR - EXTRAER CON MICROSERVICIO DE RAILWAY
       isCompressedFile = true;
-      console.log(`[${originalFileName}] 📦 Detectado archivo RAR. Se enviará completo a n8n para procesamiento.`);
+      console.log(`[${originalFileName}] 📦 Detectado archivo RAR. Llamando al microservicio...`);
       
-      // 🆕 REGISTRAR EL RAR COMO ARCHIVO PADRE
-      await createActivityRecord(
-        uploadId,
-        empresaId,
-        originalFileName,
-        normalizedFileType
-      );
-      
-      console.log(`[${originalFileName}] ℹ️ El RAR será descomprimido y hasheado por el microservicio de n8n`);
+      try {
+        // 🔥 LLAMAR AL MICROSERVICIO DE RAILWAY
+        const { fileHashes, uploadIds } = await extractAndHashRarFiles(fileBuffer, uploadId);
+        
+        individualFileHashes = fileHashes;
+        individualUploadIds = uploadIds;
+        
+        console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales (RAR)`);
+        console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales (RAR)`);
+        
+        // REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
+        for (const fileName of Object.keys(individualFileHashes)) {
+          const childUploadId = individualUploadIds[fileName];
+          
+          await createActivityRecord(
+            childUploadId,
+            empresaId,
+            fileName,
+            fileName.split('.').pop() || 'unknown',
+            uploadId  // parentUploadId
+          );
+          
+          console.log(`  [RAR] ${fileName} → UploadId: ${childUploadId}`);
+        }
+        
+        // REGISTRAR EL RAR PADRE
+        await createActivityRecord(
+          uploadId,
+          empresaId,
+          originalFileName,
+          normalizedFileType
+        );
+        
+      } catch (rarError: any) {
+        console.error(`[${originalFileName}] ❌ Error al extraer RAR:`, rarError.message);
+        throw new Error(`No se pudo procesar el archivo RAR: ${rarError.message}`);
+      }
       
     } else {
-      // 🔒 ARCHIVOS NORMALES (NO COMPRIMIDOS)
+      // ARCHIVOS NORMALES (NO COMPRIMIDOS)
       console.log(`[${originalFileName}] Verificando si ya existe este archivo...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
 
@@ -324,7 +406,7 @@ export async function uploadDocument(
 
       console.log(`[${originalFileName}] ✓ No se encontraron duplicados. Procediendo con la subida...`);
       
-      // 🆕 REGISTRAR ARCHIVO NORMAL
+      // REGISTRAR ARCHIVO NORMAL
       await createActivityRecord(
         uploadId,
         empresaId,
@@ -367,12 +449,11 @@ export async function uploadDocument(
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
 
-    // ℹ️ El trimestre será calculado por n8n basándose en la fecha de emisión
-    const fechaSubida = now; // Fecha de subida (necesaria para validar plazo en n8n)
+    const fechaSubida = now;
     console.log(`[${originalFileName}] ⏰ Fecha de subida: ${fechaSubida.toISOString()}`);
     console.log(`[${originalFileName}] ℹ️ El trimestre será calculado por n8n usando la fecha de emisión del documento`);
 
-    // PREPARAR PAYLOAD CON FECHA DE SUBIDA (trimestre se calcula en n8n)
+    // PREPARAR PAYLOAD
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
@@ -386,20 +467,17 @@ export async function uploadDocument(
       mimeType: fileMimeType,
       normalizedFileType: normalizedFileType,
       fileExtension: fileExtension,
-      fechaSubida: fechaSubida.toISOString(), // ⬅️ n8n usará esta fecha para validar plazo
-      // ❌ NO enviamos añoTrimestre ni numTrimestre (se calculan en n8n)
+      fechaSubida: fechaSubida.toISOString(),
     };
 
-    // 🔒 SOLO AGREGAR HASHES INDIVIDUALES SI ES ZIP (no RAR)
-    if (normalizedFileType === 'zip' && Object.keys(individualFileHashes).length > 0) {
+    // 🔥 AGREGAR HASHES INDIVIDUALES SI ES ZIP O RAR
+    if ((normalizedFileType === 'zip' || normalizedFileType === 'rar') && Object.keys(individualFileHashes).length > 0) {
       webhookPayload.individualFileHashes = individualFileHashes;
       webhookPayload.individualUploadIds = individualUploadIds;
       
-      console.log(`[${originalFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales del ZIP al webhook`);
+      console.log(`[${originalFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales del ${normalizedFileType.toUpperCase()} al webhook`);
       console.log(`[${originalFileName}] 📋 Mapa de hashes:`, individualFileHashes);
       console.log(`[${originalFileName}] 🆔 Mapa de uploadIds:`, individualUploadIds);
-    } else if (normalizedFileType === 'rar') {
-      console.log(`[${originalFileName}] 📦 Enviando RAR completo. n8n se encargará de descomprimirlo.`);
     }
 
     console.log(`[${originalFileName}] Notificando a webhook...`);

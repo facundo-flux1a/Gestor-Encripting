@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2, CheckCircle } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle, Eye } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
+import { DocumentPreviewDialog } from './document-preview-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
@@ -32,6 +33,7 @@ const getColumns = (
     onSummarize: (doc: Document) => void,
     onDelete: (doc: Document) => void,
     onConfirm: (doc: Document) => void,
+    onPreview: (doc: Document) => void,
     showConfirmButton: boolean = false
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
@@ -40,6 +42,8 @@ const getColumns = (
       header: 'Acciones',
       cell: ({ row }) => {
         const doc = row.original;
+        const hasFile = doc.archivos && doc.archivos.length > 0 && doc.archivos[0]?.ruta_archivo;
+        
         return (
           <div className="flex items-center gap-2 relative z-10">
             {showConfirmButton && (
@@ -68,6 +72,32 @@ const getColumns = (
                 </TooltipContent>
               </Tooltip>
             )}
+            
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-950 relative z-20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPreview(doc);
+                  }}
+                  disabled={!hasFile}
+                >
+                  <span className="sr-only">Ver documento</span>
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent 
+                side="bottom" 
+                sideOffset={5} 
+                className="z-[99999]"
+                avoidCollisions={true}
+                collisionPadding={10}
+              >
+                <p>{hasFile ? 'Ver documento' : 'Sin archivo adjunto'}</p>
+              </TooltipContent>
+            </Tooltip>
             
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
@@ -240,11 +270,9 @@ const getColumns = (
       id: 'trimestre',
       header: 'Trimestre',
       cell: ({ row }) => {
-        // ✅ Obtener año y trimestre directamente de la BD
         const anio = row.original.año_trimestre;
         const trimestre = row.original.num_trimestre;
         
-        // Si no hay datos de trimestre en BD, mostrar mensaje
         if (!anio || !trimestre) {
           return <span className="text-muted-foreground text-xs">Sin trimestre</span>;
         }
@@ -478,6 +506,7 @@ export function DocumentsTable({
   showConfirmButton = false,
   viewId,
   enableColumnPersistence = true,
+  onDocumentChanged,
 }: { 
   documents: Document[], 
   hiddenColumns?: string[], 
@@ -486,13 +515,16 @@ export function DocumentsTable({
   showConfirmButton?: boolean,
   viewId?: string,
   enableColumnPersistence?: boolean,
+  onDocumentChanged?: () => void,
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [docToDelete, setDocToDelete] = useState<Document | null>(null);
   const [docToConfirm, setDocToConfirm] = useState<Document | null>(null);
+  const [docToPreview, setDocToPreview] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const router = useRouter();
@@ -517,6 +549,11 @@ export function DocumentsTable({
     setIsConfirmDialogOpen(true);
   };
 
+  const handlePreviewClick = (doc: Document) => {
+    setDocToPreview(doc);
+    setIsPreviewOpen(true);
+  };
+
   const handleConfirmDocument = async () => {
     if (!docToConfirm) return;
 
@@ -533,12 +570,15 @@ export function DocumentsTable({
         description: `El documento #${docToConfirm.numero_documento || docToConfirm.id_documento} ha sido confirmado. Tipo actualizado: "${result.tipo_nuevo}"`,
       });
 
-      router.refresh();
+      // 🔥 LLAMAR AL CALLBACK
+      if (onDocumentChanged) {
+        onDocumentChanged();
+      }
     } catch (error) {
       console.error('❌ Error al confirmar:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudo confirmar el documento. Por favor, inténtalo de nuevo.',
+        description: error instanceof Error ? error.message : 'No se pudo confirmar el documento.',
         variant: 'destructive',
       });
     } finally {
@@ -564,12 +604,15 @@ export function DocumentsTable({
         description: `El documento #${docToDelete.numero_documento || docToDelete.id_documento} ha sido eliminado correctamente.`,
       });
 
-      router.refresh();
+      // 🔥 LLAMAR AL CALLBACK
+      if (onDocumentChanged) {
+        onDocumentChanged();
+      }
     } catch (error) {
       console.error('❌ Error al eliminar:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudo eliminar el documento. Por favor, inténtalo de nuevo.',
+        description: error instanceof Error ? error.message : 'No se pudo eliminar el documento.',
         variant: 'destructive',
       });
     } finally {
@@ -611,8 +654,12 @@ export function DocumentsTable({
     handleSummarize, 
     handleDeleteClick, 
     handleConfirmClick,
+    handlePreviewClick,
     showConfirmButton
   ), [handleUpdate, showConfirmButton]);
+
+  const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
+  const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
 
   return (
     <>
@@ -632,6 +679,13 @@ export function DocumentsTable({
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
+      />
+
+      <DocumentPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        documentUrl={previewUrl ?? null}
+        documentName={previewName}
       />
 
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
