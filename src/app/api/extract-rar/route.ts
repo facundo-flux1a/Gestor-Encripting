@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createExtractorFromData } from 'node-unrar-js';
+import { createExtractorFromData } from 'unrar-js';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
