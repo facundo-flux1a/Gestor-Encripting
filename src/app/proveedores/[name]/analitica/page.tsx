@@ -1,3 +1,4 @@
+'use client'
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { notFound } from "next/navigation";
 import { Building, BarChart3 } from "lucide-react";
