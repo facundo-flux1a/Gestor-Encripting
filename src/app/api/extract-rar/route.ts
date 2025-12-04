@@ -102,7 +102,6 @@ export async function POST(request: NextRequest) {
       fileCount: Object.keys(fileHashes).length,
       parentUploadId,
     });
-
   } catch (error: any) {
     console.error('[API Extract-RAR] ❌ Error:', error);
     return NextResponse.json(
