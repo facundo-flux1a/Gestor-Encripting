@@ -49,72 +49,77 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Bot className="h-6 w-6 text-primary" />
-                    Análisis Inteligente
+            <CardHeader className="space-y-2">
+                <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                    <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+                    <span className="line-clamp-2">Análisis Inteligente</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                     Utiliza IA para escanear todos los documentos en busca de posibles inconsistencias y duplicados.
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
                 {result && !error && (
                     <Alert className="bg-primary/5 border-primary/20">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        <AlertTitle className="text-primary">Análisis Finalizado</AlertTitle>
-                        <AlertDescription className="space-y-2 mt-2">
-                           <div className="flex justify-between items-center">
-                               <span>Nuevas Incidencias:</span>
-                               <Badge variant={result.newIncidentsFound > 0 ? "destructive" : "secondary"}>
+                        <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                        <AlertTitle className="text-primary text-sm sm:text-base">Análisis Finalizado</AlertTitle>
+                        <AlertDescription className="space-y-2 mt-2 text-xs sm:text-sm">
+                           <div className="flex justify-between items-center gap-2">
+                               <span className="truncate">Nuevas Incidencias:</span>
+                               <Badge variant={result.newIncidentsFound > 0 ? "destructive" : "secondary"} className="shrink-0">
                                     {result.newIncidentsFound}
                                </Badge>
                            </div>
-                            <div className="flex justify-between items-center">
-                               <span>Documentos Duplicados:</span>
-                               <Badge variant="outline">{result.duplicates}</Badge>
+                            <div className="flex justify-between items-center gap-2">
+                               <span className="truncate">Documentos Duplicados:</span>
+                               <Badge variant="outline" className="shrink-0">{result.duplicates}</Badge>
                            </div>
-                           <div className="flex justify-between items-center">
-                               <span>Errores de Cálculo:</span>
-                               <Badge variant="outline">{result.calculationErrors}</Badge>
+                           <div className="flex justify-between items-center gap-2">
+                               <span className="truncate">Errores de Cálculo:</span>
+                               <Badge variant="outline" className="shrink-0">{result.calculationErrors}</Badge>
                            </div>
                         </AlertDescription>
                     </Alert>
                 )}
                  {error && (
                     <Alert variant="destructive">
-                        <FileWarning className="h-4 w-4" />
-                        <AlertTitle>Error</AlertTitle>
-                        <AlertDescription>
+                        <FileWarning className="h-4 w-4 shrink-0" />
+                        <AlertTitle className="text-sm sm:text-base">Error</AlertTitle>
+                        <AlertDescription className="text-xs sm:text-sm break-words">
                             {error}
                         </AlertDescription>
                     </Alert>
                 )}
                 {!result && !error && !isLoading && (
                     <div className="text-center text-muted-foreground p-4">
-                        <p>Haz clic en el botón para iniciar el proceso de análisis.</p>
+                        <p className="text-xs sm:text-sm">Haz clic en el botón para iniciar el proceso de análisis.</p>
                     </div>
                 )}
                  {isLoading && (
-                    <div className="flex items-center justify-center p-8">
+                    <div className="flex items-center justify-center p-6 sm:p-8">
                         <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <span className="text-sm text-muted-foreground">Analizando...</span>
+                            <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
+                            <span className="text-xs sm:text-sm text-muted-foreground">Analizando...</span>
                         </div>
                     </div>
                 )}
             </CardContent>
             <CardFooter>
-                <Button onClick={handleAnalyze} disabled={isLoading} className="w-full">
+                <Button 
+                    onClick={handleAnalyze} 
+                    disabled={isLoading} 
+                    className="w-full"
+                    size="sm"
+                >
                     {isLoading ? (
                         <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            <span>Analizando Documentos...</span>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin shrink-0" />
+                            <span className="truncate">Analizando Documentos...</span>
                         </>
                     ) : (
                        <>
-                            <Search className="mr-2 h-4 w-4" />
-                            <span>Analizar Documentos</span>
+                            <Search className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">Analizar Documentos</span>
                         </>
                     )}
                 </Button>

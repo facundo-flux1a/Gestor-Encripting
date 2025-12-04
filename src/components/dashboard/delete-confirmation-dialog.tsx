@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState } from 'react';
@@ -41,13 +39,17 @@ export function DeleteConfirmationDialog({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
-      <AlertDialogContent>
+      {/* 📱 CONTENT RESPONSIVE */}
+      <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="text-destructive" />
-            ¿Estás seguro de que quieres eliminar este documento?
+          {/* 📱 TÍTULO CON ICON RESPONSIVE */}
+          <AlertDialogTitle className="flex items-start sm:items-center gap-2 text-base sm:text-lg pr-6">
+            <AlertTriangle className="text-destructive h-5 w-5 sm:h-6 sm:w-6 shrink-0 mt-0.5 sm:mt-0" />
+            <span className="leading-tight">¿Estás seguro de que quieres eliminar este documento?</span>
           </AlertDialogTitle>
-          <AlertDialogDescription className="pt-2">
+          
+          {/* 📱 DESCRIPCIÓN RESPONSIVE */}
+          <AlertDialogDescription className="pt-2 text-xs sm:text-sm leading-relaxed">
             Esta acción es irreversible y eliminará permanentemente el documento con número{' '}
             <span className="font-bold text-foreground">{documentNumber || 'N/A'}</span>.
             <br />
@@ -56,7 +58,9 @@ export function DeleteConfirmationDialog({
             <span className="font-bold text-destructive">{CONFIRMATION_TEXT}</span> en el campo de abajo.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="py-4">
+        
+        {/* 📱 INPUT RESPONSIVE */}
+        <div className="py-3 sm:py-4">
           <Label htmlFor="delete-confirm-input" className="sr-only">
             Texto de confirmación
           </Label>
@@ -66,17 +70,26 @@ export function DeleteConfirmationDialog({
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={`Escribe "${CONFIRMATION_TEXT}" para confirmar`}
             disabled={isDeleting}
+            className="h-9 sm:h-10 text-sm"
           />
         </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose} disabled={isDeleting}>Cancelar</AlertDialogCancel>
+        
+        {/* 📱 FOOTER RESPONSIVE */}
+        <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+          <AlertDialogCancel 
+            onClick={onClose} 
+            disabled={isDeleting}
+            className="w-full sm:w-auto h-9 sm:h-10 text-sm"
+          >
+            Cancelar
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={!isConfirmationTextMatching || isDeleting}
-            className="bg-destructive hover:bg-destructive/90"
+            className="w-full sm:w-auto h-9 sm:h-10 text-sm bg-destructive hover:bg-destructive/90"
           >
-            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Eliminar Documento
+            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin shrink-0" />}
+            <span>Eliminar Documento</span>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

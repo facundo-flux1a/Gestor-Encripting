@@ -12,6 +12,7 @@ import {
   SidebarInset,
   SidebarFooter,
   useSidebar,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
   FileText,
@@ -26,7 +27,7 @@ import {
   LogIn,
   Activity,
   Sparkles,
-  Calendar, // 🆕 NUEVO ICONO
+  Calendar,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -51,7 +52,10 @@ function AppLogo() {
   const { state } = useSidebar();
   return (
     <div className="flex items-center gap-2.5">
-      <h1 className={cn("text-lg font-bold text-primary truncate", state === 'collapsed' && 'sr-only')}>
+      <h1 className={cn(
+        "text-base sm:text-lg font-bold text-primary truncate transition-all",
+        state === 'collapsed' && 'sr-only'
+      )}>
         Gestor Documental
       </h1>
     </div>
@@ -64,10 +68,10 @@ function SidebarToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-8 p-1.5"
+      className="h-8 w-8 p-1.5"
       onClick={toggleSidebar}
     >
-      {state === 'expanded' ? <PanelLeftClose /> : <PanelRightClose />}
+      {state === 'expanded' ? <PanelLeftClose className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
     </Button>
   )
 }
@@ -102,12 +106,12 @@ const UserProfile = React.memo(function UserProfile({ user }: { user: User | nul
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="group-data-[collapsible=icon]:hidden">
-            <p className="text-sm font-medium leading-none">{user.nombre}</p>
-            <p className="text-xs text-muted-foreground leading-none">{user.email}</p>
+            <p className="text-sm font-medium leading-none truncate">{user.nombre}</p>
+            <p className="text-xs text-muted-foreground leading-none truncate">{user.email}</p>
           </div>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -148,9 +152,21 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
   }, []);
 
   return (
-    <header className={cn("flex h-auto min-h-14 items-center gap-4 border-b bg-background/80 px-4 sm:px-6", className)}>
-      <div className="flex-1">{children}</div>
-      <ThemeToggle />
+    <header className={cn(
+      "flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50",
+      "px-3 sm:px-4 lg:px-6",
+      className
+    )}>
+      {/* Mobile: Mostrar trigger del sidebar */}
+      <div className="md:hidden">
+        <SidebarTrigger />
+      </div>
+      
+      <div className="flex-1 min-w-0">{children}</div>
+      
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+      </div>
     </header>
   )
 }
@@ -192,11 +208,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Refresh cada 30s
+    const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
 
-  // Refetch cuando se sale de la página de actividad
   React.useEffect(() => {
     if (pathname !== '/dashboard/actividad') {
       fetchUnreadCount();
@@ -206,7 +221,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
-    { href: '/trimestres', label: 'Trimestres', icon: Calendar }, // 🆕 NUEVA ENTRADA
+    { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Proveedores', icon: Users }
@@ -218,14 +233,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <SidebarHeader className="p-3">
           <div className="flex items-center justify-between">
             <AppLogo />
-            <SidebarToggle />
+            <div className="hidden md:block">
+              <SidebarToggle />
+            </div>
           </div>
         </SidebarHeader>
+        
         <SidebarContent>
           {/* Selector de empresas */}
-          <CompaniesSelector />
+          <div className="px-2">
+            <CompaniesSelector />
+          </div>
           
-          <Separator className="mx-2" />
+          <Separator className="mx-2 my-2" />
           
           {/* Menú de navegación */}
           <SidebarMenu>
@@ -235,9 +255,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   asChild
                   isActive={pathname === item.href}
                   tooltip={item.label}>
-                  <Link href={item.href}>
-                    <item.icon />
-                    <span className="group-data-[collapsible=icon]:hidden">
+                  <Link href={item.href} className="flex items-center gap-2">
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className="group-data-[collapsible=icon]:hidden truncate">
                       {item.label}
                     </span>
                     {/* Badge de actividades no leídas */}
@@ -264,14 +284,24 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             ))}
           </SidebarMenu>
         </SidebarContent>
+        
         <SidebarFooter>
           <div className="p-2 border-t">
             <UserProfile user={user} />
           </div>
           <Separator />
           <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">
-            <a href="https://flux1a.com.ar" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground">
-              <img src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75" alt="Flux1a Logo" className="h-6 w-6" />
+            <a 
+              href="https://flux1a.com.ar" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <img 
+                src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75" 
+                alt="Flux1a Logo" 
+                className="h-6 w-6 shrink-0" 
+              />
               <span className="group-data-[collapsible=icon]:hidden">
                 Powered by AllBase
               </span>
@@ -279,8 +309,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
-        <div className="w-full overflow-x-auto">
+      
+      {/* 🔥 FIX CRÍTICO: SidebarInset con overflow controlado */}
+      <SidebarInset className="overflow-x-hidden">
+        <div className="flex flex-col min-h-screen w-full">
           {children}
         </div>
       </SidebarInset>

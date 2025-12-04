@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,23 +30,25 @@ export function EditableEntityCard({ isEditing, form, entityIndex, removeEntity 
                 name={`entidades.${entityIndex}.${fieldName}`}
                 render={({ field }) => (
                     <FormItem>
-                        <FormLabel className="text-xs text-muted-foreground">{label}</FormLabel>
+                        <FormLabel className="text-xs sm:text-sm text-muted-foreground">
+                            {label}
+                        </FormLabel>
                         <FormControl>
                             {isTextarea ? (
                                 <Textarea 
                                     {...field}
                                     value={field.value ?? ''} 
-                                    className="text-sm h-20"
+                                    className="text-xs sm:text-sm min-h-[60px] sm:min-h-[80px]"
                                 />
                             ) : (
                                 <Input 
                                     {...field}
                                     value={field.value ?? ''} 
-                                    className="h-8 text-sm"
+                                    className="h-8 sm:h-9 text-xs sm:text-sm"
                                 />
                             )}
                         </FormControl>
-                        <FormMessage />
+                        <FormMessage className="text-xs" />
                     </FormItem>
                 )}
             />
@@ -58,20 +59,38 @@ export function EditableEntityCard({ isEditing, form, entityIndex, removeEntity 
 
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    {entity.rol.toLowerCase().includes('cliente') || entity.rol.toLowerCase().includes('receptor') ? <User className="h-5 w-5" /> : <Building className="h-5 w-5" />}
-                    {isEditing ? renderEditableField('rol', 'Rol') : capitalizedRole}
+            <CardHeader className="flex flex-row items-start sm:items-center justify-between pb-3 sm:pb-4 px-3 sm:px-6 py-3 sm:py-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    {entity.rol.toLowerCase().includes('cliente') || entity.rol.toLowerCase().includes('receptor') ? (
+                        <User className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                    ) : (
+                        <Building className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                    )}
+                    {isEditing ? (
+                        <div className="flex-1 min-w-0">
+                            {renderEditableField('rol', 'Rol')}
+                        </div>
+                    ) : (
+                        <span className="truncate" title={capitalizedRole}>
+                            {capitalizedRole}
+                        </span>
+                    )}
                 </CardTitle>
-                 {isEditing && (
-                    <Button type="button" variant="ghost" size="icon" onClick={removeEntity}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                {isEditing && (
+                    <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={removeEntity}
+                        className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+                    >
+                        <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
                     </Button>
                 )}
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-3 text-xs sm:text-sm px-3 sm:px-6 pb-3 sm:pb-6">
                 {isEditing ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3 sm:space-y-4">
                         {renderEditableField('nombre', 'Nombre')}
                         {renderEditableField('identificador_fiscal', 'Identificador Fiscal')}
                         {renderEditableField('direccion', 'Dirección', true)}
@@ -80,28 +99,40 @@ export function EditableEntityCard({ isEditing, form, entityIndex, removeEntity 
                     </div>
                 ) : (
                     <>
-                        <p className="font-semibold text-base">{entity.nombre}</p>
-                        <div className="space-y-1 text-muted-foreground">
+                        <p className="font-semibold text-sm sm:text-base break-words">
+                            {entity.nombre}
+                        </p>
+                        <div className="space-y-1 sm:space-y-1.5 text-muted-foreground">
                             {entity.identificador_fiscal && (
-                                <p className="font-mono">
+                                <p className="font-mono text-xs sm:text-sm break-all">
                                     <Link 
                                         href={`/proveedores/${encodeURIComponent(entity.identificador_fiscal)}`} 
-                                        className="hover:underline hover:text-primary"
+                                        className="hover:underline hover:text-primary transition-colors"
                                     >
                                         {entity.identificador_fiscal}
                                     </Link>
                                 </p>
                             )}
-                            <p>{entity.direccion}</p>
+                            {entity.direccion && (
+                                <p className="break-words text-xs sm:text-sm">
+                                    {entity.direccion}
+                                </p>
+                            )}
                             {entity.telefono && (
-                                <p className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4" /> {entity.telefono}
+                                <p className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                                    <Phone className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" /> 
+                                    <span className="break-all">{entity.telefono}</span>
                                 </p>
                             )}
                             {entity.email && (
-                                 <p className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4" /> 
-                                    <a href={`mailto:${entity.email}`} className="hover:underline">{entity.email}</a>
+                                <p className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                                    <Mail className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" /> 
+                                    <a 
+                                        href={`mailto:${entity.email}`} 
+                                        className="hover:underline transition-colors break-all"
+                                    >
+                                        {entity.email}
+                                    </a>
                                 </p>
                             )}
                         </div>

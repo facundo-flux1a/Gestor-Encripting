@@ -45,6 +45,7 @@ export function CloseQuarterDialog({
       toast({
         title: '✅ Trimestre cerrado',
         description: `T${trimestre.trimestre} ${trimestre.año} ha sido cerrado exitosamente.`,
+        className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
 
       onOpenChange(false);
@@ -62,22 +63,28 @@ export function CloseQuarterDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      {/* 📱 DIALOG RESPONSIVE CON ANIMACIÓN */}
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[500px] max-h-[90vh] overflow-y-auto animate-fade-in">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Lock className="h-5 w-5 text-red-500" />
-            Cerrar Trimestre T{trimestre.trimestre} {trimestre.año}
+          {/* 📱 TÍTULO RESPONSIVE CON GRADIENTE */}
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg pr-6">
+            <div className="p-1.5 bg-red-500/20 rounded-lg shrink-0 transition-transform duration-300 hover:scale-110">
+              <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+            </div>
+            <span className="truncate bg-gradient-to-r from-red-600 to-red-500 bg-clip-text text-transparent">
+              Cerrar Trimestre T{trimestre.trimestre} {trimestre.año}
+            </span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm animate-fade-in" style={{ animationDelay: '50ms' }}>
             Esta acción bloqueará permanentemente los documentos del trimestre.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {/* Advertencia */}
-          <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-            <div className="text-sm text-yellow-800">
+        <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
+          {/* 📱 ADVERTENCIA RESPONSIVE CON ANIMACIÓN */}
+          <div className="flex items-start gap-2 sm:gap-3 rounded-lg border border-yellow-200 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 dark:border-yellow-900 p-2.5 sm:p-3 animate-fade-in transition-all duration-300 hover:shadow-md hover:scale-[1.01]" style={{ animationDelay: '100ms' }}>
+            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 shrink-0 animate-pulse" />
+            <div className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200 min-w-0">
               <p className="font-semibold">⚠️ Acción irreversible</p>
               <p className="mt-1">
                 Una vez cerrado, NO podrás editar ni eliminar los documentos de este trimestre.
@@ -85,27 +92,33 @@ export function CloseQuarterDialog({
             </div>
           </div>
 
-          {/* Alcance del cierre */}
-          <div className="space-y-3">
-            <Label>¿Qué deseas cerrar?</Label>
+          {/* 📱 ALCANCE DEL CIERRE RESPONSIVE CON HOVER */}
+          <div className="space-y-2 sm:space-y-3 animate-fade-in" style={{ animationDelay: '150ms' }}>
+            <Label className="text-xs sm:text-sm font-medium bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              ¿Qué deseas cerrar?
+            </Label>
             <RadioGroup value={scope} onValueChange={(v) => setScope(v as any)}>
               {trimestre.empresa_id && (
-                <div className="flex items-center space-x-2 rounded-lg border p-3">
-                  <RadioGroupItem value="empresa" id="empresa" />
-                  <Label htmlFor="empresa" className="cursor-pointer flex-1">
-                    <div className="font-medium">Solo {trimestre.empresa_nombre}</div>
-                    <div className="text-sm text-muted-foreground">
+                <div className="flex items-start space-x-2 rounded-lg border p-2.5 sm:p-3 hover:bg-accent/50 hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer group">
+                  <RadioGroupItem value="empresa" id="empresa" className="mt-0.5 shrink-0" />
+                  <Label htmlFor="empresa" className="cursor-pointer flex-1 min-w-0">
+                    <div className="font-medium text-xs sm:text-sm truncate group-hover:text-primary transition-colors duration-200">
+                      Solo {trimestre.empresa_nombre}
+                    </div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 group-hover:text-foreground/70 transition-colors duration-200">
                       Cerrar {trimestre.total_documentos} documento(s) de esta empresa
                     </div>
                   </Label>
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 rounded-lg border p-3">
-                <RadioGroupItem value="global" id="global" />
-                <Label htmlFor="global" className="cursor-pointer flex-1">
-                  <div className="font-medium">Todas las empresas</div>
-                  <div className="text-sm text-muted-foreground">
+              <div className="flex items-start space-x-2 rounded-lg border p-2.5 sm:p-3 hover:bg-accent/50 hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer group">
+                <RadioGroupItem value="global" id="global" className="mt-0.5 shrink-0" />
+                <Label htmlFor="global" className="cursor-pointer flex-1 min-w-0">
+                  <div className="font-medium text-xs sm:text-sm group-hover:text-primary transition-colors duration-200">
+                    Todas las empresas
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 group-hover:text-foreground/70 transition-colors duration-200">
                     Cerrar TODOS los documentos del T{trimestre.trimestre} {trimestre.año}
                   </div>
                 </Label>
@@ -113,28 +126,42 @@ export function CloseQuarterDialog({
             </RadioGroup>
           </div>
 
-          {/* Resumen */}
-          <div className="rounded-lg bg-muted p-3 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Documentos:</span>
-              <span className="font-medium">{trimestre.total_documentos}</span>
+          {/* 📱 RESUMEN RESPONSIVE CON GRADIENTE */}
+          <div className="rounded-lg bg-gradient-to-br from-muted to-muted/50 p-2.5 sm:p-3 space-y-1.5 sm:space-y-2 animate-fade-in hover:shadow-md transition-all duration-300" style={{ animationDelay: '200ms' }}>
+            <div className="flex justify-between items-center text-xs sm:text-sm group">
+              <span className="text-muted-foreground group-hover:text-foreground transition-colors duration-200">
+                Documentos:
+              </span>
+              <span className="font-medium tabular-nums group-hover:scale-105 transition-transform duration-200">
+                {trimestre.total_documentos}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ingresos:</span>
-              <span className="font-medium">€{trimestre.total_ingresos.toFixed(2)}</span>
+            <div className="flex justify-between items-center text-xs sm:text-sm group">
+              <span className="text-muted-foreground group-hover:text-foreground transition-colors duration-200">
+                Ingresos:
+              </span>
+              <span className="font-medium tabular-nums text-green-600 dark:text-green-500 group-hover:scale-105 transition-transform duration-200">
+                €{trimestre.total_ingresos.toFixed(2)}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Gastos:</span>
-              <span className="font-medium">€{trimestre.total_gastos.toFixed(2)}</span>
+            <div className="flex justify-between items-center text-xs sm:text-sm group">
+              <span className="text-muted-foreground group-hover:text-foreground transition-colors duration-200">
+                Gastos:
+              </span>
+              <span className="font-medium tabular-nums text-red-600 dark:text-red-500 group-hover:scale-105 transition-transform duration-200">
+                €{trimestre.total_gastos.toFixed(2)}
+              </span>
             </div>
           </div>
         </div>
 
-        <DialogFooter>
+        {/* 📱 FOOTER RESPONSIVE CON ANIMACIONES */}
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 animate-fade-in" style={{ animationDelay: '250ms' }}>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
+            className="w-full sm:w-auto order-2 sm:order-1 hover:bg-accent transition-all duration-200 hover:scale-105"
           >
             Cancelar
           </Button>
@@ -142,8 +169,19 @@ export function CloseQuarterDialog({
             variant="destructive"
             onClick={handleConfirm}
             disabled={isSubmitting}
+            className="w-full sm:w-auto order-1 sm:order-2 transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed group"
           >
-            {isSubmitting ? 'Cerrando...' : 'Cerrar Trimestre'}
+            {isSubmitting ? (
+              <>
+                <Lock className="mr-2 h-4 w-4 animate-spin" />
+                Cerrando...
+              </>
+            ) : (
+              <>
+                <Lock className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                Cerrar Trimestre
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

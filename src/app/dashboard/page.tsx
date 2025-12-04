@@ -9,7 +9,20 @@ import { DocumentStatusChart } from '@/components/dashboard/document-status-char
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
-import { FileText, Users, AlertTriangle, Package, ArrowUpRight, ArrowDownLeft, Scale, Banknote, Loader2, RefreshCcw } from 'lucide-react';
+import { 
+  FileText, 
+  Users, 
+  AlertTriangle, 
+  Package, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Scale, 
+  Banknote, 
+  Loader2, 
+  RefreshCcw,
+  X,
+  Download
+} from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +44,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
@@ -42,7 +63,6 @@ export default function DashboardPage() {
   const [selectedAño, setSelectedAño] = useState<number | null>(null);
   const [selectedTrimestre, setSelectedTrimestre] = useState<number | null>(null);
   
-  // ✅ Estados para export con polling
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<{
     exportId: number | null;
@@ -60,10 +80,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadAnalytics() {
-      console.log('🔍 [Dashboard] selectedCompanyIds:', selectedCompanyIds); // ✅ Debug log
-      
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
-        console.log('⚠️ [Dashboard] No hay empresas seleccionadas, limpiando analytics');
         setAnalytics(null);
         setIsLoading(false);
         return;
@@ -74,15 +91,12 @@ export default function DashboardPage() {
         setError(null);
         const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
         
-        console.log('📊 [Dashboard] Cargando analytics para empresas:', companyIdsAsNumbers);
-        
         const data = await getDashboardAnalytics(
           companyIdsAsNumbers,
           selectedAño ?? undefined,
           selectedTrimestre ?? undefined
         );
         
-        console.log('✅ [Dashboard] Analytics cargadas:', data);
         setAnalytics(data);
       } catch (err) {
         console.error('Error loading analytics:', err);
@@ -95,16 +109,11 @@ export default function DashboardPage() {
     loadAnalytics();
   }, [selectedCompanyIds, selectedAño, selectedTrimestre]);
 
-  // ✅ Función para hacer polling del estado del export
   const checkExportStatus = async (exportId: number): Promise<boolean> => {
     try {
       const response = await fetch(`/api/check-export?exportId=${exportId}`);
       const data = await response.json();
 
-      console.log('🔍 [Frontend] Respuesta de check-export:', data);
-      console.log('🔍 [Frontend] Estado detectado:', data.status, '| Esperaba: completed');
-
-      // ✅ Actualizar estado local
       setExportStatus({
         exportId,
         status: data.status,
@@ -115,12 +124,6 @@ export default function DashboardPage() {
       if (data.status === 'completed') {
         setIsExporting(false);
         
-        console.log('🎉 Export completado! Iniciando descarga...', {
-          status: data.status,
-          urlArchivo: data.urlArchivo,
-          nombreArchivo: data.nombreArchivo
-        });
-        
         toast({
           title: "✅ PDF Generado",
           description: `Descargando: ${data.nombreArchivo}`,
@@ -128,34 +131,18 @@ export default function DashboardPage() {
         });
         
         if (data.urlArchivo) {
-          // ✅ Extraer solo el nombre del archivo de la URL completa
-          // Ejemplo: "https://...ngrok.../api/files/Reporte_Dashboard_xxx.pdf" → "Reporte_Dashboard_xxx.pdf"
           const filename = data.nombreArchivo || data.urlArchivo.split('/').pop() || 'reporte.pdf';
-          
-          // ✅ Usar la API route interna en lugar de la URL externa
           const downloadUrl = `/api/files/${filename}`;
           
-          console.log('📥 [Frontend] Descargando desde API interna:', downloadUrl);
-          console.log('📄 [Frontend] Nombre del archivo:', filename);
-          
-          // ✅ Crear link temporal y forzar descarga
           const link = document.createElement('a');
           link.href = downloadUrl;
           link.download = filename;
           link.style.display = 'none';
           document.body.appendChild(link);
-          
-          console.log('🔗 [Frontend] Link creado:', {
-            href: link.href,
-            download: link.download
-          });
-          
           link.click();
           
-          // Limpiar después de un pequeño delay
           setTimeout(() => {
             document.body.removeChild(link);
-            console.log('✅ [Frontend] Descarga iniciada, link removido');
           }, 100);
         }
         return true;
@@ -171,22 +158,20 @@ export default function DashboardPage() {
       
       return false;
     } catch (error) {
-      console.error('❌ [Frontend] Error checking export status:', error);
+      console.error('Error checking export status:', error);
       return false;
     }
   };
 
-  // ✅ Función para iniciar polling
   const startPolling = (exportId: number) => {
     const intervalId = setInterval(async () => {
       const shouldStop = await checkExportStatus(exportId);
       if (shouldStop) {
         clearInterval(intervalId);
-        clearTimeout(timeoutId); // ✅ Limpiar timeout cuando termina exitosamente
+        clearTimeout(timeoutId);
       }
-    }, 3000); // Revisar cada 3 segundos
+    }, 3000);
 
-    // Timeout después de 2 minutos
     const timeoutId = setTimeout(() => {
       clearInterval(intervalId);
       setIsExporting(false);
@@ -198,7 +183,6 @@ export default function DashboardPage() {
     }, 120000);
   };
 
-  // ✅ Función para exportar
   const handleExport = async () => {
     setIsExporting(true);
     setExportStatus({
@@ -235,9 +219,6 @@ export default function DashboardPage() {
       }
 
       if (result.success && result.exportId) {
-        console.log('Export iniciado:', result.exportId);
-        
-        // Iniciar polling
         startPolling(result.exportId);
         
         toast({
@@ -314,24 +295,101 @@ export default function DashboardPage() {
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
+  const FilterSheet = () => (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="md:hidden hover:bg-accent transition-colors duration-200"
+        >
+          Filtros
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[300px]">
+        <SheetHeader>
+          <SheetTitle>Filtros</SheetTitle>
+          <SheetDescription>
+            Filtra los datos del dashboard
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-6 space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Año</label>
+            <Select
+              value={selectedAño?.toString() || 'all'}
+              onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
+            >
+              <SelectTrigger className="hover:bg-accent transition-colors duration-200">
+                <SelectValue placeholder="Año" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="2025">2025</SelectItem>
+                <SelectItem value="2024">2024</SelectItem>
+                <SelectItem value="2023">2023</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Trimestre</label>
+            <Select
+              value={selectedTrimestre?.toString() || 'all'}
+              onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
+              disabled={!selectedAño}
+            >
+              <SelectTrigger className="hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed">
+                <SelectValue placeholder="Trimestre" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="1">T1</SelectItem>
+                <SelectItem value="2">T2</SelectItem>
+                <SelectItem value="3">T3</SelectItem>
+                <SelectItem value="4">T4</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {(selectedAño || selectedTrimestre) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedAño(null);
+                setSelectedTrimestre(null);
+              }}
+              className="w-full hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Limpiar filtros
+            </Button>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+
   const CleanButton = () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button 
           size="sm"
-          className="gap-2 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-violet-600 hover:from-violet-600 hover:via-purple-600 hover:to-violet-700 text-white shadow-lg hover:shadow-violet-500/50 transition-all duration-200 border-2 border-violet-400/30"
+          variant="outline"
+          className="gap-2 hidden sm:flex hover:bg-violet-50 hover:text-violet-600 hover:border-violet-300 dark:hover:bg-violet-950 dark:hover:text-violet-400 dark:hover:border-violet-700 transition-all duration-200 group"
         >
-          <RefreshCcw className="h-4 w-4" />
-          <span className="font-medium">Reiniciar</span>
+          <RefreshCcw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+          <span className="hidden lg:inline">Reiniciar</span>
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="bg-gray-950 border-violet-500/30 shadow-2xl">
+      <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-3 text-xl text-white">
+          <AlertDialogTitle className="flex items-center gap-3 text-xl">
             <div className="p-2 bg-violet-500/20 rounded-xl">
               <AlertTriangle className="h-6 w-6 text-violet-400" />
             </div>
-            ¿Reiniciar el sistema completamente?
+            ¿Reiniciar el sistema?
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 pt-2">
@@ -340,30 +398,20 @@ export default function DashboardPage() {
                   ⚠️ Esta acción es irreversible
                 </span>
               </div>
-              <span className="text-sm text-gray-300 block">
-                Se eliminarán permanentemente:
+              <span className="text-sm block">
+                Se eliminarán todos los datos del sistema.
               </span>
-              <div className="text-sm text-gray-400 space-y-1 pl-4">
-                <div>• Todos los documentos</div>
-                <div>• Todos los proveedores</div>
-                <div>• Todos los productos</div>
-                <div>• Todas las incidencias</div>
-              </div>
-              <div className="pt-2 flex items-center gap-2 text-xs text-violet-300 bg-violet-500/10 p-2 rounded-lg border border-violet-500/30">
-                <RefreshCcw className="h-3 w-3" />
-                <span className="font-medium">Solo usuarios autorizados pueden ejecutar esta acción</span>
-              </div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel className="rounded-xl bg-gray-800 text-gray-300 hover:bg-gray-700 border-gray-700">
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogCancel className="w-full sm:w-auto hover:bg-accent transition-colors duration-200">
             Cancelar
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleCleanDatabase}
             disabled={isCleaningDB}
-            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 rounded-xl text-white"
+            className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 transition-colors duration-200"
           >
             {isCleaningDB ? (
               <>
@@ -373,7 +421,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <RefreshCcw className="mr-2 h-4 w-4" />
-                Sí, reiniciar sistema
+                Reiniciar
               </>
             )}
           </AlertDialogAction>
@@ -385,51 +433,24 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
-              <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate">Dashboard</h2>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled>
+                <FilterSheet />
+                <Button size="sm" variant="outline" disabled className="hidden sm:flex">
                   <FileText className="h-4 w-4 mr-2" />
-                  Exportar PDF
+                  <span className="hidden lg:inline">Exportar</span>
                 </Button>
                 <CleanButton />
               </div>
             </div>
           </MainLayoutHeader>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-32" />
+              <Skeleton key={i} className="h-32 animate-pulse" />
             ))}
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Skeleton className="h-[300px]" />
-            <Skeleton className="h-[300px]" />
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <MainLayout>
-        <div className="flex-1 space-y-4 p-8 pt-6">
-          <MainLayoutHeader>
-            <div className="flex items-center justify-between w-full">
-              <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Exportar PDF
-                </Button>
-                <CleanButton />
-              </div>
-            </div>
-          </MainLayoutHeader>
-          <div className="flex h-[400px] items-center justify-center text-red-500">
-            Error: {error}
           </div>
         </div>
       </MainLayout>
@@ -439,21 +460,17 @@ export default function DashboardPage() {
   if (!analytics) {
     return (
       <MainLayout>
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
-              <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Exportar PDF
-                </Button>
-                <CleanButton />
-              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate">Dashboard</h2>
             </div>
           </MainLayoutHeader>
-          <div className="flex h-[400px] items-center justify-center text-muted-foreground text-lg">
-            Selecciona al menos una empresa para ver el dashboard
+          <div className="flex h-[400px] items-center justify-center text-muted-foreground text-center px-4">
+            <div className="space-y-3 animate-fade-in">
+              <FileText className="h-16 w-16 mx-auto text-muted-foreground/50" />
+              <p className="text-lg">Selecciona al menos una empresa para ver el dashboard</p>
+            </div>
           </div>
         </div>
       </MainLayout>
@@ -476,32 +493,28 @@ export default function DashboardPage() {
 
   return (
     <MainLayout>
-      <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
         <MainLayoutHeader>
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-4">
-              <h2 className="text-3xl font-bold tracking-tight">
+          <div className="flex items-center justify-between w-full gap-2">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                 Dashboard
-                {selectedCompanyIds.length > 1 && (
-                  <span className="text-sm font-normal text-muted-foreground ml-2">
-                    ({selectedCompanyIds.length} empresas seleccionadas)
-                  </span>
-                )}
               </h2>
               
-              <div className="flex items-center gap-2">
+              {/* Filtros en desktop */}
+              <div className="hidden md:flex items-center gap-2">
                 <Select
                   value={selectedAño?.toString() || 'all'}
                   onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200">
                     <SelectValue placeholder="Año" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2023">2023</SelectItem>
+                    <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
+                    <SelectItem value="2025" className="hover:bg-accent transition-colors duration-150">2025</SelectItem>
+                    <SelectItem value="2024" className="hover:bg-accent transition-colors duration-150">2024</SelectItem>
+                    <SelectItem value="2023" className="hover:bg-accent transition-colors duration-150">2023</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -510,15 +523,15 @@ export default function DashboardPage() {
                   onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
                   disabled={!selectedAño}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">
                     <SelectValue placeholder="Trimestre" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="1">T1</SelectItem>
-                    <SelectItem value="2">T2</SelectItem>
-                    <SelectItem value="3">T3</SelectItem>
-                    <SelectItem value="4">T4</SelectItem>
+                    <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
+                    <SelectItem value="1" className="hover:bg-accent transition-colors duration-150">T1</SelectItem>
+                    <SelectItem value="2" className="hover:bg-accent transition-colors duration-150">T2</SelectItem>
+                    <SelectItem value="3" className="hover:bg-accent transition-colors duration-150">T3</SelectItem>
+                    <SelectItem value="4" className="hover:bg-accent transition-colors duration-150">T4</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -530,31 +543,34 @@ export default function DashboardPage() {
                       setSelectedAño(null);
                       setSelectedTrimestre(null);
                     }}
+                    className="hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group"
                   >
-                    Limpiar
+                    <X className="h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
                   </Button>
                 )}
               </div>
             </div>
             
-            {/* ✅ Botones de acción con estado de export */}
-            <div className="flex items-center gap-2">
+            {/* Botones de acción */}
+            <div className="flex items-center gap-2 shrink-0">
+              <FilterSheet />
               <Button
                 size="sm"
                 variant="outline"
                 onClick={handleExport}
                 disabled={isExporting || !selectedCompanyIds.length}
-                className="gap-2"
+                className="hidden sm:flex gap-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 disabled:cursor-not-allowed group"
               >
                 {isExporting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Generando PDF...
+                    <span className="hidden lg:inline">Generando...</span>
                   </>
                 ) : (
                   <>
-                    <FileText className="h-4 w-4" />
-                    Exportar PDF
+                    <Download className="h-4 w-4 group-hover:translate-y-0.5 transition-transform duration-200" />
+                    <span className="hidden lg:inline">Exportar PDF</span>
+                    <span className="lg:hidden">PDF</span>
                   </>
                 )}
               </Button>
@@ -564,78 +580,137 @@ export default function DashboardPage() {
         </MainLayoutHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-            <StatsCard
-              title="Total Ingresos"
-              value={formatCurrency(analytics.kpis.totalIngresos)}
-              icon={ArrowUpRight}
-              description={`${analytics.kpis.totalFacturasIngreso} facturas de venta`}
-            />
-            <StatsCard
-              title="Total Gastos"
-              value={formatCurrency(analytics.kpis.totalGastos)}
-              icon={ArrowDownLeft}
-              description={`${analytics.kpis.totalFacturasGasto} facturas de compra`}
-            />
-            <StatsCard
-              title="Beneficio Bruto"
-              value={formatCurrency(analytics.kpis.beneficio)}
-              icon={Scale}
-              description="Ingresos - Gastos"
-            />
-            <StatsCard
-              title="Resultado IVA"
-              value={formatCurrency(analytics.kpis.resultadoIva)}
-              icon={Banknote}
-              description="IVA Repercutido - Soportado"
-            />
-            <StatsCard
-              title="Total Documentos"
-              value={analytics.kpis.totalDocs.toString()}
-              icon={FileText}
-              description="Documentos en el sistema"
-            />
+          {/* KPIs Grid - Responsive con animaciones staggered y HOVER EFFECTS */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="animate-fade-in group" style={{ animationDelay: '0ms' }}>
+              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                <StatsCard
+                  title="Total Ingresos"
+                  value={formatCurrency(analytics.kpis.totalIngresos)}
+                  icon={ArrowUpRight}
+                  description={`${analytics.kpis.totalFacturasIngreso} facturas`}
+                />
+              </div>
+            </div>
+            <div className="animate-fade-in group" style={{ animationDelay: '50ms' }}>
+              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                <StatsCard
+                  title="Total Gastos"
+                  value={formatCurrency(analytics.kpis.totalGastos)}
+                  icon={ArrowDownLeft}
+                  description={`${analytics.kpis.totalFacturasGasto} facturas`}
+                />
+              </div>
+            </div>
+            <div className="animate-fade-in group" style={{ animationDelay: '100ms' }}>
+              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                <StatsCard
+                  title="Beneficio Bruto"
+                  value={formatCurrency(analytics.kpis.beneficio)}
+                  icon={Scale}
+                  description="Ingresos - Gastos"
+                />
+              </div>
+            </div>
+            <div className="animate-fade-in group" style={{ animationDelay: '150ms' }}>
+              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                <StatsCard
+                  title="Resultado IVA"
+                  value={formatCurrency(analytics.kpis.resultadoIva)}
+                  icon={Banknote}
+                  description="Repercutido - Soportado"
+                />
+              </div>
+            </div>
+            <div className="animate-fade-in group" style={{ animationDelay: '200ms' }}>
+              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                <StatsCard
+                  title="Total Documentos"
+                  value={analytics.kpis.totalDocs.toString()}
+                  icon={FileText}
+                  description="En el sistema"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <div className="col-span-1 lg:col-span-4">
+          {/* Charts Grid - Responsive con animaciones */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
+            <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '250ms' }}>
               <FinancialSummary data={financialSummaryData} />
             </div>
-            <div className="col-span-1 lg:col-span-3">
+            <div className="lg:col-span-3 animate-fade-in" style={{ animationDelay: '300ms' }}>
               <DocumentStatusChart data={analytics.documentDistribution} />
             </div>
-            <div className="col-span-1 lg:col-span-full">
+            <div className="lg:col-span-full animate-fade-in" style={{ animationDelay: '350ms' }}>
               <IvaSummary data={ivaSummaryData} />
             </div>
-            <div className="col-span-1 lg:col-span-4">
+            <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '400ms' }}>
               <InsightsWidget 
                 incidentRate={analytics.kpis.incidentRate}
                 topProviders={analytics.topProviders}
               />
             </div>
-            <div className="col-span-1 lg:col-span-3 grid grid-cols-1 gap-4 auto-rows-min">
-              <StatsCard
-                title="Incidencias Abiertas"
-                value={analytics.kpis.incidenciasAbiertas.toString()}
-                icon={AlertTriangle}
-                description={`${analytics.kpis.incidentRate.toFixed(1)}% de los documentos`}
-              />
-              <StatsCard
-                title="Proveedores Únicos"
-                value={analytics.kpis.totalProveedores.toString()}
-                icon={Users}
-                description="Total de proveedores registrados"
-              />
-              <StatsCard
-                title="Productos Únicos"
-                value={analytics.kpis.totalProductos.toString()}
-                icon={Package}
-                description="Total de productos registrados"
-              />
+            <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 auto-rows-min">
+              <div className="animate-fade-in group" style={{ animationDelay: '450ms' }}>
+                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                  <StatsCard
+                    title="Incidencias Abiertas"
+                    value={analytics.kpis.incidenciasAbiertas.toString()}
+                    icon={AlertTriangle}
+                    description={`${analytics.kpis.incidentRate.toFixed(1)}% de docs`}
+                  />
+                </div>
+              </div>
+              <div className="animate-fade-in group" style={{ animationDelay: '500ms' }}>
+                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                  <StatsCard
+                    title="Proveedores"
+                    value={analytics.kpis.totalProveedores.toString()}
+                    icon={Users}
+                    description="Únicos registrados"
+                  />
+                </div>
+              </div>
+              <div className="animate-fade-in group" style={{ animationDelay: '550ms' }}>
+                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                  <StatsCard
+                    title="Productos"
+                    value={analytics.kpis.totalProductos.toString()}
+                    icon={Package}
+                    description="Únicos registrados"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out forwards;
+          opacity: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-in {
+            animation: none;
+            opacity: 1;
+          }
+        }
+      `}</style>
     </MainLayout>
   );
 }

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import * as React from 'react';
@@ -9,7 +7,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
 import { type Column, type Row } from '@tanstack/react-table';
 
-
 interface ExportButtonProps {
     columns: Column<any, unknown>[];
     data: Row<any>[];
@@ -18,8 +15,12 @@ interface ExportButtonProps {
 
 const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
     if(isNaN(amount)) return '0,00';
-    return new Intl.NumberFormat('es-ES', { style: 'decimal', minimumFractionDigits, maximumFractionDigits: 2 }).format(amount);
-}
+    return new Intl.NumberFormat('es-ES', { 
+        style: 'decimal', 
+        minimumFractionDigits, 
+        maximumFractionDigits: 2 
+    }).format(amount);
+};
 
 const getCellString = (cell: any): string => {
     const value = cell.getValue();
@@ -47,7 +48,7 @@ const getCellString = (cell: any): string => {
         }
     }
     
-    // For other currency columns, check the initial value from EditableCell
+    // For other currency columns
     if (typeof value === 'number') {
         return formatCurrency(value);
     }
@@ -56,24 +57,20 @@ const getCellString = (cell: any): string => {
         return '';
     }
     
-    // Fallback for simple values
     return String(value ?? '');
-}
+};
 
 const getHeaderName = (col: Column<any, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') return headerDef;
     
-    // Fallback for complex headers
     const readableId = col.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
-}
-
+};
 
 export function ExportButton({ columns, data, filename }: ExportButtonProps) {
     
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
-        // Filter out the 'select' and 'actions' columns from export
         const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
         
         const headers = exportableColumns.map(column => getHeaderName(column));
@@ -83,12 +80,11 @@ export function ExportButton({ columns, data, filename }: ExportButtonProps) {
             row.getVisibleCells()
                 .filter(cell => cell.column.id !== 'select' && cell.column.id !== 'actions')
                 .forEach(cell => {
-                 const header = getHeaderName(cell.column);
-                 rowData[header] = getCellString(cell);
-            });
+                    const header = getHeaderName(cell.column);
+                    rowData[header] = getCellString(cell);
+                });
             return rowData;
         });
-
 
         if (rows.length === 0) {
             console.warn("No data to export.");
@@ -118,7 +114,7 @@ export function ExportButton({ columns, data, filename }: ExportButtonProps) {
     };
     
     const downloadFile = (content: string, filename: string, mimeType: string) => {
-        const blob = new Blob([`\uFEFF${content}`], { type: mimeType }); // Add BOM for Excel UTF-8 compatibility
+        const blob = new Blob([`\uFEFF${content}`], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -129,26 +125,38 @@ export function ExportButton({ columns, data, filename }: ExportButtonProps) {
         URL.revokeObjectURL(url);
     };
 
-
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                    <Download className="mr-2 h-4 w-4" />
-                    Exportar
+                <Button 
+                    variant="outline" 
+                    className="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm"
+                >
+                    <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span className="hidden xs:inline">Exportar</span>
+                    <span className="xs:hidden">Export</span>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleExport('excel')}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+            <DropdownMenuContent align="end" className="w-44 sm:w-48">
+                <DropdownMenuItem 
+                    onClick={() => handleExport('excel')}
+                    className="text-xs sm:text-sm gap-2 cursor-pointer"
+                >
+                    <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     <span>Excel (.xlsx)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('csv')}>
-                    <FileType className="mr-2 h-4 w-4" />
+                <DropdownMenuItem 
+                    onClick={() => handleExport('csv')}
+                    className="text-xs sm:text-sm gap-2 cursor-pointer"
+                >
+                    <FileType className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     <span>CSV (.csv)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('txt')}>
-                    <FileText className="mr-2 h-4 w-4" />
+                <DropdownMenuItem 
+                    onClick={() => handleExport('txt')}
+                    className="text-xs sm:text-sm gap-2 cursor-pointer"
+                >
+                    <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     <span>Texto (.txt)</span>
                 </DropdownMenuItem>
             </DropdownMenuContent>

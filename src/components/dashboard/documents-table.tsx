@@ -37,6 +37,7 @@ const getColumns = (
     showConfirmButton: boolean = false
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
+    // 🎯 COLUMNA DE ACCIONES - Con hover effects mejorados
     {
       id: 'actions',
       header: 'Acciones',
@@ -51,14 +52,14 @@ const getColumns = (
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-950 relative z-20"
+                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-950 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-green-500/20"
                     onClick={(e) => {
                       e.stopPropagation();
                       onConfirm(doc);
                     }}
                   >
                     <span className="sr-only">Confirmar</span>
-                    <CheckCircle className="h-4 w-4" />
+                    <CheckCircle className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent 
@@ -77,7 +78,7 @@ const getColumns = (
               <TooltipTrigger asChild>
                 <Button 
                   variant="ghost" 
-                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-950 relative z-20"
+                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-950 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/20 disabled:hover:scale-100 disabled:hover:shadow-none"
                   onClick={(e) => {
                     e.stopPropagation();
                     onPreview(doc);
@@ -85,7 +86,7 @@ const getColumns = (
                   disabled={!hasFile}
                 >
                   <span className="sr-only">Ver documento</span>
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent 
@@ -103,14 +104,14 @@ const getColumns = (
               <TooltipTrigger asChild>
                 <Button 
                   variant="ghost" 
-                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(doc);
                   }}
                 >
                   <span className="sr-only">Eliminar</span>
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent 
@@ -126,13 +127,19 @@ const getColumns = (
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0 relative z-20">
+                <Button 
+                  variant="ghost" 
+                  className="h-8 w-8 p-0 relative z-20 transition-all duration-300 hover:scale-110 hover:bg-accent"
+                >
                   <span className="sr-only">Ver más</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="z-[99999]">
-                <DropdownMenuItem onClick={() => onSummarize(doc)}>
+                <DropdownMenuItem 
+                  onClick={() => onSummarize(doc)}
+                  className="cursor-pointer transition-colors duration-200"
+                >
                   Resumir con IA
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -142,7 +149,7 @@ const getColumns = (
       },
       footer: () => null,
       enableHiding: false,
-    },
+    },// 🎯 COLUMNA SELECT + ID - Con badge animado para nuevos
     {
       id: 'select',
       header: ({ table }) => {
@@ -152,8 +159,9 @@ const getColumns = (
               checked={table.getIsAllPageRowsSelected()}
               onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
               aria-label="Select all"
+              className="transition-all duration-300 hover:scale-110"
             />
-            <span>ID</span>
+            <span className="font-medium">ID</span>
           </>
         );
         return <div className="flex items-center gap-2">{checkboxContent}</div>;
@@ -167,9 +175,10 @@ const getColumns = (
               onCheckedChange={(value) => row.toggleSelected(!!value)}
               aria-label="Select row"
               onClick={(e) => e.stopPropagation()}
+              className="transition-all duration-300 hover:scale-110"
             />
             <div className="flex items-center gap-2">
-              <span>{doc.id_documento}</span>
+              <span className="font-medium text-sm">{doc.id_documento}</span>
               {doc.is_new === 1 && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/50 animate-pulse">
                   ✨ Nuevo
@@ -181,27 +190,41 @@ const getColumns = (
         return <div className="flex items-center gap-2">{cellContent}</div>;
       },
       enableHiding: false,
-      footer: () => 'Totales',
+      footer: () => <span className="font-bold text-sm">Totales</span>,
     },
+
+    // 🎯 COLUMNA CLIENTE - Con hover effect
     {
       id: 'empresa_factura',
       header: 'Cliente',
       cell: ({ row }) => {
         const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
-        return <div className="font-medium text-sm">{nombre}</div>;
+        return (
+          <div className="font-medium text-sm transition-colors duration-300 hover:text-primary">
+            {nombre}
+          </div>
+        );
       },
       footer: () => null,
     },
+
+    // 🎯 COLUMNA EMPRESA SISTEMA
     {
       id: 'empresa_sistema',
       header: 'Empresa (Sistema)',
       cell: ({ row }) => {
         const nombre = row.original.empresa_nombre || 'Sin empresa';
-        return <div className="text-sm text-muted-foreground">{nombre}</div>;
+        return (
+          <div className="text-sm text-muted-foreground transition-colors duration-300 hover:text-foreground">
+            {nombre}
+          </div>
+        );
       },
       footer: () => null,
     },
+
+    // 🎯 COLUMNA NÚMERO DE FACTURA - Editable
     {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
@@ -219,6 +242,8 @@ const getColumns = (
         );
       }
     },
+
+    // 🎯 COLUMNA FECHA CONTABLE - Editable
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
@@ -237,13 +262,15 @@ const getColumns = (
         );
       }
     },
+
+    // 🎯 COLUMNA FECHA DE CARGA - Con formato mejorado
     {
       accessorKey: 'fecha_creacion',
       header: 'Fecha de Carga',
       cell: ({ row }) => {
         const fecha = row.getValue('fecha_creacion');
         if (!fecha) {
-          return <span>-</span>;
+          return <span className="text-muted-foreground">-</span>;
         }
         
         const date = new Date(fecha as string);
@@ -258,14 +285,16 @@ const getColumns = (
         });
         
         return (
-          <div className="text-sm whitespace-nowrap">
-            <div>{fechaStr}</div>
+          <div className="text-sm whitespace-nowrap transition-colors duration-300 hover:text-primary">
+            <div className="font-medium">{fechaStr}</div>
             <div className="text-xs text-muted-foreground">{horaStr}</div>
           </div>
         );
       },
       footer: () => null,
     },
+
+    // 🎯 COLUMNA TRIMESTRE - Con badges coloreados y hover
     {
       id: 'trimestre',
       header: 'Trimestre',
@@ -278,17 +307,17 @@ const getColumns = (
         }
         
         const colorClasses = {
-          1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-          2: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-          3: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-          4: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+          1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800',
+          2: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800',
+          3: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-800',
+          4: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800',
         };
         
         const colorClass = colorClasses[trimestre as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800';
         
         return (
           <div className="text-sm">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${colorClass}`}>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-300 hover:scale-105 hover:shadow-md ${colorClass}`}>
               Q{trimestre} {anio}
             </span>
           </div>
@@ -296,6 +325,8 @@ const getColumns = (
       },
       footer: () => null,
     },
+
+    // 🎯 COLUMNA PROVEEDOR - Editable
     {
       accessorKey: 'proveedor',
       header: 'Proveedor',
@@ -313,6 +344,8 @@ const getColumns = (
         );
       }
     },
+
+    // 🎯 COLUMNA CIF - Editable
     {
       accessorKey: 'cif',
       header: 'CIF',
@@ -330,6 +363,8 @@ const getColumns = (
         );
       }
     },
+
+    // 🎯 COLUMNA CONCEPTO - Editable
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
@@ -347,6 +382,8 @@ const getColumns = (
         );
       }
     },
+
+    // 🎯 COLUMNA INCIDENCIA - Con indicador animado
     {
       id: 'incidencia_motivo',
       header: 'Motivo Incidencia',
@@ -355,29 +392,45 @@ const getColumns = (
         
         if (!doc.incidencia || !doc.incidencia_razon) {
           return (
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <span className="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-              Sin incidencias
+            <div className="flex items-center gap-2 text-muted-foreground transition-all duration-300 hover:text-green-600">
+              <span className="inline-flex h-2 w-2 rounded-full bg-green-500 shrink-0 transition-transform duration-300 hover:scale-125"></span>
+              <span className="text-xs">Sin incidencias</span>
             </div>
           );
         }
         
         return (
-          <div className="flex items-center gap-2 max-w-md">
-            <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
-            <div className="flex-1">
-              <div 
-                className="text-sm font-medium line-clamp-2 text-red-600 dark:text-red-400 cursor-help" 
-                title={doc.incidencia_razon}
-              >
-                {doc.incidencia_razon}
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2 max-w-[300px] cursor-help transition-all duration-300 hover:scale-105">
+                <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate text-red-600 dark:text-red-400">
+                    {doc.incidencia_razon}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </TooltipTrigger>
+            <TooltipContent 
+              side="bottom" 
+              className="max-w-[400px] z-[99999]"
+              avoidCollisions={true}
+              collisionPadding={10}
+            >
+              <div className="space-y-1">
+                <p className="font-semibold text-sm">Motivo de Incidencia:</p>
+                <p className="text-sm whitespace-pre-wrap">{doc.incidencia_razon}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         );
       },
       footer: () => null,
+      size: 250,
+      minSize: 200,
     },
+
+    // 🎯 COLUMNA TIPO DOCUMENTO - Editable
     {
       accessorKey: 'tipo_documento',
       header: 'Tipo Documento',
@@ -394,7 +447,7 @@ const getColumns = (
           />
         );
       }
-    },
+    },// 🎯 COLUMNAS DE IVA - Base e IVA para cada porcentaje (21%, 10%, 4%, 0%)
     ...[21, 10, 4, 0].flatMap(rate => ([
       {
         id: `base_${rate}`,
@@ -403,7 +456,11 @@ const getColumns = (
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.base_imponible ?? 0;
           const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-          return <div className="text-right">{formatted}</div>;
+          return (
+            <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
+              {formatted}
+            </div>
+          );
         },
         footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
@@ -411,7 +468,11 @@ const getColumns = (
             return sum + (Number(detail?.base_imponible) || 0);
           }, 0);
           const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-          return <div className="text-right font-bold">{formatted}</div>;
+          return (
+            <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+              {formatted}
+            </div>
+          );
         }
       },
       {
@@ -421,7 +482,11 @@ const getColumns = (
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.cuota ?? 0;
           const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-          return <div className="text-right">{formatted}</div>;
+          return (
+            <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
+              {formatted}
+            </div>
+          );
         },
         footer: ({ table }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
@@ -429,75 +494,118 @@ const getColumns = (
             return sum + (Number(detail?.cuota) || 0);
           }, 0);
           const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-          return <div className="text-right font-bold">{formatted}</div>;
+          return (
+            <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+              {formatted}
+            </div>
+          );
         }
       }
     ])),
-    {
-      accessorKey: 'retencion',
-      header: 'Retención',
-      cell: ({ row }: { row: Row<Document> }) => {
-        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
-        const value = ivaDetail?.cuota ?? 0;
-        const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right">{formatted}</div>;
-      },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-          const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
-          return sum + (Number(detail?.cuota) || 0);
-        }, 0);
-        const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right font-bold">{formatted}</div>;
-      }
-    },
-    {
-      accessorKey: 'base_imponible',
-      header: 'Total Base',
-      cell: ({ row }) => {
-        const value = row.getValue('base_imponible');
-        const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right">{formatted}</div>;
-      },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
-        const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right font-bold">{formatted}</div>;
-      }
-    },
-    {
-      accessorKey: 'iva',
-      header: 'Total IVA',
-      cell: ({ row }) => {
-        const value = row.getValue('iva');
-        const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right">{formatted}</div>;
-      },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
-        const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right font-bold">{formatted}</div>;
-      }
-    },
-    {
-      accessorKey: 'total',
-      header: 'Total',
-      cell: ({ row }) => {
-        const value = row.getValue('total');
-        const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right">{formatted}</div>;
-      },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
-        const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        return <div className="text-right font-bold">{formatted}</div>;
-      }
-    },
+
+    // 🎯 COLUMNA RETENCIÓN
+{
+  accessorKey: 'retencion',
+  header: 'Retención',
+  cell: ({ row }: { row: Row<Document> }) => {
+    const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
+    const value = ivaDetail?.cuota ?? 0;
+    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-medium">
+        {formatted}
+      </div>
+    );
+  },
+  footer: ({ table }) => {
+    const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+      const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
+      return sum + (Number(detail?.cuota) || 0);
+    }, 0);
+    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
+        {formatted}
+      </div>
+    );
+  }
+},
+
+// 🎯 COLUMNA TOTAL BASE IMPONIBLE
+{
+  accessorKey: 'base_imponible',
+  header: 'Total Base',
+  cell: ({ row }) => {
+    const value = row.getValue('base_imponible');
+    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-semibold">
+        {formatted}
+      </div>
+    );
+  },
+  footer: ({ table }) => {
+    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
+    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
+        {formatted}
+      </div>
+    );
+  }
+},
+
+// 🎯 COLUMNA TOTAL IVA
+{
+  accessorKey: 'iva',
+  header: 'Total IVA',
+  cell: ({ row }) => {
+    const value = row.getValue('iva');
+    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-semibold">
+        {formatted}
+      </div>
+    );
+  },
+  footer: ({ table }) => {
+    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
+    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
+        {formatted}
+      </div>
+    );
+  }
+},
+
+// 🎯 COLUMNA TOTAL FINAL - Con estilo destacado
+{
+  accessorKey: 'total',
+  header: 'Total',
+  cell: ({ row }) => {
+    const value = row.getValue('total');
+    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-bold">
+        {formatted}
+      </div>
+    );
+  },
+  footer: ({ table }) => {
+    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
+    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    return (
+      <div className="text-right font-bold text-base bg-muted/50 px-3 py-1.5 rounded-lg">
+        {formatted}
+      </div>
+    );
+  }
+},
   ];
 
   return columns;
-}
-
+}// 🎯 COMPONENTE PRINCIPAL DocumentsTable
 export function DocumentsTable({ 
   documents, 
   hiddenColumns = [], 
@@ -517,6 +625,7 @@ export function DocumentsTable({
   enableColumnPersistence?: boolean,
   onDocumentChanged?: () => void,
 }) {
+  // 🎨 STATES
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -530,6 +639,7 @@ export function DocumentsTable({
   const router = useRouter();
   const { toast } = useToast();
 
+  // 🎨 HANDLERS
   const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
     // This function is now primarily for optimistic updates if needed
   }, []);
@@ -566,18 +676,17 @@ export function DocumentsTable({
       }
 
       toast({
-        title: 'Documento confirmado',
+        title: '✅ Documento confirmado',
         description: `El documento #${docToConfirm.numero_documento || docToConfirm.id_documento} ha sido confirmado. Tipo actualizado: "${result.tipo_nuevo}"`,
       });
 
-      // 🔥 LLAMAR AL CALLBACK
       if (onDocumentChanged) {
         onDocumentChanged();
       }
     } catch (error) {
       console.error('❌ Error al confirmar:', error);
       toast({
-        title: 'Error',
+        title: '❌ Error',
         description: error instanceof Error ? error.message : 'No se pudo confirmar el documento.',
         variant: 'destructive',
       });
@@ -600,18 +709,17 @@ export function DocumentsTable({
       }
 
       toast({
-        title: 'Documento eliminado',
+        title: '✅ Documento eliminado',
         description: `El documento #${docToDelete.numero_documento || docToDelete.id_documento} ha sido eliminado correctamente.`,
       });
 
-      // 🔥 LLAMAR AL CALLBACK
       if (onDocumentChanged) {
         onDocumentChanged();
       }
     } catch (error) {
       console.error('❌ Error al eliminar:', error);
       toast({
-        title: 'Error',
+        title: '❌ Error',
         description: error instanceof Error ? error.message : 'No se pudo eliminar el documento.',
         variant: 'destructive',
       });
@@ -661,26 +769,42 @@ export function DocumentsTable({
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
   const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
 
+  // 🎨 RENDER
   return (
-    <>
-      <TooltipProvider>
-        <DataTable 
-          columns={columns} 
-          data={documents} 
-          hiddenColumns={hiddenColumns} 
-          filename={filename}
-          onRowClick={handleRowClick}
-          viewId={viewId}
-          enableColumnPersistence={enableColumnPersistence}
-        />
-      </TooltipProvider>
+    <TooltipProvider>
+      <div className="space-y-4">
+        {/* Wrapper con scroll horizontal optimizado */}
+        <div className="relative w-full group">
+          {/* Contenedor de scroll optimizado con sombra sutil */}
+          <div className="w-full overflow-x-auto rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border">
+            <DataTable 
+              columns={columns} 
+              data={documents} 
+              hiddenColumns={hiddenColumns} 
+              filename={filename}
+              onRowClick={handleRowClick}
+              viewId={viewId}
+              enableColumnPersistence={enableColumnPersistence}
+            />
+          </div>
+          
+          {/* Indicador de scroll mejorado - solo visible en mobile */}
+          <div className="lg:hidden text-center text-xs text-muted-foreground mt-3 py-1.5 flex items-center justify-center gap-2 transition-opacity duration-300 opacity-70 hover:opacity-100">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            <span className="font-medium">Desliza horizontalmente para ver más</span>
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          </div>
+        </div>
+      </div>
       
+      {/* 🎨 DIALOG: Resumir con IA */}
       <SummarizeDialog 
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
       />
 
+      {/* 🎨 DIALOG: Preview del Documento */}
       <DocumentPreviewDialog
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
@@ -688,56 +812,123 @@ export function DocumentsTable({
         documentName={previewName}
       />
 
+      {/* 🎨 ALERT DIALOG: Confirmar Documento */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Confirmar documento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Vas a confirmar el documento
-              {docToConfirm?.numero_documento && ` #${docToConfirm.numero_documento}`} (ID: {docToConfirm?.id_documento}).
-              <br /><br />
-              Tipo actual: <strong>{docToConfirm?.tipo_documento}</strong>
-              <br />
-              Tipo después de confirmar: <strong>{docToConfirm?.tipo_documento?.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim()}</strong>
-              <br /><br />
-              Esta acción moverá el documento de "Sin Confirmar" a su categoría correspondiente.
+            <AlertDialogTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+              ¿Confirmar documento?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm space-y-2 pt-2">
+              <p>
+                Vas a confirmar el documento
+                {docToConfirm?.numero_documento && (
+                  <span className="font-semibold text-foreground"> #{docToConfirm.numero_documento}</span>
+                )} 
+                <span className="text-muted-foreground"> (ID: {docToConfirm?.id_documento})</span>
+              </p>
+              
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 border border-border/50">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Tipo actual:</span>
+                  <span className="font-medium text-amber-600 dark:text-amber-400">
+                    {docToConfirm?.tipo_documento}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Tipo después:</span>
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    {docToConfirm?.tipo_documento?.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim()}
+                  </span>
+                </div>
+              </div>
+              
+              <p className="text-xs text-muted-foreground pt-1">
+                Esta acción moverá el documento de "Sin Confirmar" a su categoría correspondiente.
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isConfirming}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel 
+              disabled={isConfirming}
+              className="transition-all duration-300 hover:scale-105"
+            >
+              Cancelar
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDocument}
               disabled={isConfirming}
-              className="bg-green-600 text-white hover:bg-green-700"
+              className="bg-green-600 text-white hover:bg-green-700 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-green-500/30"
             >
-              {isConfirming ? 'Confirmando...' : 'Confirmar'}
+              {isConfirming ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  Confirmando...
+                </span>
+              ) : (
+                'Confirmar'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* 🎨 ALERT DIALOG: Eliminar Documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminará permanentemente el documento
-              {docToDelete?.numero_documento && ` #${docToDelete.numero_documento}`} (ID: {docToDelete?.id_documento})
-              y todos sus datos asociados.
+            <AlertDialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              ¿Estás seguro?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm space-y-2 pt-2">
+              <p>
+                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>. 
+                Se eliminará permanentemente el documento
+                {docToDelete?.numero_documento && (
+                  <span className="font-semibold text-foreground"> #{docToDelete.numero_documento}</span>
+                )} 
+                <span className="text-muted-foreground"> (ID: {docToDelete?.id_documento})</span>
+              </p>
+              
+              <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1">
+                <p className="text-xs font-medium text-destructive flex items-center gap-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>
+                  Se eliminará permanentemente:
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5 pl-3.5">
+                  <li>• El documento y su archivo adjunto</li>
+                  <li>• Todos los datos asociados</li>
+                  <li>• Datos de IVA y totales</li>
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel 
+              disabled={isDeleting}
+              className="transition-all duration-300 hover:scale-105"
+            >
+              Cancelar
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-destructive/30"
             >
-              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+              {isDeleting ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  Eliminando...
+                </span>
+              ) : (
+                'Eliminar'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </TooltipProvider>
   );
 }

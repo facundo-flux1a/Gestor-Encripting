@@ -15,7 +15,7 @@ interface UploadDialogProps {
   onUploadComplete?: () => void;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB en bytes
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export function UploadDialog({ 
   isOpen, 
@@ -53,7 +53,6 @@ export function UploadDialog({
     }
   };
 
-  // Handlers para drag & drop
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -78,7 +77,6 @@ export function UploadDialog({
 
     const droppedFiles = Array.from(e.dataTransfer.files);
     
-    // Tipos de archivo aceptados
     const acceptedTypes = [
       'application/pdf',
       'application/msword',
@@ -93,7 +91,6 @@ export function UploadDialog({
       'application/vnd.rar',
     ];
     
-    // Filtrar archivos por tipo y tamaño
     const validFiles = droppedFiles.filter(file => {
       const isValidType = acceptedTypes.includes(file.type);
       const isValidSize = validateFileSize(file);
@@ -109,7 +106,6 @@ export function UploadDialog({
       setFiles(prevFiles => [...prevFiles, ...validFiles]);
     }
 
-    // Mostrar mensaje si hubo archivos rechazados por tipo
     const invalidTypeFiles = droppedFiles.filter(file => !acceptedTypes.includes(file.type));
     if (invalidTypeFiles.length > 0) {
       toast({
@@ -130,7 +126,6 @@ export function UploadDialog({
       return;
     }
 
-    // Validar tamaño de todos los archivos antes de subir
     const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
       toast({
@@ -146,26 +141,21 @@ export function UploadDialog({
     let errorCount = 0;
 
     try {
-      // Procesar cada archivo
       for (const file of files) {
         try {
-          // Generar uploadId único
           const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
           console.log('📤 [UploadDialog] Subiendo:', file.name, 'uploadId:', uploadId);
           
-          // Agregar al UploadProgressManager
           if ((window as any).__uploadProgressManager) {
             (window as any).__uploadProgressManager.addUpload(uploadId, file.name);
           }
           
-          // Preparar FormData
           const formData = new FormData();
           formData.append('file', file);
           formData.append('empresaId', selectedCompanyId);
           formData.append('uploadId', uploadId);
 
-          // Subir el archivo (esto dispara el flujo de n8n)
           await uploadDocument(formData);
           successCount++;
           
@@ -173,7 +163,6 @@ export function UploadDialog({
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
           errorCount++;
           
-          // Mostrar toast con error específico
           const errorMessage = error.message?.includes('413') || error.message?.includes('Body exceeded')
             ? `El archivo "${file.name}" es demasiado grande. Límite: 10MB`
             : `Error al subir "${file.name}": ${error.message || 'Error desconocido'}`;
@@ -186,7 +175,6 @@ export function UploadDialog({
         }
       }
 
-      // Mostrar resumen si hubo éxitos
       if (successCount > 0) {
         toast({
           title: "✅ Archivos enviados",
@@ -194,15 +182,12 @@ export function UploadDialog({
         });
       }
     } finally {
-      // Limpiar estado y cerrar SIEMPRE (incluso si hubo errores)
       setFiles([]);
       setSelectedCompanyId('');
       setIsUploading(false);
       
-      // Cerrar el modal primero
       onClose();
       
-      // Luego notificar (para que el progress dialog se muestre encima)
       setTimeout(() => {
         onUploadComplete?.();
       }, 100);
@@ -210,7 +195,6 @@ export function UploadDialog({
   };
 
   const handleClose = () => {
-    // Siempre limpiar estado y cerrar (incluso si está uploading)
     setFiles([]);
     setSelectedCompanyId('');
     setIsUploading(false);
@@ -225,7 +209,6 @@ export function UploadDialog({
     fileInputRef.current?.click();
   };
 
-  // Verificar si hay archivos que exceden el tamaño
   const hasOversizedFiles = files.some(file => file.size > MAX_FILE_SIZE);
 
   return (
@@ -234,24 +217,30 @@ export function UploadDialog({
         handleClose();
       }
     }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Subir Nuevos Documentos</DialogTitle>
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="px-3 sm:px-6 py-3 sm:py-6">
+          <DialogTitle className="text-base sm:text-lg">
+            Subir Nuevos Documentos
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
           {/* Selector de empresa */}
           <div>
-            <label className="text-sm font-medium mb-2 block">
+            <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">
               Empresa destino <span className="text-red-500">*</span>
             </label>
             <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-              <SelectTrigger>
+              <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
                 <SelectValue placeholder="Selecciona una empresa" />
               </SelectTrigger>
               <SelectContent>
                 {companies.map((company) => (
-                  <SelectItem key={company.id} value={company.id.toString()}>
+                  <SelectItem 
+                    key={company.id} 
+                    value={company.id.toString()}
+                    className="text-xs sm:text-sm"
+                  >
                     {company.nombre}
                   </SelectItem>
                 ))}
@@ -259,22 +248,22 @@ export function UploadDialog({
             </Select>
           </div>
 
-          {/* Drop zone con drag & drop funcional */}
+          {/* Drop zone */}
           <div
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors ${
               isDragging
                 ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
                 : 'border-gray-300 dark:border-gray-700'
             }`}
           >
-            <Upload className={`mx-auto h-12 w-12 mb-4 transition-colors ${
+            <Upload className={`mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors ${
               isDragging ? 'text-violet-500' : 'text-gray-400'
             }`} />
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2 px-2">
               {isDragging
                 ? 'Suelta los archivos aquí'
                 : 'Arrastra y suelta archivos aquí, o haz clic para seleccionar'}
@@ -290,61 +279,61 @@ export function UploadDialog({
             />
             <Button 
               variant="outline" 
-              className="cursor-pointer" 
+              className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm" 
               onClick={handleSelectFilesClick}
               type="button"
             >
               Seleccionar archivos
             </Button>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+            <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
               PDF - ZIP (máx. 10 MB por archivo)
             </p>
           </div>
 
           {/* Alerta de archivos grandes */}
           {hasOversizedFiles && (
-            <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200">
+            <div className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-red-800 dark:text-red-200">
                   Archivos demasiado grandes detectados
                 </p>
-                <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-300 mt-0.5 sm:mt-1">
                   Algunos archivos exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Lista de archivos seleccionados */}
+          {/* Lista de archivos */}
           {files.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">
+            <div className="space-y-1.5 sm:space-y-2">
+              <p className="text-xs sm:text-sm font-medium">
                 Archivos seleccionados ({files.length})
               </p>
-              <div className="max-h-40 overflow-y-auto space-y-1">
+              <div className="max-h-32 sm:max-h-40 overflow-y-auto space-y-1">
                 {files.map((file, index) => {
                   const isOversized = file.size > MAX_FILE_SIZE;
                   return (
                     <div
                       key={index}
-                      className={`flex items-center justify-between p-2 rounded ${
+                      className={`flex items-center justify-between p-1.5 sm:p-2 rounded ${
                         isOversized 
                           ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800' 
                           : 'bg-gray-50 dark:bg-gray-800'
                       }`}
                     >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
                         {isOversized && (
-                          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                          <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-sm truncate block ${
+                          <span className={`text-xs sm:text-sm truncate block ${
                             isOversized ? 'text-red-800 dark:text-red-200 font-medium' : ''
-                          }`}>
+                          }`} title={file.name}>
                             {file.name}
                           </span>
-                          <span className={`text-xs ${
+                          <span className={`text-[10px] sm:text-xs ${
                             isOversized 
                               ? 'text-red-600 dark:text-red-400 font-medium' 
                               : 'text-gray-500'
@@ -357,11 +346,11 @@ export function UploadDialog({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 flex-shrink-0"
+                        className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0"
                         onClick={() => handleRemoveFile(index)}
                         disabled={isUploading}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-3 w-3 sm:h-4 sm:w-4" />
                       </Button>
                     </div>
                   );
@@ -370,18 +359,20 @@ export function UploadDialog({
             </div>
           )}
 
-          {/* Botones de acción */}
-          <div className="flex justify-end gap-2">
+          {/* Botones */}
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
             <Button 
               variant="outline" 
               onClick={handleClose} 
               disabled={isUploading}
+              className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleUpload}
               disabled={!selectedCompanyId || files.length === 0 || isUploading || hasOversizedFiles}
+              className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
               {isUploading ? 'Subiendo...' : `Subir ${files.length} archivo(s)`}
             </Button>

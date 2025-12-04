@@ -118,35 +118,39 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[96vw] sm:w-[90vw] max-w-2xl h-[96vh] sm:h-auto sm:max-h-[90vh] p-0 gap-0 flex flex-col">
-        {/* Header fijo */}
-        <DialogHeader className="px-3 py-3 sm:px-6 sm:py-4 border-b flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base sm:text-xl pr-8">
-            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500 flex-shrink-0" />
-            <span>Configuración IA</span>
+      {/* 📱 DIALOG RESPONSIVE CON ALTURA MÁXIMA */}
+      <DialogContent className="max-w-[calc(100vw-1rem)] sm:max-w-[90vw] lg:max-w-2xl max-h-[95vh] sm:max-h-[90vh] p-0 gap-0 flex flex-col">
+        
+        {/* 📱 HEADER FIJO - NO SCROLLEA */}
+        <DialogHeader className="px-3 py-3 sm:px-4 lg:px-6 sm:py-4 border-b flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl pr-8">
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500 shrink-0" />
+            <span className="truncate">Configuración IA</span>
           </DialogTitle>
           <DialogDescription className="text-xs sm:text-sm mt-1">
             Configura el análisis con IA
           </DialogDescription>
         </DialogHeader>
 
-        {/* Contenido scrolleable */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4">
+        {/* 📱 CONTENIDO SCROLLEABLE */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 lg:px-6 sm:py-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8 sm:py-12">
               <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
-              {/* Info compartidas - más compacto */}
+              
+              {/* 📱 INFO COMPARTIDAS - COMPACTO */}
               <Alert className="text-xs sm:text-sm py-2 sm:py-3">
-                <Info className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 mt-0.5" />
+                <Info className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 mt-0.5" />
                 <AlertDescription className="leading-snug">
-                  <strong>API Keys Compartidas:</strong> Por defecto usamos nuestras keys con límites diarios.
+                  <strong className="block sm:inline">API Keys Compartidas:</strong>
+                  <span className="block sm:inline sm:ml-1">Por defecto usamos nuestras keys con límites diarios.</span>
                 </AlertDescription>
               </Alert>
 
-              {/* Selector compartido - compacto */}
+              {/* 📱 SELECTOR COMPARTIDO - SOLO VISIBLE CUANDO NO USA PROPIA */}
               {!config.useOwnKey && (
                 <div className="space-y-2 rounded-lg border p-2.5 sm:p-3 bg-muted/50">
                   <Label htmlFor="shared-provider" className="text-xs sm:text-sm font-medium">
@@ -158,7 +162,7 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                       setConfig({ ...config, sharedProvider: value as 'gemini' | 'openai' })
                     }
                   >
-                    <SelectTrigger id="shared-provider" className="h-9 text-xs sm:text-sm">
+                    <SelectTrigger id="shared-provider" className="h-8 sm:h-9 text-xs sm:text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -178,8 +182,8 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                 </div>
               )}
 
-              {/* Toggle API propia - compacto */}
-              <div className="flex items-start justify-between gap-3 rounded-lg border p-2.5 sm:p-3">
+              {/* 📱 TOGGLE API PROPIA - COMPACTO Y RESPONSIVE */}
+              <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-lg border p-2.5 sm:p-3">
                 <div className="space-y-0.5 flex-1 min-w-0">
                   <Label htmlFor="use-own-key" className="text-xs sm:text-sm font-medium cursor-pointer">
                     Usar mi API Key
@@ -194,13 +198,15 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                   onCheckedChange={(checked) =>
                     setConfig({ ...config, useOwnKey: checked })
                   }
-                  className="flex-shrink-0"
+                  className="shrink-0"
                 />
               </div>
 
-              {/* Config API propia - más compacto */}
+              {/* 📱 CONFIG API PROPIA - DESPLEGABLE */}
               {config.useOwnKey && (
                 <div className="space-y-2.5 sm:space-y-3 rounded-lg border p-2.5 sm:p-3 bg-muted/50">
+                  
+                  {/* Proveedor */}
                   <div className="space-y-1.5">
                     <Label htmlFor="provider" className="text-xs sm:text-sm">
                       Proveedor
@@ -211,26 +217,27 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                         setConfig({ ...config, ownProvider: value as 'openai' | 'gemini' })
                       }
                     >
-                      <SelectTrigger id="provider" className="h-9 text-xs sm:text-sm">
-                        <SelectValue placeholder="Selecciona" />
+                      <SelectTrigger id="provider" className="h-8 sm:h-9 text-xs sm:text-sm">
+                        <SelectValue placeholder="Selecciona proveedor" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="openai" className="text-xs sm:text-sm">
-                          OpenAI
+                          🤖 OpenAI
                         </SelectItem>
                         <SelectItem value="gemini" className="text-xs sm:text-sm">
-                          Gemini
+                          🚀 Gemini
                         </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
+                  {/* API Key */}
                   <div className="space-y-1.5">
                     <Label htmlFor="api-key" className="text-xs sm:text-sm">
                       API Key
                     </Label>
                     <div className="relative">
-                      <Key className="absolute left-2 sm:left-2.5 top-2 sm:top-2.5 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
+                      <Key className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground shrink-0" />
                       <Input
                         id="api-key"
                         type="password"
@@ -239,48 +246,50 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                         onChange={(e) =>
                           setConfig({ ...config, ownApiKey: e.target.value })
                         }
-                        className="pl-7 sm:pl-8 h-9 text-xs sm:text-sm"
+                        className="pl-7 sm:pl-8 h-8 sm:h-9 text-xs sm:text-sm"
                       />
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
-                      Se guarda encriptada
+                      Se guarda encriptada. Nunca se comparte.
                     </p>
                   </div>
 
+                  {/* Modelo */}
                   <div className="space-y-1.5">
                     <Label htmlFor="model" className="text-xs sm:text-sm">
-                      Modelo
+                      Modelo Preferido
                     </Label>
                     <Select
                       value={config.preferredModel}
                       onValueChange={(value) =>
                         setConfig({ ...config, preferredModel: value })
                       }
+                      disabled={!config.ownProvider}
                     >
-                      <SelectTrigger id="model" className="h-9 text-xs sm:text-sm">
-                        <SelectValue />
+                      <SelectTrigger id="model" className="h-8 sm:h-9 text-xs sm:text-sm">
+                        <SelectValue placeholder="Selecciona modelo" />
                       </SelectTrigger>
                       <SelectContent>
                         {config.ownProvider === 'openai' && (
                           <>
                             <SelectItem value="gpt-4o-mini" className="text-xs sm:text-sm">
-                              GPT-4o-mini
+                              GPT-4o-mini (rápido)
                             </SelectItem>
                             <SelectItem value="gpt-4o" className="text-xs sm:text-sm">
-                              GPT-4o
+                              GPT-4o (equilibrado)
                             </SelectItem>
                             <SelectItem value="gpt-4-turbo" className="text-xs sm:text-sm">
-                              GPT-4 Turbo
+                              GPT-4 Turbo (potente)
                             </SelectItem>
                           </>
                         )}
                         {config.ownProvider === 'gemini' && (
                           <>
                             <SelectItem value="gemini-1.5-flash" className="text-xs sm:text-sm">
-                              Gemini Flash
+                              Gemini Flash (rápido)
                             </SelectItem>
                             <SelectItem value="gemini-1.5-pro" className="text-xs sm:text-sm">
-                              Gemini Pro
+                              Gemini Pro (potente)
                             </SelectItem>
                           </>
                         )}
@@ -290,14 +299,14 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                 </div>
               )}
 
-              {/* Prompt - más compacto */}
+              {/* 📱 PROMPT PERSONALIZADO */}
               <div className="space-y-1.5">
                 <Label htmlFor="custom-prompt" className="text-xs sm:text-sm">
                   Prompt Personalizado (Opcional)
                 </Label>
                 <Textarea
                   id="custom-prompt"
-                  placeholder="Ej: Prioriza facturas > 1000€..."
+                  placeholder="Ej: Prioriza facturas > 1000€ y verifica fechas de vencimiento..."
                   value={config.customPrompt}
                   onChange={(e) =>
                     setConfig({ ...config, customPrompt: e.target.value })
@@ -306,34 +315,34 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                   className="text-xs sm:text-sm resize-none min-h-[60px] sm:min-h-[80px]"
                 />
                 <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  Se combina con nuestro prompt base
+                  Se combina con nuestro prompt base optimizado
                 </p>
               </div>
 
-              {/* Mensajes */}
+              {/* 📱 MENSAJES DE ERROR/ÉXITO */}
               {error && (
-                <Alert variant="destructive" className="py-2 text-xs sm:text-sm">
-                  <AlertDescription>{error}</AlertDescription>
+                <Alert variant="destructive" className="py-2 sm:py-2.5">
+                  <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
                 </Alert>
               )}
 
               {saveSuccess && (
-                <Alert className="border-green-500 bg-green-50 py-2 text-xs sm:text-sm">
-                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
-                  <AlertDescription className="text-green-800">
-                    Guardado correctamente
+                <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20 py-2 sm:py-2.5">
+                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 dark:text-green-500 shrink-0" />
+                  <AlertDescription className="text-xs sm:text-sm text-green-800 dark:text-green-200">
+                    ✓ Configuración guardada correctamente
                   </AlertDescription>
                 </Alert>
               )}
 
-              {/* Info compartido - compacto */}
+              {/* 📱 INFO BOX COMPARTIDO */}
               {!config.useOwnKey && (
-                <div className="text-[10px] sm:text-xs p-2.5 sm:p-3 bg-muted/50 rounded-lg space-y-1">
-                  <p className="font-medium">ℹ️ API keys compartidas:</p>
-                  <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
-                    <li>Gemini: 50/día (rápido)</li>
-                    <li>OpenAI: 5/día (fallback)</li>
-                    <li>Reinicio: 00:00 hs</li>
+                <div className="text-[10px] sm:text-xs p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg space-y-1.5">
+                  <p className="font-medium text-blue-900 dark:text-blue-100">ℹ️ Límites de API keys compartidas:</p>
+                  <ul className="list-disc list-inside text-blue-700 dark:text-blue-300 space-y-0.5 pl-1">
+                    <li>Gemini Flash: 50 análisis/día (recomendado)</li>
+                    <li>OpenAI GPT-4o-mini: 5 análisis/día (fallback)</li>
+                    <li>Reinicio automático: todos los días a las 00:00 hs</li>
                   </ul>
                 </div>
               )}
@@ -341,29 +350,29 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
           )}
         </div>
 
-        {/* Footer fijo con botones */}
-        <div className="border-t px-3 py-2.5 sm:px-6 sm:py-3 flex-shrink-0 bg-background">
+        {/* 📱 FOOTER FIJO CON BOTONES */}
+        <div className="border-t px-3 py-2.5 sm:px-4 lg:px-6 sm:py-3 flex-shrink-0 bg-background">
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
             <Button 
               variant="outline" 
               onClick={onClose} 
               disabled={isSaving}
-              className="w-full sm:w-auto h-9 text-xs sm:text-sm"
+              className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
               Cancelar
             </Button>
             <Button 
               onClick={handleSave} 
-              disabled={isSaving}
-              className="w-full sm:w-auto h-9 text-xs sm:text-sm"
+              disabled={isSaving || isLoading}
+              className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-                  Guardando...
+                  <Loader2 className="mr-1.5 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin shrink-0" />
+                  <span>Guardando...</span>
                 </>
               ) : (
-                'Guardar'
+                'Guardar Configuración'
               )}
             </Button>
           </div>

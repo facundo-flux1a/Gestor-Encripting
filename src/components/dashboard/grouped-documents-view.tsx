@@ -11,7 +11,6 @@ interface GroupedDocumentsViewProps {
   hiddenColumns?: string[];
 }
 
-// Colores por tipo de documento
 const getColorForType = (tipo: string): string => {
   const lower = tipo.toLowerCase();
   
@@ -69,10 +68,13 @@ const colorClasses = {
   }
 };
 
-export function GroupedDocumentsView({ documents, filename = 'otros_documentos', hiddenColumns = [] }: GroupedDocumentsViewProps) {
+export function GroupedDocumentsView({ 
+  documents, 
+  filename = 'otros_documentos', 
+  hiddenColumns = [] 
+}: GroupedDocumentsViewProps) {
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
 
-  // Agrupar documentos por tipo
   const documentsByType = useMemo(() => {
     const grouped = new Map<string, Document[]>();
     
@@ -84,7 +86,6 @@ export function GroupedDocumentsView({ documents, filename = 'otros_documentos',
       grouped.get(tipo)!.push(doc);
     });
     
-    // Ordenar por cantidad de documentos (más documentos primero)
     return Array.from(grouped.entries())
       .sort((a, b) => b[1].length - a[1].length);
   }, [documents]);
@@ -103,14 +104,14 @@ export function GroupedDocumentsView({ documents, filename = 'otros_documentos',
 
   if (documentsByType.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-8">
+      <div className="text-center text-muted-foreground py-6 sm:py-8 text-xs sm:text-sm">
         No hay documentos en esta categoría
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {documentsByType.map(([tipo, docs]) => {
         const isExpanded = expandedTypes.has(tipo);
         const color = getColorForType(tipo);
@@ -121,40 +122,43 @@ export function GroupedDocumentsView({ documents, filename = 'otros_documentos',
             {/* Header de la carpeta */}
             <button
               onClick={() => toggleType(tipo)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border ${classes.bg} ${classes.border} ${classes.hover} transition-all duration-200`}
+              className={`w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border ${classes.bg} ${classes.border} ${classes.hover} transition-all duration-200`}
             >
               {/* Icono de carpeta */}
-              <div className={classes.text}>
+              <div className={`${classes.text} shrink-0`}>
                 {isExpanded ? (
-                  <FolderOpen className="h-5 w-5" />
+                  <FolderOpen className="h-4 w-4 sm:h-5 sm:w-5" />
                 ) : (
-                  <Folder className="h-5 w-5" />
+                  <Folder className="h-4 w-4 sm:h-5 sm:w-5" />
                 )}
               </div>
 
               {/* Nombre del tipo */}
-              <span className={`font-semibold ${classes.text} flex-1 text-left`}>
+              <span className={`font-semibold ${classes.text} flex-1 text-left text-xs sm:text-sm lg:text-base truncate`}>
                 {tipo}
               </span>
 
               {/* Badge con contador */}
-              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${classes.badge}`}>
-                {docs.length} {docs.length === 1 ? 'documento' : 'documentos'}
+              <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium ${classes.badge} whitespace-nowrap shrink-0`}>
+                {docs.length}
+                <span className="hidden xs:inline ml-1">
+                  {docs.length === 1 ? 'doc' : 'docs'}
+                </span>
               </span>
 
               {/* Chevron */}
-              <div className={classes.text}>
+              <div className={`${classes.text} shrink-0`}>
                 {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 ) : (
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 )}
               </div>
             </button>
 
             {/* Contenido expandible */}
             {isExpanded && (
-              <div className="pl-4 animate-in slide-in-from-top-2 duration-200">
+              <div className="pl-2 sm:pl-4 animate-in slide-in-from-top-2 duration-200">
                 <DocumentsTable 
                   documents={docs}
                   filename={`${filename}_${tipo.toLowerCase().replace(/\s+/g, '_')}`}
