@@ -43,11 +43,11 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
       return (
         <Link
           href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}
-          className="font-medium text-primary hover:underline flex items-center gap-1.5 sm:gap-2"
+          className="font-medium text-primary hover:underline flex items-center gap-1.5 sm:gap-2 group"
         >
-          <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+          <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
           <div className="flex flex-col min-w-0">
-            <span className="text-xs sm:text-sm truncate" title={provider.nombre}>
+            <span className="text-xs sm:text-sm truncate transition-colors duration-200" title={provider.nombre}>
                 {provider.nombre}
             </span>
             {showCompanyColumn && provider.empresaNombre && (
@@ -68,7 +68,7 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
     cell: ({ row }) => {
       const value = row.getValue('identificador_fiscal') as string;
       return (
-        <span className="font-mono text-xs sm:text-sm break-all" title={value}>
+        <span className="font-mono text-xs sm:text-sm break-all transition-colors duration-200 hover:text-primary" title={value}>
             {value || 'N/A'}
         </span>
       );
@@ -80,7 +80,7 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
     accessorKey: 'totalSpent',
     header: 'Gasto Total',
     cell: ({ row }) => (
-      <div className="text-right font-mono text-xs sm:text-sm tabular-nums">
+      <div className="text-right font-mono text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
         {formatCurrency(row.getValue('totalSpent'))}
       </div>
     ),
@@ -93,7 +93,7 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
     cell: ({ row }) => {
       const value = row.getValue('totalDocuments') as number;
       return (
-        <div className="text-center text-xs sm:text-sm tabular-nums">
+        <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
             {value || 0}
         </div>
       );
@@ -107,7 +107,7 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
     cell: ({ row }) => {
       const value = row.getValue('uniqueProducts') as number;
       return (
-        <div className="text-center text-xs sm:text-sm tabular-nums">
+        <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
             {value || 0}
         </div>
       );
@@ -125,12 +125,12 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
             variant="ghost" 
             size="sm" 
             asChild
-            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm"
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
           >
             <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}>
               <span className="hidden xs:inline">Ver Detalles</span>
               <span className="xs:hidden">Ver</span>
-              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
             </Link>
           </Button>
         </div>
@@ -180,12 +180,12 @@ export function ProvidersTable({
             placeholder="Buscar proveedor..."
             value={globalFilter ?? ''}
             onChange={(event) => setGlobalFilter(event.target.value)}
-            className="max-w-full sm:max-w-sm h-8 sm:h-9 text-xs sm:text-sm"
+            className="max-w-full sm:max-w-sm h-8 sm:h-9 text-xs sm:text-sm transition-all duration-200 focus:ring-2 focus:ring-primary/20"
           />
         </div>
 
         {/* Table with horizontal scroll on mobile */}
-        <div className="w-full overflow-x-auto rounded-md border">
+        <div className="w-full overflow-x-auto rounded-md border transition-all duration-300 hover:shadow-lg hover:shadow-primary/5">
           <div className="min-w-[800px]">
             <Table>
               <TableHeader>
@@ -206,14 +206,15 @@ export function ProvidersTable({
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map(row => (
+                  table.getRowModel().rows.map((row, index) => (
                     <TableRow 
                       key={row.id} 
                       data-state={row.getIsSelected() && 'selected'}
-                      className="text-xs sm:text-sm"
+                      className="text-xs sm:text-sm transition-all duration-200 hover:bg-muted/50 animate-fade-in"
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
                       {row.getVisibleCells().map(cell => (
-                        <TableCell key={cell.id}>
+                        <TableCell key={cell.id} className="transition-colors duration-200">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
                       ))}
@@ -253,7 +254,7 @@ export function ProvidersTable({
               size="sm"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="h-7 sm:h-8 gap-1 text-xs sm:text-sm"
+              className="h-7 sm:h-8 gap-1 text-xs sm:text-sm transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
             >
               <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
               <span className="hidden xs:inline">Anterior</span>
@@ -263,7 +264,7 @@ export function ProvidersTable({
               size="sm"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="h-7 sm:h-8 gap-1 text-xs sm:text-sm"
+              className="h-7 sm:h-8 gap-1 text-xs sm:text-sm transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
             >
               <span className="hidden xs:inline">Siguiente</span>
               <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
@@ -271,6 +272,45 @@ export function ProvidersTable({
           </div>
         </div>
       </div>
+
+      {/* Estilos de animación */}
+      <style jsx global>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out forwards;
+          opacity: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-in {
+            animation: none;
+            opacity: 1;
+            transform: none;
+          }
+          
+          .transition-all,
+          .transition-colors,
+          .transition-transform {
+            transition: none !important;
+          }
+          
+          .hover\:scale-105:hover,
+          .hover\:scale-110:hover,
+          .hover\:translate-x-1:hover {
+            transform: none !important;
+          }
+        }
+      `}</style>
     </TooltipProvider>
   );
 }

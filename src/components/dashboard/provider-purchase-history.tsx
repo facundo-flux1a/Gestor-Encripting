@@ -20,7 +20,7 @@ const formatCurrency = (amount: number) => {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border bg-background p-2 sm:p-3 shadow-sm">
+      <div className="rounded-lg border bg-background p-2 sm:p-3 shadow-sm animate-tooltip-in">
         <p className="font-semibold text-xs sm:text-sm">{label}</p>
         <p className="text-primary text-xs sm:text-sm tabular-nums">
             {formatCurrency(payload[0].value)}
@@ -33,11 +33,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function ProviderPurchaseHistory({ data }: { data: ChartData[] }) {
   return (
-    <Card>
+    <Card className="transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 group">
       <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
         <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-            <span className="truncate">Evolución del Gasto Mensual</span>
+            <div className="p-1.5 bg-green-500/10 rounded-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-green-500" />
+            </div>
+            <span className="truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              Evolución del Gasto Mensual
+            </span>
         </CardTitle>
         <CardDescription className="text-xs sm:text-sm">
             Muestra el total gastado con este proveedor a lo largo del tiempo.
@@ -155,10 +159,46 @@ export function ProviderPurchaseHistory({ data }: { data: ChartData[] }) {
           </>
         ) : (
           <div className="flex h-[280px] sm:h-[320px] lg:h-[350px] w-full items-center justify-center text-muted-foreground text-xs sm:text-sm">
-            No hay datos de compras para mostrar.
+            <div className="text-center space-y-2">
+              <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50" />
+              <p>No hay datos de compras para mostrar.</p>
+            </div>
           </div>
         )}
       </CardContent>
+
+      {/* Estilos de animación */}
+      <style jsx global>{`
+        @keyframes tooltip-in {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .animate-tooltip-in {
+          animation: tooltip-in 0.2s ease-out;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-tooltip-in {
+            animation: none;
+          }
+          
+          .transition-all {
+            transition: none !important;
+          }
+          
+          .group-hover\:scale-110:hover,
+          .group-hover\:rotate-3:hover {
+            transform: none !important;
+          }
+        }
+      `}</style>
     </Card>
   );
 }

@@ -33,7 +33,8 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <CompanyProvider> 
+          {/* ✅ KEY CRÍTICO: Remonta el Provider cuando cambia el usuario */}
+          <CompanyProvider key={userId || 'anonymous'}> 
             {/* Container con gradiente sutil de fondo */}
             <div className="relative min-h-screen w-full bg-gradient-to-br from-background via-background to-muted/5">
               {/* Efecto de grano sutil para textura */}

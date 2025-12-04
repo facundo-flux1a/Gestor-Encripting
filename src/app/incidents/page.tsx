@@ -114,13 +114,13 @@ export default function IncidentsPage() {
                 <div className="space-y-4 sm:space-y-6">
                     {/* Analytics y Card de Análisis - Grid Responsive con animaciones */}
                     <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-3">
-                        <div className="lg:col-span-2 animate-fade-in group" style={{ animationDelay: '0ms' }}>
-                            <div className="transition-all duration-300 hover:shadow-xl hover:shadow-primary/10">
+                        <div className="lg:col-span-2 animate-fade-in" style={{ animationDelay: '0ms' }}>
+                            <div className="transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10">
                                 <IncidentsAnalytics data={analyticsData} />
                             </div>
                         </div>
-                        <div className="animate-fade-in group" style={{ animationDelay: '50ms' }}>
-                            <div className="transition-all duration-300 hover:shadow-xl hover:shadow-primary/10">
+                        <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
+                            <div className="transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10">
                                 <AnalyzeDocumentsCard onAnalysisComplete={handleAnalysisComplete} />
                             </div>
                         </div>
@@ -128,8 +128,8 @@ export default function IncidentsPage() {
 
                     <Separator className="my-4 sm:my-6" />
 
-                    {/* Tabla de Incidencias de IA con animación */}
-                    <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+                    {/* Tabla de Incidencias de IA con animación y hover */}
+                    <div className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '100ms' }}>
                         <AIIncidentsTable 
                             empresaIds={selectedCompanyIds} 
                             onRefresh={handleAnalysisComplete}
@@ -138,8 +138,8 @@ export default function IncidentsPage() {
 
                     <Separator className="my-4 sm:my-6" />
 
-                    {/* Tabla de Documentos con Incidencias con animación */}
-                    <div className="space-y-3 sm:space-y-4 animate-fade-in" style={{ animationDelay: '150ms' }}>
+                    {/* Tabla de Documentos con Incidencias con animación y hover */}
+                    <div className="space-y-3 sm:space-y-4 animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '150ms' }}>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                             <div className="space-y-1 min-w-0">
                                 <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
@@ -181,10 +181,16 @@ export default function IncidentsPage() {
                     .animate-fade-in {
                         animation: none;
                         opacity: 1;
+                        transform: none;
                     }
                     
                     .transition-all {
                         transition: none !important;
+                    }
+                    
+                    .hover\:scale-\[1\.01\]:hover,
+                    .hover\:scale-\[1\.005\]:hover {
+                        transform: none !important;
                     }
                 }
             `}</style>
