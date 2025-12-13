@@ -28,6 +28,32 @@ import { useRouter } from 'next/navigation';
 import { deleteDocument } from '@/services/document-service';
 import { confirmDocument } from '@/services/document-client-service';
 
+// 🎯 FUNCIONES DE FORMATO MANUAL
+const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
+
+const formatCurrency = (amount: number | string): string => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
+
 const getColumns = (
     onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
     onSummarize: (doc: Document) => void,
@@ -37,7 +63,7 @@ const getColumns = (
     showConfirmButton: boolean = false
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
-    // 🎯 COLUMNA DE ACCIONES - Con hover effects mejorados
+    // 🎯 COLUMNA DE ACCIONES
     {
       id: 'actions',
       header: 'Acciones',
@@ -149,7 +175,9 @@ const getColumns = (
       },
       footer: () => null,
       enableHiding: false,
-    },// 🎯 COLUMNA SELECT + ID - Con badge animado para nuevos
+    },
+
+    // 🎯 COLUMNA SELECT + ID
     {
       id: 'select',
       header: ({ table }) => {
@@ -193,7 +221,7 @@ const getColumns = (
       footer: () => <span className="font-bold text-sm">Totales</span>,
     },
 
-    // 🎯 COLUMNA CLIENTE - Con hover effect
+    // 🎯 COLUMNA CLIENTE
     {
       id: 'empresa_factura',
       header: 'Cliente',
@@ -224,7 +252,7 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA NÚMERO DE FACTURA - Editable
+    // 🎯 COLUMNA NÚMERO DE FACTURA
     {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
@@ -243,7 +271,7 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA FECHA CONTABLE - Editable
+    // 🎯 COLUMNA FECHA CONTABLE
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
@@ -263,7 +291,7 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA FECHA DE CARGA - Con formato mejorado
+    // 🎯 COLUMNA FECHA DE CARGA
     {
       accessorKey: 'fecha_creacion',
       header: 'Fecha de Carga',
@@ -294,7 +322,7 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA TRIMESTRE - Con badges coloreados y hover
+    // 🎯 COLUMNA TRIMESTRE
     {
       id: 'trimestre',
       header: 'Trimestre',
@@ -326,7 +354,7 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA PROVEEDOR - Editable
+    // 🎯 COLUMNA PROVEEDOR
     {
       accessorKey: 'proveedor',
       header: 'Proveedor',
@@ -345,7 +373,7 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA CIF - Editable
+    // 🎯 COLUMNA CIF
     {
       accessorKey: 'cif',
       header: 'CIF',
@@ -364,7 +392,7 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA CONCEPTO - Editable
+    // 🎯 COLUMNA CONCEPTO
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
@@ -383,7 +411,7 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA INCIDENCIA - Con indicador animado
+    // 🎯 COLUMNA INCIDENCIA
     {
       id: 'incidencia_motivo',
       header: 'Motivo Incidencia',
@@ -430,7 +458,7 @@ const getColumns = (
       minSize: 200,
     },
 
-    // 🎯 COLUMNA TIPO DOCUMENTO - Editable
+    // 🎯 COLUMNA TIPO DOCUMENTO
     {
       accessorKey: 'tipo_documento',
       header: 'Tipo Documento',
@@ -455,7 +483,7 @@ const getColumns = (
         cell: ({ row }: { row: Row<Document> }) => {
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.base_imponible ?? 0;
-          const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+          const formatted = formatCurrency(value);
           return (
             <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
               {formatted}
@@ -467,7 +495,7 @@ const getColumns = (
             const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
             return sum + (Number(detail?.base_imponible) || 0);
           }, 0);
-          const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+          const formatted = formatCurrency(total);
           return (
             <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
               {formatted}
@@ -481,7 +509,7 @@ const getColumns = (
         cell: ({ row }: { row: Row<Document> }) => {
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.cuota ?? 0;
-          const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+          const formatted = formatCurrency(value);
           return (
             <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
               {formatted}
@@ -493,7 +521,7 @@ const getColumns = (
             const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
             return sum + (Number(detail?.cuota) || 0);
           }, 0);
-          const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+          const formatted = formatCurrency(total);
           return (
             <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
               {formatted}
@@ -504,104 +532,104 @@ const getColumns = (
     ])),
 
     // 🎯 COLUMNA RETENCIÓN
-{
-  accessorKey: 'retencion',
-  header: 'Retención',
-  cell: ({ row }: { row: Row<Document> }) => {
-    const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
-    const value = ivaDetail?.cuota ?? 0;
-    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-medium">
-        {formatted}
-      </div>
-    );
-  },
-  footer: ({ table }) => {
-    const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-      const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
-      return sum + (Number(detail?.cuota) || 0);
-    }, 0);
-    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
-        {formatted}
-      </div>
-    );
-  }
-},
+    {
+      accessorKey: 'retencion',
+      header: 'Retención',
+      cell: ({ row }: { row: Row<Document> }) => {
+        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
+        const value = ivaDetail?.cuota ?? 0;
+        const formatted = formatCurrency(value);
+        return (
+          <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
+          return sum + (Number(detail?.cuota) || 0);
+        }, 0);
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
 
-// 🎯 COLUMNA TOTAL BASE IMPONIBLE
-{
-  accessorKey: 'base_imponible',
-  header: 'Total Base',
-  cell: ({ row }) => {
-    const value = row.getValue('base_imponible');
-    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-semibold">
-        {formatted}
-      </div>
-    );
-  },
-  footer: ({ table }) => {
-    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
-    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
-        {formatted}
-      </div>
-    );
-  }
-},
+    // 🎯 COLUMNA TOTAL BASE IMPONIBLE
+    {
+      accessorKey: 'base_imponible',
+      header: 'Total Base',
+      cell: ({ row }) => {
+        const value = row.getValue('base_imponible');
+        const formatted = formatCurrency(value);
+        return (
+          <div className="text-right font-semibold transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
 
-// 🎯 COLUMNA TOTAL IVA
-{
-  accessorKey: 'iva',
-  header: 'Total IVA',
-  cell: ({ row }) => {
-    const value = row.getValue('iva');
-    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-semibold">
-        {formatted}
-      </div>
-    );
-  },
-  footer: ({ table }) => {
-    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
-    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded">
-        {formatted}
-      </div>
-    );
-  }
-},
+    // 🎯 COLUMNA TOTAL IVA
+    {
+      accessorKey: 'iva',
+      header: 'Total IVA',
+      cell: ({ row }) => {
+        const value = row.getValue('iva');
+        const formatted = formatCurrency(value);
+        return (
+          <div className="text-right font-semibold transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
 
-// 🎯 COLUMNA TOTAL FINAL - Con estilo destacado
-{
-  accessorKey: 'total',
-  header: 'Total',
-  cell: ({ row }) => {
-    const value = row.getValue('total');
-    const formatted = Number(value).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-bold">
-        {formatted}
-      </div>
-    );
-  },
-  footer: ({ table }) => {
-    const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
-    const formatted = total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    return (
-      <div className="text-right font-bold text-base bg-muted/50 px-3 py-1.5 rounded-lg">
-        {formatted}
-      </div>
-    );
-  }
-},
+    // 🎯 COLUMNA TOTAL FINAL
+    {
+      accessorKey: 'total',
+      header: 'Total',
+      cell: ({ row }) => {
+        const value = row.getValue('total');
+        const formatted = formatCurrency(value);
+        return (
+          <div className="text-right font-bold transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-base bg-muted/50 px-3 py-1.5 rounded-lg transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
   ];
 
   return columns;
@@ -872,9 +900,7 @@ export function DocumentsTable({
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-
-      {/* 🎨 ALERT DIALOG: Eliminar Documento */}
+      </AlertDialog>{/* 🎨 ALERT DIALOG: Eliminar Documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>

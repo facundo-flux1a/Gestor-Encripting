@@ -26,12 +26,21 @@ import {
 import { Input } from '@/components/ui/input';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-const formatCurrency = (amount: number) => {
-  if (isNaN(amount)) return 'N/A';
-  return new Intl.NumberFormat('es-ES', { 
-      style: 'currency', 
-      currency: 'EUR' 
-  }).format(amount);
+// 🎯 FUNCIÓN DE FORMATO MANUAL
+const formatCurrency = (amount: number | string | null | undefined): string => {
+  if (amount === null || amount === undefined) return 'N/A';
+  
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return 'N/A';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
 };
 
 export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWithStats>[] => [

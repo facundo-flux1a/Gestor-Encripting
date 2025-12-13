@@ -28,12 +28,26 @@ interface ProviderAnalyticsProps {
     data: ProviderAnalyticsData;
 }
 
-const formatCurrency = (amount: number, minimumFractionDigits = 2) =>
-  new Intl.NumberFormat('es-ES', { 
-      style: 'currency', 
-      currency: 'EUR', 
-      minimumFractionDigits 
-  }).format(amount);
+// 🎯 FUNCIÓN DE FORMATO MANUAL
+const formatCurrency = (amount: number | string | null | undefined, minimumFractionDigits = 2): string => {
+  if (amount === null || amount === undefined) return '0,00 €';
+  
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(minimumFractionDigits);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  if (minimumFractionDigits === 0) {
+    return `${formattedInteger} €`;
+  }
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -90,9 +104,9 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                 
                 {/* Top Products Chart */}
                 <div className="lg:col-span-2">
-                    <Card className="h-full">
+                    <Card className="h-full transition-all duration-300 hover:shadow-xl hover:shadow-primary/10">
                         <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
-                            <CardTitle className="text-base sm:text-lg">
+                            <CardTitle className="text-base sm:text-lg bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                                 Top 5 Productos por Gasto
                             </CardTitle>
                             <CardDescription className="text-xs sm:text-sm">
@@ -100,83 +114,94 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
-                            {/* Mobile Chart */}
-                            <ResponsiveContainer width="100%" height={280} className="sm:hidden">
-                                <BarChart 
-                                    layout="vertical" 
-                                    data={data.topProductsBySpend} 
-                                    margin={{ top: 5, right: 60, left: 5, bottom: 5 }}
-                                >
-                                    <XAxis type="number" hide />
-                                    <YAxis 
-                                        type="category" 
-                                        dataKey="descripcion" 
-                                        stroke="hsl(var(--muted-foreground))"
-                                        fontSize={9}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        width={80}
-                                        tickFormatter={value => value.length > 12 ? `${value.substring(0, 12)}...` : value}
-                                    />
-                                    <Tooltip 
-                                        cursor={{ fill: 'hsl(var(--muted))' }} 
-                                        content={<CustomTooltip />} 
-                                    />
-                                    <Bar 
-                                        dataKey="total" 
-                                        name="Total Gastado" 
-                                        radius={[0, 4, 4, 0]} 
-                                        fill="hsl(var(--primary))"
+                            {data.topProductsBySpend.length > 0 ? (
+                              <>
+                                {/* Mobile Chart */}
+                                <ResponsiveContainer width="100%" height={280} className="sm:hidden">
+                                    <BarChart 
+                                        layout="vertical" 
+                                        data={data.topProductsBySpend} 
+                                        margin={{ top: 5, right: 60, left: 5, bottom: 5 }}
                                     >
-                                        <LabelList 
-                                            dataKey="total" 
-                                            position="right" 
-                                            formatter={(value: number) => `${(value/1000).toFixed(0)}k`}
-                                            className="font-semibold text-[9px]"
-                                            style={{ fill: 'hsl(var(--foreground))' }}
+                                        <XAxis type="number" hide />
+                                        <YAxis 
+                                            type="category" 
+                                            dataKey="descripcion" 
+                                            stroke="hsl(var(--muted-foreground))"
+                                            fontSize={9}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            width={80}
+                                            tickFormatter={value => value.length > 12 ? `${value.substring(0, 12)}...` : value}
                                         />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                                        <Tooltip 
+                                            cursor={{ fill: 'hsl(var(--muted))' }} 
+                                            content={<CustomTooltip />} 
+                                        />
+                                        <Bar 
+                                            dataKey="total" 
+                                            name="Total Gastado" 
+                                            radius={[0, 4, 4, 0]} 
+                                            fill="hsl(var(--primary))"
+                                        >
+                                            <LabelList 
+                                                dataKey="total" 
+                                                position="right" 
+                                                formatter={(value: number) => `${(value/1000).toFixed(0)}k`}
+                                                className="font-semibold text-[9px]"
+                                                style={{ fill: 'hsl(var(--foreground))' }}
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
 
-                            {/* Desktop Chart */}
-                            <ResponsiveContainer width="100%" height={350} className="hidden sm:block">
-                                <BarChart 
-                                    layout="vertical" 
-                                    data={data.topProductsBySpend} 
-                                    margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                                >
-                                    <XAxis type="number" hide />
-                                    <YAxis 
-                                        type="category" 
-                                        dataKey="descripcion" 
-                                        stroke="hsl(var(--muted-foreground))"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        width={120}
-                                        tickFormatter={value => value.length > 15 ? `${value.substring(0, 15)}...` : value}
-                                    />
-                                    <Tooltip 
-                                        cursor={{ fill: 'hsl(var(--muted))' }} 
-                                        content={<CustomTooltip />} 
-                                    />
-                                    <Bar 
-                                        dataKey="total" 
-                                        name="Total Gastado" 
-                                        radius={[0, 4, 4, 0]} 
-                                        fill="hsl(var(--primary))"
+                                {/* Desktop Chart */}
+                                <ResponsiveContainer width="100%" height={350} className="hidden sm:block">
+                                    <BarChart 
+                                        layout="vertical" 
+                                        data={data.topProductsBySpend} 
+                                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                                     >
-                                        <LabelList 
-                                            dataKey="total" 
-                                            position="right" 
-                                            formatter={(value: number) => formatCurrency(value, 0)} 
-                                            className="font-semibold text-sm"
-                                            style={{ fill: 'hsl(var(--foreground))' }}
+                                        <XAxis type="number" hide />
+                                        <YAxis 
+                                            type="category" 
+                                            dataKey="descripcion" 
+                                            stroke="hsl(var(--muted-foreground))"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            width={120}
+                                            tickFormatter={value => value.length > 15 ? `${value.substring(0, 15)}...` : value}
                                         />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                                        <Tooltip 
+                                            cursor={{ fill: 'hsl(var(--muted))' }} 
+                                            content={<CustomTooltip />} 
+                                        />
+                                        <Bar 
+                                            dataKey="total" 
+                                            name="Total Gastado" 
+                                            radius={[0, 4, 4, 0]} 
+                                            fill="hsl(var(--primary))"
+                                        >
+                                            <LabelList 
+                                                dataKey="total" 
+                                                position="right" 
+                                                formatter={(value: number) => formatCurrency(value, 0)} 
+                                                className="font-semibold text-sm"
+                                                style={{ fill: 'hsl(var(--foreground))' }}
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                              </>
+                            ) : (
+                              <div className="flex h-[280px] sm:h-[350px] w-full items-center justify-center text-muted-foreground text-xs sm:text-sm">
+                                <div className="text-center space-y-2">
+                                  <Package className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                                  <p>No hay productos para mostrar.</p>
+                                </div>
+                              </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

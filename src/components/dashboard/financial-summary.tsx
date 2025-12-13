@@ -10,11 +10,18 @@ type ChartData = {
   expenses: number;
 };
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount);
+const formatCurrency = (amount: number | string): string => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
 };
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -86,7 +93,7 @@ export function FinancialSummary({ data }: { data: ChartData[] }) {
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => new Intl.NumberFormat('es-ES', { notation: 'compact', compactDisplay: 'short' }).format(value)}
                 width={40}
               />
               <Tooltip 

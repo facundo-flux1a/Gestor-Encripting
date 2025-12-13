@@ -9,12 +9,25 @@ type ChartData = {
   total: number;
 };
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 0,
-  }).format(amount);
+// 🎯 FUNCIÓN DE FORMATO MANUAL
+const formatCurrency = (amount: number | string | null | undefined, minimumFractionDigits = 2): string => {
+  if (amount === null || amount === undefined) return '0,00 €';
+  
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(minimumFractionDigits);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  if (minimumFractionDigits === 0) {
+    return `${formattedInteger} €`;
+  }
+  
+  return `${formattedInteger},${decimalPart} €`;
 };
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -100,7 +113,7 @@ export function ProviderPurchaseHistory({ data }: { data: ChartData[] }) {
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(value) => formatCurrency(value as number)}
+                        tickFormatter={(value) => formatCurrency(value as number, 0)}
                         width={60}
                     />
                     <Tooltip 
@@ -138,7 +151,7 @@ export function ProviderPurchaseHistory({ data }: { data: ChartData[] }) {
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(value) => formatCurrency(value as number)}
+                        tickFormatter={(value) => formatCurrency(value as number, 0)}
                     />
                     <Tooltip 
                         cursor={{ fill: 'hsl(var(--muted))' }} 

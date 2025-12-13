@@ -8,6 +8,7 @@ import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { DocumentStatusChart } from '@/components/dashboard/document-status-chart';
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
+import { DashboardTutorial } from '@/components/dashboard/dashboard-tutorial';
 import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
 import { 
   FileText, 
@@ -292,9 +293,33 @@ export default function DashboardPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => 
-    new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
+  // FUNCIÓN MODIFICADA: Ahora formatea con separador de millares
+  // Función manual: Formatea números con separador de millares
+const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
 
+// Función manual: Formatea moneda con separador de millares
+const formatCurrency = (amount: number | string): string => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
   const FilterSheet = () => (
     <Sheet>
       <SheetTrigger asChild>
@@ -313,7 +338,7 @@ export default function DashboardPage() {
             Filtra los datos del dashboard
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 space-y-4" data-tutorial="filters-mobile">
           <div className="space-y-2">
             <label className="text-sm font-medium">Año</label>
             <Select
@@ -430,9 +455,11 @@ export default function DashboardPage() {
     </AlertDialog>
   );
 
+  // Estados de carga y sin datos
   if (isLoading) {
     return (
       <MainLayout>
+        <DashboardTutorial />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
@@ -460,6 +487,7 @@ export default function DashboardPage() {
   if (!analytics) {
     return (
       <MainLayout>
+        <DashboardTutorial />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <MainLayoutHeader>
             <div className="flex items-center justify-between w-full">
@@ -489,20 +517,19 @@ export default function DashboardPage() {
     { name: 'T2', ivaRepercutido: analytics.ivaSummary.T2.repercutido, ivaSoportado: analytics.ivaSummary.T2.soportado },
     { name: 'T3', ivaRepercutido: analytics.ivaSummary.T3.repercutido, ivaSoportado: analytics.ivaSummary.T3.soportado },
     { name: 'T4', ivaRepercutido: analytics.ivaSummary.T4.repercutido, ivaSoportado: analytics.ivaSummary.T4.soportado },
-  ];
-
-  return (
+  ];return (
     <MainLayout>
+      <DashboardTutorial />
       <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
         <MainLayoutHeader>
-          <div className="flex items-center justify-between w-full gap-2">
+          <div data-tutorial="welcome" className="flex items-center justify-between w-full gap-2">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                 Dashboard
               </h2>
               
               {/* Filtros en desktop */}
-              <div className="hidden md:flex items-center gap-2">
+              <div data-tutorial="filters" className="hidden md:flex items-center gap-2">
                 <Select
                   value={selectedAño?.toString() || 'all'}
                   onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
@@ -555,6 +582,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 shrink-0">
               <FilterSheet />
               <Button
+                data-tutorial="export-button"
                 size="sm"
                 variant="outline"
                 onClick={handleExport}
@@ -580,15 +608,15 @@ export default function DashboardPage() {
         </MainLayoutHeader>
 
         <div className="space-y-4">
-          {/* KPIs Grid - Responsive con animaciones staggered y HOVER EFFECTS */}
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {/* KPIs Grid - MODIFICADO: Ahora usa formatNumber para números enteros */}
+          <div data-tutorial="kpis" className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <div className="animate-fade-in group" style={{ animationDelay: '0ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
                   title="Total Ingresos"
                   value={formatCurrency(analytics.kpis.totalIngresos)}
                   icon={ArrowUpRight}
-                  description={`${analytics.kpis.totalFacturasIngreso} facturas`}
+                  description={`${formatNumber(analytics.kpis.totalFacturasIngreso)} facturas`}
                 />
               </div>
             </div>
@@ -598,7 +626,7 @@ export default function DashboardPage() {
                   title="Total Gastos"
                   value={formatCurrency(analytics.kpis.totalGastos)}
                   icon={ArrowDownLeft}
-                  description={`${analytics.kpis.totalFacturasGasto} facturas`}
+                  description={`${formatNumber(analytics.kpis.totalFacturasGasto)} facturas`}
                 />
               </div>
             </div>
@@ -626,23 +654,24 @@ export default function DashboardPage() {
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
                   title="Total Documentos"
-                  value={analytics.kpis.totalDocs.toString()}
+                  value={formatNumber(analytics.kpis.totalDocs)}
                   icon={FileText}
                   description="En el sistema"
                 />
               </div>
             </div>
           </div>
+          
 
-          {/* Charts Grid - Responsive con animaciones */}
+          {/* Charts Grid */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
-            <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '250ms' }}>
+            <div data-tutorial="financial-chart" className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '250ms' }}>
               <FinancialSummary data={financialSummaryData} />
             </div>
-            <div className="lg:col-span-3 animate-fade-in" style={{ animationDelay: '300ms' }}>
+            <div data-tutorial="distribution-chart" className="lg:col-span-3 animate-fade-in" style={{ animationDelay: '300ms' }}>
               <DocumentStatusChart data={analytics.documentDistribution} />
             </div>
-            <div className="lg:col-span-full animate-fade-in" style={{ animationDelay: '350ms' }}>
+            <div data-tutorial="iva-chart" className="lg:col-span-full animate-fade-in" style={{ animationDelay: '350ms' }}>
               <IvaSummary data={ivaSummaryData} />
             </div>
             <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '400ms' }}>
@@ -656,7 +685,7 @@ export default function DashboardPage() {
                 <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                   <StatsCard
                     title="Incidencias Abiertas"
-                    value={analytics.kpis.incidenciasAbiertas.toString()}
+                    value={formatNumber(analytics.kpis.incidenciasAbiertas)}
                     icon={AlertTriangle}
                     description={`${analytics.kpis.incidentRate.toFixed(1)}% de docs`}
                   />
@@ -666,7 +695,7 @@ export default function DashboardPage() {
                 <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                   <StatsCard
                     title="Proveedores"
-                    value={analytics.kpis.totalProveedores.toString()}
+                    value={formatNumber(analytics.kpis.totalProveedores)}
                     icon={Users}
                     description="Únicos registrados"
                   />
@@ -676,7 +705,7 @@ export default function DashboardPage() {
                 <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                   <StatsCard
                     title="Productos"
-                    value={analytics.kpis.totalProductos.toString()}
+                    value={formatNumber(analytics.kpis.totalProductos)}
                     icon={Package}
                     description="Únicos registrados"
                   />
@@ -692,25 +721,22 @@ export default function DashboardPage() {
           from {
             opacity: 0;
             transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+}
+to {
+opacity: 1;
+transform: translateY(0);
+}
+}.animate-fade-in {
+      animation: fade-in 0.5s ease-out forwards;
+      opacity: 0;
+    }
 
-        .animate-fade-in {
-          animation: fade-in 0.5s ease-out forwards;
-          opacity: 0;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .animate-fade-in {
-            animation: none;
-            opacity: 1;
-          }
-        }
-      `}</style>
-    </MainLayout>
-  );
+    @media (prefers-reduced-motion: reduce) {
+      .animate-fade-in {
+        animation: none;
+        opacity: 1;
+      }
+    }
+  `}</style>
+</MainLayout>);
 }

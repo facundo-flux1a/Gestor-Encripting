@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
+// =====================================
+// USUARIO Y SESIÓN
+// =====================================
+
 export const UserSchema = z.object({
   id: z.number(),
   nombre: z.string(),
   email: z.string(),
   password: z.string().nullable().optional(),
+  tutorial: z.number().optional(), // ⬅️ CORREGIDO: number (0 o 1)
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -13,8 +18,13 @@ export const SessionPayloadSchema = z.object({
   email: z.string(),
   nombre: z.string(),
   expires: z.string(),
+  tutorial: z.number().optional(), // ⬅️ CORREGIDO: number (0 o 1)
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
+
+// =====================================
+// IVA Y DETALLES FISCALES
+// =====================================
 
 export const IvaDetailSchema = z.object({
   id: z.number().optional(),
@@ -24,6 +34,10 @@ export const IvaDetailSchema = z.object({
   cuota: z.coerce.number(),
 });
 export type IvaDetail = z.infer<typeof IvaDetailSchema>;
+
+// =====================================
+// ENTIDADES (PROVEEDORES/CLIENTES)
+// =====================================
 
 export const DocumentEntitySchema = z.object({
     id: z.number().optional(),
@@ -46,6 +60,10 @@ export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
 });
 export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
 
+// =====================================
+// LÍNEAS DE DOCUMENTO
+// =====================================
+
 export const DocumentLineSchema = z.object({
     id: z.number().optional(),
     documento_id: z.number().optional(),
@@ -64,6 +82,10 @@ export const DocumentLineSchema = z.object({
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 
+// =====================================
+// ARCHIVOS
+// =====================================
+
 export const DocumentFileSchema = z.object({
     id: z.number().optional(),
     documento_id: z.number().optional(),
@@ -74,6 +96,10 @@ export const DocumentFileSchema = z.object({
     fecha_subida: z.string().nullable(),
 });
 export type DocumentFile = z.infer<typeof DocumentFileSchema>;
+
+// =====================================
+// INCIDENCIAS
+// =====================================
 
 export const IncidentSchema = z.object({
     id: z.number(),
@@ -86,6 +112,10 @@ export const IncidentSchema = z.object({
     validado_por: z.string().nullable(),
 });
 export type Incident = z.infer<typeof IncidentSchema>;
+
+// =====================================
+// DOCUMENTOS
+// =====================================
 
 export type Document = {
   id_documento: number;
@@ -145,6 +175,10 @@ export const IncidentAnalysisResultSchema = z.object({
 });
 export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
 
+// =====================================
+// VALIDACIÓN DE IMPUESTOS
+// =====================================
+
 export const TaxValidationRuleSchema = z.object({
     id: z.number(),
     vigente: z.boolean(),
@@ -162,6 +196,10 @@ export const CreateTaxValidationRuleSchema = z.object({
   porcentaje: z.coerce.number().min(0, "El porcentaje no puede ser negativo."),
 });
 export type CreateTaxValidationRulePayload = z.infer<typeof CreateTaxValidationRuleSchema>;
+
+// =====================================
+// EMPRESAS
+// =====================================
 
 export type Company = {
   id: number;
@@ -182,6 +220,10 @@ export type CreateDocumentPayload = {
   empresa_id: number;
 };
 
+// =====================================
+// UTILIDADES
+// =====================================
+
 export function calcularTrimestre(fecha: Date | string): number {
   const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
   const mes = date.getMonth() + 1;
@@ -193,7 +235,7 @@ export function calcularTrimestre(fecha: Date | string): number {
 }
 
 // =====================================
-// TIPOS DE TRIMESTRES
+// TRIMESTRES
 // =====================================
 
 export const TrimestreSchema = z.object({
@@ -226,7 +268,7 @@ export const TrimestreFiltersSchema = z.object({
 export type TrimestreFilters = z.infer<typeof TrimestreFiltersSchema>;
 
 // =====================================
-// 🆕 TIPO ACTIVITY CON DASHBOARD-CORREO
+// ACTIVIDAD
 // =====================================
 
 export interface Activity {
@@ -252,5 +294,5 @@ export interface Activity {
   empresa_emisora?: string;
   cliente?: string;
   is_new?: number;
-  'dashboard-correo'?: 'dashboard' | 'correo' | null;  // 🆕 NUEVO CAMPO
+  'dashboard-correo'?: 'dashboard' | 'correo' | null;
 }

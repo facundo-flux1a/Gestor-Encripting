@@ -9,14 +9,38 @@ import { Separator } from "@/components/ui/separator";
 import { useFieldArray } from "react-hook-form";
 import type { UseFormReturn } from "react-hook-form";
 
-const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
+// 🎯 FUNCIONES DE FORMATO MANUAL
+const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
+
+const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR'): string => {
     if (amount === null || amount === undefined) return 'N/A';
-    let numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    
+    let numericAmount: number;
+    if (typeof amount === 'string') {
+        numericAmount = parseFloat(amount);
+    } else {
+        numericAmount = amount;
+    }
+    
     if (isNaN(numericAmount)) return 'N/A';
-    return new Intl.NumberFormat('es-ES', { 
-        style: 'currency', 
-        currency 
-    }).format(numericAmount);
+    
+    const fixed = numericAmount.toFixed(2);
+    const parts = fixed.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${formattedInteger},${decimalPart} €`;
 };
 
 interface FinancialDetailsCardProps {
@@ -49,7 +73,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                                     {...field}
                                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                     value={field.value ?? 0}
-                                    className="h-8 sm:h-9 text-xs sm:text-sm w-full xs:w-28 sm:w-32 text-right tabular-nums"
+                                    className="h-8 sm:h-9 text-xs sm:text-sm w-full xs:w-28 sm:w-32 text-right tabular-nums transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                                 />
                             ) : (
                                 <p className="text-xs sm:text-sm font-medium text-right tabular-nums">
@@ -65,10 +89,10 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
     };
 
     return (
-        <Card>
+        <Card className="transition-all duration-300 hover:shadow-lg">
             <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
-                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                    <Euro className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" /> 
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
+                    <Euro className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-green-600 dark:text-green-400 transition-transform duration-200 hover:rotate-12" /> 
                     <span className="truncate">Detalles Financieros</span>
                 </CardTitle>
             </CardHeader>
@@ -79,7 +103,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                 
                 <div className="space-y-2 sm:space-y-3">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1.5 sm:gap-2">
-                        <Percent className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" /> 
+                        <Percent className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 hover:rotate-12" /> 
                         Desglose de Impuestos
                     </p>
                     
@@ -97,7 +121,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                                             <Input 
                                                 {...field} 
                                                 value={field.value ?? ''} 
-                                                className="h-7 sm:h-8 text-xs" 
+                                                className="h-7 sm:h-8 text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20" 
                                                 placeholder="Tipo"
                                             />
                                         )} 
@@ -111,7 +135,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                                                 {...field} 
                                                 value={field.value ?? 0} 
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                className="h-7 sm:h-8 text-xs text-right tabular-nums" 
+                                                className="h-7 sm:h-8 text-xs text-right tabular-nums transition-all duration-200 focus:ring-2 focus:ring-primary/20" 
                                                 placeholder="%"
                                             />
                                         )} 
@@ -126,7 +150,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                                                 {...field} 
                                                 value={field.value ?? 0} 
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                                                className="h-7 sm:h-8 text-xs text-right tabular-nums" 
+                                                className="h-7 sm:h-8 text-xs text-right tabular-nums transition-all duration-200 focus:ring-2 focus:ring-primary/20" 
                                                 placeholder="Cuota"
                                             />
                                         )} 
@@ -139,12 +163,12 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                             {doc.iva_details.map((iva, index) => (
                                 <div 
                                     key={index} 
-                                    className="flex items-center justify-between text-muted-foreground text-xs sm:text-sm"
+                                    className="flex items-center justify-between text-muted-foreground text-xs sm:text-sm transition-all duration-200 hover:text-foreground group"
                                 >
-                                    <span className="break-words">
+                                    <span className="break-words transition-colors duration-200 group-hover:text-primary">
                                         {iva.tipo_impuesto} ({iva.porcentaje}%)
                                     </span>
-                                    <span className="font-mono tabular-nums shrink-0 ml-2">
+                                    <span className="font-mono tabular-nums shrink-0 ml-2 transition-colors duration-200 group-hover:text-primary">
                                         {formatCurrency(iva.cuota, doc.moneda)}
                                     </span>
                                 </div>
@@ -155,7 +179,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
 
                 <Separator />
                 
-                <div className="text-sm sm:text-base font-bold">
+                <div className="text-sm sm:text-base font-bold bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-2 sm:p-3 rounded-lg transition-all duration-300 hover:shadow-md">
                     {renderEditableField("total", "Total Documento")}
                 </div>
             </CardContent>

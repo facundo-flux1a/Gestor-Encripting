@@ -781,7 +781,7 @@ const isSubDocument = (docName: string): boolean => {
                   markActivityAsRead(activity.id);
                 }}
                 className="p-1.5 sm:p-2 hover:bg-accent rounded-lg transition-all duration-200 hover:scale-110"
-                title="Marcar como leído"
+                title="Marcar leído"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
               </button>
@@ -950,16 +950,25 @@ const isSubDocument = (docName: string): boolean => {
     );
   }
 
-  if (activities.length === 0 && !showFilters) {
+ // Renderizar botón de volver si no hay actividades
+  if (activities.length === 0) {
     return (
-      <div className="bg-muted/30 border border-border rounded-lg p-8 sm:p-12 text-center backdrop-blur-sm animate-fade-in">
-        <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4 shrink-0" />
-        <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-2">Los documentos subidos aparecerán aquí</p>
+      <div className="space-y-4">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-secondary hover:bg-secondary/80 rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 group"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 group-hover:-translate-x-1 transition-transform" />
+          <span>Volver</span>
+        </button>
+        <div className="bg-muted/30 border border-border rounded-lg p-8 sm:p-12 text-center backdrop-blur-sm animate-fade-in">
+          <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4 shrink-0" />
+          <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-2">Los documentos subidos aparecerán aquí</p>
+        </div>
       </div>
     );
   }
-
   const { parentFiles, childrenMap, zipUploadIds } = organizeActivities();
   const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
   const unreadCount = activities.filter(a => a.is_new === 1).length;
@@ -990,7 +999,7 @@ const isSubDocument = (docName: string): boolean => {
                 className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
               >
                 <CheckCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
-                <span className="hidden xs:inline">Marcar leído</span>
+                <span className="hidden xs:inline">Marcar todos como leídos</span>
                 {unreadCount > 0 && (
                   <span className="bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold min-w-[20px] text-center">
                     {unreadCount}

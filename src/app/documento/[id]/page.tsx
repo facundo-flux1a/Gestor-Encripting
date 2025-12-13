@@ -22,6 +22,31 @@ import { FinancialDetailsCard } from '@/components/dashboard/financial-details-c
 import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
 
+// 🎯 FUNCIONES DE FORMATO MANUAL
+const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
+
+const formatCurrency = (amount: number | string): string => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
 
 export default function DocumentoPage() {
   const params = useParams();
@@ -381,9 +406,7 @@ export default function DocumentoPage() {
                                     )}
                                 </div>
                             </div>
-                        </MainLayoutHeader>
-                        
-                        {/* 🎨 GRID PRINCIPAL CON ANIMACIONES STAGGERED */}
+                        </MainLayoutHeader>{/* 🎨 GRID PRINCIPAL CON ANIMACIONES STAGGERED */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                             {/* Columna principal - Información del documento */}
                             <div className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in" style={{ animationDelay: '50ms' }}>

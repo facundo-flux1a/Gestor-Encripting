@@ -27,6 +27,32 @@ export default function TrimestresPage() {
   const { selectedCompanyIds } = useCompanyContext();
   const { toast } = useToast();
 
+  //Currencies
+  const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
+
+const formatCurrency = (amount: number | string): string => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
+
   // Estados
   const [trimestres, setTrimestres] = React.useState<Trimestre[]>([]);
   const [documentos, setDocumentos] = React.useState<Document[]>([]);
@@ -262,7 +288,11 @@ export default function TrimestresPage() {
   }, [trimestres]);
 
   const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
-
+console.log('🔵 Estado del diálogo:', {
+  dialogOpen,
+  trimestreToClose,
+  puedeCerrarse
+});
   return (
     <MainLayout>
       <MainLayoutHeader>
@@ -330,18 +360,20 @@ export default function TrimestresPage() {
                 <QuarterBadge cerrado={trimestreAgregado.cerrado} />
                 {puedeCerrarse && (
                   <Button
-                    variant="destructive"
-                    size="sm"
-                    className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
-                    onClick={() => {
-                      setTrimestreToClose(trimestreAgregado);
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                    <span className="hidden xs:inline">Cerrar Trimestre</span>
-                    <span className="xs:hidden">Cerrar</span>
-                  </Button>
+  variant="destructive"
+  size="sm"
+  className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+  onClick={() => {
+    console.log('🔴 Abriendo diálogo de cierre'); // DEBUG
+    console.log('Trimestre:', trimestreAgregado); // DEBUG
+    setTrimestreToClose(trimestreAgregado);
+    setDialogOpen(true);
+  }}
+>
+  <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+  <span className="hidden xs:inline">Cerrar Trimestre</span>
+  <span className="xs:hidden">Cerrar</span>
+</Button>
                 )}
               </div>
             )}
@@ -365,21 +397,21 @@ export default function TrimestresPage() {
             />
             <TrimestreStatsCard
               title="Ingresos"
-              value={`€${trimestreAgregado.total_ingresos.toFixed(2)}`}
+              value={formatCurrency(trimestreAgregado.total_ingresos)}
               icon={TrendingUp}
               description="Total facturado"
               trend="up"
             />
             <TrimestreStatsCard
               title="Gastos"
-              value={`€${trimestreAgregado.total_gastos.toFixed(2)}`}
+              value={formatCurrency(trimestreAgregado.total_gastos)}
               icon={TrendingDown}
               description="Total gastado"
               trend="down"
             />
             <TrimestreStatsCard
               title="IVA Neto"
-              value={`€${(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado).toFixed(2)}`}
+              value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
               icon={Receipt}
               description="Repercutido - Soportado"
             />

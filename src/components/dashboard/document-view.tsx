@@ -18,7 +18,19 @@ import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useRouter } from 'next/navigation';
 
-const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
+// 🎯 FUNCIONES DE FORMATO MANUAL
+const formatNumber = (num: number | string): string => {
+  const value = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(value)) return '0';
+  
+  const parts = value.toString().split('.');
+  const integerPart = parts[0];
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return formattedInteger;
+};
+
+const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR'): string => {
     if (amount === null || amount === undefined) return 'N/A';
     
     let numericAmount: number;
@@ -30,10 +42,14 @@ const formatCurrency = (amount: number | string | null | undefined, currency: st
     
     if (isNaN(numericAmount)) return 'N/A';
     
-    return new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency,
-    }).format(numericAmount);
+    const fixed = numericAmount.toFixed(2);
+    const parts = fixed.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${formattedInteger},${decimalPart} €`;
 };
 
 const formatDate = (date: string | null | undefined) => {
@@ -378,9 +394,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 </Badge>
                             ))}
                         </div>
-                    )}
-                    
-                    {/* 📱 LÍNEAS */}
+                    )}{/* 📱 LÍNEAS */}
                      <div className="space-y-3 sm:space-y-4">
                         {paginatedLineaFields.map(({ field, originalIndex }) => {
                             const currentLinea = formValues.lineas?.[originalIndex] || field;
@@ -507,74 +521,71 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                                     {provider && currentLinea.codigo && (
                                                         <Button size="sm" variant="link" asChild className="p-0 h-auto text-xs sm:text-sm transition-all duration-200 hover:scale-105 group/link">
                                                             <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}/${encodeURIComponent(currentLinea.codigo)}`}>
-                                                                <History className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover/link:rotate-[-15deg]" />
-                                                                <span className="hidden xs:inline">Ver Historial</span>
-                                                                <span className="xs:hidden">Historial</span>
-                                                            </Link>
-                                                         </Button>
-                                                     )}
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0 text-right space-y-1 sm:space-y-2">
-                                                 <p className="font-bold text-base sm:text-lg lg:text-xl text-primary tabular-nums transition-all duration-200 group-hover:scale-105">
-                                                    {formatCurrency(currentLinea.importe_linea, doc.moneda)}
-                                                 </p>
-                                                 <p className="text-xs sm:text-sm text-muted-foreground tabular-nums">
-                                                    {formatCurrency(currentLinea.precio_unitario, doc.moneda)} / {currentLinea.unidad}
-                                                 </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })}
-
-                        {/* 📱 EMPTY STATE + ANIMADO */}
-                        {filteredLineaFields.length === 0 && (
-                            <div className="text-center text-muted-foreground py-6 sm:py-8 animate-fade-in">
-                                <Search className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400 animate-pulse" />
-                                <h3 className="mt-2 text-sm sm:text-base font-medium">No se encontraron líneas</h3>
-                                <p className="mt-1 text-xs sm:text-sm text-gray-500">
-                                    {lineaFilters.length > 0 ? "Prueba con otro término de búsqueda." : "No hay líneas de documento."}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                    
-                    {/* 📱 PAGINACIÓN RESPONSIVE + ANIMADA */}
-                     {totalPages > 1 && (
-                        <div className="flex flex-col xs:flex-row items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-4">
-                            <span className="text-xs sm:text-sm text-muted-foreground order-2 xs:order-1">
-                                Página {currentPage} de {totalPages}
-                            </span>
-                            <div className="flex items-center gap-2 order-1 xs:order-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    type="button"
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    className="h-8 sm:h-9 text-xs sm:text-sm gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:hover:scale-100 group"
-                                >
-                                    <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5" />
-                                    <span className="hidden xs:inline">Anterior</span>
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    type="button"
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                    disabled={currentPage === totalPages}
-                                    className="h-8 sm:h-9 text-xs sm:text-sm gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:hover:scale-100 group"
-                                >
-                                    <span className="hidden xs:inline">Siguiente</span>
-                                    <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
-                                </Button>
-                            </div>
+                                                                <History className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200group-hover/link:rotate-[-15deg]" />
+<span className="hidden xs:inline">Ver Historial</span>
+<span className="xs:hidden">Historial</span>
+</Link>
+</Button>
+)}
+</div>
+</div>
+<div className="shrink-0 text-right space-y-1 sm:space-y-2">
+<p className="font-bold text-base sm:text-lg lg:text-xl text-primary tabular-nums transition-all duration-200 group-hover:scale-105">
+{formatCurrency(currentLinea.importe_linea, doc.moneda)}
+</p>
+<p className="text-xs sm:text-sm text-muted-foreground tabular-nums">
+{formatCurrency(currentLinea.precio_unitario, doc.moneda)} / {currentLinea.unidad}
+</p>
+</div>
+</div>
+)}
+</div>
+)
+})}{/* 📱 EMPTY STATE + ANIMADO */}
+                    {filteredLineaFields.length === 0 && (
+                        <div className="text-center text-muted-foreground py-6 sm:py-8 animate-fade-in">
+                            <Search className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400 animate-pulse" />
+                            <h3 className="mt-2 text-sm sm:text-base font-medium">No se encontraron líneas</h3>
+                            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+                                {lineaFilters.length > 0 ? "Prueba con otro término de búsqueda." : "No hay líneas de documento."}
+                            </p>
                         </div>
                     )}
-                </CardContent>
-            </Card>
-        </>
-    );
-}
+                </div>
+                
+                {/* 📱 PAGINACIÓN RESPONSIVE + ANIMADA */}
+                 {totalPages > 1 && (
+                    <div className="flex flex-col xs:flex-row items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-4">
+                        <span className="text-xs sm:text-sm text-muted-foreground order-2 xs:order-1">
+                            Página {currentPage} de {totalPages}
+                        </span>
+                        <div className="flex items-center gap-2 order-1 xs:order-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="h-8 sm:h-9 text-xs sm:text-sm gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:hover:scale-100 group"
+                            >
+                                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5" />
+                                <span className="hidden xs:inline">Anterior</span>
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage === totalPages}
+                                className="h-8 sm:h-9 text-xs sm:text-sm gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:hover:scale-100 group"
+                            >
+                                <span className="hidden xs:inline">Siguiente</span>
+                                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    </>
+);}

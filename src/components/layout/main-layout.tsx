@@ -240,8 +240,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </SidebarHeader>
         
         <SidebarContent>
-          {/* Selector de empresas */}
-          <div className="px-2">
+          {/* 🎯 Selector de empresas CON data-tutorial */}
+          <div className="px-2" data-tutorial="company-selector">
             <CompaniesSelector />
           </div>
           

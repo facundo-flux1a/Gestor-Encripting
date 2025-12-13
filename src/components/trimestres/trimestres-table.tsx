@@ -22,6 +22,23 @@ interface TrimestreTableProps {
   className?: string;
 }
 
+// 🎯 FUNCIONES DE FORMATO MANUAL
+const formatCurrency = (amount: number | string | null | undefined): string => {
+  if (amount === null || amount === undefined) return '0,00 €';
+  
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0,00 €';
+  
+  const fixed = num.toFixed(2);
+  const parts = fixed.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return `${formattedInteger},${decimalPart} €`;
+};
+
 export function TrimestreTable({
   documentos,
   onDocumentClick,
@@ -130,19 +147,19 @@ export function TrimestreTable({
                       </span>
                     </TableCell>
                     
-                    {/* Base Imponible */}
+                    {/* Base Imponible - CON FORMATO */}
                     <TableCell className="text-right text-xs sm:text-sm tabular-nums group-hover:text-foreground group-hover:scale-105 transition-all duration-200">
-                      €{baseImponible.toFixed(2)}
+                      {formatCurrency(baseImponible)}
                     </TableCell>
                     
-                    {/* IVA */}
+                    {/* IVA - CON FORMATO */}
                     <TableCell className="text-right text-xs sm:text-sm tabular-nums group-hover:text-foreground group-hover:scale-105 transition-all duration-200">
-                      €{ivaTotal.toFixed(2)}
+                      {formatCurrency(ivaTotal)}
                     </TableCell>
                     
-                    {/* Total */}
+                    {/* Total - CON FORMATO */}
                     <TableCell className="text-right font-semibold text-xs sm:text-sm tabular-nums group-hover:text-primary group-hover:scale-110 transition-all duration-200">
-                      €{total.toFixed(2)}
+                      {formatCurrency(total)}
                     </TableCell>
                     
                     {/* Estado */}
@@ -150,7 +167,7 @@ export function TrimestreTable({
                       {doc.incidencia ? (
                         <Badge 
                           variant="destructive" 
-                          className="text-[10px] sm:text-xs whitespace-nowrap transition-all duration-1700 group-hover:scale-110 group-hover:shadow-md animate-pulse"
+                          className="text-[10px] sm:text-xs whitespace-nowrap transition-all duration-20 group-hover:scale-110 group-hover:shadow-md animate-pulse"
                         >
                           Incidencia
                         </Badge>
@@ -172,6 +189,32 @@ export function TrimestreTable({
           ← Desliza para ver más columnas →
         </p>
       </div>
+      
+      {/* 🎨 ANIMACIONES GLOBALES */}
+      <style jsx global>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out forwards;
+          opacity: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-in {
+            animation: none;
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }

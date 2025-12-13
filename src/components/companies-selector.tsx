@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
+const { useEffect, useState } = React;
 import { useCompanyContext } from '@/context/CompanyProvider'; 
 import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTutorial } from '@/context/tutorial-context';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -41,7 +43,7 @@ interface Company {
 
 // Función de validación de email
 const isValidEmail = (email: string): boolean => {
-  if (!email.trim()) return true; // Email vacío es válido (campo opcional)
+  if (!email.trim()) return true;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email.trim());
 };
@@ -65,7 +67,6 @@ const CreateCompanyFormComponent = React.memo(({
     
     const email = emailRef.current?.value || '';
     
-    // Validar email antes de enviar
     if (email && !isValidEmail(email)) {
       setEmailError('Formato de email inválido');
       return;
@@ -154,7 +155,6 @@ const CreateCompanyFormComponent = React.memo(({
           autoComplete="off"
           disabled={isCreating}
           onChange={(e) => {
-            // Validar en tiempo real
             if (e.target.value && !isValidEmail(e.target.value)) {
               setEmailError('Formato de email inválido');
             } else {
@@ -172,7 +172,7 @@ const CreateCompanyFormComponent = React.memo(({
 
 CreateCompanyFormComponent.displayName = 'CreateCompanyFormComponent';
 
-// ✅ Componente CORREGIDO para edición - CON VALUES y useEffect
+// Componente para edición
 const EditCompanyFormComponent = React.memo(({ 
   company,
   onEmailValidation
@@ -186,7 +186,6 @@ const EditCompanyFormComponent = React.memo(({
   const [localEmail, setLocalEmail] = React.useState(company.mail_de_carga ?? '');
   const [emailError, setEmailError] = React.useState<string>('');
 
-  // ✅ AGREGADO: useEffect para actualizar valores cuando cambia la empresa
   React.useEffect(() => {
     setLocalName(company.name || '');
     setLocalFiscal(company.nombre_fiscal || '');
@@ -198,7 +197,6 @@ const EditCompanyFormComponent = React.memo(({
     const value = e.target.value;
     setLocalEmail(value);
     
-    // Validar email
     if (value && !isValidEmail(value)) {
       setEmailError('Formato de email inválido');
       onEmailValidation(false);
@@ -303,6 +301,25 @@ export function CompaniesSelector() {
     setCompanies
   } = useCompanyContext();
 
+  // ✅ CAMBIO: Agregar lowerTutorialZIndex y raiseTutorialZIndex
+  const { isTutorialActive, currentStep, lowerTutorialZIndex, raiseTutorialZIndex } = useTutorial();
+  const [isStep2, setIsStep2] = useState(false);
+
+  useEffect(() => {
+    const checkStep2 = () => {
+      const element = document.querySelector('[data-tutorial-step2="true"]');
+      setIsStep2(element !== null);
+    };
+    
+    checkStep2();
+    const interval = setInterval(checkStep2, 100);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const shouldBlockClose = isTutorialActive || isStep2;
+
+  console.log('🎭 CompaniesSelector:', { isTutorialActive, isStep2, shouldBlockClose });
+  
   const { toast } = useToast();
   const [availableCompanies, setAvailableCompanies] = React.useState(companies);
   const [isCreating, setIsCreating] = React.useState(false);
@@ -316,6 +333,8 @@ export function CompaniesSelector() {
 
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
+  const [isZIndexLowered, setIsZIndexLowered] = React.useState(false); // ⬅️ AGREGAR ESTA LÍNEA
+
 
   React.useEffect(() => {
     setAvailableCompanies(companies);
@@ -337,6 +356,56 @@ export function CompaniesSelector() {
     loadCompanies();
   }, [setCompanies]);
 
+  React.useEffect(() => {
+  console.log('🔍 [useEffect z-index] Ejecutando:', {
+    isTutorialActive,
+    currentStep,
+    isPopoverOpen,
+    isZIndexLowered,
+    shouldAct: isTutorialActive && currentStep === 1
+  });
+
+  if (!isTutorialActive || currentStep !== 1) {
+    console.log('❌ [useEffect z-index] NO cumple condiciones - saliendo');
+    if (isZIndexLowered) {
+      console.log('🔄 Reseteando isZIndexLowered');
+      setIsZIndexLowered(false);
+    }
+    return;
+  }
+  
+  // ⬅️ CAMBIO: Usar isPopoverOpen en lugar de isCreateDialogOpen
+  if (isPopoverOpen && !isZIndexLowered) {
+    console.log('🔽 [useEffect z-index] Popover ABIERTO en paso 2 - bajando z-index UNA VEZ');
+    lowerTutorialZIndex();
+    setIsZIndexLowered(true);
+  } else if (!isPopoverOpen && isZIndexLowered) {
+    console.log('🔼 [useEffect z-index] Popover CERRADO - subiendo z-index UNA VEZ');
+    raiseTutorialZIndex();
+    setIsZIndexLowered(false);
+  }
+}, [isPopoverOpen, isTutorialActive, currentStep, isZIndexLowered, lowerTutorialZIndex, raiseTutorialZIndex]);
+
+  // ✅ NUEVO: Controlar z-index del tutorial cuando se abre/cierra el Dialog en paso 2
+
+
+  // ✅ NUEVO: Bloquear cierre del popover durante tutorial
+  React.useEffect(() => {
+    if (!isTutorialActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isTutorialActive) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isTutorialActive]);
   React.useEffect(() => {
     const handleDragStart = () => {
       setIsDragging(true);
@@ -372,7 +441,6 @@ export function CompaniesSelector() {
       return;
     }
 
-    // Validar email si se proporciona
     if (data.mailDeCarga && !isValidEmail(data.mailDeCarga)) {
       toast({
         title: "Error",
@@ -421,7 +489,7 @@ export function CompaniesSelector() {
 
   const handleEditClick = (company: Company) => {
     setEditingCompany(company);
-    setOriginalCompany({ ...company }); // Guardar valores originales
+    setOriginalCompany({ ...company });
     setIsEditDialogOpen(true);
     setIsEmailValid(true);
   };
@@ -446,13 +514,11 @@ export function CompaniesSelector() {
       const cif = (formData.get('cif') as string)?.trim();
       const mailDeCarga = (formData.get('mailDeCarga') as string)?.trim();
 
-      // ✅ PASO 1: Detectar QUÉ cambió
       const nameChanged = name !== originalCompany.name;
       const fiscalChanged = nombreFiscal !== (originalCompany.nombre_fiscal || '');
       const cifChanged = cif !== (originalCompany.CIF || '');
       const emailChanged = mailDeCarga !== (originalCompany.mail_de_carga || '');
 
-      // ✅ PASO 2: Verificar si hay cambios ANTES de validar
       if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged) {
         toast({
           title: 'Sin cambios',
@@ -464,7 +530,6 @@ export function CompaniesSelector() {
         return;
       }
 
-      // ✅ PASO 3: Validar SOLO los campos que cambiaron
       if (nameChanged && !name) {
         toast({
           title: 'Error',
@@ -483,7 +548,6 @@ export function CompaniesSelector() {
         return;
       }
 
-      // ✅ PASO 4: Construir payload SOLO con campos que cambiaron
       const payload: any = {};
 
       if (nameChanged) {
@@ -501,8 +565,6 @@ export function CompaniesSelector() {
       if (emailChanged) {
         payload.mailDeCarga = mailDeCarga || null;
       }
-
-      console.log('📤 Enviando solo campos modificados:', payload);
 
       setIsCreating(true);
 
@@ -552,7 +614,13 @@ export function CompaniesSelector() {
     }
   };
 
-  const handleDeleteClick = async (companyId: number, companyName: string) => {
+const handleDeleteClick = async (companyId: number, companyName: string) => {
+    // ✅ Primero cerrar el dialog de edición
+    setIsEditDialogOpen(false);
+    
+    // ✅ Pequeño delay para que se complete la animación de cierre
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     try {
       const response = await fetch(`/api/companies/${companyId}`);
       
@@ -687,9 +755,8 @@ export function CompaniesSelector() {
         variant: "destructive",
       });
     }
-  };
+  };// CONTINÚA DESDE PARTE 2...
 
-  // ✅ COMPONENTE CORREGIDO: Warning que verifica correctamente null/undefined/vacío
   const CompanyWithWarning = ({ company, labelId }: { company: Company; labelId: string }) => {
     const hasNoEmail = 
       company.mail_de_carga === null || 
@@ -774,7 +841,7 @@ export function CompaniesSelector() {
   if (availableCompanies.length === 0) {
     return (
       <>
-        <div className="space-y-4">
+        <div className="space-y-4" data-tutorial="company-selector">
           <div className="text-sm text-muted-foreground">No hay empresas</div>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -826,7 +893,7 @@ export function CompaniesSelector() {
   if (availableCompanies.length <= 5) {
     return (
       <>
-        <div className="space-y-3">
+        <div className="space-y-3" data-tutorial="company-selector">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Empresas</span>
           </div>
@@ -967,8 +1034,45 @@ export function CompaniesSelector() {
   }
 
   return (
-    <>
-      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+  <>
+    <div data-tutorial="company-selector">
+      <Popover 
+  open={isPopoverOpen} 
+  onOpenChange={(open) => {
+  const isInStep2 = document.querySelector('[data-tutorial-step2="true"]') !== null;
+  const noHayEmpresas = availableCompanies.length === 0;  // ⬅️ AGREGAR
+  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔍 [POPOVER onOpenChange] TRIGGERED');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📊 Estado actual:', { 
+    open_nuevo: open,
+    isPopoverOpen_actual: isPopoverOpen,
+    isInStep2,
+    noHayEmpresas,  // ⬅️ AGREGAR
+    isCreateDialogOpen,
+    isTutorialActive,
+    currentStep
+  });
+  
+  // ⬅️ MODIFICAR ESTA LÍNEA
+  const shouldBlock = (isInStep2 || isCreateDialogOpen || (isTutorialActive && noHayEmpresas)) && !open;
+  
+  console.log('🎯 Decisión:', {
+    shouldBlock,
+    razon: shouldBlock ? (isInStep2 ? 'Paso 2 activo' : noHayEmpresas ? 'No hay empresas en tutorial' : 'Dialog abierto') : 'Permitir cambio'
+  });
+  
+  if (shouldBlock) {
+    console.log('🚫 [POPOVER] BLOQUEANDO cierre del popover');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return;
+  }
+  
+  console.log('✅ [POPOVER] PERMITIENDO cambio de estado a:', open);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  setIsPopoverOpen(open);
+}}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -985,145 +1089,246 @@ export function CompaniesSelector() {
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className="w-[300px] p-0" 
+          className="w-[400px] p-0" 
           align="start"
         >
-          <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
-            {availableCompanies.map((company) => (
-              <div key={company.id}>
-                <div
-                  className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
-                  onDragOver={(e) => handleDragOver(e, company.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, company.id)}
-                >
-                  <Checkbox
-                    id={`company-popover-${company.id}`}
-                    checked={selectedCompanyIds.includes(company.id)}
-                    onCheckedChange={() => toggleCompanyId(company.id)}
-                  />
-                  <CompanyWithWarning company={company} labelId={`company-popover-${company.id}`} />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 hover:bg-primary/10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditClick(company);
-                    }}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </div>
+          {/* ✅ SI NO HAY EMPRESAS Y ESTÁ EN TUTORIAL - MOSTRAR FORM INLINE */}
+          {availableCompanies.length === 0 && isTutorialActive ? (
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Crear tu primera empresa 🏢</h4>
+                <p className="text-xs text-muted-foreground">
+                  Complete los datos básicos para continuar
+                </p>
               </div>
-            ))}
-          </div>
+              
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  handleCreateCompany({
+                    name: formData.get('name'),
+                    nombreFiscal: formData.get('nombreFiscal'),
+                    cif: formData.get('cif'),
+                    mailDeCarga: formData.get('mailDeCarga'),
+                  });
+                }} 
+                className="space-y-3"
+              >
+                <div className="space-y-1.5">
+                  <Label htmlFor="inline-name" className="text-xs font-medium">
+                    Nombre * 
+                  </Label>
+                  <Input
+                    id="inline-name"
+                    name="name"
+                    placeholder="Mi Empresa S.L."
+                    required
+                    disabled={isCreating}
+                    className="h-9 text-sm"
+                  />
+                </div>
 
-          <div className="border-t p-4">
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="w-full" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Agregar Empresa
+                <div className="space-y-1.5">
+                  <Label htmlFor="inline-fiscal" className="text-xs text-muted-foreground">
+                    Nombre fiscal (opcional)
+                  </Label>
+                  <Input
+                    id="inline-fiscal"
+                    name="nombreFiscal"
+                    placeholder="Nombre fiscal"
+                    disabled={isCreating}
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="inline-cif" className="text-xs font-medium">
+                    CIF *
+                  </Label>
+                  <Input
+                    id="inline-cif"
+                    name="cif"
+                    placeholder="B12345678"
+                    required
+                    disabled={isCreating}
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="inline-email" className="text-xs text-muted-foreground">
+                    Mail de carga (opcional)
+                  </Label>
+                  <Input
+                    id="inline-email"
+                    name="mailDeCarga"
+                    type="email"
+                    placeholder="docs@miempresa.com"
+                    disabled={isCreating}
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full"
+                  disabled={isCreating}
+                  size="sm"
+                >
+                  {isCreating ? 'Creando...' : 'Crear Empresa'}
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Crear nueva empresa</DialogTitle>
-                  <DialogDescription>
-                    Complete los datos de la nueva empresa
-                  </DialogDescription>
-                </DialogHeader>
-                <CreateCompanyFormComponent 
-                  onSubmit={handleCreateCompany}
-                  isCreating={isCreating}
-                />
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsCreateDialogOpen(false)}
-                    disabled={isCreating}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    onClick={() => {
-                      const form = document.querySelector('form');
-                      if (form) {
-                        const event = new Event('submit', { bubbles: true, cancelable: true });
-                        form.dispatchEvent(event);
-                      }
-                    }}
-                    disabled={isCreating}
-                  >
-                    {isCreating ? 'Creando...' : 'Crear Empresa'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+              </form>
+            </div>
+          ) : (
+            /* ✅ SI HAY EMPRESAS - MOSTRAR LISTA NORMAL */
+            <>
+              <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
+                {availableCompanies.map((company) => (
+                  <div key={company.id}>
+                    <div
+                      className="flex items-center gap-2 p-2 rounded border-2 border-dashed border-transparent transition-all hover:border-primary/50"
+                      onDragOver={(e) => handleDragOver(e, company.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, company.id)}
+                    >
+                      <Checkbox
+                        id={`company-popover-${company.id}`}
+                        checked={selectedCompanyIds.includes(company.id)}
+                        onCheckedChange={() => {
+                          toggleCompanyId(company.id);
+                          if (!isTutorialActive) {
+                            setIsPopoverOpen(false);
+                          }
+                        }}
+                      />
+                      <CompanyWithWarning company={company} labelId={`company-popover-${company.id}`} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-primary/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditClick(company);
+                        }}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-          <p className="text-xs text-muted-foreground p-2 border-t">
-            {isDragging ? '🎯 Suelta el documento aquí' : '💡 Arrastra documentos aquí para moverlos'}
-          </p>
+              {/* ✅ BOTÓN AGREGAR EMPRESA - SOLO SI NO ESTÁ EN TUTORIAL */}
+              {!isTutorialActive && (
+                <div className="border-t p-4">
+                  <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="w-full" size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Agregar Empresa
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Crear nueva empresa</DialogTitle>
+                        <DialogDescription>
+                          Complete los datos de la nueva empresa
+                        </DialogDescription>
+                      </DialogHeader>
+                      <CreateCompanyFormComponent 
+                        onSubmit={handleCreateCompany}
+                        isCreating={isCreating}
+                      />
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsCreateDialogOpen(false)}
+                          disabled={isCreating}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button 
+                          onClick={() => {
+                            const form = document.querySelector('form');
+                            if (form) {
+                              const event = new Event('submit', { bubbles: true, cancelable: true });
+                              form.dispatchEvent(event);
+                            }
+                          }}
+                          disabled={isCreating}
+                        >
+                          {isCreating ? 'Creando...' : 'Crear Empresa'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground p-2 border-t">
+                {isDragging ? '🎯 Suelta el documento aquí' : '💡 Arrastra documentos aquí para moverlos'}
+              </p>
+            </>
+          )}
         </PopoverContent>
       </Popover>
+    </div>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Configurar empresa</DialogTitle>
-            <DialogDescription>
-              Modifica los datos de la empresa o elimínala
-            </DialogDescription>
-          </DialogHeader>
-          {editingCompany && (
-            <EditCompanyFormComponent 
-              key={editingCompany.id}
-              company={editingCompany}
-              onEmailValidation={setIsEmailValid}
-            />
-          )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Configurar empresa</DialogTitle>
+          <DialogDescription>
+            Modifica los datos de la empresa o elimínala
+          </DialogDescription>
+        </DialogHeader>
+        {editingCompany && (
+          <EditCompanyFormComponent 
+            key={editingCompany.id}
+            company={editingCompany}
+            onEmailValidation={setIsEmailValid}
+          />
+        )}
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button
+            variant="destructive"
+            className="w-full sm:w-auto sm:mr-auto"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (editingCompany) {
+                handleDeleteClick(editingCompany.id, editingCompany.name);
+              }
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Eliminar Empresa
+          </Button>
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button
-              variant="destructive"
-              className="w-full sm:w-auto sm:mr-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (editingCompany) {
-                  handleDeleteClick(editingCompany.id, editingCompany.name);
-                }
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                setEditingCompany(null);
+                setOriginalCompany(null);
               }}
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar Empresa
+              Cancelar
             </Button>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={() => {
-                  setIsEditDialogOpen(false);
-                  setEditingCompany(null);
-                  setOriginalCompany(null);
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                type="button"
-                className="flex-1 sm:flex-none"
-                onClick={handleSaveCompany}
-                disabled={isCreating || !isEmailValid}
-              >
-                {isCreating ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button 
+              type="button"
+              className="flex-1 sm:flex-none"
+              onClick={handleSaveCompany}
+              disabled={isCreating || !isEmailValid}
+            >
+              {isCreating ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-      <DeleteAlertDialog />
-    </>
-  );
-}
+    <DeleteAlertDialog />
+  </>
+);}

@@ -27,10 +27,12 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       algorithms: ['HS256'],
     });
     
+    // ✅ MODIFICADO: Agregado campo tutorial al schema
     const parsedPayload = z.object({
         userId: z.number(),
         email: z.string().email(),
         nombre: z.string(),
+        tutorial: z.number().optional(), // ⬅️ NUEVO CAMPO
         exp: z.number(),
     }).safeParse(payload);
     
@@ -40,6 +42,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         userId: parsedPayload.data.userId,
         email: parsedPayload.data.email,
         nombre: parsedPayload.data.nombre,
+        tutorial: parsedPayload.data.tutorial, // ⬅️ NUEVO CAMPO
         expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
@@ -73,9 +76,10 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     return session;
 }
 
-export async function createSession(userId: number, email: string, nombre: string) {
+// ✅ MODIFICADO: Agregado parámetro tutorial
+export async function createSession(userId: number, email: string, nombre: string, tutorial: number = 0) {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const session = await encrypt({ userId, email, nombre, expires });
+    const session = await encrypt({ userId, email, nombre, tutorial, expires }); // ⬅️ Incluir tutorial
 
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE_NAME, session, {
@@ -84,7 +88,7 @@ export async function createSession(userId: number, email: string, nombre: strin
         secure: process.env.NODE_ENV === 'production',
         path: '/',
     });
-    console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/' });
+    console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/', tutorial });
 }
 
 /**
@@ -118,8 +122,9 @@ export async function login(formData: FormData) {
   }
 
   try {
+    // ✅ MODIFICADO: Agregado campo tutorial al SELECT
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, tutorial FROM usuarios WHERE email = ?',
       [email.trim()]
     );
     
@@ -135,6 +140,7 @@ export async function login(formData: FormData) {
     console.log('👤 [login] Usuario encontrado:', {
       id: user.id,
       email: user.email,
+      tutorial: user.tutorial, // ⬅️ Log del tutorial
       passwordEnBD: user.password,
       passwordIngresada: password,
       coinciden: user.password === password.trim()
@@ -145,9 +151,10 @@ export async function login(formData: FormData) {
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    console.log('✅ [login] Contraseña correcta, creando sesión');
+    console.log('✅ [login] Contraseña correcta, creando sesión con tutorial:', user.tutorial);
     
-    await createSession(user.id, user.email, user.nombre);
+    // ✅ MODIFICADO: Pasar el campo tutorial
+    await createSession(user.id, user.email, user.nombre, user.tutorial || 0);
     
   } catch (error) {
     console.error('❌ [login] Error:', error);
@@ -172,8 +179,9 @@ export async function register(formData: FormData) {
             return redirect('/auth/register?error=user_exists');
         }
 
+        // ✅ MODIFICADO: Asegurar que tutorial se inicializa en 1 para nuevos usuarios
         const [result] = await db.query<OkPacket>(
-            'INSERT INTO usuarios (nombre, email, password) VALUES (?, ?, ?)',
+            'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
             [nombre, email, password]
         );
 
@@ -182,7 +190,8 @@ export async function register(formData: FormData) {
         // Crear configuración de IA por defecto
         await createDefaultAIConfig(newUserId);
         
-        await createSession(newUserId, email, nombre);
+        // ✅ MODIFICADO: Nuevos usuarios tienen tutorial = 1
+        await createSession(newUserId, email, nombre, 1);
 
     } catch (error) {
         console.error('Registration error:', error);
@@ -201,34 +210,69 @@ export async function handleGoogleSignInOnServer(
       return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
     }
 
+    // ✅ MODIFICADO: Traer campo tutorial
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, tutorial FROM usuarios WHERE email = ?',
       [email]
     );
 
     let user: User;
+    let tutorialValue = 0;
 
     if (existingUsers.length > 0) {
       user = existingUsers[0] as User;
+      tutorialValue = user.tutorial || 0;
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
+      // ✅ MODIFICADO: Nuevos usuarios de Google también tienen tutorial = 1
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email, password) VALUES (?, ?, ?)',
+          'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
           [nombre, email, null]
       );
-      user = { id: result.insertId, email, nombre };
+      user = { id: result.insertId, email, nombre, tutorial: 1 };
+      tutorialValue = 1;
       
       // Crear configuración de IA por defecto para nuevo usuario
       await createDefaultAIConfig(user.id);
     }
 
-    await createSession(user.id, user.email, user.nombre);
+    // ✅ MODIFICADO: Pasar tutorial a la sesión
+    await createSession(user.id, user.email, user.nombre, tutorialValue);
     
     return { success: true };
 
   } catch (error) {
     console.error("Server-side Google sign-in error:", error);
     return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
+  }
+}
+
+/**
+ * Marca el tutorial como completado para el usuario actual
+ */
+export async function completeTutorial() {
+  try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      throw new Error('No hay sesión activa');
+    }
+
+    console.log('📝 [completeTutorial] Actualizando tutorial para usuario:', session.userId);
+
+    await db.query(
+      'UPDATE usuarios SET tutorial = 0 WHERE id = ?',
+      [session.userId]
+    );
+
+    console.log('✅ [completeTutorial] Tutorial marcado como completado');
+
+    // Recrear la sesión con tutorial = 0
+    await createSession(session.userId, session.email, session.nombre, 0);
+
+  } catch (error) {
+    console.error('❌ [completeTutorial] Error:', error);
+    throw error;
   }
 }
 
