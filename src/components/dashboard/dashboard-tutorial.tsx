@@ -16,6 +16,7 @@ export function DashboardTutorial() {
   const selectedIdsRef = useRef<number[]>([]);
   const companiesRef = useRef<any[]>([]);
   const lastStepRef = useRef(0);
+  const sidebarBlockerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     selectedIdsRef.current = selectedCompanyIds;
@@ -26,6 +27,42 @@ export function DashboardTutorial() {
     companiesRef.current = companies;
     console.log('🔄 companiesRef actualizado:', companies.length, 'empresas');
   }, [companies]);
+
+  const createSidebarBlocker = () => {
+    if (sidebarBlockerRef.current) {
+      sidebarBlockerRef.current.remove();
+      sidebarBlockerRef.current = null;
+    }
+
+    const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+    if (!sidebar) return;
+
+    const blocker = document.createElement('div');
+    blocker.id = 'tutorial-sidebar-blocker';
+    blocker.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 9999999;
+      background: transparent;
+      cursor: not-allowed;
+    `;
+    
+    sidebar.appendChild(blocker);
+    sidebarBlockerRef.current = blocker;
+    
+    console.log('🔒 Overlay bloqueador creado sobre la sidebar');
+  };
+
+  const removeSidebarBlocker = () => {
+    if (sidebarBlockerRef.current) {
+      sidebarBlockerRef.current.remove();
+      sidebarBlockerRef.current = null;
+      console.log('🔓 Overlay bloqueador removido');
+    }
+  };
 
   useEffect(() => {
     if (!shouldShowTutorial) {
@@ -70,6 +107,8 @@ export function DashboardTutorial() {
             isStep2Active.current = true;
             setIsTutorialActive(true);
             
+            removeSidebarBlocker();
+            
             setTimeout(() => {
               const overlay = document.querySelector('.driver-overlay');
               
@@ -95,9 +134,14 @@ export function DashboardTutorial() {
               console.log('🔧 Expandiendo sidebar para el paso 3');
               (trigger as HTMLElement).click();
             }
+            
+            setTimeout(() => {
+              createSidebarBlocker();
+            }, 150);
           }
           else {
             isStep2Active.current = false;
+            removeSidebarBlocker();
           }
         },
         
@@ -147,9 +191,7 @@ export function DashboardTutorial() {
 
         onPrevClick: () => {
           driverObj.movePrevious();
-        },
-        
-        steps: [
+        },steps: [
           {
             element: 'body',
             popover: {
@@ -235,19 +277,20 @@ export function DashboardTutorial() {
               align: 'end'
             }
           },
-         {
-  element: 'body',
-  popover: {
-    title: '¡Todo listo! ✨',
-    description: `
-      <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
-      <p class="mt-2">Nos vemos en el <span class="inline-flex items-center gap-1 text-violet-600 font-semibold" title="En desarrollo">tutorial<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></span> de la sección "Documentos". ¡Éxitos!</p>
-    `,
-    side: 'center',
-    align: 'center'
-  }
-}
-        ],nextBtnText: 'Siguiente →',
+          {
+            element: 'body',
+            popover: {
+              title: '¡Todo listo! ✨',
+              description: `
+                <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
+                <p class="mt-2">Nos vemos en el <span class="inline-flex items-center gap-1 text-violet-600 font-semibold" title="En desarrollo">tutorial<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></span> de la sección "Documentos". ¡Éxitos!</p>
+              `,
+              side: 'center',
+              align: 'center'
+            }
+          }
+        ],
+        nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
         doneBtnText: '¡Comenzar!',
         onDestroyed: async (element, step, options) => {
@@ -262,6 +305,7 @@ export function DashboardTutorial() {
           });
           
           setIsTutorialActive(false);
+          removeSidebarBlocker();
           
           console.log('🔍 Paso actual guardado desde ref:', finalStep);
           
@@ -321,10 +365,9 @@ export function DashboardTutorial() {
 
     return () => {
       clearTimeout(timer);
+      removeSidebarBlocker();
     };
-  }, [shouldShowTutorial]);
-
-  const showErrorMessage = (hasCompanies: boolean) => {
+  }, [shouldShowTutorial]);const showErrorMessage = (hasCompanies: boolean) => {
     const popoverDescription = document.querySelector('.driver-popover-description');
     if (popoverDescription) {
       const existingError = popoverDescription.querySelector('.tutorial-error-msg');
@@ -341,7 +384,7 @@ export function DashboardTutorial() {
     }
   };
 
-useEffect(() => {
+  useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
       .driver-overlay,
@@ -361,7 +404,6 @@ useEffect(() => {
         pointer-events: auto !important;
       }
       
-      /* 🔥 FIX: Forzar z-index MUY alto para modales de Radix cuando tutorial está activo */
       body:has(.driver-overlay) [role="dialog"] {
         z-index: 10000001 !important;
       }
@@ -370,7 +412,6 @@ useEffect(() => {
         z-index: 10000000 !important;
       }
       
-      /* 🔥 FIX CRÍTICO: Forzar pointer-events en TODO dentro del modal */
       body:has(.driver-overlay) [role="dialog"] *,
       body:has(.driver-overlay) [role="dialog"] input,
       body:has(.driver-overlay) [role="dialog"] button,
@@ -379,13 +420,11 @@ useEffect(() => {
         pointer-events: auto !important;
       }
       
-      /* 🔥 NUEVO: Permitir clicks en el selector de empresas cuando tutorial está activo */
       body:has(.driver-overlay) [data-tutorial="company-selector"],
       body:has(.driver-overlay) [data-tutorial="company-selector"] * {
         pointer-events: auto !important;
       }
       
-      /* Asegurar que contenido del modal también esté arriba */
       [data-radix-popper-content-wrapper],
       [data-radix-portal],
       [role="dialog"],
@@ -434,6 +473,13 @@ useEffect(() => {
       
       .driver-popover-close-btn:hover {
         color: hsl(var(--foreground)) !important;
+      }
+      
+      #tutorial-sidebar-blocker {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 9999999 !important;
+        cursor: not-allowed !important;
       }
     `;
     document.head.appendChild(style);

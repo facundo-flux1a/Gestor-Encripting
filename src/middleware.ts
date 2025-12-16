@@ -1,8 +1,13 @@
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicRoutes = ['/auth/login', '/auth/register'];
+// ✅ AGREGAR las rutas de reset password
+const publicRoutes = [
+  '/auth/login', 
+  '/auth/register',
+  '/auth/forgot-password',      // 👈 NUEVA
+  '/auth/reset-password',        // 👈 NUEVA
+];
 const rootRoute = '/';
 
 /**
@@ -40,4 +45,3 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
-

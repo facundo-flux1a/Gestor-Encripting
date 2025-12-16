@@ -9,14 +9,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Chrome } from 'lucide-react';
-import React, { Suspense } from 'react';
+import { AlertCircle, Chrome, Loader2 } from 'lucide-react';
+import React, { Suspense, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
-import { LogoutDetector } from '@/components/auth/LogoutDetector'; // 👈 NUEVO IMPORT
+import { LogoutDetector } from '@/components/auth/LogoutDetector';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 
+// 🔥 WEBHOOK HARDCODEADO
+const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/reset-password';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -63,7 +73,6 @@ function GoogleLoginButton() {
     }
   };
 
-
   return (
     <Button variant="outline" className="w-full" type="button" onClick={handleGoogleSignIn}>
       <Chrome className="mr-2 h-4 w-4" />
@@ -80,6 +89,8 @@ function LoginError() {
         switch (errorCode) {
             case 'invalid_credentials':
                 return 'El correo electrónico o la contraseña son incorrectos.';
+            case 'google_account':
+                return 'Esta cuenta fue creada con Google. Por favor, usa el botón "Continuar con Google" para iniciar sesión.';
             case 'server_error':
                 return 'Ha ocurrido un error en el servidor. Por favor, inténtalo de nuevo más tarde.';
             default:
@@ -99,6 +110,127 @@ function LoginError() {
     )
 }
 
+// 🆕 POPUP DE RESET PASSWORD
+function ForgotPasswordDialog() {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  // Función para generar token único
+  const generateToken = () => {
+    const timestamp = Date.now().toString(36);
+    const random1 = Math.random().toString(36).substring(2, 15);
+    const random2 = Math.random().toString(36).substring(2, 15);
+    const random3 = Math.random().toString(36).substring(2, 15);
+    return `${timestamp}-${random1}-${random2}-${random3}`;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !email.includes('@')) {
+      toast({
+        title: 'Email inválido',
+        description: 'Por favor ingresa un email válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Generar token y URL
+      const token = generateToken();
+      const resetUrl = `${window.location.origin}/auth/reset-password?token=${token}`;
+      
+      // Calcular expiración (30 minutos)
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+      // 🔥 ENVIAR TODO A N8N (token incluido)
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          token: token,
+          resetUrl: resetUrl,
+          expiresAt: expiresAt,
+          timestamp: new Date().toISOString(),
+          source: 'forgot-password-form',
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: '¡Email enviado!',
+          description: 'Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña.',
+        });
+        setEmail('');
+        setOpen(false);
+      } else {
+        throw new Error('Error al enviar la solicitud');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Hubo un problema al enviar la solicitud. Intenta de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button 
+          type="button"
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Restablecer contraseña</DialogTitle>
+          <DialogDescription>
+            Ingresa el correo electrónico asignado a la cuenta y te enviaremos instrucciones para restablecer tu contraseña.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Correo Electrónico</Label>
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              'Enviar instrucciones'
+            )}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function LoginForm() {
     return (
         <form action={login} className="space-y-4">
@@ -109,9 +241,7 @@ function LoginForm() {
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <Label htmlFor="password">Contraseña</Label>
-                    <Link href="#" className="text-sm font-medium text-primary hover:underline" prefetch={false}>
-                        ¿Olvidaste tu contraseña?
-                    </Link>
+                    <ForgotPasswordDialog />
                 </div>
                 <Input id="password" name="password" type="password" required />
             </div>
@@ -123,7 +253,6 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      {/* 🆕 AGREGAR DETECTOR DE LOGOUT */}
       <Suspense fallback={null}>
         <LogoutDetector />
       </Suspense>

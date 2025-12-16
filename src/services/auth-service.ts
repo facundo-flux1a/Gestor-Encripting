@@ -3,14 +3,17 @@
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
+import crypto from 'crypto';
  
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
+const GOOGLE_PASSWORD_MARKER = 'GOOGLE_AUTH_';
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)
@@ -27,12 +30,11 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       algorithms: ['HS256'],
     });
     
-    // ✅ MODIFICADO: Agregado campo tutorial al schema
     const parsedPayload = z.object({
         userId: z.number(),
         email: z.string().email(),
         nombre: z.string(),
-        tutorial: z.number().optional(), // ⬅️ NUEVO CAMPO
+        tutorial: z.number().optional(),
         exp: z.number(),
     }).safeParse(payload);
     
@@ -42,7 +44,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         userId: parsedPayload.data.userId,
         email: parsedPayload.data.email,
         nombre: parsedPayload.data.nombre,
-        tutorial: parsedPayload.data.tutorial, // ⬅️ NUEVO CAMPO
+        tutorial: parsedPayload.data.tutorial,
         expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
@@ -76,10 +78,9 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     return session;
 }
 
-// ✅ MODIFICADO: Agregado parámetro tutorial
 export async function createSession(userId: number, email: string, nombre: string, tutorial: number = 0) {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const session = await encrypt({ userId, email, nombre, tutorial, expires }); // ⬅️ Incluir tutorial
+    const session = await encrypt({ userId, email, nombre, tutorial, expires });
 
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE_NAME, session, {
@@ -91,9 +92,6 @@ export async function createSession(userId: number, email: string, nombre: strin
     console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/', tutorial });
 }
 
-/**
- * Crea la configuración de IA por defecto para un nuevo usuario
- */
 async function createDefaultAIConfig(userId: number) {
   try {
     await db.query(
@@ -106,7 +104,19 @@ async function createDefaultAIConfig(userId: number) {
     console.log('✅ [createDefaultAIConfig] Config de IA creada para usuario:', userId);
   } catch (error) {
     console.error('❌ [createDefaultAIConfig] Error creando config:', error);
-    // No fallar el registro si esto falla
+  }
+}
+
+async function migratePasswordToHash(userId: number, plainPassword: string) {
+  try {
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
+    await db.query(
+      'UPDATE usuarios SET password = ? WHERE id = ?',
+      [hashedPassword, userId]
+    );
+    console.log('🔄 [migratePasswordToHash] Contraseña migrada a hash para usuario:', userId);
+  } catch (error) {
+    console.error('❌ [migratePasswordToHash] Error migrando:', error);
   }
 }
 
@@ -122,7 +132,6 @@ export async function login(formData: FormData) {
   }
 
   try {
-    // ✅ MODIFICADO: Agregado campo tutorial al SELECT
     const [rows] = await db.query<RowDataPacket[]>(
       'SELECT id, nombre, email, password, tutorial FROM usuarios WHERE email = ?',
       [email.trim()]
@@ -137,23 +146,41 @@ export async function login(formData: FormData) {
 
     const user = rows[0] as User;
     
-    console.log('👤 [login] Usuario encontrado:', {
-      id: user.id,
-      email: user.email,
-      tutorial: user.tutorial, // ⬅️ Log del tutorial
-      passwordEnBD: user.password,
-      passwordIngresada: password,
-      coinciden: user.password === password.trim()
-    });
+    // 🔥 DETECTAR SI ES CUENTA DE GOOGLE
+    if (user.password && user.password.startsWith(GOOGLE_PASSWORD_MARKER)) {
+      console.warn('⚠️ [login] Cuenta creada con Google - debe usar Google Sign In');
+      return redirect('/auth/login?error=google_account');
+    }
     
-    if (user.password !== password.trim()) {
+    let passwordValid = false;
+    let isPlainText = false;
+
+    if (user.password === password.trim()) {
+      console.log('✅ [login] Contraseña en texto plano válida');
+      passwordValid = true;
+      isPlainText = true;
+    } else {
+      try {
+        passwordValid = await bcrypt.compare(password.trim(), user.password);
+        console.log('🔐 [login] Validación bcrypt:', passwordValid);
+      } catch (bcryptError) {
+        console.log('⚠️ [login] bcrypt falló:', bcryptError);
+        passwordValid = false;
+      }
+    }
+
+    if (!passwordValid) {
       console.warn('❌ [login] Contraseña incorrecta');
       return redirect('/auth/login?error=invalid_credentials');
     }
 
+    if (isPlainText) {
+      console.log('🔄 [login] Migrando contraseña a hash...');
+      await migratePasswordToHash(user.id, password.trim());
+    }
+
     console.log('✅ [login] Contraseña correcta, creando sesión con tutorial:', user.tutorial);
     
-    // ✅ MODIFICADO: Pasar el campo tutorial
     await createSession(user.id, user.email, user.nombre, user.tutorial || 0);
     
   } catch (error) {
@@ -162,9 +189,7 @@ export async function login(formData: FormData) {
   }
 
   redirect('/dashboard');
-}
-
-export async function register(formData: FormData) {
+}export async function register(formData: FormData) {
     const nombre = formData.get('name') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
@@ -179,18 +204,18 @@ export async function register(formData: FormData) {
             return redirect('/auth/register?error=user_exists');
         }
 
-        // ✅ MODIFICADO: Asegurar que tutorial se inicializa en 1 para nuevos usuarios
+        const hashedPassword = await bcrypt.hash(password, 10);
+        console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
+
         const [result] = await db.query<OkPacket>(
             'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
-            [nombre, email, password]
+            [nombre, email, hashedPassword]
         );
 
         const newUserId = result.insertId;
         
-        // Crear configuración de IA por defecto
         await createDefaultAIConfig(newUserId);
         
-        // ✅ MODIFICADO: Nuevos usuarios tienen tutorial = 1
         await createSession(newUserId, email, nombre, 1);
 
     } catch (error) {
@@ -210,9 +235,8 @@ export async function handleGoogleSignInOnServer(
       return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
     }
 
-    // ✅ MODIFICADO: Traer campo tutorial
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, tutorial FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, tutorial FROM usuarios WHERE email = ?',
       [email]
     );
 
@@ -222,35 +246,36 @@ export async function handleGoogleSignInOnServer(
     if (existingUsers.length > 0) {
       user = existingUsers[0] as User;
       tutorialValue = user.tutorial || 0;
+      console.log('✅ [handleGoogleSignIn] Usuario existente encontrado:', user.id);
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
-      // ✅ MODIFICADO: Nuevos usuarios de Google también tienen tutorial = 1
+      
+      // 🔥 GENERAR PASSWORD ÚNICO MARCADO COMO GOOGLE
+      const googlePassword = GOOGLE_PASSWORD_MARKER + crypto.randomBytes(32).toString('hex');
+      
+      console.log('🆕 [handleGoogleSignIn] Creando nuevo usuario de Google');
+      
       const [result] = await db.query<OkPacket>(
           'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
-          [nombre, email, null]
+          [nombre, email, googlePassword]
       );
+      
       user = { id: result.insertId, email, nombre, tutorial: 1 };
       tutorialValue = 1;
       
-      // Crear configuración de IA por defecto para nuevo usuario
       await createDefaultAIConfig(user.id);
+      console.log('✅ [handleGoogleSignIn] Usuario creado con ID:', user.id);
     }
 
-    // ✅ MODIFICADO: Pasar tutorial a la sesión
     await createSession(user.id, user.email, user.nombre, tutorialValue);
     
     return { success: true };
 
   } catch (error) {
-    console.error("Server-side Google sign-in error:", error);
+    console.error("❌ [handleGoogleSignIn] Error:", error);
     return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
   }
-}
-
-/**
- * Marca el tutorial como completado para el usuario actual
- */
-export async function completeTutorial() {
+}export async function completeTutorial() {
   try {
     const session = await getSession();
     
@@ -267,7 +292,6 @@ export async function completeTutorial() {
 
     console.log('✅ [completeTutorial] Tutorial marcado como completado');
 
-    // Recrear la sesión con tutorial = 0
     await createSession(session.userId, session.email, session.nombre, 0);
 
   } catch (error) {
@@ -276,14 +300,10 @@ export async function completeTutorial() {
   }
 }
 
-/**
- * Cierra sesión y retorna información para que el cliente limpie el localStorage
- */
 export async function logout() {
   console.log('🚪 [logout] Cerrando sesión del servidor');
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
   
-  // Redirigir con query param para que el cliente sepa que debe limpiar storage
   redirect('/auth/login?logout=true');
 }
