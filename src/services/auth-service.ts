@@ -35,6 +35,10 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         email: z.string().email(),
         nombre: z.string(),
         tutorial: z.number().optional(),
+        tutorialDocumentos: z.number().optional(),
+        tutorialTrimestres: z.number().optional(),
+        tutorialActividad: z.number().optional(),
+        tutorialIndividual: z.number().optional(), // ⬅️ NUEVO
         exp: z.number(),
     }).safeParse(payload);
     
@@ -45,6 +49,10 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         email: parsedPayload.data.email,
         nombre: parsedPayload.data.nombre,
         tutorial: parsedPayload.data.tutorial,
+        tutorialDocumentos: parsedPayload.data.tutorialDocumentos,
+        tutorialTrimestres: parsedPayload.data.tutorialTrimestres,
+        tutorialActividad: parsedPayload.data.tutorialActividad,
+        tutorialIndividual: parsedPayload.data.tutorialIndividual, // ⬅️ NUEVO
         expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
@@ -78,9 +86,28 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     return session;
 }
 
-export async function createSession(userId: number, email: string, nombre: string, tutorial: number = 0) {
+export async function createSession(
+  userId: number, 
+  email: string, 
+  nombre: string, 
+  tutorial: number = 0,
+  tutorialDocumentos: number = 0,
+  tutorialTrimestres: number = 0,
+  tutorialActividad: number = 0,
+  tutorialIndividual: number = 0 // ⬅️ NUEVO
+) {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const session = await encrypt({ userId, email, nombre, tutorial, expires });
+    const session = await encrypt({ 
+      userId, 
+      email, 
+      nombre, 
+      tutorial, 
+      tutorialDocumentos,
+      tutorialTrimestres,
+      tutorialActividad,
+      tutorialIndividual, // ⬅️ NUEVO
+      expires 
+    });
 
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE_NAME, session, {
@@ -89,7 +116,15 @@ export async function createSession(userId: number, email: string, nombre: strin
         secure: process.env.NODE_ENV === 'production',
         path: '/',
     });
-    console.log('🍪 [createSession] Cookie guardada:', { name: SESSION_COOKIE_NAME, path: '/', tutorial });
+    console.log('🍪 [createSession] Cookie guardada:', { 
+      name: SESSION_COOKIE_NAME, 
+      path: '/', 
+      tutorial,
+      tutorialDocumentos,
+      tutorialTrimestres,
+      tutorialActividad,
+      tutorialIndividual // ⬅️ NUEVO
+    });
 }
 
 async function createDefaultAIConfig(userId: number) {
@@ -133,7 +168,7 @@ export async function login(formData: FormData) {
 
   try {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, tutorial FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual FROM usuarios WHERE email = ?', // ⬅️ MODIFICADO
       [email.trim()]
     );
     
@@ -144,7 +179,12 @@ export async function login(formData: FormData) {
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    const user = rows[0] as User;
+    const user = rows[0] as User & { 
+      tutorial_documentos?: number; 
+      tutorial_trimestres?: number;
+      tutorial_actividad?: number;
+      tutorial_individual?: number; // ⬅️ NUEVO
+    };
     
     // 🔥 DETECTAR SI ES CUENTA DE GOOGLE
     if (user.password && user.password.startsWith(GOOGLE_PASSWORD_MARKER)) {
@@ -179,9 +219,24 @@ export async function login(formData: FormData) {
       await migratePasswordToHash(user.id, password.trim());
     }
 
-    console.log('✅ [login] Contraseña correcta, creando sesión con tutorial:', user.tutorial);
+    console.log('✅ [login] Contraseña correcta, creando sesión con:', {
+      tutorial: user.tutorial || 0,
+      tutorialDocumentos: user.tutorial_documentos || 0,
+      tutorialTrimestres: user.tutorial_trimestres || 0,
+      tutorialActividad: user.tutorial_actividad || 0,
+      tutorialIndividual: user.tutorial_individual || 0 // ⬅️ NUEVO
+    });
     
-    await createSession(user.id, user.email, user.nombre, user.tutorial || 0);
+    await createSession(
+      user.id, 
+      user.email, 
+      user.nombre, 
+      user.tutorial || 0,
+      user.tutorial_documentos || 0,
+      user.tutorial_trimestres || 0,
+      user.tutorial_actividad || 0,
+      user.tutorial_individual || 0 // ⬅️ NUEVO
+    );
     
   } catch (error) {
     console.error('❌ [login] Error:', error);
@@ -189,7 +244,9 @@ export async function login(formData: FormData) {
   }
 
   redirect('/dashboard');
-}export async function register(formData: FormData) {
+}
+
+export async function register(formData: FormData) {
     const nombre = formData.get('name') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
@@ -208,7 +265,7 @@ export async function login(formData: FormData) {
         console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
 
         const [result] = await db.query<OkPacket>(
-            'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
+            'INSERT INTO usuarios (nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual) VALUES (?, ?, ?, 1, 1, 1, 1, 1)', // ⬅️ MODIFICADO
             [nombre, email, hashedPassword]
         );
 
@@ -216,7 +273,7 @@ export async function login(formData: FormData) {
         
         await createDefaultAIConfig(newUserId);
         
-        await createSession(newUserId, email, nombre, 1);
+        await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1); // ⬅️ MODIFICADO
 
     } catch (error) {
         console.error('Registration error:', error);
@@ -236,16 +293,34 @@ export async function handleGoogleSignInOnServer(
     }
 
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, tutorial FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual FROM usuarios WHERE email = ?', // ⬅️ MODIFICADO
       [email]
     );
 
-    let user: User;
+    let user: User & { 
+      tutorial_documentos?: number; 
+      tutorial_trimestres?: number;
+      tutorial_actividad?: number;
+      tutorial_individual?: number; // ⬅️ NUEVO
+    };
     let tutorialValue = 0;
+    let tutorialDocumentosValue = 0;
+    let tutorialTrimestresValue = 0;
+    let tutorialActividadValue = 0;
+    let tutorialIndividualValue = 0; // ⬅️ NUEVO
 
     if (existingUsers.length > 0) {
-      user = existingUsers[0] as User;
+      user = existingUsers[0] as User & { 
+        tutorial_documentos?: number; 
+        tutorial_trimestres?: number;
+        tutorial_actividad?: number;
+        tutorial_individual?: number; // ⬅️ NUEVO
+      };
       tutorialValue = user.tutorial || 0;
+      tutorialDocumentosValue = user.tutorial_documentos || 0;
+      tutorialTrimestresValue = user.tutorial_trimestres || 0;
+      tutorialActividadValue = user.tutorial_actividad || 0;
+      tutorialIndividualValue = user.tutorial_individual || 0; // ⬅️ NUEVO
       console.log('✅ [handleGoogleSignIn] Usuario existente encontrado:', user.id);
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
@@ -256,18 +331,40 @@ export async function handleGoogleSignInOnServer(
       console.log('🆕 [handleGoogleSignIn] Creando nuevo usuario de Google');
       
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email, password, tutorial) VALUES (?, ?, ?, 1)',
+          'INSERT INTO usuarios (nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual) VALUES (?, ?, ?, 1, 1, 1, 1, 1)', // ⬅️ MODIFICADO
           [nombre, email, googlePassword]
       );
       
-      user = { id: result.insertId, email, nombre, tutorial: 1 };
+      user = { 
+        id: result.insertId, 
+        email, 
+        nombre, 
+        tutorial: 1,
+        tutorial_documentos: 1,
+        tutorial_trimestres: 1,
+        tutorial_actividad: 1,
+        tutorial_individual: 1 // ⬅️ NUEVO
+      };
       tutorialValue = 1;
+      tutorialDocumentosValue = 1;
+      tutorialTrimestresValue = 1;
+      tutorialActividadValue = 1;
+      tutorialIndividualValue = 1; // ⬅️ NUEVO
       
       await createDefaultAIConfig(user.id);
       console.log('✅ [handleGoogleSignIn] Usuario creado con ID:', user.id);
     }
 
-    await createSession(user.id, user.email, user.nombre, tutorialValue);
+    await createSession(
+      user.id, 
+      user.email, 
+      user.nombre, 
+      tutorialValue, 
+      tutorialDocumentosValue, 
+      tutorialTrimestresValue,
+      tutorialActividadValue,
+      tutorialIndividualValue // ⬅️ NUEVO
+    );
     
     return { success: true };
 
@@ -275,7 +372,9 @@ export async function handleGoogleSignInOnServer(
     console.error("❌ [handleGoogleSignIn] Error:", error);
     return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
   }
-}export async function completeTutorial() {
+}
+
+export async function completeTutorial() {
   try {
     const session = await getSession();
     
@@ -292,10 +391,156 @@ export async function handleGoogleSignInOnServer(
 
     console.log('✅ [completeTutorial] Tutorial marcado como completado');
 
-    await createSession(session.userId, session.email, session.nombre, 0);
+    await createSession(
+      session.userId, 
+      session.email, 
+      session.nombre, 
+      0,
+      session.tutorialDocumentos || 0,
+      session.tutorialTrimestres || 0,
+      session.tutorialActividad || 0,
+      session.tutorialIndividual || 0 // ⬅️ MANTENER
+    );
 
   } catch (error) {
     console.error('❌ [completeTutorial] Error:', error);
+    throw error;
+  }
+}
+
+export async function completeTutorialDocumentos() {
+  try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      throw new Error('No hay sesión activa');
+    }
+
+    console.log('📝 [completeTutorialDocumentos] Actualizando tutorial documentos para usuario:', session.userId);
+
+    await db.query(
+      'UPDATE usuarios SET tutorial_documentos = 0 WHERE id = ?',
+      [session.userId]
+    );
+
+    console.log('✅ [completeTutorialDocumentos] Tutorial documentos marcado como completado');
+
+    await createSession(
+      session.userId, 
+      session.email, 
+      session.nombre, 
+      session.tutorial || 0,
+      0,
+      session.tutorialTrimestres || 0,
+      session.tutorialActividad || 0,
+      session.tutorialIndividual || 0 // ⬅️ MANTENER
+    );
+
+  } catch (error) {
+    console.error('❌ [completeTutorialDocumentos] Error:', error);
+    throw error;
+  }
+}
+
+export async function completeTutorialTrimestres() {
+  try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      throw new Error('No hay sesión activa');
+    }
+
+    console.log('📝 [completeTutorialTrimestres] Actualizando tutorial trimestres para usuario:', session.userId);
+
+    await db.query(
+      'UPDATE usuarios SET tutorial_trimestres = 0 WHERE id = ?',
+      [session.userId]
+    );
+
+    console.log('✅ [completeTutorialTrimestres] Tutorial trimestres marcado como completado');
+
+    await createSession(
+      session.userId, 
+      session.email, 
+      session.nombre, 
+      session.tutorial || 0,
+      session.tutorialDocumentos || 0,
+      0,
+      session.tutorialActividad || 0,
+      session.tutorialIndividual || 0 // ⬅️ MANTENER
+    );
+
+  } catch (error) {
+    console.error('❌ [completeTutorialTrimestres] Error:', error);
+    throw error;
+  }
+}
+
+export async function completeTutorialActividad() {
+  try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      throw new Error('No hay sesión activa');
+    }
+
+    console.log('📝 [completeTutorialActividad] Actualizando tutorial actividad para usuario:', session.userId);
+
+    await db.query(
+      'UPDATE usuarios SET tutorial_actividad = 0 WHERE id = ?',
+      [session.userId]
+    );
+
+    console.log('✅ [completeTutorialActividad] Tutorial actividad marcado como completado');
+
+    await createSession(
+      session.userId, 
+      session.email, 
+      session.nombre, 
+      session.tutorial || 0,
+      session.tutorialDocumentos || 0,
+      session.tutorialTrimestres || 0,
+      0,
+      session.tutorialIndividual || 0 // ⬅️ MANTENER
+    );
+
+  } catch (error) {
+    console.error('❌ [completeTutorialActividad] Error:', error);
+    throw error;
+  }
+}
+
+// ⬅️ NUEVA FUNCIÓN
+export async function completeTutorialIndividual() {
+  try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      throw new Error('No hay sesión activa');
+    }
+
+    console.log('📝 [completeTutorialIndividual] Actualizando tutorial individual para usuario:', session.userId);
+
+    await db.query(
+      'UPDATE usuarios SET tutorial_individual = 0 WHERE id = ?',
+      [session.userId]
+    );
+
+    console.log('✅ [completeTutorialIndividual] Tutorial individual marcado como completado');
+
+    await createSession(
+      session.userId, 
+      session.email, 
+      session.nombre, 
+      session.tutorial || 0,
+      session.tutorialDocumentos || 0,
+      session.tutorialTrimestres || 0,
+      session.tutorialActividad || 0,
+      0 // ⬅️ MARCAR INDIVIDUAL COMO COMPLETADO
+    );
+
+  } catch (error) {
+    console.error('❌ [completeTutorialIndividual] Error:', error);
     throw error;
   }
 }

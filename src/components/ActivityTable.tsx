@@ -418,7 +418,9 @@ export default function ActivityTable({
         return newSet;
       });
     }
-  };const clearFilters = () => {
+  };
+
+  const clearFilters = () => {
     setFilters({ status: '', tipoDocumento: '', dateFrom: '', dateTo: '', searchText: '' });
     setPagination(prev => ({ ...prev, offset: 0 }));
   };
@@ -478,78 +480,63 @@ export default function ActivityTable({
     return sorted;
   };
 
-  // Agregar estas dos funciones JUSTO ANTES de organizeActivities()
-// (alrededor de la línea 545)
+  const extractParentNameFromSub = (subDocName: string): string | null => {
+    const match = subDocName.match(/^[Ss]ub-[^-]+-(.+)$/i);
+    return match ? match[1] : null;
+  };
 
-const extractParentNameFromSub = (subDocName: string): string | null => {
-  // Patrón: sub-{tipo}-{nombre padre}.pdf o Sub-{tipo}-{nombre padre}.pdf
-  const match = subDocName.match(/^[Ss]ub-[^-]+-(.+)$/i);
-  return match ? match[1] : null;
-};
-
-const isSubDocument = (docName: string): boolean => {
-  return /^[Ss]ub-/.test(docName);
-};
-
-  const organizeActivities = () => {
-  const sortedActivities = sortActivities(activities);
-  
-  // Identificar archivos hijos por parent_upload_id (ZIPs/RARs)
-  const childFiles = sortedActivities.filter(a => a.parent_upload_id);
-  const zipUploadIds = new Set(childFiles.map(a => a.parent_upload_id).filter(Boolean));
-  
-  // Identificar sub-documentos PDF (por patrón de nombre)
-  const subDocuments = sortedActivities.filter(a => !a.parent_upload_id && isSubDocument(a.documento_nombre));
-  
-  // Crear un mapa de nombre padre -> sub-documentos
-  const subDocParentMap = new Map<string, Activity[]>();
-  subDocuments.forEach(sub => {
-    const parentName = extractParentNameFromSub(sub.documento_nombre);
-    if (parentName) {
-      if (!subDocParentMap.has(parentName)) {
-        subDocParentMap.set(parentName, []);
+  const isSubDocument = (docName: string): boolean => {
+    return /^[Ss]ub-/.test(docName);
+  };const organizeActivities = () => {
+    const sortedActivities = sortActivities(activities);
+    
+    const childFiles = sortedActivities.filter(a => a.parent_upload_id);
+    const zipUploadIds = new Set(childFiles.map(a => a.parent_upload_id).filter(Boolean));
+    
+    const subDocuments = sortedActivities.filter(a => !a.parent_upload_id && isSubDocument(a.documento_nombre));
+    
+    const subDocParentMap = new Map<string, Activity[]>();
+    subDocuments.forEach(sub => {
+      const parentName = extractParentNameFromSub(sub.documento_nombre);
+      if (parentName) {
+        if (!subDocParentMap.has(parentName)) {
+          subDocParentMap.set(parentName, []);
+        }
+        subDocParentMap.get(parentName)!.push(sub);
       }
-      subDocParentMap.get(parentName)!.push(sub);
-    }
-  });
+    });
 
-  // Identificar documentos padre que tienen sub-documentos
-  const parentPdfNames = new Set(subDocParentMap.keys());
-  
-  // Filtrar archivos padre: aquellos sin parent_upload_id y que NO sean sub-documentos
-  const parentFiles = sortedActivities.filter(a => 
-    !a.parent_upload_id && !isSubDocument(a.documento_nombre)
-  );
+    const parentPdfNames = new Set(subDocParentMap.keys());
+    
+    const parentFiles = sortedActivities.filter(a => 
+      !a.parent_upload_id && !isSubDocument(a.documento_nombre)
+    );
 
-  // Mapa de hijos por parent_upload_id o por nombre (para sub-documentos)
-  const childrenMap = new Map<string, Activity[]>();
-  
-  // Agregar hijos de ZIPs/RARs por parent_upload_id
-  childFiles.forEach(child => {
-    if (!child.parent_upload_id) return;
-    if (!childrenMap.has(child.parent_upload_id)) {
-      childrenMap.set(child.parent_upload_id, []);
-    }
-    childrenMap.get(child.parent_upload_id)!.push(child);
-  });
+    const childrenMap = new Map<string, Activity[]>();
+    
+    childFiles.forEach(child => {
+      if (!child.parent_upload_id) return;
+      if (!childrenMap.has(child.parent_upload_id)) {
+        childrenMap.set(child.parent_upload_id, []);
+      }
+      childrenMap.get(child.parent_upload_id)!.push(child);
+    });
 
-  // Agregar sub-documentos PDF por nombre del padre
-  parentFiles.forEach(parent => {
-    if (subDocParentMap.has(parent.documento_nombre)) {
-      const subs = subDocParentMap.get(parent.documento_nombre)!;
-      // Usar el upload_id del padre como key
-      childrenMap.set(parent.upload_id, subs);
-      zipUploadIds.add(parent.upload_id);
-    }
-  });
+    parentFiles.forEach(parent => {
+      if (subDocParentMap.has(parent.documento_nombre)) {
+        const subs = subDocParentMap.get(parent.documento_nombre)!;
+        childrenMap.set(parent.upload_id, subs);
+        zipUploadIds.add(parent.upload_id);
+      }
+    });
 
-  // Ordenar los hijos de cada grupo
-  childrenMap.forEach((children, parentId) => {
-    childrenMap.set(parentId, sortActivities(children));
-  });
+    childrenMap.forEach((children, parentId) => {
+      childrenMap.set(parentId, sortActivities(children));
+    });
 
-  return { parentFiles, childrenMap, zipUploadIds };
-};
+    return { parentFiles, childrenMap, zipUploadIds };
+  };
+
   const toggleZip = (uploadId: string) => {
     setExpandedZips(prev => {
       const newSet = new Set(prev);
@@ -679,6 +666,9 @@ const isSubDocument = (docName: string): boolean => {
     const canNavigate = status === 'completado' && activity.documento_id;
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(status);
     const isError = canRetry;
+    
+    // ⬅️ NUEVO: Identificar si es la primera fila
+    const isFirstRow = !isChild && activities.indexOf(activity) === 0;
 
     const handleRowClick = () => {
       if (canNavigate) {
@@ -697,7 +687,10 @@ const isSubDocument = (docName: string): boolean => {
         style={{ animationDelay: `${activities.indexOf(activity) * 50}ms` }}
         onClick={handleRowClick}
       >
-        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+        <td 
+          className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap"
+          data-tutorial={isFirstRow ? "actividad-badges" : undefined}
+        >
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="group-hover:scale-110 transition-transform duration-200">
               {getStatusIcon(activity.status)}
@@ -768,7 +761,11 @@ const isSubDocument = (docName: string): boolean => {
             </span>
           </div>
         </td>
-        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+        <td 
+          className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" 
+          onClick={(e) => e.stopPropagation()}
+          data-tutorial={isFirstRow ? "actividad-actions" : undefined}
+        >
           <div className="flex items-center gap-1 sm:gap-2">
             <div className="hidden sm:flex">
               {getSourceIcon(activity['dashboard-correo'])}
@@ -809,9 +806,14 @@ const isSubDocument = (docName: string): boolean => {
         </td>
       </tr>
     );
-  };const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
+  };
+
+  const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
     const isExpanded = expandedZips.has(zipActivity.upload_id);
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(zipActivity.status.toLowerCase());
+    
+    // ⬅️ NUEVO: Identificar si es la primera fila ZIP
+    const isFirstZip = activities.indexOf(zipActivity) === 0;
 
     return (
       <React.Fragment key={zipActivity.upload_id}>
@@ -821,6 +823,7 @@ const isSubDocument = (docName: string): boolean => {
           }`}
           style={{ animationDelay: `${activities.indexOf(zipActivity) * 50}ms` }}
           onClick={() => toggleZip(zipActivity.upload_id)}
+          data-tutorial={isFirstZip ? "actividad-zip" : undefined}
         >
           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -950,7 +953,6 @@ const isSubDocument = (docName: string): boolean => {
     );
   }
 
- // Renderizar botón de volver si no hay actividades
   if (activities.length === 0) {
     return (
       <div className="space-y-4">
@@ -969,6 +971,7 @@ const isSubDocument = (docName: string): boolean => {
       </div>
     );
   }
+
   const { parentFiles, childrenMap, zipUploadIds } = organizeActivities();
   const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
   const unreadCount = activities.filter(a => a.is_new === 1).length;
@@ -976,7 +979,6 @@ const isSubDocument = (docName: string): boolean => {
   return (
     <>
       <div className="space-y-4">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-4 animate-fade-in">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
             <button
@@ -996,6 +998,7 @@ const isSubDocument = (docName: string): boolean => {
               <button
                 onClick={markAllAsRead}
                 disabled={isMarkingRead}
+                data-tutorial="actividad-mark-read"
                 className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
               >
                 <CheckCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
@@ -1019,6 +1022,7 @@ const isSubDocument = (docName: string): boolean => {
             )}
             <button
               onClick={() => setShowFilters(!showFilters)}
+              data-tutorial="actividad-filters"
               className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
                 showFilters || activeFiltersCount > 0
                   ? 'bg-primary text-primary-foreground border-primary'
@@ -1033,7 +1037,7 @@ const isSubDocument = (docName: string): boolean => {
                 </span>
               )}
             </button>
-            <div className="relative">
+            <div className="relative" data-tutorial="actividad-autorefresh">
               <div className="flex items-center gap-1.5 bg-secondary/80 backdrop-blur-sm border rounded-lg px-2 sm:px-3 py-2">
                 <button
                   onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
@@ -1056,10 +1060,7 @@ const isSubDocument = (docName: string): boolean => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Panel de Filtros */}
-        {showFilters && (
+        </div>{showFilters && (
           <div className="bg-muted/50 border rounded-lg p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div>
@@ -1120,10 +1121,9 @@ const isSubDocument = (docName: string): boolean => {
           </div>
         )}
 
-        {/* Tabla */}
         <div className="bg-card border rounded-lg overflow-hidden shadow-sm backdrop-blur-sm animate-fade-in" style={{ animationDelay: '150ms' }}>
           <div className="overflow-x-auto">
-            <table className="w-full table-auto min-w-[640px]">
+            <table className="w-full table-auto min-w-[640px]" data-tutorial="actividad-table">
               <thead className="bg-muted/50 backdrop-blur-sm border-b">
                 <tr>
                   <th 
@@ -1187,7 +1187,6 @@ const isSubDocument = (docName: string): boolean => {
           </div>
         </div>
 
-        {/* Paginación */}
         {pagination.hasMore && (
           <div className="flex justify-center mt-4 sm:mt-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
             <button
@@ -1211,7 +1210,6 @@ const isSubDocument = (docName: string): boolean => {
         )}
       </div>
 
-      {/* Modales */}
       <DeleteActivityDialog
         isOpen={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}

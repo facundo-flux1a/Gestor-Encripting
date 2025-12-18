@@ -47,6 +47,7 @@ interface StorageData {
 
 const STORAGE_KEY = 'active_uploads';
 const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutos
+const AUTO_CLOSE_DELAY = 5000; // 5 segundos
 
 function saveToStorage(uploads: Map<string, UploadItem>, userId: number | null) {
   if (!userId) return;
@@ -127,7 +128,6 @@ interface UploadProgressManagerProps {
 }
 
 export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
-  // 🚀 Cargar desde localStorage INMEDIATAMENTE en la inicialización
   const [uploads, setUploads] = useState<Map<string, UploadItem>>(() => {
     if (userId) {
       const stored = loadFromStorage(userId);
@@ -138,31 +138,30 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
     return new Map();
   });
   const pollIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const prevUserIdRef = useRef<number | null>(userId); // Inicializar con userId actual
-  const hasLoadedRef = useRef(userId ? true : false); // Ya cargó si hay userId
+  const autoCloseTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const prevUserIdRef = useRef<number | null>(userId);
+  const hasLoadedRef = useRef(userId ? true : false);
 
-  // 🧹 EFECTO 1: Detectar cambio/cierre de sesión y limpiar
   useEffect(() => {
     const prevUserId = prevUserIdRef.current;
 
-    // Solo limpiar si había un usuario DIFERENTE antes
     if (prevUserId !== null && prevUserId !== userId) {
       console.log('🧹 [Manager] Usuario cambió o cerró sesión, limpiando estado:', { prevUserId, newUserId: userId });
       
-      // Detener todos los pollings
       pollIntervalsRef.current.forEach(interval => clearInterval(interval));
       pollIntervalsRef.current.clear();
       
-      // Limpiar estado
+      // 🔥 Limpiar timers de auto-close
+      autoCloseTimersRef.current.forEach(timer => clearTimeout(timer));
+      autoCloseTimersRef.current.clear();
+      
       setUploads(new Map());
       hasLoadedRef.current = false;
     }
 
-    // Actualizar la referencia DESPUÉS de la limpieza
     prevUserIdRef.current = userId;
   }, [userId]);
 
-  // 🚀 EFECTO 2: Cargar uploads cuando hay usuario
   useEffect(() => {
     if (userId && !hasLoadedRef.current) {
       console.log('🚀 [Manager] Cargando uploads para userId:', userId);
@@ -178,7 +177,6 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
     }
   }, [userId]);
 
-  // 💾 GUARDAR EN LOCALSTORAGE CADA VEZ QUE CAMBIA
   useEffect(() => {
     if (uploads.size > 0 && userId) {
       saveToStorage(uploads, userId);
@@ -223,6 +221,13 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
       pollIntervalsRef.current.delete(uploadId);
     }
 
+    // 🔥 Limpiar timer de auto-close si existe
+    const autoCloseTimer = autoCloseTimersRef.current.get(uploadId);
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer);
+      autoCloseTimersRef.current.delete(uploadId);
+    }
+
     setUploads(prev => {
       const newUploads = new Map(prev);
       newUploads.delete(uploadId);
@@ -264,10 +269,11 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
       delete (window as any).__uploadProgressManager;
       pollIntervalsRef.current.forEach(interval => clearInterval(interval));
       pollIntervalsRef.current.clear();
+      autoCloseTimersRef.current.forEach(timer => clearTimeout(timer));
+      autoCloseTimersRef.current.clear();
     };
   }, [addUpload, removeUpload]);
 
-  // 🔄 POLLING AUTOMÁTICO
   useEffect(() => {
     uploads.forEach((upload) => {
       if (upload.connectionStatus === 'polling' && !pollIntervalsRef.current.has(upload.uploadId)) {
@@ -298,8 +304,12 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                   current.progressData = data;
 
                   const normalizedStatus = data.status.toLowerCase();
-                  if (normalizedStatus === 'completado' || data.status === 'completed' || 
-                      normalizedStatus === 'fallido' || data.status === 'failed') {
+                  const isFinished = normalizedStatus === 'completado' || 
+                                    data.status === 'completed' || 
+                                    normalizedStatus === 'fallido' || 
+                                    data.status === 'failed';
+
+                  if (isFinished) {
                     console.log('🛑 [Manager] Deteniendo polling por estado final:', upload.uploadId);
                     current.connectionStatus = 'completed';
 
@@ -307,6 +317,16 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                     if (interval) {
                       clearInterval(interval);
                       pollIntervalsRef.current.delete(upload.uploadId);
+                    }
+
+                    // 🔥 INICIAR TIMER DE AUTO-CLOSE (5 segundos)
+                    if (!autoCloseTimersRef.current.has(upload.uploadId)) {
+                      console.log(`⏲️ [Manager] Auto-close programado en ${AUTO_CLOSE_DELAY/1000}s para:`, upload.uploadId);
+                      const timer = setTimeout(() => {
+                        console.log('🔄 [Manager] Auto-close ejecutado para:', upload.uploadId);
+                        removeUpload(upload.uploadId);
+                      }, AUTO_CLOSE_DELAY);
+                      autoCloseTimersRef.current.set(upload.uploadId, timer);
                     }
                   }
 
@@ -347,6 +367,16 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                 clearInterval(interval);
                 pollIntervalsRef.current.delete(upload.uploadId);
               }
+
+              // 🔥 AUTO-CLOSE también para errores de conexión
+              if (!autoCloseTimersRef.current.has(upload.uploadId)) {
+                console.log(`⏲️ [Manager] Auto-close programado (error) en ${AUTO_CLOSE_DELAY/1000}s para:`, upload.uploadId);
+                const timer = setTimeout(() => {
+                  console.log('🔄 [Manager] Auto-close ejecutado (error) para:', upload.uploadId);
+                  removeUpload(upload.uploadId);
+                }, AUTO_CLOSE_DELAY);
+                autoCloseTimersRef.current.set(upload.uploadId, timer);
+              }
             }
           }
         };
@@ -356,7 +386,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
         pollIntervalsRef.current.set(upload.uploadId, intervalId);
       }
     });
-  }, [uploads]);
+  }, [uploads, removeUpload]);
 
   if (uploads.size === 0) return null;
 

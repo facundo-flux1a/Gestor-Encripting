@@ -180,6 +180,10 @@ export function UploadDialog({
           title: "✅ Archivos enviados",
           description: `${successCount} archivo(s) en procesamiento${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
         });
+
+        // 🔥 DISPARAR EVENTO PARA EL TUTORIAL
+        console.log('🎯 [UploadDialog] Disparando evento documentUploaded');
+        window.dispatchEvent(new Event('documentUploaded'));
       }
     } finally {
       setFiles([]);

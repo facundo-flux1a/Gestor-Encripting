@@ -802,7 +802,7 @@ export function DocumentsTable({
     <TooltipProvider>
       <div className="space-y-4">
         {/* Wrapper con scroll horizontal optimizado */}
-        <div className="relative w-full group">
+        <div className="relative w-full group" data-tutorial="documents-table">
           {/* Contenedor de scroll optimizado con sombra sutil */}
           <div className="w-full overflow-x-auto rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border">
             <DataTable 

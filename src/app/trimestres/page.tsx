@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { TrimestresProvider } from '@/context/TrimestresProvider';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { TrimestreSelector } from '@/components/trimestres/trimestre-selector';
 import { TrimestreStatsCard } from '@/components/trimestres/trimestre-stats-card';
@@ -9,6 +10,7 @@ import { TrimestreTable } from '@/components/trimestres/trimestres-table';
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
+import { TrimestresTutorial } from '@/components/trimestres/TrimestresTutorial';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -23,35 +25,35 @@ import {
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
-export default function TrimestresPage() {
+function TrimestresPageContent() {
   const { selectedCompanyIds } = useCompanyContext();
   const { toast } = useToast();
 
   //Currencies
   const formatNumber = (num: number | string): string => {
-  const value = typeof num === 'string' ? parseFloat(num) : num;
-  if (isNaN(value)) return '0';
-  
-  const parts = value.toString().split('.');
-  const integerPart = parts[0];
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
-  return formattedInteger;
-};
+    const value = typeof num === 'string' ? parseFloat(num) : num;
+    if (isNaN(value)) return '0';
+    
+    const parts = value.toString().split('.');
+    const integerPart = parts[0];
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return formattedInteger;
+  };
 
-const formatCurrency = (amount: number | string): string => {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0,00 €';
-  
-  const fixed = num.toFixed(2);
-  const parts = fixed.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
-  
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
-  return `${formattedInteger},${decimalPart} €`;
-};
+  const formatCurrency = (amount: number | string): string => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(num)) return '0,00 €';
+    
+    const fixed = num.toFixed(2);
+    const parts = fixed.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${formattedInteger},${decimalPart} €`;
+  };
 
   // Estados
   const [trimestres, setTrimestres] = React.useState<Trimestre[]>([]);
@@ -288,166 +290,162 @@ const formatCurrency = (amount: number | string): string => {
   }, [trimestres]);
 
   const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
-console.log('🔵 Estado del diálogo:', {
-  dialogOpen,
-  trimestreToClose,
-  puedeCerrarse
-});
+
   return (
-    <MainLayout>
-      <MainLayoutHeader>
-        {/* 📱 HEADER CON MEJOR LAYOUT */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 w-full">
-          {/* Título */}
-          <div className="flex flex-col gap-1 min-w-0 flex-1">
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">
-              Gestión de Trimestres
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground truncate">
-              Visualiza y cierra los trimestres fiscales
-            </p>
-          </div>
-          
-          {/* 🎯 CONTROLES COMPACTOS EN DESKTOP */}
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Switch de mostrar vacíos */}
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="mostrar-vacios"
-                checked={mostrarVacios}
-                onCheckedChange={setMostrarVacios}
-              />
-              <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
-                Mostrar vacíos
-              </Label>
+    <>
+      <TrimestresTutorial />
+      
+      <MainLayout>
+        <MainLayoutHeader data-tutorial="trimestres-welcome">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 w-full">
+            <div className="flex flex-col gap-1 min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">
+                Gestión de Trimestres
+              </h1>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                Visualiza y cierra los trimestres fiscales
+              </p>
             </div>
-
-            {/* 🎯 SELECTOR DE EMPRESAS - WIDTH FIJO MÁXIMO */}
-            <div className="w-[200px]">
-              <CompaniesHeaderSelector />
-            </div>
-          </div>
-        </div>
-      </MainLayoutHeader>
-
-      {/* 📱 CONTENIDO PRINCIPAL CON PADDING RESPONSIVE */}
-      <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
-        
-        {/* 📱 SELECTOR DE TRIMESTRE + BADGE */}
-        {isLoading ? (
-          <Skeleton className="h-12 sm:h-16 w-full" />
-        ) : (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            {/* 🎯 SELECTOR DE TRIMESTRE - WIDTH FULL EN MOBILE */}
-            <div className="w-full sm:flex-1 sm:min-w-0">
-              <TrimestreSelector
-                trimestres={trimestresParaSelector}
-                selectedAño={selectedAño}
-                selectedTrimestre={selectedTrimestre}
-                onSelectTrimestre={(año, trimestre) => {
-                  setSelectedAño(año);
-                  setSelectedTrimestre(trimestre);
-                }}
-                onSelectAño={handleSelectAño}
-                mostrarVacios={mostrarVacios}
-                onToggleMostrarVacios={setMostrarVacios}
-              />
-            </div>
-
-            {/* Badge y botón de cerrar */}
-            {trimestreAgregado && (
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <QuarterBadge cerrado={trimestreAgregado.cerrado} />
-                {puedeCerrarse && (
-                  <Button
-  variant="destructive"
-  size="sm"
-  className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
-  onClick={() => {
-    console.log('🔴 Abriendo diálogo de cierre'); // DEBUG
-    console.log('Trimestre:', trimestreAgregado); // DEBUG
-    setTrimestreToClose(trimestreAgregado);
-    setDialogOpen(true);
-  }}
->
-  <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-  <span className="hidden xs:inline">Cerrar Trimestre</span>
-  <span className="xs:hidden">Cerrar</span>
-</Button>
-                )}
+            
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
+                <Switch
+                  id="mostrar-vacios"
+                  checked={mostrarVacios}
+                  onCheckedChange={setMostrarVacios}
+                />
+                <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
+                  Mostrar vacíos
+                </Label>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* 📱 STATS CARDS - GRID RESPONSIVE */}
-        {isLoading ? (
-          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
-            ))}
-          </div>
-        ) : trimestreAgregado ? (
-          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-            <TrimestreStatsCard
-              title="Total Documentos"
-              value={trimestreAgregado.total_documentos}
-              icon={FileText}
-              description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
-            />
-            <TrimestreStatsCard
-              title="Ingresos"
-              value={formatCurrency(trimestreAgregado.total_ingresos)}
-              icon={TrendingUp}
-              description="Total facturado"
-              trend="up"
-            />
-            <TrimestreStatsCard
-              title="Gastos"
-              value={formatCurrency(trimestreAgregado.total_gastos)}
-              icon={TrendingDown}
-              description="Total gastado"
-              trend="down"
-            />
-            <TrimestreStatsCard
-              title="IVA Neto"
-              value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
-              icon={Receipt}
-              description="Repercutido - Soportado"
-            />
-          </div>
-        ) : (
-          // 📱 EMPTY STATE CUANDO NO HAY TRIMESTRE SELECCIONADO
-          <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-              <FileText className="h-6 w-6 text-muted-foreground" />
+              <div className="w-[200px]" data-tutorial="trimestres-company-selector">
+                <CompaniesHeaderSelector />
+              </div>
             </div>
-            <h3 className="text-base sm:text-lg font-semibold mb-2">
-              No hay datos disponibles
-            </h3>
-            <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto">
-              Selecciona un trimestre para ver las estadísticas o activa "Mostrar vacíos" para ver todos los trimestres del año.
-            </p>
           </div>
-        )}
+        </MainLayoutHeader>
 
-        {/* 📱 TABLA DE DOCUMENTOS */}
-        {isLoadingDocs ? (
-          <Skeleton className="h-64 sm:h-80 lg:h-96 w-full rounded-lg" />
-        ) : (
-          <div className="rounded-lg border bg-card">
-            <TrimestreTable documentos={documentos} />
-          </div>
-        )}
-      </div>
+        <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
+          
+          {isLoading ? (
+            <Skeleton className="h-12 sm:h-16 w-full" />
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+              <div className="w-full sm:flex-1 sm:min-w-0" data-tutorial="trimestres-selector">
+                <TrimestreSelector
+                  trimestres={trimestresParaSelector}
+                  selectedAño={selectedAño}
+                  selectedTrimestre={selectedTrimestre}
+                  onSelectTrimestre={(año, trimestre) => {
+                    setSelectedAño(año);
+                    setSelectedTrimestre(trimestre);
+                  }}
+                  onSelectAño={handleSelectAño}
+                  mostrarVacios={mostrarVacios}
+                  onToggleMostrarVacios={setMostrarVacios}
+                />
+              </div>
 
-      {/* 📱 DIALOG DE CIERRE - YA ES RESPONSIVE POR DEFECTO */}
-      <CloseQuarterDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        trimestre={trimestreToClose}
-        onConfirm={handleCerrarTrimestre}
-      />
-    </MainLayout>
+              {trimestreAgregado && (
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                  <QuarterBadge cerrado={trimestreAgregado.cerrado} />
+                  {puedeCerrarse && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+                      data-tutorial="trimestres-close-button"
+                      onClick={() => {
+                        console.log('🔴 Abriendo diálogo de cierre');
+                        console.log('Trimestre:', trimestreAgregado);
+                        setTrimestreToClose(trimestreAgregado);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                      <span className="hidden xs:inline">Cerrar Trimestre</span>
+                      <span className="xs:hidden">Cerrar</span>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
+              ))}
+            </div>
+          ) : trimestreAgregado ? (
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4" data-tutorial="trimestres-stats">
+              <TrimestreStatsCard
+                title="Total Documentos"
+                value={trimestreAgregado.total_documentos}
+                icon={FileText}
+                description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
+              />
+              <TrimestreStatsCard
+                title="Ingresos"
+                value={formatCurrency(trimestreAgregado.total_ingresos)}
+                icon={TrendingUp}
+                description="Total facturado"
+                trend="up"
+              />
+              <TrimestreStatsCard
+                title="Gastos"
+                value={formatCurrency(trimestreAgregado.total_gastos)}
+                icon={TrendingDown}
+                description="Total gastado"
+                trend="down"
+              />
+              <TrimestreStatsCard
+                title="IVA Neto"
+                value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
+                icon={Receipt}
+                description="Repercutido - Soportado"
+              />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                <FileText className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">
+                No hay datos disponibles
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto">
+                Selecciona un trimestre para ver las estadísticas o activa "Mostrar vacíos" para ver todos los trimestres del año.
+              </p>
+            </div>
+          )}
+
+          {isLoadingDocs ? (
+            <Skeleton className="h-64 sm:h-80 lg:h-96 w-full rounded-lg" />
+          ) : (
+            <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
+              <TrimestreTable documentos={documentos} />
+            </div>
+          )}
+        </div>
+
+        <CloseQuarterDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          trimestre={trimestreToClose}
+          onConfirm={handleCerrarTrimestre}
+        />
+      </MainLayout>
+    </>
+  );
+}
+
+export default function TrimestresPage() {
+  return (
+    <TrimestresProvider>
+      <TrimestresPageContent />
+    </TrimestresProvider>
   );
 }

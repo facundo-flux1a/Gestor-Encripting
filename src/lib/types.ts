@@ -9,7 +9,11 @@ export const UserSchema = z.object({
   nombre: z.string(),
   email: z.string(),
   password: z.string().nullable().optional(),
-  tutorial: z.number().optional(), // ⬅️ CORREGIDO: number (0 o 1)
+  tutorial: z.number().optional(),
+  tutorial_documentos: z.number().optional(),
+  tutorial_trimestres: z.number().optional(),
+  tutorial_actividad: z.number().optional(),
+  tutorial_individual: z.number().optional(), // ⬅️ NUEVO
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -18,7 +22,11 @@ export const SessionPayloadSchema = z.object({
   email: z.string(),
   nombre: z.string(),
   expires: z.string(),
-  tutorial: z.number().optional(), // ⬅️ CORREGIDO: number (0 o 1)
+  tutorial: z.number().optional(),
+  tutorialDocumentos: z.number().optional(),
+  tutorialTrimestres: z.number().optional(),
+  tutorialActividad: z.number().optional(),
+  tutorialIndividual: z.number().optional(), // ⬅️ NUEVO
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 

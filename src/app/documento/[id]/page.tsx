@@ -21,6 +21,8 @@ import { useFieldArray } from 'react-hook-form';
 import { FinancialDetailsCard } from '@/components/dashboard/financial-details-card';
 import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
+import { IndividualProvider } from '@/context/IndividualProvider';
+import { IndividualTutorial } from '@/components/documento/IndividualTutorial';
 
 // 🎯 FUNCIONES DE FORMATO MANUAL
 const formatNumber = (num: number | string): string => {
@@ -48,7 +50,7 @@ const formatCurrency = (amount: number | string): string => {
   return `${formattedInteger},${decimalPart} €`;
 };
 
-export default function DocumentoPage() {
+function DocumentoPageContent() {
   const params = useParams();
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -262,7 +264,8 @@ export default function DocumentoPage() {
                     <div className="flex-1 space-y-4 sm:space-y-6 p-4 pt-4 sm:pt-6 sm:p-6 lg:p-8">
                         {/* 🎨 HEADER CON ANIMACIÓN */}
                         <MainLayoutHeader>
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-3 sm:gap-4 animate-fade-in" style={{ animationDelay: '0ms' }}>
+                            {/* 🎯 data-tutorial="documento-header" */}
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-3 sm:gap-4 animate-fade-in" style={{ animationDelay: '0ms' }} data-tutorial="documento-header">
                                 {/* Título con gradiente */}
                                 <div className="flex-1 min-w-0">
                                     <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
@@ -278,7 +281,8 @@ export default function DocumentoPage() {
                                 </div>
                                 
                                 {/* 🎯 BOTONES DE ACCIÓN CON HOVER EFFECTS */}
-                                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                {/* 🎯 data-tutorial="documento-actions" */}
+                                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap" data-tutorial="documento-actions">
                                     {isEditing ? (
                                         <>
                                             <Button 
@@ -311,6 +315,7 @@ export default function DocumentoPage() {
                                     ) : (
                                         <>
                                             {/* Ver Documento */}
+                                            {/* 🎯 data-tutorial="documento-archivo" */}
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <div tabIndex={0} className="flex-1 sm:flex-none"> 
@@ -320,6 +325,7 @@ export default function DocumentoPage() {
                                                             onClick={() => setIsPreviewOpen(true)} 
                                                             disabled={!documentUrl}
                                                             className="w-full sm:w-auto hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 group disabled:cursor-not-allowed"
+                                                            data-tutorial="documento-archivo"
                                                         >
                                                             <Eye className="h-4 w-4 sm:mr-2 group-hover:scale-110 transition-transform duration-200" />
                                                             <span className="hidden sm:inline">Ver</span>
@@ -406,19 +412,35 @@ export default function DocumentoPage() {
                                     )}
                                 </div>
                             </div>
-                        </MainLayoutHeader>{/* 🎨 GRID PRINCIPAL CON ANIMACIONES STAGGERED */}
+                        </MainLayoutHeader>
+
+                        {/* 🎨 GRID PRINCIPAL CON ANIMACIONES STAGGERED */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                             {/* Columna principal - Información del documento */}
                             <div className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in" style={{ animationDelay: '50ms' }}>
-                                <div className="transition-all duration-300 hover:scale-[1.01]">
+                                {/* 🎯 data-tutorial="documento-view" */}
+                                <div className="transition-all duration-300 hover:scale-[1.01]" data-tutorial="documento-view">
                                     <DocumentView doc={doc} isEditing={isEditing} form={form} />
                                 </div>
                             </div>
                             
                             {/* Columna lateral - Cards de análisis y detalles */}
                             <div className="space-y-4 sm:space-y-6">
+                                {/* 🎯 Alerta de incidencias (condicional) */}
+                                {doc.incidencia && (
+                                    <div 
+                                        className="bg-red-50 border border-red-200 rounded-lg p-4 dark:bg-red-950 dark:border-red-800"
+                                        data-tutorial="documento-incidencias"
+                                    >
+                                        <p className="text-sm text-red-800 dark:text-red-200">
+                                            <strong>⚠️ Incidencia detectada:</strong> {doc.incidencia_razon || 'Este documento tiene problemas sin resolver.'}
+                                        </p>
+                                    </div>
+                                )}
+
                                 {/* Analyze Document Card */}
-                                <div className="animate-fade-in group" style={{ animationDelay: '100ms' }}>
+                                {/* 🎯 data-tutorial="documento-analizar" */}
+                                <div className="animate-fade-in group" style={{ animationDelay: '100ms' }} data-tutorial="documento-analizar">
                                     <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                                         <AnalyzeDocumentCard 
                                             documentId={doc.id_documento} 
@@ -428,22 +450,25 @@ export default function DocumentoPage() {
                                 </div>
                                 
                                 {/* Entidades */}
-                                {entidadFields.map((field, index) => (
-                                    <div 
-                                        key={field.id} 
-                                        className="animate-fade-in group" 
-                                        style={{ animationDelay: `${150 + (index * 50)}ms` }}
-                                    >
-                                        <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                                            <EditableEntityCard
-                                                isEditing={isEditing}
-                                                form={form}
-                                                entityIndex={index}
-                                                removeEntity={() => removeEntidad(index)}
-                                            />
+                                {/* 🎯 data-tutorial="documento-entidades" */}
+                                <div data-tutorial="documento-entidades">
+                                    {entidadFields.map((field, index) => (
+                                        <div 
+                                            key={field.id} 
+                                            className="animate-fade-in group mb-4" 
+                                            style={{ animationDelay: `${150 + (index * 50)}ms` }}
+                                        >
+                                            <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                                                <EditableEntityCard
+                                                    isEditing={isEditing}
+                                                    form={form}
+                                                    entityIndex={index}
+                                                    removeEntity={() => removeEntidad(index)}
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
 
                                 {/* Añadir Entidad */}
                                 {isEditing && (
@@ -470,7 +495,8 @@ export default function DocumentoPage() {
                                 )}
                                 
                                 {/* Financial Details */}
-                                <div className="animate-fade-in group" style={{ animationDelay: `${200 + (entidadFields.length * 50)}ms` }}>
+                                {/* 🎯 data-tutorial="documento-financiero" */}
+                                <div className="animate-fade-in group" style={{ animationDelay: `${200 + (entidadFields.length * 50)}ms` }} data-tutorial="documento-financiero">
                                     <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                                         <FinancialDetailsCard 
                                             doc={doc} 
@@ -571,5 +597,15 @@ export default function DocumentoPage() {
             }
         `}</style>
     </MainLayout>
+  );
+}
+
+// 🎯 WRAPPER CON PROVIDER Y TUTORIAL
+export default function DocumentoPage() {
+  return (
+    <IndividualProvider>
+      <DocumentoPageContent />
+      <IndividualTutorial />
+    </IndividualProvider>
   );
 }

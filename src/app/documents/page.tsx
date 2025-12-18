@@ -10,9 +10,10 @@ import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDocumentEvents } from '@/hooks/useDocumentEvents'
-import { Upload, Loader2, FileText, AlertCircle, CheckCircle, Download } from 'lucide-react'
+import { Upload, Loader2, FileText, AlertCircle, CheckCircle, Download, Receipt } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { DocumentosTutorial } from '@/components/tutorials/DocumentosTutorial'
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
@@ -80,21 +81,35 @@ function DocumentsPageContent() {
     loadDocuments();
   }, [selectedCompanyIds, key]);
 
-  const { facturas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
+  // 🎯 NUEVA CLASIFICACIÓN CON ABONOS
+  const { facturas, abonos, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     const facturas: Document[] = [];
+    const abonos: Document[] = [];
     const otrosDocumentos: Document[] = [];
     const sinConfirmar: Document[] = [];
+    
     documents.forEach(doc => {
-      if (doc.tipo_documento?.toLowerCase().includes('(sin confirmar)')) {
+      const tipoLower = doc.tipo_documento?.toLowerCase() || '';
+      
+      // Primero verificar si es "sin confirmar"
+      if (tipoLower.includes('(sin confirmar)')) {
         sinConfirmar.push(doc);
-      } else if (doc.tipo_documento?.toLowerCase().includes('factura')) {
+      } 
+      // Luego verificar si es abono
+      else if (tipoLower.includes('abono')) {
+        abonos.push(doc);
+      }
+      // Luego si es factura
+      else if (tipoLower.includes('factura')) {
         facturas.push(doc);
-      } else {
+      } 
+      // Todo lo demás va a "otros"
+      else {
         otrosDocumentos.push(doc);
       }
     });
     
-    return { facturas, otrosDocumentos, sinConfirmar };
+    return { facturas, abonos, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
   const otherDocsHiddenColumns = [
@@ -115,18 +130,18 @@ function DocumentsPageContent() {
         return sinConfirmar;
       case 'facturas':
         return facturas;
+      case 'abonos':
+        return abonos;
       case 'otros':
         return otrosDocumentos;
       default:
         return [];
     }
-  }, [activeTab, sinConfirmar, facturas, otrosDocumentos]);
+  }, [activeTab, sinConfirmar, facturas, abonos, otrosDocumentos]);
 
-  // Handler para cambiar de tab con mini loader
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
       setIsTabChanging(true);
-      // Simular una pequeña carga para mejor UX
       setTimeout(() => {
         setActiveTab(value);
         setIsTabChanging(false);
@@ -150,6 +165,7 @@ function DocumentsPageContent() {
       const statusMap: { [key: string]: string } = {
         'sin-confirmar': 'pending',
         'facturas': 'confirmed',
+        'abonos': 'abonos',
         'otros': 'others'
       };
 
@@ -196,6 +212,8 @@ function DocumentsPageContent() {
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>
+        <DocumentosTutorial />
+        
         <MainLayoutHeader>
           <div className="flex items-center justify-between w-full gap-2">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
@@ -210,6 +228,7 @@ function DocumentsPageContent() {
               onClick={() => setIsUploadOpen(true)}
               size="sm"
               className="gap-2 shrink-0 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/20"
+              data-tutorial="upload-button"
             >
               <Upload className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
               <span className="hidden sm:inline">Subir</span>
@@ -243,6 +262,8 @@ function DocumentsPageContent() {
 
   return (
     <>
+      <DocumentosTutorial />
+      
       <MainLayoutHeader>
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
@@ -266,6 +287,7 @@ function DocumentsPageContent() {
               onClick={() => setIsUploadOpen(true)}
               size="sm"
               className="gap-2 group transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/20"
+              data-tutorial="upload-button"
             >
               <Upload className="h-4 w-4 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-0.5" />
               <span className="hidden lg:inline">Subir Documento</span>
@@ -274,7 +296,7 @@ function DocumentsPageContent() {
           </div>
         </div>
       </MainLayoutHeader>
-      
+
       <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -299,7 +321,7 @@ function DocumentsPageContent() {
           <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
             {/* Tabs List con botón de exportar PDF */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-              <div className="w-full sm:w-auto overflow-x-auto">
+              <div className="w-full sm:w-auto overflow-x-auto" data-tutorial="tabs-filters">
                 <TabsList className="inline-flex w-full sm:w-auto">
                   <TabsTrigger 
                     value="sin-confirmar" 
@@ -328,6 +350,21 @@ function DocumentsPageContent() {
                       {facturas.length}
                     </Badge>
                   </TabsTrigger>
+
+                  {/* 🎯 NUEVO TAB: ABONOS */}
+                  <TabsTrigger 
+                    value="abonos"
+                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/20"
+                  >
+                    <Receipt className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
+                    <span className="whitespace-nowrap">Abonos</span>
+                    <Badge 
+                      variant="secondary" 
+                      className="ml-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 transition-all duration-300 hover:scale-110 hover:bg-purple-500/20"
+                    >
+                      {abonos.length}
+                    </Badge>
+                  </TabsTrigger>
                   
                   <TabsTrigger 
                     value="otros"
@@ -352,6 +389,7 @@ function DocumentsPageContent() {
                   onClick={handleExportPdf}
                   disabled={isExportingPdf}
                   className="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm shrink-0 group transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/20 hover:border-primary disabled:hover:scale-100"
+                  data-tutorial="export-pdf"
                 >
                   <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-0.5" />
                   <span className="hidden xs:inline">
@@ -367,9 +405,9 @@ function DocumentsPageContent() {
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-green-500" />
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-amber-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
-                      Cargando facturas...
+                      Cargando sin confirmar...
                     </p>
                   </div>
                 </div>
@@ -386,14 +424,16 @@ function DocumentsPageContent() {
                   </p>
                 </div>
               ) : (
-                <DocumentsTable 
-                  documents={sinConfirmar} 
-                  filename="documentos_sin_confirmar"
-                  showConfirmButton={true}  
-                  viewId="documentos-sin-confirmar" 
-                  enableColumnPersistence={true}
-                  onDocumentChanged={handleDocumentChanged}
-                />
+                <div data-tutorial="documents-table">
+                  <DocumentsTable 
+                    documents={sinConfirmar} 
+                    filename="documentos_sin_confirmar"
+                    showConfirmButton={true}  
+                    viewId="documentos-sin-confirmar" 
+                    enableColumnPersistence={true}
+                    onDocumentChanged={handleDocumentChanged}
+                  />
+                </div>
               )}
             </TabsContent>
             
@@ -401,9 +441,9 @@ function DocumentsPageContent() {
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-500" />
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-green-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
-                      Cargando otros documentos...
+                      Cargando facturas...
                     </p>
                   </div>
                 </div>
@@ -420,13 +460,51 @@ function DocumentsPageContent() {
                   </p>
                 </div>
               ) : (
-                <DocumentsTable 
-                  documents={facturas} 
-                  filename="facturas" 
-                  viewId="documentos-facturas"
-                  enableColumnPersistence={true}
-                  onDocumentChanged={handleDocumentChanged}
-                />
+                <div data-tutorial="documents-table">
+                  <DocumentsTable 
+                    documents={facturas} 
+                    filename="facturas" 
+                    viewId="documentos-facturas"
+                    enableColumnPersistence={true}
+                    onDocumentChanged={handleDocumentChanged}
+                  />
+                </div>
+              )}
+            </TabsContent>
+
+            {/* 🎯 NUEVO TAB CONTENT: ABONOS */}
+            <TabsContent value="abonos" className="space-y-4 animate-in fade-in duration-300">
+              {isTabChanging ? (
+                <div className="flex items-center justify-center py-24">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-purple-500" />
+                    <p className="text-sm text-muted-foreground animate-pulse">
+                      Cargando abonos...
+                    </p>
+                  </div>
+                </div>
+              ) : abonos.length === 0 ? (
+                <div className="text-center py-12 px-4">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-purple-500/10 hover:shadow-lg hover:shadow-purple-500/20 hover:scale-110">
+                    <Receipt className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-purple-500 hover:scale-110" />
+                  </div>
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-purple-600">
+                    No hay abonos
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Aún no se han registrado abonos
+                  </p>
+                </div>
+              ) : (
+                <div data-tutorial="documents-table">
+                  <DocumentsTable 
+                    documents={abonos} 
+                    filename="abonos" 
+                    viewId="documentos-abonos"
+                    enableColumnPersistence={true}
+                    onDocumentChanged={handleDocumentChanged}
+                  />
+                </div>
               )}
             </TabsContent>
             
@@ -434,9 +512,9 @@ function DocumentsPageContent() {
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-amber-500" />
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
-                      Cargando documentos sin confirmar...
+                      Cargando otros documentos...
                     </p>
                   </div>
                 </div>
@@ -453,11 +531,13 @@ function DocumentsPageContent() {
                   </p>
                 </div>
               ) : (
-                <GroupedDocumentsView 
-                  documents={otrosDocumentos} 
-                  filename="otros_documentos"
-                  hiddenColumns={otherDocsHiddenColumns} 
-                />
+                <div data-tutorial="documents-table">
+                  <GroupedDocumentsView 
+                    documents={otrosDocumentos} 
+                    filename="otros_documentos"
+                    hiddenColumns={otherDocsHiddenColumns} 
+                  />
+                </div>
               )}
             </TabsContent>
           </Tabs>
