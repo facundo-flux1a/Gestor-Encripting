@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Bot, Loader2, FileWarning, Search, BarChart } from 'lucide-react';
+import { CheckCircle2, Database, Loader2, FileWarning, Search } from 'lucide-react';
 import { analyzeDocumentsForIncidents } from '@/ai/flows/analyze-incidents';
 import type { IncidentAnalysisResult } from '@/lib/types';
 
@@ -51,11 +51,11 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
         <Card className="h-full flex flex-col">
             <CardHeader className="space-y-2">
                 <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-                    <span className="line-clamp-2">Análisis Inteligente</span>
+                    <Database className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+                    <span className="line-clamp-2">Análisis Automático</span>
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                    Utiliza IA para escanear todos los documentos en busca de posibles inconsistencias y duplicados.
+                    Revisa todos los documentos comparando datos para detectar duplicados, errores de cálculo y datos incompletos.
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
@@ -92,7 +92,7 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
                 )}
                 {!result && !error && !isLoading && (
                     <div className="text-center text-muted-foreground p-4">
-                        <p className="text-xs sm:text-sm">Haz clic en el botón para iniciar el proceso de análisis.</p>
+                        <p className="text-xs sm:text-sm">Haz clic en el botón para iniciar la revisión.</p>
                     </div>
                 )}
                  {isLoading && (

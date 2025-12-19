@@ -12,8 +12,10 @@ import type { IncidentsAnalyticsData } from "@/components/incidents/incidents-an
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle } from "lucide-react";
+import { IncidenciasProvider } from "@/context/IncidenciasProvider";
+import { IncidenciasTutorial } from "@/components/incidencias/IncidenciasTutorial";
 
-export default function IncidentsPage() {
+function IncidentsPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
     const [docs, setDocs] = useState<Document[]>([]);
     const [analyticsData, setAnalyticsData] = useState<IncidentsAnalyticsData>({
@@ -94,7 +96,8 @@ export default function IncidentsPage() {
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
                 <MainLayoutHeader>
-                    <div className="flex items-start sm:items-center justify-between w-full gap-2 flex-col sm:flex-row">
+                    {/* 🎯 data-tutorial="incidencias-header" */}
+                    <div className="flex items-start sm:items-center justify-between w-full gap-2 flex-col sm:flex-row" data-tutorial="incidencias-header">
                         <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                             <div className="p-2 bg-amber-500/10 rounded-xl shrink-0 animate-fade-in">
                                 <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
@@ -114,12 +117,14 @@ export default function IncidentsPage() {
                 <div className="space-y-4 sm:space-y-6">
                     {/* Analytics y Card de Análisis - Grid Responsive con animaciones */}
                     <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-3">
-                        <div className="lg:col-span-2 animate-fade-in" style={{ animationDelay: '0ms' }}>
+                        {/* 🎯 data-tutorial="incidencias-analytics" */}
+                        <div className="lg:col-span-2 animate-fade-in" style={{ animationDelay: '0ms' }} data-tutorial="incidencias-analytics">
                             <div className="transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10">
                                 <IncidentsAnalytics data={analyticsData} />
                             </div>
                         </div>
-                        <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
+                        {/* 🎯 data-tutorial="incidencias-analizar" */}
+                        <div className="animate-fade-in" style={{ animationDelay: '50ms' }} data-tutorial="incidencias-analizar">
                             <div className="transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10">
                                 <AnalyzeDocumentsCard onAnalysisComplete={handleAnalysisComplete} />
                             </div>
@@ -129,7 +134,8 @@ export default function IncidentsPage() {
                     <Separator className="my-4 sm:my-6" />
 
                     {/* Tabla de Incidencias de IA con animación y hover */}
-                    <div className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '100ms' }}>
+                    {/* 🎯 data-tutorial="incidencias-ai-table" */}
+                    <div className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '100ms' }} data-tutorial="incidencias-ai-table">
                         <AIIncidentsTable 
                             empresaIds={selectedCompanyIds} 
                             onRefresh={handleAnalysisComplete}
@@ -139,7 +145,8 @@ export default function IncidentsPage() {
                     <Separator className="my-4 sm:my-6" />
 
                     {/* Tabla de Documentos con Incidencias con animación y hover */}
-                    <div className="space-y-3 sm:space-y-4 animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '150ms' }}>
+                    {/* 🎯 data-tutorial="incidencias-documentos" */}
+                    <div className="space-y-3 sm:space-y-4 animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '150ms' }} data-tutorial="incidencias-documentos">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                             <div className="space-y-1 min-w-0">
                                 <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
@@ -195,5 +202,15 @@ export default function IncidentsPage() {
                 }
             `}</style>
         </MainLayout>
+    );
+}
+
+// 🎯 WRAPPER CON PROVIDER Y TUTORIAL
+export default function IncidentsPage() {
+    return (
+        <IncidenciasProvider>
+            <IncidentsPageContent />
+            <IncidenciasTutorial />
+        </IncidenciasProvider>
     );
 }

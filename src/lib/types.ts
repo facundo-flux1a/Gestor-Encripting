@@ -13,7 +13,9 @@ export const UserSchema = z.object({
   tutorial_documentos: z.number().optional(),
   tutorial_trimestres: z.number().optional(),
   tutorial_actividad: z.number().optional(),
-  tutorial_individual: z.number().optional(), // ⬅️ NUEVO
+  tutorial_individual: z.number().optional(),
+  tutorial_incidencias: z.number().optional(),
+  tutorial_proveedores: z.number().optional(), // ⬅️ NUEVO
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -26,7 +28,9 @@ export const SessionPayloadSchema = z.object({
   tutorialDocumentos: z.number().optional(),
   tutorialTrimestres: z.number().optional(),
   tutorialActividad: z.number().optional(),
-  tutorialIndividual: z.number().optional(), // ⬅️ NUEVO
+  tutorialIndividual: z.number().optional(),
+  tutorialIncidencias: z.number().optional(),
+  tutorialProveedores: z.number().optional(), // ⬅️ NUEVO
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 

@@ -283,7 +283,7 @@ export function DashboardTutorial() {
               title: '¡Todo listo! ✨',
               description: `
                 <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
-                <p class="mt-2">Nos vemos en el <span class="inline-flex items-center gap-1 text-violet-600 font-semibold" title="En desarrollo">tutorial<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></span> de la sección "Documentos". ¡Éxitos!</p>
+                <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
               `,
               side: 'center',
               align: 'center'
