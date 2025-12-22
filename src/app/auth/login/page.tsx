@@ -89,6 +89,8 @@ function LoginError() {
         switch (errorCode) {
             case 'invalid_credentials':
                 return 'El correo electrónico o la contraseña son incorrectos.';
+            case 'user_inactive':
+                return 'Tu cuenta está inactiva. Por favor, contacta al administrador para reactivarla.';
             case 'google_account':
                 return 'Esta cuenta fue creada con Google. Por favor, usa el botón "Continuar con Google" para iniciar sesión.';
             case 'server_error':

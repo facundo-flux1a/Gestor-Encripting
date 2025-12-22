@@ -40,7 +40,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         tutorialActividad: z.number().optional(),
         tutorialIndividual: z.number().optional(),
         tutorialIncidencias: z.number().optional(),
-        tutorialProveedores: z.number().optional(), // ⬅️ NUEVO
+        tutorialProveedores: z.number().optional(),
         exp: z.number(),
     }).safeParse(payload);
     
@@ -56,7 +56,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
         tutorialActividad: parsedPayload.data.tutorialActividad,
         tutorialIndividual: parsedPayload.data.tutorialIndividual,
         tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
-        tutorialProveedores: parsedPayload.data.tutorialProveedores, // ⬅️ NUEVO
+        tutorialProveedores: parsedPayload.data.tutorialProveedores,
         expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
@@ -100,7 +100,7 @@ export async function createSession(
   tutorialActividad: number = 0,
   tutorialIndividual: number = 0,
   tutorialIncidencias: number = 0,
-  tutorialProveedores: number = 0 // ⬅️ NUEVO
+  tutorialProveedores: number = 0
 ) {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const session = await encrypt({ 
@@ -113,7 +113,7 @@ export async function createSession(
       tutorialActividad,
       tutorialIndividual,
       tutorialIncidencias,
-      tutorialProveedores, // ⬅️ NUEVO
+      tutorialProveedores,
       expires 
     });
 
@@ -133,7 +133,7 @@ export async function createSession(
       tutorialActividad,
       tutorialIndividual,
       tutorialIncidencias,
-      tutorialProveedores // ⬅️ NUEVO
+      tutorialProveedores
     });
 }
 
@@ -177,8 +177,9 @@ export async function login(formData: FormData) {
   }
 
   try {
+    // ✅ AGREGADO: Incluir campo "activo" en la consulta
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?', // ⬅️ MODIFICADO
+      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?',
       [email.trim()]
     );
     
@@ -190,13 +191,20 @@ export async function login(formData: FormData) {
     }
 
     const user = rows[0] as User & { 
+      activo: number; // ✅ AGREGADO
       tutorial_documentos?: number; 
       tutorial_trimestres?: number;
       tutorial_actividad?: number;
       tutorial_individual?: number;
       tutorial_incidencias?: number;
-      tutorial_proveedores?: number; // ⬅️ NUEVO
+      tutorial_proveedores?: number;
     };
+    
+    // ✅ AGREGADO: Verificar si el usuario está activo
+    if (!user.activo || user.activo === 0) {
+      console.warn('⚠️ [login] Usuario inactivo:', email.trim());
+      return redirect('/auth/login?error=user_inactive');
+    }
     
     // 🔥 DETECTAR SI ES CUENTA DE GOOGLE
     if (user.password && user.password.startsWith(GOOGLE_PASSWORD_MARKER)) {
@@ -238,7 +246,7 @@ export async function login(formData: FormData) {
       tutorialActividad: user.tutorial_actividad || 0,
       tutorialIndividual: user.tutorial_individual || 0,
       tutorialIncidencias: user.tutorial_incidencias || 0,
-      tutorialProveedores: user.tutorial_proveedores || 0 // ⬅️ NUEVO
+      tutorialProveedores: user.tutorial_proveedores || 0
     });
     
     await createSession(
@@ -251,7 +259,7 @@ export async function login(formData: FormData) {
       user.tutorial_actividad || 0,
       user.tutorial_individual || 0,
       user.tutorial_incidencias || 0,
-      user.tutorial_proveedores || 0 // ⬅️ NUEVO
+      user.tutorial_proveedores || 0
     );
     
   } catch (error) {
@@ -260,7 +268,9 @@ export async function login(formData: FormData) {
   }
 
   redirect('/dashboard');
-}export async function register(formData: FormData) {
+}
+
+export async function register(formData: FormData) {
     const nombre = formData.get('name') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
@@ -278,8 +288,9 @@ export async function login(formData: FormData) {
         const hashedPassword = await bcrypt.hash(password, 10);
         console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
 
+        // ✅ AGREGADO: activo = 1 por defecto al registrarse
         const [result] = await db.query<OkPacket>(
-            'INSERT INTO usuarios (nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)', // ⬅️ MODIFICADO
+            'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)',
             [nombre, email, hashedPassword]
         );
 
@@ -287,7 +298,7 @@ export async function login(formData: FormData) {
         
         await createDefaultAIConfig(newUserId);
         
-        await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1); // ⬅️ MODIFICADO
+        await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
 
     } catch (error) {
         console.error('Registration error:', error);
@@ -306,18 +317,20 @@ export async function handleGoogleSignInOnServer(
       return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
     }
 
+    // ✅ AGREGADO: Incluir campo "activo" en la consulta
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?', // ⬅️ MODIFICADO
+      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?',
       [email]
     );
 
     let user: User & { 
+      activo?: number; // ✅ AGREGADO
       tutorial_documentos?: number; 
       tutorial_trimestres?: number;
       tutorial_actividad?: number;
       tutorial_individual?: number;
       tutorial_incidencias?: number;
-      tutorial_proveedores?: number; // ⬅️ NUEVO
+      tutorial_proveedores?: number;
     };
     let tutorialValue = 0;
     let tutorialDocumentosValue = 0;
@@ -325,24 +338,32 @@ export async function handleGoogleSignInOnServer(
     let tutorialActividadValue = 0;
     let tutorialIndividualValue = 0;
     let tutorialIncidenciasValue = 0;
-    let tutorialProveedoresValue = 0; // ⬅️ NUEVO
+    let tutorialProveedoresValue = 0;
 
     if (existingUsers.length > 0) {
       user = existingUsers[0] as User & { 
+        activo?: number;
         tutorial_documentos?: number; 
         tutorial_trimestres?: number;
         tutorial_actividad?: number;
         tutorial_individual?: number;
         tutorial_incidencias?: number;
-        tutorial_proveedores?: number; // ⬅️ NUEVO
+        tutorial_proveedores?: number;
       };
+      
+      // ✅ AGREGADO: Verificar si el usuario está activo
+      if (!user.activo || user.activo === 0) {
+        console.warn('⚠️ [handleGoogleSignIn] Usuario inactivo:', email);
+        return { success: false, error: 'Usuario inactivo. Contacte al administrador.' };
+      }
+      
       tutorialValue = user.tutorial || 0;
       tutorialDocumentosValue = user.tutorial_documentos || 0;
       tutorialTrimestresValue = user.tutorial_trimestres || 0;
       tutorialActividadValue = user.tutorial_actividad || 0;
       tutorialIndividualValue = user.tutorial_individual || 0;
       tutorialIncidenciasValue = user.tutorial_incidencias || 0;
-      tutorialProveedoresValue = user.tutorial_proveedores || 0; // ⬅️ NUEVO
+      tutorialProveedoresValue = user.tutorial_proveedores || 0;
       console.log('✅ [handleGoogleSignIn] Usuario existente encontrado:', user.id);
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
@@ -351,8 +372,9 @@ export async function handleGoogleSignInOnServer(
       
       console.log('🆕 [handleGoogleSignIn] Creando nuevo usuario de Google');
       
+      // ✅ AGREGADO: activo = 1 por defecto al crear con Google
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email, password, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)', // ⬅️ MODIFICADO
+          'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)',
           [nombre, email, googlePassword]
       );
       
@@ -360,13 +382,14 @@ export async function handleGoogleSignInOnServer(
         id: result.insertId, 
         email, 
         nombre, 
+        activo: 1,
         tutorial: 1,
         tutorial_documentos: 1,
         tutorial_trimestres: 1,
         tutorial_actividad: 1,
         tutorial_individual: 1,
         tutorial_incidencias: 1,
-        tutorial_proveedores: 1 // ⬅️ NUEVO
+        tutorial_proveedores: 1
       };
       tutorialValue = 1;
       tutorialDocumentosValue = 1;
@@ -374,7 +397,7 @@ export async function handleGoogleSignInOnServer(
       tutorialActividadValue = 1;
       tutorialIndividualValue = 1;
       tutorialIncidenciasValue = 1;
-      tutorialProveedoresValue = 1; // ⬅️ NUEVO
+      tutorialProveedoresValue = 1;
       
       await createDefaultAIConfig(user.id);
       console.log('✅ [handleGoogleSignIn] Usuario creado con ID:', user.id);
@@ -390,7 +413,7 @@ export async function handleGoogleSignInOnServer(
       tutorialActividadValue,
       tutorialIndividualValue,
       tutorialIncidenciasValue,
-      tutorialProveedoresValue // ⬅️ NUEVO
+      tutorialProveedoresValue
     );
     
     return { success: true };
@@ -400,6 +423,8 @@ export async function handleGoogleSignInOnServer(
     return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
   }
 }
+
+// ... resto de funciones sin cambios (completeTutorial, etc.)
 
 export async function completeTutorial() {
   try {
@@ -428,7 +453,7 @@ export async function completeTutorial() {
       session.tutorialActividad || 0,
       session.tutorialIndividual || 0,
       session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -464,7 +489,7 @@ export async function completeTutorialDocumentos() {
       session.tutorialActividad || 0,
       session.tutorialIndividual || 0,
       session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -500,7 +525,7 @@ export async function completeTutorialTrimestres() {
       session.tutorialActividad || 0,
       session.tutorialIndividual || 0,
       session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -536,7 +561,7 @@ export async function completeTutorialActividad() {
       0,
       session.tutorialIndividual || 0,
       session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -572,7 +597,7 @@ export async function completeTutorialIndividual() {
       session.tutorialActividad || 0,
       0,
       session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -608,7 +633,7 @@ export async function completeTutorialIncidencias() {
       session.tutorialActividad || 0,
       session.tutorialIndividual || 0,
       0,
-      session.tutorialProveedores || 0 // ⬅️ MANTENER
+      session.tutorialProveedores || 0
     );
 
   } catch (error) {
@@ -617,7 +642,6 @@ export async function completeTutorialIncidencias() {
   }
 }
 
-// ⬅️ NUEVA FUNCIÓN
 export async function completeTutorialProveedores() {
   try {
     const session = await getSession();
@@ -645,7 +669,7 @@ export async function completeTutorialProveedores() {
       session.tutorialActividad || 0,
       session.tutorialIndividual || 0,
       session.tutorialIncidencias || 0,
-      0 // ⬅️ MARCAR PROVEEDORES COMO COMPLETADO
+      0
     );
 
   } catch (error) {
