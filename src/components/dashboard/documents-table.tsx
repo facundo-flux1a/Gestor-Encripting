@@ -10,7 +10,7 @@ import { DocumentPreviewDialog } from './document-preview-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { deleteDocument } from '@/services/document-service';
 import { confirmDocument } from '@/services/document-client-service';
+import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
 
 // 🎯 FUNCIONES DE FORMATO MANUAL
 const formatNumber = (num: number | string): string => {
@@ -60,7 +61,8 @@ const getColumns = (
     onDelete: (doc: Document) => void,
     onConfirm: (doc: Document) => void,
     onPreview: (doc: Document) => void,
-    showConfirmButton: boolean = false
+    showConfirmButton: boolean = false,
+    duplicates: Set<number> = new Set() // ⬅️ NUEVO: IDs de documentos duplicados
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     // 🎯 COLUMNA DE ACCIONES
@@ -257,6 +259,8 @@ const getColumns = (
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
       cell: ({ row, table }) => {
+        const isDuplicate = duplicates.has(row.original.id_documento); // ⬅️ NUEVO
+        
         return (
           <EditableCell 
             docId={row.original.id_documento} 
@@ -266,6 +270,7 @@ const getColumns = (
             table={table} 
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isDuplicate={isDuplicate} // ⬅️ NUEVO: pasar si es duplicado
           />
         );
       }
@@ -475,7 +480,9 @@ const getColumns = (
           />
         );
       }
-    },// 🎯 COLUMNAS DE IVA - Base e IVA para cada porcentaje (21%, 10%, 4%, 0%)
+    },
+
+    // 🎯 COLUMNAS DE IVA - Base e IVA para cada porcentaje (21%, 10%, 4%, 0%)
     ...[21, 10, 4, 0].flatMap(rate => ([
       {
         id: `base_${rate}`,
@@ -633,7 +640,9 @@ const getColumns = (
   ];
 
   return columns;
-}// 🎯 COMPONENTE PRINCIPAL DocumentsTable
+}
+
+// 🎯 COMPONENTE PRINCIPAL DocumentsTable
 export function DocumentsTable({ 
   documents, 
   hiddenColumns = [], 
@@ -667,10 +676,45 @@ export function DocumentsTable({
   const router = useRouter();
   const { toast } = useToast();
 
+  // ⬅️ AGREGAR: Hook de detección de duplicados CON duplicates
+  // Nota: empresaId se maneja automáticamente dentro del hook desde selectedCompanyIds
+  const { checkDuplicates, duplicates } = useDuplicateDetection();
+  
+  // ⬅️ DEBUG: Ver cuántos duplicados hay
+  console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));
+  
+  // ⬅️ AGREGAR: Verificar duplicados cuando cambian los documentos
+  useEffect(() => {
+    if (documents.length > 0) {
+      const timer = setTimeout(async () => {
+        console.log('🔍 [DocumentsTable] Verificando duplicados...');
+        await checkDuplicates();
+        // NO llamar a onDocumentChanged aquí porque causa loop infinito
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [documents.length, checkDuplicates]);
+
+  // ⬅️ NUEVO: Log para ver los duplicados actuales
+  useEffect(() => {
+    console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));
+    console.log('🎯 [DocumentsTable] Total duplicados:', duplicates.size);
+  }, [duplicates]);
+
   // 🎨 HANDLERS
-  const handleUpdate = useCallback((docId: number, fieldName: string, value: any) => {
-    // This function is now primarily for optimistic updates if needed
-  }, []);
+  // ⬅️ MODIFICAR: handleUpdate ahora llama a checkDuplicates si se editó numero_documento
+  const handleUpdate = useCallback(async (docId: number, fieldName: string, value: any) => {
+    console.log('📝 [handleUpdate] Actualización:', { docId, fieldName, value });
+    
+    // Si se editó el número de documento, verificar duplicados después de un delay
+    if (fieldName === 'numero_documento') {
+      setTimeout(async () => {
+        console.log('🔍 [handleUpdate] Verificando duplicados después de editar...');
+        await checkDuplicates();
+      }, 500);
+    }
+  }, [checkDuplicates]);
   
   const handleSummarize = (doc: Document) => {
     setSelectedDocForSummary(doc);
@@ -791,8 +835,9 @@ export function DocumentsTable({
     handleDeleteClick, 
     handleConfirmClick,
     handlePreviewClick,
-    showConfirmButton
-  ), [handleUpdate, showConfirmButton]);
+    showConfirmButton,
+    duplicates // ⬅️ NUEVO: pasar los duplicados
+  ), [handleUpdate, showConfirmButton, duplicates]);
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
   const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
@@ -801,6 +846,9 @@ export function DocumentsTable({
   return (
     <TooltipProvider>
       <div className="space-y-4">
+        {/* ⬅️ BOTÓN DEBUG TEMPORAL */}
+     
+        
         {/* Wrapper con scroll horizontal optimizado */}
         <div className="relative w-full group" data-tutorial="documents-table">
           {/* Contenedor de scroll optimizado con sombra sutil */}
@@ -900,7 +948,9 @@ export function DocumentsTable({
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>{/* 🎨 ALERT DIALOG: Eliminar Documento */}
+      </AlertDialog>
+
+      {/* 🎨 ALERT DIALOG: Eliminar Documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>

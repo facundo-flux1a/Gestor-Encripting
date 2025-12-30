@@ -5,9 +5,15 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { updateDocumentField } from '@/services/document-service';
 import { cn } from '@/lib/utils';
-import { Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock, AlertTriangle } from 'lucide-react';
 import type { Table } from '@tanstack/react-table';
 import type { Document } from '@/lib/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface EditableCellProps {
   initialValue: any;
@@ -19,6 +25,7 @@ interface EditableCellProps {
   table: Table<Document>;
   rowIndex: number;
   trimestre_cerrado?: number;
+  isDuplicate?: boolean; // ⬅️ NUEVA PROP
 }
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
@@ -54,7 +61,8 @@ export function EditableCell({
   isCurrency = false,
   table,
   rowIndex,
-  trimestre_cerrado = 0
+  trimestre_cerrado = 0,
+  isDuplicate = false, // ⬅️ NUEVA PROP
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
@@ -146,58 +154,85 @@ export function EditableCell({
   };
 
   return (
-    <div 
-      className={cn(
-        "relative min-h-[20px] sm:min-h-[24px] px-1 sm:px-2", // ← Padding responsive
-        isTrimesterClosed && "cursor-not-allowed opacity-60"
-      )}
-      onClick={handleClick}
-    >
-      {/* Loader adaptativo */}
-      {isLoading && (
-        <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-      )}
-      
-      {/* Lock icon responsive */}
-      {isTrimesterClosed && !isLoading && (
-        <Lock className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
-      )}
-      
-      {/* Display value con text size responsive */}
-      {!isEditing && !isLoading && (
-        <span 
-          className={cn(
-            "truncate block text-xs sm:text-sm", // ← Text size responsive
-            !isTrimesterClosed && "cursor-pointer",
-            isTrimesterClosed && "pr-4 sm:pr-5" // ← Espacio para lock icon
-          )}
-          title={displayValue()} // ← Tooltip para valores truncados
-        >
-          {displayValue()}
-        </span>
-      )}
+    <TooltipProvider>
+      <div 
+        className={cn(
+          "relative min-h-[20px] sm:min-h-[24px] px-1 sm:px-2",
+          isTrimesterClosed && "cursor-not-allowed opacity-60",
+          isDuplicate && "bg-amber-50 dark:bg-amber-950/20" // ⬅️ Fondo amarillo si es duplicado
+        )}
+        onClick={handleClick}
+      >
+        {/* Loader adaptativo */}
+        {isLoading && (
+          <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+        )}
+        
+        {/* Lock icon responsive */}
+        {isTrimesterClosed && !isLoading && (
+          <Lock className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
+        )}
+        
+        {/* ⬅️ NUEVO: Alerta de duplicado */}
+        {isDuplicate && !isLoading && !isTrimesterClosed && (
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <AlertTriangle className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400 shrink-0 animate-pulse cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent 
+              side="bottom" 
+              className="z-[99999] bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700"
+              avoidCollisions={true}
+              collisionPadding={10}
+            >
+              <p className="text-amber-900 dark:text-amber-100 font-medium">
+                ⚠️ Número de factura duplicado
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                Este número ya existe en otro documento
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        
+        {/* Display value con text size responsive */}
+        {!isEditing && !isLoading && (
+          <span 
+            className={cn(
+              "truncate block text-xs sm:text-sm",
+              !isTrimesterClosed && "cursor-pointer",
+              (isTrimesterClosed || isDuplicate) && "pr-5 sm:pr-6", // ⬅️ Espacio para iconos
+              isDuplicate && "font-medium text-amber-800 dark:text-amber-200" // ⬅️ Texto en color ámbar
+            )}
+            title={displayValue()}
+          >
+            {displayValue()}
+          </span>
+        )}
 
-      {/* Input responsive */}
-      {isEditing && (
-        <Input
-          ref={inputRef}
-          type={inputType}
-          value={formattedValueForInput()}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleBlur();
-            if (e.key === 'Escape') {
-              setValue(initialValue);
-              setIsEditing(false);
-            }
-          }}
-          className={cn(
-            "h-7 sm:h-8 text-xs sm:text-sm", // ← Heights y text responsive
-            isCurrency ? "text-right tabular-nums" : "" // ← Tabular nums para montos
-          )}
-        />
-      )}
-    </div>
+        {/* Input responsive */}
+        {isEditing && (
+          <Input
+            ref={inputRef}
+            type={inputType}
+            value={formattedValueForInput()}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleBlur();
+              if (e.key === 'Escape') {
+                setValue(initialValue);
+                setIsEditing(false);
+              }
+            }}
+            className={cn(
+              "h-7 sm:h-8 text-xs sm:text-sm",
+              isCurrency ? "text-right tabular-nums" : "",
+              isDuplicate && "border-amber-400 dark:border-amber-600 focus-visible:ring-amber-500" // ⬅️ Borde ámbar en input
+            )}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

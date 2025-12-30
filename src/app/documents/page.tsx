@@ -139,11 +139,13 @@ function DocumentsPageContent() {
     }
   }, [activeTab, sinConfirmar, facturas, abonos, otrosDocumentos]);
 
+  // ✅ ÚNICO CAMBIO: Invertir el orden
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
-      setIsTabChanging(true);
+      setActiveTab(value); // ⬅️ PRIMERO cambiar el tab
+      setIsTabChanging(true); // ⬅️ LUEGO activar loading
+      
       setTimeout(() => {
-        setActiveTab(value);
         setIsTabChanging(false);
       }, 300);
     }
