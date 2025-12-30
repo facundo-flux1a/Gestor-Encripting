@@ -613,58 +613,216 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
     const connection = await db.getConnection();
-    await connection.beginTransaction();
-
+    
     try {
-        // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
-        const [docRows] = await connection.query<DocumentPacket[]>(
-            'SELECT trimestre_cerrado FROM documentos WHERE id = ?', 
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('🚀 [updateDocument] INICIO - ID:', id);
+        console.log('═══════════════════════════════════════════════════════════');
+        
+        await connection.beginTransaction();
+        console.log('✅ [updateDocument] Transacción iniciada');
+        
+        // Verificar trimestre cerrado
+        const [docRows] = await connection.query<RowDataPacket[]>(
+            'SELECT trimestre_cerrado FROM documentos WHERE id = ?',
             [id]
         );
         
         if (docRows.length === 0) {
-            throw new Error('Documento no encontrado.');
+            throw new Error('Documento no encontrado');
         }
         
-        if (docRows[0].trimestre_cerrado === 1) {
-            throw new Error('No se pueden editar documentos de trimestres cerrados.');
+        if (docRows[0].trimestre_cerrado) {
+            throw new Error('No se puede modificar un documento de un trimestre cerrado');
         }
 
-        const { numero_documento, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, entidades, lineas, iva_details } = data;
-        
-        await connection.query<OkPacket>(
-          'UPDATE documentos SET numero_documento = ?, fecha_emision = ?, importe_sin_impuestos = ?, importe_total = ?, tipo_documento = ?, fecha_vencimiento = ?, moneda = ?, observaciones = ? WHERE id = ?',
-          [numero_documento, fecha_emision, base_imponible, total, tipo_documento, fecha_vencimiento, moneda, observaciones, id]
+        // Actualizar documento principal
+        console.log('📝 [updateDocument] Actualizando documento principal...');
+        await connection.query(
+            `UPDATE documentos SET 
+                tipo_documento = ?,
+                numero_documento = ?,
+                fecha_emision = ?,
+                fecha_vencimiento = ?,
+                observaciones = ?,
+                importe_sin_impuestos = ?,
+                importe_total = ?,
+                moneda = ?
+            WHERE id = ?`,
+            [
+                data.tipo_documento || data.tipo,
+                data.numero_documento,
+                data.fecha_emision || data.fecha_documento,
+                data.fecha_vencimiento || data.fecha_recepcion,
+                data.observaciones || data.descripcion || data.notas,
+                data.importe_sin_impuestos || data.total_sin_impuesto,
+                data.importe_total || data.total_con_impuesto,
+                data.moneda || 'EUR',
+                id
+            ]
         );
+        console.log('✅ [updateDocument] Documento principal actualizado');
 
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('🔄 [updateDocument] ESTRATEGIA PATCH - UPDATE/INSERT/DELETE');
+        console.log('═══════════════════════════════════════════════════════════');
+
+        await connection.query('SET FOREIGN_KEY_CHECKS=0');
+
+        // ═══════════════════════════════════════════════════════════
+        // ENTIDADES - DELETE + INSERT (funciona sin problemas)
+        // ═══════════════════════════════════════════════════════════
+        console.log('🔄 [updateDocument] Procesando entidades...');
         await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
-        await connection.query('DELETE FROM lineas_documento WHERE documento_id = ?', [id]);
-        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
-
-        for (const entidad of entidades) {
-            await connection.query('INSERT INTO entidades_documento (documento_id, rol, nombre, direccion, identificador_fiscal, telefono, email, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, entidad.rol, entidad.nombre, entidad.direccion, entidad.identificador_fiscal, entidad.telefono, entidad.email, JSON.stringify(entidad.datos_extra)]);
-        }
-        for (const linea of lineas) {
-             await connection.query(
-                'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
-                [id, linea.codigo, linea.descripcion, linea.cantidad, linea.unidad, linea.precio_unitario, linea.descuento_porcentaje, linea.precio_neto, linea.importe_linea, JSON.stringify(linea.datos_extra)]
-            );
-        }
-        for (const iva of iva_details) {
+        
+        for (const entidad of data.entidades || []) {
             await connection.query(
-                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', 
-                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota]
+                'INSERT INTO entidades_documento (documento_id, nombre, identificador_fiscal, direccion, telefono, email, rol, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    id,
+                    entidad.nombre || entidad.razon_social,
+                    entidad.identificador_fiscal || entidad.cif,
+                    entidad.direccion || entidad.domicilio,
+                    entidad.telefono || '',
+                    entidad.email || '',
+                    entidad.rol || entidad.tipo_entidad,
+                    JSON.stringify(entidad.datos_extra || {}),
+                    data.id_de_empresa || null
+                ]
             );
         }
+        console.log('✅ [updateDocument] Entidades actualizadas');
 
+        // ═══════════════════════════════════════════════════════════
+        // LÍNEAS - ESTRATEGIA PATCH: UPDATE existentes + INSERT nuevas
+        // ═══════════════════════════════════════════════════════════
+        console.log('🔄 [updateDocument] Procesando líneas (PATCH)...');
+        
+        // Obtener líneas existentes
+        const [lineasExistentes] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM lineas_documento WHERE documento_id = ? ORDER BY id',
+            [id]
+        );
+        console.log(`   📊 Líneas existentes: ${lineasExistentes.length}`);
+        console.log(`   📊 Líneas nuevas: ${data.lineas?.length || 0}`);
+        
+        const lineasNuevas = data.lineas || [];
+        const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
+        
+        for (let i = 0; i < maxLineas; i++) {
+            const lineaExistente = lineasExistentes[i];
+            const lineaNueva = lineasNuevas[i];
+            
+            if (lineaExistente && lineaNueva) {
+                // UPDATE: La línea existe, actualizarla
+                console.log(`   🔄 UPDATE línea ${i + 1}/${maxLineas} (ID: ${lineaExistente.id})`);
+                await connection.query(
+                    `UPDATE lineas_documento SET 
+                        codigo = ?,
+                        descripcion = ?,
+                        cantidad = ?,
+                        unidad = ?,
+                        precio_unitario = ?,
+                        descuento_porcentaje = ?,
+                        precio_neto = ?,
+                        importe_linea = ?,
+                        datos_extra = ?,
+                        id_de_empresa = ?
+                    WHERE id = ?`,
+                    [
+                        lineaNueva.codigo || '',
+                        lineaNueva.descripcion,
+                        lineaNueva.cantidad,
+                        lineaNueva.unidad,
+                        lineaNueva.precio_unitario,
+                        lineaNueva.descuento_porcentaje,
+                        lineaNueva.precio_neto,
+                        lineaNueva.importe_linea,
+                        JSON.stringify(lineaNueva.datos_extra || {}),
+                        data.id_de_empresa || null,
+                        lineaExistente.id
+                    ]
+                );
+            } else if (!lineaExistente && lineaNueva) {
+                // INSERT: Nueva línea
+                console.log(`   ➕ INSERT línea ${i + 1}/${maxLineas}`);
+                await connection.query(
+                    'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [
+                        id,
+                        lineaNueva.codigo || '',
+                        lineaNueva.descripcion,
+                        lineaNueva.cantidad,
+                        lineaNueva.unidad,
+                        lineaNueva.precio_unitario,
+                        lineaNueva.descuento_porcentaje,
+                        lineaNueva.precio_neto,
+                        lineaNueva.importe_linea,
+                        JSON.stringify(lineaNueva.datos_extra || {}),
+                        data.id_de_empresa || null
+                    ]
+                );
+            } else if (lineaExistente && !lineaNueva) {
+                // DELETE: Línea sobrante - Marcar con documento_id negativo
+                console.log(`   🗑️ MARCAR para eliminar línea ${i + 1}/${maxLineas} (ID: ${lineaExistente.id})`);
+                await connection.query(
+                    'UPDATE lineas_documento SET documento_id = -999999 WHERE id = ?',
+                    [lineaExistente.id]
+                );
+            }
+        }
+        
+        // Limpiar líneas marcadas para eliminación
+        console.log('   🧹 Limpiando líneas marcadas...');
+        try {
+            await connection.query('DELETE FROM lineas_documento WHERE documento_id = -999999');
+            console.log('   ✅ Líneas sobrantes eliminadas');
+        } catch (err) {
+            console.log('   ⚠️ No hay líneas para limpiar (esto es normal)');
+        }
+        
+        console.log('✅ [updateDocument] Líneas actualizadas');
+
+        // ═══════════════════════════════════════════════════════════
+        // IMPUESTOS - DELETE + INSERT (funciona sin problemas)
+        // ═══════════════════════════════════════════════════════════
+        console.log('🔄 [updateDocument] Procesando impuestos...');
+        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
+        
+        for (const iva of data.iva_details || []) {
+            const totalConImpuesto = iva.total_con_impuesto || (iva.base_imponible + iva.cuota);
+            await connection.query(
+                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)',
+                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
+            );
+        }
+        console.log('✅ [updateDocument] Impuestos actualizados');
+
+        await connection.query('SET FOREIGN_KEY_CHECKS=1');
+
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('💾 [updateDocument] COMMITEANDO TRANSACCIÓN');
+        console.log('═══════════════════════════════════════════════════════════');
         await connection.commit();
+        console.log('🎉 [updateDocument] Transacción completada exitosamente');
+        console.log('═══════════════════════════════════════════════════════════');
+        
         return { success: true };
-    } catch (error) {
+    } catch (error: any) {
+        console.error('═══════════════════════════════════════════════════════════');
+        console.error('❌ [updateDocument] ERROR CRÍTICO');
+        console.error('═══════════════════════════════════════════════════════════');
+        console.error('❌ Error:', error);
+        console.error('❌ Error message:', error?.message);
+        console.error('═══════════════════════════════════════════════════════════');
+        
         await connection.rollback();
-        console.error("Error updating document:", error);
+        console.log('🔄 [updateDocument] Rollback ejecutado');
         throw error;
     } finally {
         connection.release();
+        console.log('🔌 [updateDocument] Conexión liberada');
+        console.log('═══════════════════════════════════════════════════════════');
     }
 }
 
@@ -2113,24 +2271,28 @@ export async function getTrimestresList(
     const whereClause = whereConditions.join(' AND ');
 
     const query = `
-      SELECT 
-        d.año_trimestre as año,
-        d.num_trimestre as trimestre,
-        d.id_de_empresa as empresa_id,
-        e.nombre_de_empresa as empresa_nombre,
-        COUNT(d.id) as total_documentos,
-        SUM(d.importe_sin_impuestos) as total_base,
-        SUM(d.importe_total) as total_con_iva,
-        SUM(CASE WHEN i.tipo_impuesto NOT LIKE '%retencion%' THEN i.cuota ELSE 0 END) as iva_total,
-        MAX(d.trimestre_cerrado) as cerrado,
-        MAX(d.fecha_cierre_trimestre) as fecha_cierre
-      FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      LEFT JOIN impuestos_documento i ON d.id = i.documento_id
-      WHERE ${whereClause}
-      GROUP BY d.año_trimestre, d.num_trimestre, d.id_de_empresa, e.nombre_de_empresa
-      ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
-    `;
+  SELECT 
+    d.año_trimestre as año,
+    d.num_trimestre as trimestre,
+    d.id_de_empresa as empresa_id,
+    e.nombre_de_empresa as empresa_nombre,
+    COUNT(DISTINCT d.id) as total_documentos,
+    SUM(DISTINCT d.importe_sin_impuestos) as total_base,
+    SUM(DISTINCT d.importe_total) as total_con_iva,
+    COALESCE(SUM(CASE 
+      WHEN i.tipo_impuesto NOT LIKE '%retencion%' 
+      THEN i.cuota 
+      ELSE 0 
+    END), 0) as iva_total,
+    MAX(d.trimestre_cerrado) as cerrado,
+    MAX(d.fecha_cierre_trimestre) as fecha_cierre
+  FROM documentos d
+  LEFT JOIN empresas e ON d.id_de_empresa = e.id
+  LEFT JOIN impuestos_documento i ON d.id = i.documento_id
+  WHERE ${whereClause}
+  GROUP BY d.año_trimestre, d.num_trimestre, d.id_de_empresa, e.nombre_de_empresa
+  ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
+`;
 
     console.log('📝 [getTrimestresList] Query:', query);
     console.log('📝 [getTrimestresList] Params:', params);
@@ -2168,11 +2330,15 @@ export async function getTrimestresList(
  * Obtiene documentos de un trimestre específico
  * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
  */
+/**
+ * Obtiene documentos de un trimestre específico
+ * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
+ */
 export async function getDocumentosByTrimestre(
   userId: number,
   año: number,
   trimestre: number,
-  empresaIds?: number[] | null  // ✅ CAMBIO: De number | null a number[] | null
+  empresaIds?: number[] | null
 ): Promise<Document[]> {
   try {
     let whereConditions = [
@@ -2184,8 +2350,9 @@ export async function getDocumentosByTrimestre(
 
     // ✅ CAMBIO: Aceptar array de empresas
     if (empresaIds && empresaIds.length > 0) {
-      whereConditions.push('d.id_de_empresa IN (?)');
-      params.push(empresaIds);
+      const placeholders = empresaIds.map(() => '?').join(',');
+      whereConditions.push(`d.id_de_empresa IN (${placeholders})`);
+      params.push(...empresaIds);
     }
 
     const whereClause = whereConditions.join(' AND ');
