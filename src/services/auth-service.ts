@@ -87,9 +87,26 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
       return null;
     }
     
+    // ✅ AGREGADO: Verificar si el usuario sigue activo en la BD
+    try {
+      const [rows] = await db.query<RowDataPacket[]>(
+        'SELECT activo FROM usuarios WHERE id = ?',
+        [session.userId]
+      );
+      
+      if (!rows[0] || rows[0].activo === 0) {
+        console.warn('⚠️ [getSession] Usuario inactivo, eliminando sesión:', session.userId);
+        const cookieStore = await cookies();
+        cookieStore.delete(SESSION_COOKIE_NAME);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ [getSession] Error verificando estado activo:', error);
+      // En caso de error de BD, permitir continuar para no romper la app
+    }
+    
     return session;
 }
-
 export async function createSession(
   userId: number, 
   email: string, 
