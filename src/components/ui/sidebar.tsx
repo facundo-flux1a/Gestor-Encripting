@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/tooltip"
 
 // Importar el servicio para obtener las empresas
-import { getCompanies } from '@/services/document-service';
+//import { getCompanies } from '@/services/document-service';
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -176,22 +176,29 @@ const SidebarProvider = React.forwardRef<
 
     // Hook para cargar las empresas al inicio
     React.useEffect(() => {
-        const fetchCompanies = async () => {
-            try {
-                setCompaniesLoading(true);
-                const fetchedCompanies = await getCompanies();
-                setCompanies(fetchedCompanies);
-                if (fetchedCompanies.length > 0) {
-                    setSelectedCompanyId(fetchedCompanies[0].id);
-                }
-            } catch (err) {
-                console.error("Error fetching companies:", err);
-            } finally {
-                setCompaniesLoading(false);
+    const fetchCompanies = async () => {
+        try {
+            setCompaniesLoading(true);
+            
+            // ✅ USAR API ROUTE
+            const response = await fetch('/api/companies');
+            if (!response.ok) {
+                throw new Error('Error al cargar empresas');
             }
-        };
-        fetchCompanies();
-    }, []);
+            const fetchedCompanies = await response.json();
+            
+            setCompanies(fetchedCompanies);
+            if (fetchedCompanies.length > 0) {
+                setSelectedCompanyId(fetchedCompanies[0].id);
+            }
+        } catch (err) {
+            console.error("Error fetching companies:", err);
+        } finally {
+            setCompaniesLoading(false);
+        }
+    };
+    fetchCompanies();
+}, []);
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({

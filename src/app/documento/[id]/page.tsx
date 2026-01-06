@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
-import { getDocumentById, updateDocument, deleteDocument, validateDocumentIncidents } from '@/services/document-service';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +23,6 @@ import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-d
 import { IndividualProvider } from '@/context/IndividualProvider';
 import { IndividualTutorial } from '@/components/documento/IndividualTutorial';
 
-// 🎯 FUNCIONES DE FORMATO MANUAL
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
   if (isNaN(value)) return '0';
@@ -61,7 +59,8 @@ function DocumentoPageContent() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
-  const [key, setKey] = useState(0);
+  
+  const lastDocIdRef = useRef<number | null>(null);
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
@@ -77,24 +76,48 @@ function DocumentoPageContent() {
       name: "entidades"
   });
 
-  const resetFormWithDocData = (docData: Document) => {
-    form.reset({
+  const resetFormWithDocData = useCallback((docData: Document) => {
+    const formData = {
         ...docData,
         fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
         fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
+    };
+    
+    form.reset(formData, {
+      keepErrors: false,
+      keepDirty: false,
+      keepIsSubmitted: false,
+      keepTouched: false,
+      keepIsValid: false,
+      keepSubmitCount: false,
     });
-  }
+  }, [form]);
 
-  const fetchDocument = async (id: number) => {
+  const fetchDocument = useCallback(async (id: number) => {
     try {
       setIsLoading(true);
-      const fetchedDoc = await getDocumentById(id);
-      if (!fetchedDoc) {
-        notFound();
-      } else {
-        setDoc(fetchedDoc);
-        resetFormWithDocData(fetchedDoc);
+      
+      const response = await fetch(`/api/documents/${id}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          notFound();
+        }
+        throw new Error(`Error ${response.status}`);
       }
+      
+      const fetchedDoc = await response.json();
+      setDoc(fetchedDoc);
+      
+      if (lastDocIdRef.current !== fetchedDoc.id_documento) {
+        console.log('🔄 [page] Reseteando form para nuevo documento:', fetchedDoc.id_documento);
+        resetFormWithDocData(fetchedDoc);
+        lastDocIdRef.current = fetchedDoc.id_documento;
+      }
+      
     } catch (error) {
       console.error("Failed to fetch document", error);
       toast({
@@ -105,7 +128,7 @@ function DocumentoPageContent() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [toast, resetFormWithDocData]);
 
   useEffect(() => {
     const idParam = params.id;
@@ -117,42 +140,47 @@ function DocumentoPageContent() {
     }
 
     fetchDocument(id);
-  }, [params.id, key]);
+  }, [params.id, fetchDocument]);
 
-
-  const onAnalysisComplete = () => {
-     setKey(prevKey => prevKey + 1);
-  };
+  const onAnalysisComplete = useCallback(() => {
+    if (doc) {
+      fetchDocument(doc.id_documento);
+    }
+  }, [doc, fetchDocument]);
 
   const handleDelete = async () => {
     if (!doc) return;
     setIsDeleting(true);
     try {
-        const result = await deleteDocument(doc.id_documento);
-        
-        if (result.success) {
-            toast({
-                title: "✅ Documento Eliminado",
-                description: "El documento ha sido eliminado correctamente.",
-                className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
-            });
-            window.location.href = '/documents';
-        } else {
-            toast({
-                title: "Error",
-                description: result.error || "No se pudo eliminar el documento.",
-                variant: "destructive",
-            });
-        }
-    } catch (error) {
-        console.error("Failed to delete document", error);
+      const response = await fetch(`/api/documents/${doc.id_documento}`, {
+        method: 'DELETE',
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
         toast({
-            title: "Error",
-            description: "No se pudo eliminar el documento.",
-            variant: "destructive",
+          title: "✅ Documento Eliminado",
+          description: "El documento ha sido eliminado correctamente.",
+          className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
         });
+        window.location.href = '/documents';
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo eliminar el documento.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to delete document", error);
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el documento.",
+        variant: "destructive",
+      });
     } finally {
-        setIsDeleting(false);
+      setIsDeleting(false);
     }
   };
 
@@ -160,59 +188,88 @@ function DocumentoPageContent() {
     if (!doc || !doc.incidencia) return;
     setIsValidating(true);
     try {
-        await validateDocumentIncidents(doc.id_documento);
-        
-        const esSinConfirmar = doc.tipo_documento?.toUpperCase().includes('(SIN CONFIRMAR)');
-        
-        if (esSinConfirmar) {
-            const confirmResponse = await fetch('/api/documents-confirm', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ documentId: doc.id_documento })
-            });
+      const response = await fetch(`/api/documents/${doc.id_documento}/validate`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al validar');
+      }
+      
+      const esSinConfirmar = doc.tipo_documento?.toUpperCase().includes('(SIN CONFIRMAR)');
+      
+      if (esSinConfirmar) {
+        const confirmResponse = await fetch('/api/documents-confirm', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: doc.id_documento })
+        });
 
-            if (!confirmResponse.ok) {
-                throw new Error('Error al confirmar el documento');
-            }
+        if (!confirmResponse.ok) {
+          throw new Error('Error al confirmar el documento');
         }
-        
-        toast({
-            title: "✅ Documento Validado",
-            description: esSinConfirmar 
-                ? "Incidencias resueltas y documento confirmado" 
-                : "Las incidencias han sido marcadas como resueltas",
-            className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
-        });
-        
-        setKey(prevKey => prevKey + 1);
+      }
+      
+      toast({
+        title: "✅ Documento Validado",
+        description: esSinConfirmar 
+          ? "Incidencias resueltas y documento confirmado" 
+          : "Las incidencias han sido marcadas como resueltas",
+        className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
+      });
+      
+      fetchDocument(doc.id_documento);
     } catch (error) {
-        console.error("Failed to validate incidents", error);
-        toast({
-            title: "Error",
-            description: "No se pudieron validar las incidencias.",
-            variant: "destructive",
-        });
+      console.error("Failed to validate incidents", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron validar las incidencias.",
+        variant: "destructive",
+      });
     } finally {
-        setIsValidating(false);
+      setIsValidating(false);
     }
   }
 
-
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
+    
+    // ✅ GUARD: Prevenir ejecución si no está en modo edición
+    if (!isEditing) {
+      console.log('⚠️ [onSubmit] Bloqueado - no está en modo edición');
+      return;
+    }
+    
+    if (isSaving) {
+      console.log('⚠️ [onSubmit] Bloqueado - ya está guardando');
+      return;
+    }
+    
     setIsSaving(true);
     try {
-      const payload = { ...data };
-
-      await updateDocument(doc.id_documento, payload);
+      const response = await fetch(`/api/documents/${doc.id_documento}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Error al actualizar');
+      }
+      
+      const updatedDoc = { ...doc, ...data };
+      setDoc(updatedDoc);
+      resetFormWithDocData(updatedDoc);
       
       toast({
         title: '✅ Cambios Guardados',
         description: 'El documento se actualizó correctamente.',
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
+      
       setIsEditing(false);
-      setKey(prevKey => prevKey + 1);
 
     } catch (error: any) {
       console.error(error);
@@ -226,15 +283,16 @@ function DocumentoPageContent() {
     }
   };
   
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
       if (!doc) return;
+      console.log('🔄 [page] Reset manual al cancelar edición');
       resetFormWithDocData(doc);
-  }
+  }, [doc, resetFormWithDocData]);
 
   const isEditable = useMemo(() => {
     if (!doc) return false;
     return !doc.trimestre_cerrado;
-  }, [doc]);
+  }, [doc?.id_documento, doc?.trimestre_cerrado]);
 
   if (isLoading) {
     return (
@@ -256,351 +314,335 @@ function DocumentoPageContent() {
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
   const exportData = doc ? [doc] : [];
 
+  // ✅ CONTENIDO SIN FORM
+  const pageContent = (
+    <div className="flex-1 space-y-4 sm:space-y-6 p-4 pt-4 sm:pt-6 sm:p-6 lg:p-8">
+      <MainLayoutHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-3 sm:gap-4 animate-fade-in" style={{ animationDelay: '0ms' }} data-tutorial="documento-header">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              {isEditing ? (
+                <span className="flex items-center gap-2">
+                  <Edit className="h-6 w-6 text-primary animate-pulse" />
+                  Editando Documento
+                </span>
+              ) : (
+                'Detalles del Documento'
+              )}
+            </h2>
+          </div>
+          
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap" data-tutorial="documento-actions">
+            {isEditing ? (
+              <>
+                <Button 
+                  variant="outline" 
+                  type="button" 
+                  size="sm"
+                  onClick={() => {
+                    setIsEditing(false);
+                    resetForm();
+                  }}
+                  className="flex-1 sm:flex-none hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-200 group"
+                >
+                  <X className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
+                  <span className="hidden xs:inline">Cancelar</span>
+                </Button>
+                <Button 
+                  type="submit" 
+                  size="sm"
+                  disabled={isSaving || !form.formState.isDirty}
+                  className="flex-1 sm:flex-none bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  <span className="hidden xs:inline">Guardar</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div tabIndex={0} className="flex-1 sm:flex-none"> 
+                      <Button 
+                        variant="outline" 
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsPreviewOpen(true)} 
+                        disabled={!documentUrl}
+                        className="w-full sm:w-auto hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 group disabled:cursor-not-allowed"
+                        data-tutorial="documento-archivo"
+                      >
+                        <Eye className="h-4 w-4 sm:mr-2 group-hover:scale-110 transition-transform duration-200" />
+                        <span className="hidden sm:inline">Ver</span>
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  {!documentUrl && (
+                    <TooltipContent>
+                      <p>No hay un archivo adjunto</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+                
+                {doc.incidencia && (
+                  <Button 
+                    type="button"
+                    size="sm"
+                    onClick={handleValidate} 
+                    disabled={isValidating}
+                    className="hidden md:flex bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
+                  >
+                    {isValidating ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                    )}
+                    Validar
+                  </Button>
+                )}
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div tabIndex={0} className="flex-1 sm:flex-none">
+                      <Button 
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsEditing(true)} 
+                        disabled={!isEditable}
+                        className="w-full sm:w-auto hover:bg-primary/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50 group"
+                      >
+                        {isEditable ? (
+                          <Edit className="h-4 w-4 sm:mr-2 group-hover:rotate-12 transition-transform duration-200" />
+                        ) : (
+                          <Lock className="h-4 w-4 sm:mr-2" />
+                        )}
+                        <span className="hidden sm:inline">Editar</span>
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  {!isEditable && (
+                    <TooltipContent>
+                      <p>El trimestre está cerrado</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+                
+                <Button 
+                  variant="destructive" 
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsDeleteDialogOpen(true)} 
+                  disabled={isDeleting}
+                  className="hidden lg:flex hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                  )}
+                  Eliminar
+                </Button>
+                
+                <div className="hidden lg:block">
+                  <ExportButton 
+                    data={exportData} 
+                    filename={`documento_${doc.id_documento}`} 
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </MainLayoutHeader>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in" style={{ animationDelay: '50ms' }}>
+          <div className="transition-all duration-300 hover:scale-[1.01]" data-tutorial="documento-view">
+            <DocumentView doc={doc} isEditing={isEditing} form={form} />
+          </div>
+        </div>
+        
+        <div className="space-y-4 sm:space-y-6">
+          {doc.incidencia && (
+            <div 
+              className="bg-red-50 border border-red-200 rounded-lg p-4 dark:bg-red-950 dark:border-red-800"
+              data-tutorial="documento-incidencias"
+            >
+              <p className="text-sm text-red-800 dark:text-red-200">
+                <strong>⚠️ Incidencia detectada:</strong> {doc.incidencia_razon || 'Este documento tiene problemas sin resolver.'}
+              </p>
+            </div>
+          )}
+
+          <div className="animate-fade-in group" style={{ animationDelay: '100ms' }} data-tutorial="documento-analizar">
+            <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+              <AnalyzeDocumentCard 
+                documentId={doc.id_documento} 
+                onAnalysisComplete={onAnalysisComplete} 
+              />
+            </div>
+          </div>
+          
+          <div data-tutorial="documento-entidades">
+            {entidadFields.map((field, index) => (
+              <div 
+                key={field.id} 
+                className="animate-fade-in group mb-4" 
+                style={{ animationDelay: `${150 + (index * 50)}ms` }}
+              >
+                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+                  <EditableEntityCard
+                    isEditing={isEditing}
+                    form={form}
+                    entityIndex={index}
+                    removeEntity={() => removeEntidad(index)}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {isEditing && (
+            <div className="animate-fade-in" style={{ animationDelay: `${150 + (entidadFields.length * 50)}ms` }}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => appendEntidad({ 
+                  rol: 'Otro', 
+                  nombre: '', 
+                  direccion: '', 
+                  identificador_fiscal: '', 
+                  telefono: '', 
+                  email: '', 
+                  datos_extra: null 
+                })}
+                className="w-full hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-200 group"
+              >
+                <PlusCircle className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" /> 
+                Añadir Entidad
+              </Button>
+            </div>
+          )}
+          
+          <div className="animate-fade-in group" style={{ animationDelay: `${200 + (entidadFields.length * 50)}ms` }} data-tutorial="documento-financiero">
+            <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
+              <FinancialDetailsCard 
+                doc={doc} 
+                isEditing={isEditing} 
+                form={form} 
+              />
+            </div>
+          </div>
+          
+          {!isEditing && (
+            <div className="flex flex-col gap-2 lg:hidden animate-fade-in" style={{ animationDelay: `${250 + (entidadFields.length * 50)}ms` }}>
+              {doc.incidencia && (
+                <Button 
+                  type="button"
+                  size="sm"
+                  onClick={handleValidate} 
+                  disabled={isValidating}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
+                >
+                  {isValidating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                  )}
+                  Validar Incidencias
+                </Button>
+              )}
+              
+              <Button 
+                variant="destructive" 
+                type="button"
+                size="sm"
+                onClick={() => setIsDeleteDialogOpen(true)} 
+                disabled={isDeleting}
+                className="w-full hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
+              >
+                {isDeleting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                )}
+                Eliminar Documento
+              </Button>
+              
+              <ExportButton 
+                data={exportData} 
+                filename={`documento_${doc.id_documento}`}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <MainLayout>
-        <TooltipProvider>
-            <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)}>
-                    <div className="flex-1 space-y-4 sm:space-y-6 p-4 pt-4 sm:pt-6 sm:p-6 lg:p-8">
-                        {/* 🎨 HEADER CON ANIMACIÓN */}
-                        <MainLayoutHeader>
-                            {/* 🎯 data-tutorial="documento-header" */}
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-3 sm:gap-4 animate-fade-in" style={{ animationDelay: '0ms' }} data-tutorial="documento-header">
-                                {/* Título con gradiente */}
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                        {isEditing ? (
-                                            <span className="flex items-center gap-2">
-                                                <Edit className="h-6 w-6 text-primary animate-pulse" />
-                                                Editando Documento
-                                            </span>
-                                        ) : (
-                                            'Detalles del Documento'
-                                        )}
-                                    </h2>
-                                </div>
-                                
-                                {/* 🎯 BOTONES DE ACCIÓN CON HOVER EFFECTS */}
-                                {/* 🎯 data-tutorial="documento-actions" */}
-                                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap" data-tutorial="documento-actions">
-                                    {isEditing ? (
-                                        <>
-                                            <Button 
-                                                variant="outline" 
-                                                type="button" 
-                                                size="sm"
-                                                onClick={() => {
-                                                    setIsEditing(false);
-                                                    resetForm();
-                                                }}
-                                                className="flex-1 sm:flex-none hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-200 group"
-                                            >
-                                                <X className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
-                                                <span className="hidden xs:inline">Cancelar</span>
-                                            </Button>
-                                            <Button 
-                                                type="submit" 
-                                                size="sm"
-                                                disabled={isSaving || !form.formState.isDirty}
-                                                className="flex-1 sm:flex-none bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50"
-                                            >
-                                                {isSaving ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Save className="mr-2 h-4 w-4" />
-                                                )}
-                                                <span className="hidden xs:inline">Guardar</span>
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {/* Ver Documento */}
-                                            {/* 🎯 data-tutorial="documento-archivo" */}
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <div tabIndex={0} className="flex-1 sm:flex-none"> 
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm"
-                                                            onClick={() => setIsPreviewOpen(true)} 
-                                                            disabled={!documentUrl}
-                                                            className="w-full sm:w-auto hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 group disabled:cursor-not-allowed"
-                                                            data-tutorial="documento-archivo"
-                                                        >
-                                                            <Eye className="h-4 w-4 sm:mr-2 group-hover:scale-110 transition-transform duration-200" />
-                                                            <span className="hidden sm:inline">Ver</span>
-                                                        </Button>
-                                                    </div>
-                                                </TooltipTrigger>
-                                                {!documentUrl && (
-                                                    <TooltipContent>
-                                                        <p>No hay un archivo adjunto</p>
-                                                    </TooltipContent>
-                                                )}
-                                            </Tooltip>
-                                            
-                                            {/* Validar Incidencias */}
-                                            {doc.incidencia && (
-                                                <Button 
-                                                    type="button" 
-                                                    size="sm"
-                                                    onClick={handleValidate} 
-                                                    disabled={isValidating}
-                                                    className="hidden md:flex bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
-                                                >
-                                                    {isValidating ? (
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        <ShieldCheck className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-                                                    )}
-                                                    Validar
-                                                </Button>
-                                            )}
-                                            
-                                            {/* Editar */}
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <div tabIndex={0} className="flex-1 sm:flex-none">
-                                                        <Button 
-                                                            type="button" 
-                                                            size="sm"
-                                                            onClick={() => setIsEditing(true)} 
-                                                            disabled={!isEditable}
-                                                            className="w-full sm:w-auto hover:bg-primary/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50 group"
-                                                        >
-                                                            {isEditable ? (
-                                                                <Edit className="h-4 w-4 sm:mr-2 group-hover:rotate-12 transition-transform duration-200" />
-                                                            ) : (
-                                                                <Lock className="h-4 w-4 sm:mr-2" />
-                                                            )}
-                                                            <span className="hidden sm:inline">Editar</span>
-                                                        </Button>
-                                                    </div>
-                                                </TooltipTrigger>
-                                                {!isEditable && (
-                                                    <TooltipContent>
-                                                        <p>El trimestre está cerrado</p>
-                                                    </TooltipContent>
-                                                )}
-                                            </Tooltip>
-                                            
-                                            {/* Eliminar - Solo desktop */}
-                                            <Button 
-                                                variant="destructive" 
-                                                type="button" 
-                                                size="sm"
-                                                onClick={() => setIsDeleteDialogOpen(true)} 
-                                                disabled={isDeleting}
-                                                className="hidden lg:flex hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
-                                            >
-                                                {isDeleting ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-                                                )}
-                                                Eliminar
-                                            </Button>
-                                            
-                                            {/* Exportar - Solo desktop */}
-                                            <div className="hidden lg:block">
-                                                <ExportButton 
-                                                    data={exportData} 
-                                                    filename={`documento_${doc.id_documento}`} 
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </MainLayoutHeader>
+      <TooltipProvider>
+        <Form {...form}>
+          {/* ✅ FORM SOLO ENVUELVE CUANDO ESTÁ EN MODO EDICIÓN */}
+          {isEditing ? (
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+              {pageContent}
+            </form>
+          ) : (
+            pageContent
+          )}
+        </Form>
+      </TooltipProvider>
+      
+      <DeleteConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
+        isDeleting={isDeleting}
+      />
+      <DocumentPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        documentUrl={documentUrl ?? null}
+        documentName={doc.archivos?.[0]?.nombre_archivo || `documento_${doc.id_documento}.pdf`}
+      />
 
-                        {/* 🎨 GRID PRINCIPAL CON ANIMACIONES STAGGERED */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-                            {/* Columna principal - Información del documento */}
-                            <div className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in" style={{ animationDelay: '50ms' }}>
-                                {/* 🎯 data-tutorial="documento-view" */}
-                                <div className="transition-all duration-300 hover:scale-[1.01]" data-tutorial="documento-view">
-                                    <DocumentView doc={doc} isEditing={isEditing} form={form} />
-                                </div>
-                            </div>
-                            
-                            {/* Columna lateral - Cards de análisis y detalles */}
-                            <div className="space-y-4 sm:space-y-6">
-                                {/* 🎯 Alerta de incidencias (condicional) */}
-                                {doc.incidencia && (
-                                    <div 
-                                        className="bg-red-50 border border-red-200 rounded-lg p-4 dark:bg-red-950 dark:border-red-800"
-                                        data-tutorial="documento-incidencias"
-                                    >
-                                        <p className="text-sm text-red-800 dark:text-red-200">
-                                            <strong>⚠️ Incidencia detectada:</strong> {doc.incidencia_razon || 'Este documento tiene problemas sin resolver.'}
-                                        </p>
-                                    </div>
-                                )}
+      <style jsx global>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
 
-                                {/* Analyze Document Card */}
-                                {/* 🎯 data-tutorial="documento-analizar" */}
-                                <div className="animate-fade-in group" style={{ animationDelay: '100ms' }} data-tutorial="documento-analizar">
-                                    <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                                        <AnalyzeDocumentCard 
-                                            documentId={doc.id_documento} 
-                                            onAnalysisComplete={onAnalysisComplete} 
-                                        />
-                                    </div>
-                                </div>
-                                
-                                {/* Entidades */}
-                                {/* 🎯 data-tutorial="documento-entidades" */}
-                                <div data-tutorial="documento-entidades">
-                                    {entidadFields.map((field, index) => (
-                                        <div 
-                                            key={field.id} 
-                                            className="animate-fade-in group mb-4" 
-                                            style={{ animationDelay: `${150 + (index * 50)}ms` }}
-                                        >
-                                            <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                                                <EditableEntityCard
-                                                    isEditing={isEditing}
-                                                    form={form}
-                                                    entityIndex={index}
-                                                    removeEntity={() => removeEntidad(index)}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out forwards;
+          opacity: 0;
+        }
 
-                                {/* Añadir Entidad */}
-                                {isEditing && (
-                                    <div className="animate-fade-in" style={{ animationDelay: `${150 + (entidadFields.length * 50)}ms` }}>
-                                        <Button 
-                                            type="button" 
-                                            variant="outline" 
-                                            size="sm" 
-                                            onClick={() => appendEntidad({ 
-                                                rol: 'Otro', 
-                                                nombre: '', 
-                                                direccion: '', 
-                                                identificador_fiscal: '', 
-                                                telefono: '', 
-                                                email: '', 
-                                                datos_extra: null 
-                                            })}
-                                            className="w-full hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-200 group"
-                                        >
-                                            <PlusCircle className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" /> 
-                                            Añadir Entidad
-                                        </Button>
-                                    </div>
-                                )}
-                                
-                                {/* Financial Details */}
-                                {/* 🎯 data-tutorial="documento-financiero" */}
-                                <div className="animate-fade-in group" style={{ animationDelay: `${200 + (entidadFields.length * 50)}ms` }} data-tutorial="documento-financiero">
-                                    <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                                        <FinancialDetailsCard 
-                                            doc={doc} 
-                                            isEditing={isEditing} 
-                                            form={form} 
-                                        />
-                                    </div>
-                                </div>
-                                
-                                {/* Botones adicionales en mobile */}
-                                {!isEditing && (
-                                    <div className="flex flex-col gap-2 lg:hidden animate-fade-in" style={{ animationDelay: `${250 + (entidadFields.length * 50)}ms` }}>
-                                        {doc.incidencia && (
-                                            <Button 
-                                                type="button" 
-                                                size="sm"
-                                                onClick={handleValidate} 
-                                                disabled={isValidating}
-                                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
-                                            >
-                                                {isValidating ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <ShieldCheck className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-                                                )}
-                                                Validar Incidencias
-                                            </Button>
-                                        )}
-                                        
-                                        <Button 
-                                            variant="destructive" 
-                                            type="button" 
-                                            size="sm"
-                                            onClick={() => setIsDeleteDialogOpen(true)} 
-                                            disabled={isDeleting}
-                                            className="w-full hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
-                                        >
-                                            {isDeleting ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-                                            )}
-                                            Eliminar Documento
-                                        </Button>
-                                        
-                                        <ExportButton 
-                                            data={exportData} 
-                                            filename={`documento_${doc.id_documento}`}
-                                            className="w-full"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </Form>
-        </TooltipProvider>
-        
-        {/* Diálogos */}
-        <DeleteConfirmationDialog
-            isOpen={isDeleteDialogOpen}
-            onClose={() => setIsDeleteDialogOpen(false)}
-            onConfirm={handleDelete}
-            documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
-            isDeleting={isDeleting}
-        />
-        <DocumentPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            documentUrl={documentUrl ?? null}
-            documentName={doc.archivos?.[0]?.nombre_archivo || `documento_${doc.id_documento}.pdf`}
-        />
-
-        {/* 🎨 ANIMACIONES GLOBALES */}
-        <style jsx global>{`
-            @keyframes fade-in {
-                from {
-                    opacity: 0;
-                    transform: translateY(10px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-
-            .animate-fade-in {
-                animation: fade-in 0.5s ease-out forwards;
-                opacity: 0;
-            }
-
-            @media (prefers-reduced-motion: reduce) {
-                .animate-fade-in {
-                    animation: none;
-                    opacity: 1;
-                }
-            }
-        `}</style>
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-in {
+            animation: none;
+            opacity: 1;
+          }
+        }
+      `}</style>
     </MainLayout>
   );
 }
 
-// 🎯 WRAPPER CON PROVIDER Y TUTORIAL
 export default function DocumentoPage() {
   return (
     <IndividualProvider>

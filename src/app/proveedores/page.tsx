@@ -11,50 +11,47 @@ import { ProveedoresTutorial } from "@/components/proveedores/ProveedoresTutoria
 import { Skeleton } from "@/components/ui/skeleton";
 
 function ProveedoresPageContent() {
-    const { selectedCompanyIds } = useCompanyContext(); // ⬅️ FIX: Usa selectedCompanyIds en lugar de selectedCompanies
+    const { selectedCompanyIds } = useCompanyContext();
     const [providers, setProviders] = useState<ProviderWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Determinar si mostrar la columna de empresa
     const showCompanyColumn = selectedCompanyIds.length > 1;
 
-    useEffect(() => {
-        const fetchProviders = async () => {
-            // ⬅️ FIX: Validar selectedCompanyIds
-            if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+    // ✅ Función para cargar proveedores
+    const fetchProviders = async () => {
+        if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+            setProviders([]);
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const response = await fetch('/api/proveedores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyIds: selectedCompanyIds }),
+            });
+
+            if (!response.ok) {
                 setProviders([]);
-                setIsLoading(false);
                 return;
             }
 
-            try {
-                setIsLoading(true);
-                // ⬅️ FIX: Endpoint correcto '/api/proveedores'
-                const response = await fetch('/api/proveedores', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ companyIds: selectedCompanyIds }), // ⬅️ FIX: Ya tienes los IDs directamente
-                });
+            const data = await response.json();
+            setProviders(data.providers || []);
+        } catch (error) {
+            console.error('Error cargando proveedores:', error);
+            setProviders([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-                if (!response.ok) {
-                    setProviders([]);
-                    return;
-                }
-
-                const data = await response.json();
-                setProviders(data.providers || []);
-            } catch (error) {
-                console.error('Error cargando proveedores:', error);
-                setProviders([]);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
+    useEffect(() => {
         fetchProviders();
-    }, [selectedCompanyIds]); // ⬅️ FIX: Dependencia correcta
+    }, [selectedCompanyIds]);
 
-    // ⬅️ FIX: Estado de carga consistente con la versión vieja
     if (isLoading) {
         return (
             <MainLayout>
@@ -104,11 +101,11 @@ function ProveedoresPageContent() {
                     <ProvidersTable 
                         providers={providers} 
                         showCompanyColumn={showCompanyColumn}
+                        onProviderUpdated={fetchProviders} // ✅ AGREGAR ESTA LÍNEA
                     />
                 </div>
             </div>
 
-            {/* Estilos de animación */}
             <style jsx global>{`
                 @keyframes fade-in {
                     from {

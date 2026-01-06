@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Database, Loader2, FileWarning, Search } from 'lucide-react';
 import { analyzeDocumentsForIncidents } from '@/ai/flows/analyze-incidents';
 import type { IncidentAnalysisResult } from '@/lib/types';
+import { useCompanyContext } from '@/context/CompanyProvider'; // ⬅️ AGREGAR
 
 interface AnalyzeDocumentsCardProps {
     onAnalysisComplete: () => Promise<void>;
@@ -19,6 +20,9 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
     const [result, setResult] = useState<IncidentAnalysisResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { toast } = useToast();
+    
+    // ✅ AGREGAR: Obtener empresas seleccionadas
+    const { selectedCompanyIds } = useCompanyContext();
 
     const handleAnalyze = async () => {
         setIsLoading(true);
@@ -26,7 +30,22 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
         setResult(null);
 
         try {
-            const analysisResult = await analyzeDocumentsForIncidents();
+            // ✅ CAMBIO: Pasar empresas seleccionadas
+            console.log('🔍 [AnalyzeDocuments] Analizando empresas:', selectedCompanyIds);
+            
+            // ✅ Validación: Si no hay empresas seleccionadas, avisar
+            if (selectedCompanyIds.length === 0) {
+                toast({
+                    title: "Sin empresas seleccionadas",
+                    description: "Por favor, selecciona al menos una empresa para analizar",
+                    variant: "destructive",
+                });
+                setIsLoading(false);
+                return;
+            }
+            
+            const analysisResult = await analyzeDocumentsForIncidents(selectedCompanyIds);
+            
             setResult(analysisResult);
             toast({
                 title: "Análisis Completado",
@@ -92,14 +111,21 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
                 )}
                 {!result && !error && !isLoading && (
                     <div className="text-center text-muted-foreground p-4">
-                        <p className="text-xs sm:text-sm">Haz clic en el botón para iniciar la revisión.</p>
+                        <p className="text-xs sm:text-sm">
+                            {selectedCompanyIds.length === 0 
+                                ? '⚠️ Selecciona al menos una empresa para analizar'
+                                : 'Haz clic en el botón para iniciar la revisión.'
+                            }
+                        </p>
                     </div>
                 )}
                  {isLoading && (
                     <div className="flex items-center justify-center p-6 sm:p-8">
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
-                            <span className="text-xs sm:text-sm text-muted-foreground">Analizando...</span>
+                            <span className="text-xs sm:text-sm text-muted-foreground">
+                                Analizando {selectedCompanyIds.length} empresa(s)...
+                            </span>
                         </div>
                     </div>
                 )}
@@ -107,7 +133,7 @@ export function AnalyzeDocumentsCard({ onAnalysisComplete }: AnalyzeDocumentsCar
             <CardFooter>
                 <Button 
                     onClick={handleAnalyze} 
-                    disabled={isLoading} 
+                    disabled={isLoading || selectedCompanyIds.length === 0}
                     className="w-full"
                     size="sm"
                 >

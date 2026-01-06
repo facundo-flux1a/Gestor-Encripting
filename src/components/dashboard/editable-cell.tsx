@@ -25,7 +25,7 @@ interface EditableCellProps {
   table: Table<Document>;
   rowIndex: number;
   trimestre_cerrado?: number;
-  isDuplicate?: boolean; // ⬅️ NUEVA PROP
+  isDuplicate?: boolean;
 }
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
@@ -62,41 +62,94 @@ export function EditableCell({
   table,
   rowIndex,
   trimestre_cerrado = 0,
-  isDuplicate = false, // ⬅️ NUEVA PROP
+  isDuplicate = false,
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isBlurring = useRef(false);
 
   const isTrimesterClosed = trimestre_cerrado === 1;
 
+  // Usar un ref para rastrear si estamos editando activamente
+  const isEditingRef = useRef(false);
+
   useEffect(() => {
-    setValue(initialValue);
-  }, [initialValue]);
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
+  useEffect(() => {
+    // Solo actualizar el valor si NO estamos editando activamente
+    if (!isEditingRef.current) {
+      console.log('🔄 [EditableCell] initialValue cambió (no editando):', { docId, fieldName, initialValue });
+      setValue(initialValue);
+    } else {
+      console.log('⏸️ [EditableCell] initialValue cambió pero ESTAMOS EDITANDO, ignorando:', { docId, fieldName, initialValue });
+    }
+  }, [initialValue, docId, fieldName]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
+      console.log('✏️ [EditableCell] Entrando en modo edición:', { docId, fieldName });
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [isEditing]);
+  }, [isEditing, docId, fieldName]);
 
-  const handleBlur = async () => {
+  const handleBlur = async (e?: React.FocusEvent) => {
+    console.log('👋 [EditableCell] handleBlur llamado:', { 
+      docId, 
+      fieldName, 
+      relatedTarget: e?.relatedTarget,
+      isBlurring: isBlurring.current 
+    });
+
+    // Prevenir múltiples llamadas simultáneas
+    if (isBlurring.current) {
+      console.log('⏸️ [EditableCell] Ya está procesando blur, ignorando');
+      return;
+    }
+
+    // Prevenir que se cierre si el blur fue por re-render dentro del wrapper
+    if (e && e.relatedTarget && (e.relatedTarget as HTMLElement).closest('.editable-cell-wrapper')) {
+      console.log('🛑 [EditableCell] Blur interno detectado, ignorando');
+      return;
+    }
+
+    isBlurring.current = true;
     setIsEditing(false);
     
     const processedValue = inputType === 'number' ? parseFloat(value) : value;
 
+    console.log('💾 [EditableCell] Comparando valores:', { 
+      processedValue, 
+      initialValue, 
+      areEqual: processedValue === initialValue 
+    });
+
     if (processedValue === initialValue) {
+      console.log('⏭️ [EditableCell] Valor sin cambios, saliendo');
+      isBlurring.current = false;
       return;
     }
 
     setIsLoading(true);
+    console.log('🚀 [EditableCell] Guardando cambios...');
+
     try {
       const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
+        console.log('✅ [EditableCell] Campo actualizado exitosamente');
+        
+        // ✅ PRIMERO: Actualizar la tabla local
         table.options.meta?.updateData(rowIndex, fieldName, processedValue);
+        
+        // ✅ SEGUNDO: Llamar al onUpdate para que refresque la data global
+        console.log('🔄 [EditableCell] Llamando onUpdate para refrescar data...');
+        onUpdate(docId, fieldName, processedValue, table, rowIndex);
+        
         toast({
           title: 'Campo Actualizado',
           description: `El campo se ha guardado correctamente.`,
@@ -105,7 +158,7 @@ export function EditableCell({
         throw new Error('La actualización falló en el servidor.');
       }
     } catch (error: any) {
-      console.error('Failed to update field:', error);
+      console.error('❌ [EditableCell] Error al actualizar:', error);
       setValue(initialValue);
       toast({
         title: 'Error al Actualizar',
@@ -114,6 +167,8 @@ export function EditableCell({
       });
     } finally {
       setIsLoading(false);
+      isBlurring.current = false;
+      console.log('🏁 [EditableCell] Proceso de guardado finalizado');
     }
   };
 
@@ -138,8 +193,18 @@ export function EditableCell({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    
+    console.log('🖱️ [EditableCell] Click detectado:', { 
+      docId, 
+      fieldName, 
+      isEditing, 
+      isLoading, 
+      isTrimesterClosed 
+    });
     
     if (isTrimesterClosed) {
+      console.log('🔒 [EditableCell] Trimestre cerrado, bloqueando edición');
       toast({
         title: 'Trimestre Cerrado',
         description: 'No se pueden editar documentos de trimestres cerrados.',
@@ -149,7 +214,10 @@ export function EditableCell({
     }
     
     if (!isEditing && !isLoading) {
+      console.log('✅ [EditableCell] Activando modo edición');
       setIsEditing(true);
+    } else {
+      console.log('⚠️ [EditableCell] No se puede activar edición:', { isEditing, isLoading });
     }
   };
 
@@ -157,9 +225,9 @@ export function EditableCell({
     <TooltipProvider>
       <div 
         className={cn(
-          "relative min-h-[20px] sm:min-h-[24px] px-1 sm:px-2",
+          "editable-cell-wrapper relative min-h-[20px] sm:min-h-[24px] px-1 sm:px-2",
           isTrimesterClosed && "cursor-not-allowed opacity-60",
-          isDuplicate && "bg-amber-50 dark:bg-amber-950/20" // ⬅️ Fondo amarillo si es duplicado
+          isDuplicate && "bg-amber-50 dark:bg-amber-950/20"
         )}
         onClick={handleClick}
       >
@@ -173,7 +241,7 @@ export function EditableCell({
           <Lock className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
         )}
         
-        {/* ⬅️ NUEVO: Alerta de duplicado */}
+        {/* Alerta de duplicado */}
         {isDuplicate && !isLoading && !isTrimesterClosed && (
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
@@ -201,8 +269,8 @@ export function EditableCell({
             className={cn(
               "truncate block text-xs sm:text-sm",
               !isTrimesterClosed && "cursor-pointer",
-              (isTrimesterClosed || isDuplicate) && "pr-5 sm:pr-6", // ⬅️ Espacio para iconos
-              isDuplicate && "font-medium text-amber-800 dark:text-amber-200" // ⬅️ Texto en color ámbar
+              (isTrimesterClosed || isDuplicate) && "pr-5 sm:pr-6",
+              isDuplicate && "font-medium text-amber-800 dark:text-amber-200"
             )}
             title={displayValue()}
           >
@@ -216,11 +284,37 @@ export function EditableCell({
             ref={inputRef}
             type={inputType}
             value={formattedValueForInput()}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              console.log('⌨️ [EditableCell] onChange:', { 
+                docId, 
+                fieldName, 
+                newValue: e.target.value 
+              });
+              setValue(e.target.value);
+            }}
             onBlur={handleBlur}
+            onMouseDown={(e) => {
+              console.log('🖱️ [EditableCell] Input mouseDown');
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              console.log('🖱️ [EditableCell] Input click');
+              e.stopPropagation();
+            }}
+            onFocus={(e) => {
+              console.log('🎯 [EditableCell] Input focus');
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleBlur();
+              console.log('⌨️ [EditableCell] keyDown:', { key: e.key });
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('↩️ [EditableCell] Enter presionado, guardando...');
+                handleBlur();
+              }
               if (e.key === 'Escape') {
+                e.preventDefault();
+                console.log('⎋ [EditableCell] Escape presionado, cancelando edición');
                 setValue(initialValue);
                 setIsEditing(false);
               }
@@ -228,7 +322,7 @@ export function EditableCell({
             className={cn(
               "h-7 sm:h-8 text-xs sm:text-sm",
               isCurrency ? "text-right tabular-nums" : "",
-              isDuplicate && "border-amber-400 dark:border-amber-600 focus-visible:ring-amber-500" // ⬅️ Borde ámbar en input
+              isDuplicate && "border-amber-400 dark:border-amber-600 focus-visible:ring-amber-500"
             )}
           />
         )}

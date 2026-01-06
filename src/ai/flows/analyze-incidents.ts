@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -13,20 +12,24 @@ import { runDocumentAnalysis } from '@/services/document-service';
 import type { IncidentAnalysisResult } from '@/lib/types';
 import { IncidentAnalysisResultSchema } from '@/lib/types';
 
+// ✅ CAMBIO: Ahora acepta empresaIds como input
 const analyzeDocumentsFlow = ai.defineFlow(
   {
     name: 'analyzeDocumentsForIncidentsFlow',
-    inputSchema: z.void(),
+    inputSchema: z.object({
+      empresaIds: z.array(z.number()).optional(),
+    }),
     outputSchema: IncidentAnalysisResultSchema,
   },
-  async () => {
-    console.log('Starting document analysis flow...');
-    const result = await runDocumentAnalysis();
+  async (input) => {
+    console.log('Starting document analysis flow...', input);
+    const result = await runDocumentAnalysis(input.empresaIds);
     console.log('Document analysis flow completed.', result);
     return result;
   }
 );
 
-export async function analyzeDocumentsForIncidents(): Promise<IncidentAnalysisResult> {
-  return await analyzeDocumentsFlow();
+// ✅ CAMBIO: Ahora acepta empresaIds como parámetro
+export async function analyzeDocumentsForIncidents(empresaIds?: number[]): Promise<IncidentAnalysisResult> {
+  return await analyzeDocumentsFlow({ empresaIds });
 }

@@ -1684,6 +1684,8 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
     }
 }
 
+// En src/services/document-service.ts - línea ~1950
+
 async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResult> {
     const connection = await db.getConnection();
     await connection.beginTransaction();
@@ -1727,7 +1729,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                     [doc.id, 'Datos incompletos%']
                 );
                 if (existing.length === 0) {
-                    // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
                     await connection.query(
                         'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
                         [doc.id, doc.id_de_empresa, description]
@@ -1739,10 +1740,14 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
         const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
 
-        // Check for duplicates
+        // ✅ CAMBIO CRÍTICO: Incluir empresa en la clave de duplicados
+        // Check for duplicates (solo DENTRO de cada empresa)
         const docMap = new Map<string, Array<{id: number, id_de_empresa: number}>>();
         for (const doc of validDocsForAnalysis) {
-            const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+            // ✅ ANTES: const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+            // ✅ AHORA: Incluir empresa en la clave
+            const key = `${doc.id_de_empresa}|${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+            
             if (!docMap.has(key)) {
                 docMap.set(key, []);
             }
@@ -1753,7 +1758,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             if (docs.length > 1) {
                 duplicates += docs.length;
                 const ids = docs.map(d => d.id);
-                const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(0, 2).join(' - ')}. IDs: ${ids.join(', ')}`;
+                const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(1, 3).join(' - ')}. IDs: ${ids.join(', ')}`;
                 
                 for (const doc of docs) {
                     const [existing] = await connection.query<RowDataPacket[]>(
@@ -1761,7 +1766,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                         [doc.id, 'Documento duplicado%']
                     );
                     if (existing.length === 0) {
-                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
                         await connection.query(
                             'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
                             [doc.id, doc.id_de_empresa, description]
@@ -1784,7 +1788,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                         [doc.id, 'Error de cálculo en el subtotal%']
                     );
                     if (existing.length === 0) {
-                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
                         await connection.query(
                             'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
                             [doc.id, doc.id_de_empresa, description]
@@ -1805,7 +1808,6 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
                         [doc.id, 'Error de cálculo en el total%']
                     );
                     if (existing.length === 0) {
-                        // ⬅️ CAMBIO: Ahora guardamos id_de_empresa
                         await connection.query(
                             'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
                             [doc.id, doc.id_de_empresa, description]
@@ -1864,9 +1866,38 @@ export async function markDocumentAsRead(documentId: number) {
       };
     }
   }
-export async function runDocumentAnalysis(): Promise<IncidentAnalysisResult> {
-    const [allDocIds] = await db.query<RowDataPacket[]>('SELECT id FROM documentos');
+// ✅ MODIFICAR esta función (línea ~2100)
+export async function runDocumentAnalysis(empresaIds?: number[]): Promise<IncidentAnalysisResult> {
+    let query = 'SELECT d.id FROM documentos d';
+    const params: any[] = [];
+    
+    // ✅ NUEVO: Filtro de tipo de documento (facturas Y abonos)
+    const conditions: string[] = [`(
+        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+    )`];
+    
+    // ✅ NUEVO: Filtrar por empresas si se especifican
+    if (empresaIds && empresaIds.length > 0) {
+        const placeholders = empresaIds.map(() => '?').join(',');
+        conditions.push(`d.id_de_empresa IN (${placeholders})`);
+        params.push(...empresaIds);
+    }
+    
+    if (conditions.length > 0) {
+        query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+    
+    console.log('🔍 [runDocumentAnalysis] Query:', query);
+    console.log('🔍 [runDocumentAnalysis] Params:', params);
+    
+    const [allDocIds] = await db.query<RowDataPacket[]>(query, params);
     const docIds = allDocIds.map(row => row.id);
+    
+    console.log(`📊 [runDocumentAnalysis] Analizando ${docIds.length} documentos`);
+    
     return analyzeDocuments(docIds);
 }
 
@@ -2246,9 +2277,8 @@ export async function getTrimestresList(
     let whereConditions = ['e.id_de_usuario = ?'];
     const params: any[] = [userId];
 
-    // ✅ FIX: Filtro por múltiples empresas usando IN
+    // Filtro por múltiples empresas usando IN
     if (filters?.empresa_id) {
-      // Si empresa_id es un array
       if (Array.isArray(filters.empresa_id)) {
         if (filters.empresa_id.length > 0) {
           const placeholders = filters.empresa_id.map(() => '?').join(', ');
@@ -2256,7 +2286,6 @@ export async function getTrimestresList(
           params.push(...filters.empresa_id);
         }
       } else {
-        // Si es un número individual
         whereConditions.push('d.id_de_empresa = ?');
         params.push(filters.empresa_id);
       }
@@ -2270,34 +2299,138 @@ export async function getTrimestresList(
 
     const whereClause = whereConditions.join(' AND ');
 
+    // ✅ PASO 1: Obtener CIFs de las empresas seleccionadas
+    let MY_COMPANY_FISCAL_IDS: string[] = [];
+    if (filters?.empresa_id) {
+      const empresaIds = Array.isArray(filters.empresa_id) 
+        ? filters.empresa_id 
+        : [filters.empresa_id];
+      
+      if (empresaIds.length > 0) {
+        const [empresasInfo] = await conn.query<RowDataPacket[]>(
+          'SELECT cif FROM empresas WHERE id IN (?)',
+          [empresaIds]
+        );
+        MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+      }
+    }
+
+    console.log('🏢 [getTrimestresList] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
+
+    // ✅ PASO 2: Query corregido que separa ingresos y gastos
+    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
+      ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+      : "'NEVER_MATCH'";
+
     const query = `
-  SELECT 
-    d.año_trimestre as año,
-    d.num_trimestre as trimestre,
-    d.id_de_empresa as empresa_id,
-    e.nombre_de_empresa as empresa_nombre,
-    COUNT(DISTINCT d.id) as total_documentos,
-    SUM(DISTINCT d.importe_sin_impuestos) as total_base,
-    SUM(DISTINCT d.importe_total) as total_con_iva,
-    COALESCE(SUM(CASE 
-      WHEN i.tipo_impuesto NOT LIKE '%retencion%' 
-      THEN i.cuota 
-      ELSE 0 
-    END), 0) as iva_total,
-    MAX(d.trimestre_cerrado) as cerrado,
-    MAX(d.fecha_cierre_trimestre) as fecha_cierre
-  FROM documentos d
-  LEFT JOIN empresas e ON d.id_de_empresa = e.id
-  LEFT JOIN impuestos_documento i ON d.id = i.documento_id
-  WHERE ${whereClause}
-  GROUP BY d.año_trimestre, d.num_trimestre, d.id_de_empresa, e.nombre_de_empresa
-  ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
-`;
+      WITH DocTypes AS (
+        SELECT 
+          d.id,
+          d.año_trimestre,
+          d.num_trimestre,
+          d.id_de_empresa,
+          d.importe_sin_impuestos,
+          d.importe_total,
+          -- ✅ Marcar si es abono
+          CASE 
+            WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
+              OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
+              OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
+            THEN 1
+            ELSE 0
+          END as es_abono,
+          -- ✅ Detectar si es emisor (ingreso) o receptor (gasto)
+          MAX(CASE 
+            WHEN ent.rol IN ('emisor', 'proveedor') 
+              AND ent.identificador_fiscal IN (${cifPlaceholders}) 
+            THEN 1 
+            ELSE 0 
+          END) as is_issued
+        FROM documentos d
+        LEFT JOIN empresas e ON d.id_de_empresa = e.id
+        LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
+        WHERE ${whereClause}
+          AND (
+            (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          )
+        GROUP BY d.id
+      )
+      SELECT 
+        dt.año_trimestre as año,
+        dt.num_trimestre as trimestre,
+        dt.id_de_empresa as empresa_id,
+        e.nombre_de_empresa as empresa_nombre,
+        COUNT(DISTINCT dt.id) as total_documentos,
+        -- ✅ INGRESOS = Facturas emitidas - Abonos emitidos
+        (
+          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
+          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END)
+        ) as total_ingresos,
+        -- ✅ GASTOS = Facturas recibidas - Abonos recibidos
+        (
+          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
+          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END)
+        ) as total_gastos,
+        -- ✅ IVA Repercutido (de ingresos)
+        (
+          SELECT 
+            COALESCE(
+              SUM(CASE WHEN dt2.is_issued = 1 AND dt2.es_abono = 0 THEN i.cuota ELSE 0 END) - 
+              SUM(CASE WHEN dt2.is_issued = 1 AND dt2.es_abono = 1 THEN i.cuota ELSE 0 END)
+            , 0)
+          FROM DocTypes dt2
+          LEFT JOIN impuestos_documento i ON dt2.id = i.documento_id
+          WHERE dt2.año_trimestre = dt.año_trimestre
+            AND dt2.num_trimestre = dt.num_trimestre
+            AND dt2.id_de_empresa = dt.id_de_empresa
+            AND (i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
+        ) as iva_repercutido,
+        -- ✅ IVA Soportado (de gastos)
+        (
+          SELECT 
+            COALESCE(
+              SUM(CASE WHEN dt2.is_issued = 0 AND dt2.es_abono = 0 THEN i.cuota ELSE 0 END) - 
+              SUM(CASE WHEN dt2.is_issued = 0 AND dt2.es_abono = 1 THEN i.cuota ELSE 0 END)
+            , 0)
+          FROM DocTypes dt2
+          LEFT JOIN impuestos_documento i ON dt2.id = i.documento_id
+          WHERE dt2.año_trimestre = dt.año_trimestre
+            AND dt2.num_trimestre = dt.num_trimestre
+            AND dt2.id_de_empresa = dt.id_de_empresa
+            AND (i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
+        ) as iva_soportado,
+        MAX(d.trimestre_cerrado) as cerrado,
+        MAX(d.fecha_cierre_trimestre) as fecha_cierre
+      FROM DocTypes dt
+      LEFT JOIN empresas e ON dt.id_de_empresa = e.id
+      LEFT JOIN documentos d ON dt.id = d.id
+      GROUP BY dt.año_trimestre, dt.num_trimestre, dt.id_de_empresa, e.nombre_de_empresa
+      ORDER BY dt.año_trimestre DESC, dt.num_trimestre DESC, e.nombre_de_empresa ASC
+    `;
 
-    console.log('📝 [getTrimestresList] Query:', query);
-    console.log('📝 [getTrimestresList] Params:', params);
+    console.log('📝 [getTrimestresList] Query ejecutándose...');
+    console.log('📝 [getTrimestresList] CIFs:', MY_COMPANY_FISCAL_IDS);
+    console.log('📝 [getTrimestresList] Params:', [...MY_COMPANY_FISCAL_IDS, ...params]);
 
-    const [rows] = await conn.query<RowDataPacket[]>(query, params);
+    const [rows] = await conn.query<RowDataPacket[]>(
+      query, 
+      [...MY_COMPANY_FISCAL_IDS, ...params]
+    );
+
+    console.log('📊 [getTrimestresList] Filas obtenidas:', rows.length);
+
+    if (rows.length > 0) {
+      console.log('🔍 [getTrimestresList] Primera fila:', {
+        año: rows[0].año,
+        trimestre: rows[0].trimestre,
+        empresa: rows[0].empresa_nombre,
+        ingresos: rows[0].total_ingresos,
+        gastos: rows[0].total_gastos,
+        iva_repercutido: rows[0].iva_repercutido,
+        iva_soportado: rows[0].iva_soportado
+      });
+    }
 
     let trimestres = rows.map(row => ({
       año: row.año,
@@ -2305,10 +2438,10 @@ export async function getTrimestresList(
       empresa_id: row.empresa_id,
       empresa_nombre: row.empresa_nombre || 'Sin empresa',
       total_documentos: Number(row.total_documentos),
-      total_ingresos: Number(row.total_base || 0),
-      total_gastos: 0,
-      iva_repercutido: Number(row.iva_total || 0),
-      iva_soportado: 0,
+      total_ingresos: Number(row.total_ingresos || 0),
+      total_gastos: Number(row.total_gastos || 0),
+      iva_repercutido: Number(row.iva_repercutido || 0),
+      iva_soportado: Number(row.iva_soportado || 0),
       cerrado: Boolean(row.cerrado),
       fecha_cierre: row.fecha_cierre || null,
     }));
@@ -2318,14 +2451,17 @@ export async function getTrimestresList(
       trimestres = trimestres.filter(t => t.total_documentos > 0);
     }
 
-    console.log('✅ [getTrimestresList] Trimestres encontrados:', trimestres.length);
+    console.log('✅ [getTrimestresList] Trimestres procesados:', trimestres.length);
+    console.log('📊 [getTrimestresList] Resumen:');
+    trimestres.forEach(t => {
+      console.log(`   - ${t.año}-T${t.trimestre} ${t.empresa_nombre}: Ingresos ${t.total_ingresos}€, Gastos ${t.total_gastos}€`);
+    });
 
     return trimestres;
   } finally {
     conn.release();
   }
 }
-
 /**
  * Obtiene documentos de un trimestre específico
  * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)

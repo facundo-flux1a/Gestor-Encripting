@@ -65,7 +65,7 @@ export function useDuplicateDetection(empresaId?: number) {
     // Configurar polling cada 3 segundos
     intervalRef.current = setInterval(() => {
       checkDuplicates();
-    }, 3000);
+    }, 30000);
 
     // Limpiar al desmontar
     return () => {

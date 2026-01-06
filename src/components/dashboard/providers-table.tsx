@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowRight, Building, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, Building, ChevronLeft, ChevronRight, Pencil, Save, AlertCircle } from 'lucide-react';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import {
   flexRender,
@@ -24,7 +24,27 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 // 🎯 FUNCIÓN DE FORMATO MANUAL
 const formatCurrency = (amount: number | string | null | undefined): string => {
@@ -43,7 +63,248 @@ const formatCurrency = (amount: number | string | null | undefined): string => {
   return `${formattedInteger},${decimalPart} €`;
 };
 
-export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWithStats>[] => [
+// 🆕 Modal de edición de proveedor
+function EditProviderModal({
+  provider,
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  provider: ProviderWithStats | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: () => void;
+}) {
+  const { toast } = useToast();
+  const [formData, setFormData] = React.useState({
+    nombre: '',
+    identificador_fiscal: '',
+    direccion: '',
+    telefono: '',
+    email: '',
+  });
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [showWarningModal, setShowWarningModal] = React.useState(false);
+
+  React.useEffect(() => {
+    if (provider) {
+      setFormData({
+        nombre: provider.nombre || '',
+        identificador_fiscal: provider.identificador_fiscal || '',
+        direccion: provider.direccion || '',
+        telefono: provider.telefono || '',
+        email: provider.email || '',
+      });
+    }
+  }, [provider]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!provider) return;
+
+    // ✅ Si el CIF cambió, mostrar modal de advertencia
+    if (formData.identificador_fiscal !== provider.identificador_fiscal) {
+      setShowWarningModal(true);
+      return;
+    }
+
+    // Si no cambió el CIF, actualizar directamente
+    await performUpdate();
+  };
+
+  const performUpdate = async () => {
+    if (!provider) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/proveedores/${encodeURIComponent(provider.identificador_fiscal)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          oldFiscalId: provider.identificador_fiscal,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al actualizar el proveedor');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: result.merged ? "Proveedores fusionados" : "Proveedor actualizado",
+        description: result.merged 
+          ? `Se han fusionado ambos proveedores. ${result.affectedRows} documentos actualizados.`
+          : "Los cambios se han guardado correctamente",
+      });
+      onSave();
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo actualizar el proveedor",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!provider) return null;
+
+  return (
+    <>
+      {/* Modal principal de edición */}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-violet-500" />
+              Editar Proveedor
+            </DialogTitle>
+            <DialogDescription>
+              Modifica los datos del proveedor. Cambiar el CIF actualizará todas las referencias.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nombre">Nombre *</Label>
+              <Input
+                id="nombre"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cif">CIF/NIF *</Label>
+              <Input
+                id="cif"
+                value={formData.identificador_fiscal}
+                onChange={(e) => setFormData({ ...formData, identificador_fiscal: e.target.value })}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Cambiar el CIF actualizará todas las referencias a este proveedor
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="direccion">Dirección</Label>
+              <Input
+                id="direccion"
+                value={formData.direccion}
+                onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="telefono">Teléfono</Label>
+                <Input
+                  id="telefono"
+                  type="tel"
+                  value={formData.telefono}
+                  onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="text"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="Email o N/A"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSaving}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSaving} className="gap-2">
+                <Save className="h-4 w-4" />
+                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de advertencia de cambio de CIF */}
+      <AlertDialog open={showWarningModal} onOpenChange={setShowWarningModal}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-violet-500" />
+              ⚠️ ADVERTENCIA: Cambio de CIF
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-2 text-sm text-muted-foreground">
+                <div>
+                  Estás cambiando el CIF de <strong className="text-foreground">"{provider.identificador_fiscal}"</strong> a <strong className="text-foreground">"{formData.identificador_fiscal}"</strong>.
+                </div>
+                
+                <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-violet-600 dark:text-violet-400 font-bold shrink-0">⚠️</span>
+                    <span>
+                      Si ya existe un proveedor con el CIF <strong className="text-foreground">"{formData.identificador_fiscal}"</strong>, <strong>ambos se fusionarán en uno solo</strong>.
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-violet-600 dark:text-violet-400 font-bold shrink-0">📋</span>
+                    <span>
+                      Cambiar el CIF actualizará <strong>todas las referencias</strong> a este proveedor en tus documentos.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <strong>Nota:</strong> Esta acción actualizará permanentemente todos los documentos asociados con este proveedor.
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSaving}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowWarningModal(false);
+                performUpdate();
+              }}
+              disabled={isSaving}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              Sí, Cambiar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+export const createColumns = (
+  showCompanyColumn: boolean,
+  onEdit: (provider: ProviderWithStats) => void
+): ColumnDef<ProviderWithStats>[] => [
   {
     accessorKey: 'nombre',
     header: 'Proveedor',
@@ -126,10 +387,23 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
   },
   {
     id: 'actions',
+    header: 'Acciones',
     cell: ({ row }) => {
       const provider = row.original;
       return (
-        <div className="text-center">
+        <div className="flex items-center justify-center gap-1 sm:gap-2">
+          {/* Botón Editar */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => onEdit(provider)}
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
+          >
+            <Pencil className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:rotate-12" />
+            <span className="hidden sm:inline">Editar</span>
+          </Button>
+
+          {/* Botón Ver Detalles */}
           <Button 
             variant="ghost" 
             size="sm" 
@@ -137,31 +411,46 @@ export const createColumns = (showCompanyColumn: boolean): ColumnDef<ProviderWit
             className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
           >
             <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}>
-              <span className="hidden xs:inline">Ver Detalles</span>
-              <span className="xs:hidden">Ver</span>
+              <span className="hidden xs:inline">Ver</span>
               <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
             </Link>
           </Button>
         </div>
       );
     },
-    size: 120,
-    minSize: 80,
+    size: 160,
+    minSize: 120,
   },
 ];
 
 export function ProvidersTable({ 
   providers, 
-  showCompanyColumn = false 
+  showCompanyColumn = false,
+  onProviderUpdated
 }: { 
   providers: ProviderWithStats[];
   showCompanyColumn?: boolean;
+  onProviderUpdated?: () => void;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [editingProvider, setEditingProvider] = React.useState<ProviderWithStats | null>(null);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
+  const handleEdit = (provider: ProviderWithStats) => {
+    setEditingProvider(provider);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    // Recargar la lista de proveedores
+    if (onProviderUpdated) {
+      onProviderUpdated();
+    }
+  };
 
   const columns = React.useMemo(
-    () => createColumns(showCompanyColumn),
+    () => createColumns(showCompanyColumn, handleEdit),
     [showCompanyColumn]
   );
 
@@ -195,7 +484,7 @@ export function ProvidersTable({
 
         {/* Table with horizontal scroll on mobile */}
         <div className="w-full overflow-x-auto rounded-md border transition-all duration-300 hover:shadow-lg hover:shadow-primary/5">
-          <div className="min-w-[800px]">
+          <div className="min-w-[900px]">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map(headerGroup => (
@@ -282,6 +571,14 @@ export function ProvidersTable({
         </div>
       </div>
 
+      {/* Modal de edición */}
+      <EditProviderModal
+        provider={editingProvider}
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onSave={handleSave}
+      />
+
       {/* Estilos de animación */}
       <style jsx global>{`
         @keyframes fade-in {
@@ -315,7 +612,8 @@ export function ProvidersTable({
           
           .hover\:scale-105:hover,
           .hover\:scale-110:hover,
-          .hover\:translate-x-1:hover {
+          .hover\:translate-x-1:hover,
+          .hover\:rotate-12:hover {
             transform: none !important;
           }
         }

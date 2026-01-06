@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDocumentEvents } from '@/hooks/useDocumentEvents'
-import { Upload, Loader2, FileText, AlertCircle, CheckCircle, Download, Receipt } from 'lucide-react'
+import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { DocumentosTutorial } from '@/components/tutorials/DocumentosTutorial'
@@ -81,35 +81,86 @@ function DocumentsPageContent() {
     loadDocuments();
   }, [selectedCompanyIds, key]);
 
-  // 🎯 NUEVA CLASIFICACIÓN CON ABONOS
-  const { facturas, abonos, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
-    const facturas: Document[] = [];
-    const abonos: Document[] = [];
+  // ✅ CLASIFICACIÓN CORREGIDA: Prioriza tipo ABONO antes del signo
+  const { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🔍 [CLASIFICACIÓN] INICIO');
+    console.log('═══════════════════════════════════════════════════════');
+    
+    const facturasEmitidas: Document[] = [];
+    const facturasRecibidas: Document[] = [];
     const otrosDocumentos: Document[] = [];
     const sinConfirmar: Document[] = [];
     
     documents.forEach(doc => {
       const tipoLower = doc.tipo_documento?.toLowerCase() || '';
+      const total = doc.total || 0;
       
-      // Primero verificar si es "sin confirmar"
+      console.log(`📄 Doc ${doc.id_documento}: Tipo="${doc.tipo_documento}", Total=${total}`);
+      
+      // PASO 1: Verificar si es "sin confirmar"
       if (tipoLower.includes('(sin confirmar)')) {
         sinConfirmar.push(doc);
-      } 
-      // Luego verificar si es abono
-      else if (tipoLower.includes('abono')) {
-        abonos.push(doc);
+        console.log(`   ⚠️ -> Sin confirmar`);
+        return;
       }
-      // Luego si es factura
-      else if (tipoLower.includes('factura')) {
-        facturas.push(doc);
-      } 
-      // Todo lo demás va a "otros"
-      else {
+      
+      // PASO 2: Verificar si es factura o abono
+      const esFacturaOAbono = tipoLower.includes('factura') || tipoLower.includes('abono');
+      
+      if (!esFacturaOAbono) {
         otrosDocumentos.push(doc);
+        console.log(`   📦 -> Otros`);
+        return;
+      }
+      
+      // ✅ LÓGICA CORREGIDA DE CLASIFICACIÓN
+      let esEmitida = false;
+      
+      // REGLA 1: Si el tipo dice explícitamente "EMITIDA" o "EMITIDO"
+      if (/emitid[oa]/i.test(tipoLower)) {
+        esEmitida = true;
+        console.log(`   ✅ Tipo incluye "emitida" -> EMITIDA`);
+      }
+      // REGLA 2: Si el tipo dice explícitamente "RECIBIDA" o "RECIBIDO"
+      else if (/recibid[oa]/i.test(tipoLower)) {
+        esEmitida = false;
+        console.log(`   ✅ Tipo incluye "recibida" -> RECIBIDA`);
+      }
+      // ⬅️ REGLA 3 NUEVA: Es un ABONO sin especificar emitida/recibida
+      else if (tipoLower.includes('abono')) {
+        // Los abonos sin especificar se asumen EMITIDOS por defecto
+        // (más común devolver dinero a clientes que recibir de proveedores)
+        esEmitida = true;
+        console.log(`   🎫 Es ABONO sin especificar -> EMITIDO (por defecto)`);
+      }
+      // REGLA 4: Es una FACTURA sin especificar emitida/recibida
+      else {
+        // Usar el signo del total como fallback
+        esEmitida = total < 0;
+        console.log(`   ⚖️ Total ${total < 0 ? 'negativo' : 'positivo'} -> ${esEmitida ? 'EMITIDA' : 'RECIBIDA'}`);
+      }
+      
+      // Clasificar en la categoría correspondiente
+      if (esEmitida) {
+        facturasEmitidas.push(doc);
+        console.log(`   ✅ -> FACTURAS EMITIDAS`);
+      } else {
+        facturasRecibidas.push(doc);
+        console.log(`   ✅ -> FACTURAS RECIBIDAS`);
       }
     });
     
-    return { facturas, abonos, otrosDocumentos, sinConfirmar };
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📊 Clasificación final:', {
+      emitidas: facturasEmitidas.length,
+      recibidas: facturasRecibidas.length,
+      otros: otrosDocumentos.length,
+      sinConfirmar: sinConfirmar.length
+    });
+    console.log('═══════════════════════════════════════════════════════');
+    
+    return { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
   const otherDocsHiddenColumns = [
@@ -128,22 +179,21 @@ function DocumentsPageContent() {
     switch (activeTab) {
       case 'sin-confirmar':
         return sinConfirmar;
-      case 'facturas':
-        return facturas;
-      case 'abonos':
-        return abonos;
+      case 'emitidas':
+        return facturasEmitidas;
+      case 'recibidas':
+        return facturasRecibidas;
       case 'otros':
         return otrosDocumentos;
       default:
         return [];
     }
-  }, [activeTab, sinConfirmar, facturas, abonos, otrosDocumentos]);
+  }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos]);
 
-  // ✅ ÚNICO CAMBIO: Invertir el orden
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
-      setActiveTab(value); // ⬅️ PRIMERO cambiar el tab
-      setIsTabChanging(true); // ⬅️ LUEGO activar loading
+      setActiveTab(value);
+      setIsTabChanging(true);
       
       setTimeout(() => {
         setIsTabChanging(false);
@@ -166,8 +216,8 @@ function DocumentsPageContent() {
     try {
       const statusMap: { [key: string]: string } = {
         'sin-confirmar': 'pending',
-        'facturas': 'confirmed',
-        'abonos': 'abonos',
+        'emitidas': 'emitidas',
+        'recibidas': 'recibidas',
         'otros': 'others'
       };
 
@@ -208,9 +258,7 @@ function DocumentsPageContent() {
     } finally {
       setIsExportingPdf(false);
     }
-  };
-
-  // Empty state cuando no hay empresas seleccionadas
+  };// Empty state cuando no hay empresas seleccionadas
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>
@@ -321,7 +369,7 @@ function DocumentsPageContent() {
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-            {/* Tabs List con botón de exportar PDF */}
+            {/* Tabs List */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <div className="w-full sm:w-auto overflow-x-auto" data-tutorial="tabs-filters">
                 <TabsList className="inline-flex w-full sm:w-auto">
@@ -339,44 +387,45 @@ function DocumentsPageContent() {
                     </Badge>
                   </TabsTrigger>
                   
+                  {/* Facturas Emitidas */}
                   <TabsTrigger 
-                    value="facturas"
+                    value="emitidas"
                     className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-green-500/10 data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400 data-[state=active]:shadow-lg data-[state=active]:shadow-green-500/20"
                   >
-                    <CheckCircle className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
-                    <span className="whitespace-nowrap">Facturas</span>
+                    <TrendingUp className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
+                    <span className="whitespace-nowrap">Facturas Emitidas</span>
                     <Badge 
                       variant="secondary" 
                       className="ml-1 bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 transition-all duration-300 hover:scale-110 hover:bg-green-500/20"
                     >
-                      {facturas.length}
+                      {facturasEmitidas.length}
                     </Badge>
                   </TabsTrigger>
 
-                  {/* 🎯 NUEVO TAB: ABONOS */}
+                  {/* Facturas Recibidas */}
                   <TabsTrigger 
-                    value="abonos"
-                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/20"
+                    value="recibidas"
+                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20"
                   >
-                    <Receipt className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
-                    <span className="whitespace-nowrap">Abonos</span>
+                    <TrendingDown className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
+                    <span className="whitespace-nowrap">Facturas Recibidas</span>
                     <Badge 
                       variant="secondary" 
-                      className="ml-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 transition-all duration-300 hover:scale-110 hover:bg-purple-500/20"
+                      className="ml-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 transition-all duration-300 hover:scale-110 hover:bg-blue-500/20"
                     >
-                      {abonos.length}
+                      {facturasRecibidas.length}
                     </Badge>
                   </TabsTrigger>
                   
                   <TabsTrigger 
                     value="otros"
-                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20"
+                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/20"
                   >
                     <FileText className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
                     <span className="whitespace-nowrap">Otros</span>
                     <Badge 
                       variant="secondary" 
-                      className="ml-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 transition-all duration-300 hover:scale-110 hover:bg-blue-500/20"
+                      className="ml-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 transition-all duration-300 hover:scale-110 hover:bg-purple-500/20"
                     >
                       {otrosDocumentos.length}
                     </Badge>
@@ -393,7 +442,7 @@ function DocumentsPageContent() {
                   className="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm shrink-0 group transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/20 hover:border-primary disabled:hover:scale-100"
                   data-tutorial="export-pdf"
                 >
-                  <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-0.5" />
+                  <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-0.5" />
                   <span className="hidden xs:inline">
                     {isExportingPdf ? 'Generando...' : 'Exportar PDF'}
                   </span>
@@ -416,7 +465,7 @@ function DocumentsPageContent() {
               ) : sinConfirmar.length === 0 ? (
                 <div className="text-center py-12 px-4">
                   <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-green-500/10 hover:shadow-lg hover:shadow-green-500/20 hover:scale-110">
-                    <CheckCircle className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-green-500 hover:scale-110" />
+                    <AlertCircle className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-green-500 hover:scale-110" />
                   </div>
                   <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-green-600">
                     No hay documentos sin confirmar
@@ -439,34 +488,35 @@ function DocumentsPageContent() {
               )}
             </TabsContent>
             
-            <TabsContent value="facturas" className="space-y-4 animate-in fade-in duration-300">
+            {/* Facturas Emitidas */}
+            <TabsContent value="emitidas" className="space-y-4 animate-in fade-in duration-300">
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
                     <Loader2 className="h-10 w-10 animate-spin mx-auto text-green-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
-                      Cargando facturas...
+                      Cargando facturas emitidas...
                     </p>
                   </div>
                 </div>
-              ) : facturas.length === 0 ? (
+              ) : facturasEmitidas.length === 0 ? (
                 <div className="text-center py-12 px-4">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-primary/10 hover:shadow-lg hover:shadow-primary/20 hover:scale-110">
-                    <FileText className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-primary hover:scale-110" />
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-green-500/10 hover:shadow-lg hover:shadow-green-500/20 hover:scale-110">
+                    <TrendingUp className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-green-500 hover:scale-110" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-primary">
-                    No hay facturas
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-green-600">
+                    No hay facturas emitidas
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Aún no se han registrado facturas
+                    Aún no se han registrado facturas emitidas
                   </p>
                 </div>
               ) : (
                 <div data-tutorial="documents-table">
                   <DocumentsTable 
-                    documents={facturas} 
-                    filename="facturas" 
-                    viewId="documentos-facturas"
+                    documents={facturasEmitidas} 
+                    filename="facturas_emitidas" 
+                    viewId="documentos-facturas-emitidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
                   />
@@ -474,35 +524,35 @@ function DocumentsPageContent() {
               )}
             </TabsContent>
 
-            {/* 🎯 NUEVO TAB CONTENT: ABONOS */}
-            <TabsContent value="abonos" className="space-y-4 animate-in fade-in duration-300">
+            {/* Facturas Recibidas */}
+            <TabsContent value="recibidas" className="space-y-4 animate-in fade-in duration-300">
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-purple-500" />
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
-                      Cargando abonos...
+                      Cargando facturas recibidas...
                     </p>
                   </div>
                 </div>
-              ) : abonos.length === 0 ? (
+              ) : facturasRecibidas.length === 0 ? (
                 <div className="text-center py-12 px-4">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-purple-500/10 hover:shadow-lg hover:shadow-purple-500/20 hover:scale-110">
-                    <Receipt className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-purple-500 hover:scale-110" />
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-500/20 hover:scale-110">
+                    <TrendingDown className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-blue-500 hover:scale-110" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-purple-600">
-                    No hay abonos
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-blue-600">
+                    No hay facturas recibidas
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Aún no se han registrado abonos
+                    Aún no se han registrado facturas recibidas
                   </p>
                 </div>
               ) : (
                 <div data-tutorial="documents-table">
                   <DocumentsTable 
-                    documents={abonos} 
-                    filename="abonos" 
-                    viewId="documentos-abonos"
+                    documents={facturasRecibidas} 
+                    filename="facturas_recibidas" 
+                    viewId="documentos-facturas-recibidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
                   />
@@ -510,11 +560,12 @@ function DocumentsPageContent() {
               )}
             </TabsContent>
             
+            {/* Tab Otros */}
             <TabsContent value="otros" className="space-y-4 animate-in fade-in duration-300">
               {isTabChanging ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-500" />
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-purple-500" />
                     <p className="text-sm text-muted-foreground animate-pulse">
                       Cargando otros documentos...
                     </p>
@@ -522,10 +573,10 @@ function DocumentsPageContent() {
                 </div>
               ) : otrosDocumentos.length === 0 ? (
                 <div className="text-center py-12 px-4">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-500/20 hover:scale-110">
-                    <FileText className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-blue-500 hover:scale-110" />
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-purple-500/10 hover:shadow-lg hover:shadow-purple-500/20 hover:scale-110">
+                    <FileText className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-purple-500 hover:scale-110" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-blue-600">
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-purple-600">
                     No hay otros documentos
                   </h3>
                   <p className="text-sm text-muted-foreground">
