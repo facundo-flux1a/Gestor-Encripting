@@ -145,7 +145,7 @@ async function extractAndHashRarFiles(
   fileHashes: { [fileName: string]: string }, 
   uploadIds: { [fileName: string]: string } 
 }> {
-  const RAILWAY_RAR_SERVICE = 'https://rar-extractor-production.up.railway.app/api/extract-rar';
+  const RAILWAY_RAR_SERVICE = 'https://rar-extractor.onrender.com/api/extract-rar';
   
   console.log(`  [RAR] 🔄 Llamando al microservicio de Railway...`);
   console.log(`  [RAR] 🆔 parentUploadId: ${parentUploadId}`);
