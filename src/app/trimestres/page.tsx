@@ -307,7 +307,7 @@ function TrimestresPageContent() {
               </p>
             </div>
             
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0 mb-6 sm:mb-0">
               <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
                 <Switch
                   id="mostrar-vacios"

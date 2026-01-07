@@ -993,74 +993,91 @@ export default function ActivityTable({
               <span className="font-semibold text-foreground">{pagination.total}</span>
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                disabled={isMarkingRead}
-                data-tutorial="actividad-mark-read"
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
-              >
-                <CheckCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
-                <span className="hidden xs:inline">Marcar todos como leídos</span>
-                {unreadCount > 0 && (
-                  <span className="bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold min-w-[20px] text-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            )}
-            {pagination.total > 0 && (
-              <button
-                onClick={handleDeleteAllClick}
-                disabled={isDeletingAll}
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-destructive/90 hover:bg-destructive text-destructive-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-destructive disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
-              >
-                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 group-hover:scale-110 transition-transform" />
-                <span className="hidden xs:inline">Eliminar</span>
-              </button>
-            )}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              data-tutorial="actividad-filters"
-              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
-                showFilters || activeFiltersCount > 0
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-secondary hover:bg-secondary/80 border-border'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="hidden xs:inline">Filtros</span>
-              {activeFiltersCount > 0 && (
-                <span className="bg-primary-foreground text-primary rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-xs font-bold">
-                  {activeFiltersCount}
-                </span>
-              )}
-            </button>
-            <div className="relative" data-tutorial="actividad-autorefresh">
-              <div className="flex items-center gap-1.5 bg-secondary/80 backdrop-blur-sm border rounded-lg px-2 sm:px-3 py-2">
-                <button
-                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                  className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 ${
-                    autoRefreshEnabled 
-                      ? 'text-green-600 dark:text-green-500' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
-                  <span className="hidden xs:inline">Auto</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    autoRefreshEnabled 
-                      ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
-                      : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {autoRefreshEnabled ? 'ON' : 'OFF'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>{showFilters && (
+          {/* ✅ CAMBIO: justify-between en móvil, flex-start en desktop */}
+<div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
+  {/* Marcar todos como leídos */}
+  {unreadCount > 0 && (
+    <button
+      onClick={markAllAsRead}
+      disabled={isMarkingRead}
+      data-tutorial="actividad-mark-read"
+      title="Marcar todos como leídos"
+      className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
+    >
+      <CheckCheck className={`w-4 h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
+      {/* ✅ Mostrar texto solo en desktop */}
+      <span className="hidden sm:inline">Marcar leídos</span>
+      {/* Badge de contador */}
+      {unreadCount > 0 && (
+        <span className="bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold min-w-[20px] text-center">
+          {unreadCount}
+        </span>
+      )}
+    </button>
+  )}
+  
+  {/* Eliminar todos */}
+  {pagination.total > 0 && (
+    <button
+      onClick={handleDeleteAllClick}
+      disabled={isDeletingAll}
+      title="Eliminar todas las actividades"
+      className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-destructive/90 hover:bg-destructive text-destructive-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-destructive disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
+    >
+      <Trash2 className="w-4 h-4 shrink-0 group-hover:scale-110 transition-transform" />
+      {/* ✅ Mostrar texto solo en desktop */}
+      <span className="hidden sm:inline">Eliminar</span>
+    </button>
+  )}
+  
+  {/* Filtros */}
+  <button
+    onClick={() => setShowFilters(!showFilters)}
+    data-tutorial="actividad-filters"
+    title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+    className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
+      showFilters || activeFiltersCount > 0
+        ? 'bg-primary text-primary-foreground border-primary'
+        : 'bg-secondary hover:bg-secondary/80 border-border'
+    }`}
+  >
+    <Filter className="w-4 h-4 shrink-0" />
+    {/* ✅ Mostrar texto solo en desktop */}
+    <span className="hidden sm:inline">Filtros</span>
+    {/* Badge de contador de filtros activos */}
+    {activeFiltersCount > 0 && (
+      <span className="bg-primary-foreground text-primary rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+        {activeFiltersCount}
+      </span>
+    )}
+  </button>
+  
+  {/* Auto refresh */}
+  <div className="relative" data-tutorial="actividad-autorefresh">
+    <button
+      onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+      title={autoRefreshEnabled ? "Desactivar actualización automática" : "Activar actualización automática"}
+      className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
+        autoRefreshEnabled 
+          ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30' 
+          : 'bg-secondary hover:bg-secondary/80 border-border'
+      }`}
+    >
+      <RefreshCw className={`w-4 h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
+      {/* ✅ Mostrar texto solo en desktop */}
+      <span className="hidden sm:inline">Auto</span>
+      {/* Badge de estado ON/OFF */}
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        autoRefreshEnabled 
+          ? 'bg-green-500/30 text-green-600 dark:text-green-400' 
+          : 'bg-muted text-muted-foreground'
+      }`}>
+        {autoRefreshEnabled ? 'ON' : 'OFF'}
+      </span>
+    </button>
+  </div>
+</div>
+</div>{showFilters && (
           <div className="bg-muted/50 border rounded-lg p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div>
