@@ -81,7 +81,7 @@ function DocumentsPageContent() {
     loadDocuments();
   }, [selectedCompanyIds, key]);
 
-  // ✅ CLASIFICACIÓN CORREGIDA: Prioriza tipo ABONO antes del signo
+  // ✅ CLASIFICACIÓN CORREGIDA: Validación de CIF para abonos
   const { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     console.log('═══════════════════════════════════════════════════════');
     console.log('🔍 [CLASIFICACIÓN] INICIO');
@@ -127,12 +127,22 @@ function DocumentsPageContent() {
         esEmitida = false;
         console.log(`   ✅ Tipo incluye "recibida" -> RECIBIDA`);
       }
-      // ⬅️ REGLA 3 NUEVA: Es un ABONO sin especificar emitida/recibida
+      // ✅ REGLA 3 CORREGIDA: Es un ABONO sin especificar emitida/recibida
       else if (tipoLower.includes('abono')) {
-        // Los abonos sin especificar se asumen EMITIDOS por defecto
-        // (más común devolver dinero a clientes que recibir de proveedores)
-        esEmitida = true;
-        console.log(`   🎫 Es ABONO sin especificar -> EMITIDO (por defecto)`);
+        // Buscar el emisor del documento
+        const emisor = doc.entidades?.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
+        const cifEmisor = emisor?.identificador_fiscal?.trim().toUpperCase();
+        const cifEmpresa = doc.empresa_cif?.trim().toUpperCase();
+        
+        if (cifEmisor && cifEmpresa && cifEmisor === cifEmpresa) {
+          // El CIF del emisor coincide con el CIF de nuestra empresa → ABONO EMITIDO
+          esEmitida = true;
+          console.log(`   🎫 Abono EMITIDO por nuestra empresa (CIF coincide: ${cifEmisor})`);
+        } else {
+          // El CIF del emisor NO coincide → ABONO RECIBIDO de proveedor
+          esEmitida = false;
+          console.log(`   🎫 Abono RECIBIDO de proveedor (CIF emisor: ${cifEmisor}, CIF empresa: ${cifEmpresa})`);
+        }
       }
       // REGLA 4: Es una FACTURA sin especificar emitida/recibida
       else {
@@ -577,40 +587,36 @@ function DocumentsPageContent() {
                     <FileText className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-purple-500 hover:scale-110" />
                   </div>
                   <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-purple-600">
-                    No hay otros documentos
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Aún no se han registrado otros tipos de documentos
-                  </p>
-                </div>
-              ) : (
-                <div data-tutorial="documents-table">
-                  <GroupedDocumentsView 
-                    documents={otrosDocumentos} 
-                    filename="otros_documentos"
-                    hiddenColumns={otherDocsHiddenColumns} 
-                  />
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
-      </div>
-      
-      <UploadDialog 
-        isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-        companies={companiesForUpload}
-        onUploadComplete={handleUploadComplete}
-      />
-    </>
-  );
+No hay otros documentos
+</h3>
+<p className="text-sm text-muted-foreground">
+Aún no se han registrado otros tipos de documentos
+</p>
+</div>
+) : (
+<div data-tutorial="documents-table">
+<GroupedDocumentsView 
+                 documents={otrosDocumentos} 
+                 filename="otros_documentos"
+                 hiddenColumns={otherDocsHiddenColumns} 
+               />
+</div>
+)}
+</TabsContent>
+</Tabs>
+)}
+</div><UploadDialog 
+    isOpen={isUploadOpen}
+    onClose={() => setIsUploadOpen(false)}
+    companies={companiesForUpload}
+    onUploadComplete={handleUploadComplete}
+  />
+</>);
 }
-
 export default function DocumentsPage() {
-  return (
-    <MainLayout>
-      <DocumentsPageContent />
-    </MainLayout>
-  );
+return (
+<MainLayout>
+<DocumentsPageContent />
+</MainLayout>
+);
 }
