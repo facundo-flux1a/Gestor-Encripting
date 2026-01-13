@@ -1971,11 +1971,11 @@ export async function getDashboardAnalytics(
             GROUP BY d.id
         )
         SELECT
-          -- ✅ CRÍTICO: Simplemente SUMAR todos los importes (los negativos ya restan automáticamente)
-          COALESCE(SUM(CASE WHEN is_issued = 1 THEN importe_sin_impuestos ELSE 0 END), 0) as totalIngresos,
-          COALESCE(SUM(CASE WHEN is_issued = 0 THEN importe_sin_impuestos ELSE 0 END), 0) as totalGastos,
-          COALESCE(SUM(CASE WHEN is_issued = 1 THEN total_iva ELSE 0 END), 0) as ivaRepercutido,
-          COALESCE(SUM(CASE WHEN is_issued = 0 THEN total_iva ELSE 0 END), 0) as ivaSoportado,
+          -- ✅ LÓGICA CORRECTA: Negativos = Ingresos, Positivos = Gastos
+          COALESCE(SUM(CASE WHEN importe_sin_impuestos < 0 THEN ABS(importe_sin_impuestos) ELSE 0 END), 0) as totalIngresos,
+          COALESCE(SUM(CASE WHEN importe_sin_impuestos > 0 THEN importe_sin_impuestos ELSE 0 END), 0) as totalGastos,
+          COALESCE(SUM(CASE WHEN total_iva < 0 THEN ABS(total_iva) ELSE 0 END), 0) as ivaRepercutido,
+          COALESCE(SUM(CASE WHEN total_iva > 0 THEN total_iva ELSE 0 END), 0) as ivaSoportado,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 1) as totalFacturasIngreso,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento i 
@@ -2045,34 +2045,23 @@ export async function getDashboardAnalytics(
 
     // ✅ MODIFICADO: Lógica simplificada para quarterlySummary
     const [quarterlyRows] = await db.query<RowDataPacket[]>(`
-        WITH DocTypes AS (
-            SELECT 
-                d.id,
-                d.fecha_emision,
-                d.importe_sin_impuestos,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) as is_issued
-            FROM documentos d
-            LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE (
-                (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-                OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-            )
-            ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
-            ${whereTrimestreFilter}
-            GROUP BY d.id
-        )
         SELECT
-          CONCAT('T', QUARTER(dt.fecha_emision)) as quarter,
-          COALESCE(SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END), 0) as ingresos,
-          COALESCE(SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END), 0) as gastos
-        FROM DocTypes dt
-        WHERE YEAR(dt.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'}
+          CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
+          COALESCE(SUM(CASE WHEN d.importe_sin_impuestos < 0 THEN ABS(d.importe_sin_impuestos) ELSE 0 END), 0) as ingresos,
+          COALESCE(SUM(CASE WHEN d.importe_sin_impuestos > 0 THEN d.importe_sin_impuestos ELSE 0 END), 0) as gastos
+        FROM documentos d
+        WHERE YEAR(d.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'}
+          AND (
+              (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+              OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          )
+          ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+          ${whereTrimestreFilter}
         GROUP BY quarter
     `, [
-        ...MY_COMPANY_FISCAL_IDS, 
+        ...(hasTrimestreFilter ? [año] : []),
         ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
-        ...(hasTrimestreFilter ? [año] : [])
+        ...(hasTrimestreFilter ? [año, trimestre] : [])
     ]);
 
     const quarterlySummary = { T1: { ingresos: 0, gastos: 0 }, T2: { ingresos: 0, gastos: 0 }, T3: { ingresos: 0, gastos: 0 }, T4: { ingresos: 0, gastos: 0 } };
@@ -2100,27 +2089,12 @@ export async function getDashboardAnalytics(
 
     // ✅ MODIFICADO: Lógica simplificada para IVA
     const [ivaRows] = await db.query<RowDataPacket[]>(`
-        WITH DocTypes AS (
-            SELECT 
-                d.id,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) as is_issued
-            FROM documentos d
-            LEFT JOIN entidades_documento e ON d.id = e.documento_id
-            WHERE (
-                (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-                OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-            )
-            ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
-            ${whereTrimestreFilter}
-            GROUP BY d.id
-        )
         SELECT
           CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-          COALESCE(SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota ELSE 0 END), 0) as repercutido,
-          COALESCE(SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota ELSE 0 END), 0) as soportado
+          COALESCE(SUM(CASE WHEN i.cuota < 0 THEN ABS(i.cuota) ELSE 0 END), 0) as repercutido,
+          COALESCE(SUM(CASE WHEN i.cuota > 0 THEN i.cuota ELSE 0 END), 0) as soportado
         FROM documentos d
         JOIN impuestos_documento i ON d.id = i.documento_id
-        JOIN DocTypes dt ON d.id = dt.id
         WHERE YEAR(d.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'} 
           AND i.tipo_impuesto NOT LIKE '%retencion%'
           AND (
@@ -2131,9 +2105,6 @@ export async function getDashboardAnalytics(
         ${whereTrimestreFilter}
         GROUP BY quarter
     `, [
-        ...MY_COMPANY_FISCAL_IDS, 
-        ...(hasEmpresaFilter ? [empresaIds] : []), 
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
         ...(hasTrimestreFilter ? [año] : []),
         ...(hasEmpresaFilter ? [empresaIds] : []),
         ...(hasTrimestreFilter ? [año, trimestre] : [])
@@ -2241,124 +2212,55 @@ export async function getTrimestresList(
 
     const whereClause = whereConditions.join(' AND ');
 
-    // ✅ PASO 1: Obtener CIFs de las empresas seleccionadas
-    let MY_COMPANY_FISCAL_IDS: string[] = [];
-    if (filters?.empresa_id) {
-      const empresaIds = Array.isArray(filters.empresa_id) 
-        ? filters.empresa_id 
-        : [filters.empresa_id];
-      
-      if (empresaIds.length > 0) {
-        const [empresasInfo] = await conn.query<RowDataPacket[]>(
-          'SELECT cif FROM empresas WHERE id IN (?)',
-          [empresaIds]
-        );
-        MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
-      }
-    }
-
-    console.log('🏢 [getTrimestresList] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
-
-    // ✅ PASO 2: Query corregido que separa ingresos y gastos
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
-      ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
-      : "'NEVER_MATCH'";
-
+    // ✅ QUERY SIMPLIFICADO: Solo por signo del importe
     const query = `
-      WITH DocTypes AS (
-        SELECT 
-          d.id,
-          d.año_trimestre,
-          d.num_trimestre,
-          d.id_de_empresa,
-          d.importe_sin_impuestos,
-          d.importe_total,
-          -- ✅ Marcar si es abono
-          CASE 
-            WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-              OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-              OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-            THEN 1
-            ELSE 0
-          END as es_abono,
-          -- ✅ Detectar si es emisor (ingreso) o receptor (gasto)
-          MAX(CASE 
-            WHEN ent.rol IN ('emisor', 'proveedor') 
-              AND ent.identificador_fiscal IN (${cifPlaceholders}) 
-            THEN 1 
-            ELSE 0 
-          END) as is_issued
-        FROM documentos d
-        LEFT JOIN empresas e ON d.id_de_empresa = e.id
-        LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
-        WHERE ${whereClause}
-          AND (
-            (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-            OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-          )
-        GROUP BY d.id
-      )
       SELECT 
-        dt.año_trimestre as año,
-        dt.num_trimestre as trimestre,
-        dt.id_de_empresa as empresa_id,
+        d.año_trimestre as año,
+        d.num_trimestre as trimestre,
+        d.id_de_empresa as empresa_id,
         e.nombre_de_empresa as empresa_nombre,
-        COUNT(DISTINCT dt.id) as total_documentos,
-        -- ✅ INGRESOS = Facturas emitidas - Abonos emitidos
-        (
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END)
-        ) as total_ingresos,
-        -- ✅ GASTOS = Facturas recibidas - Abonos recibidos
-        (
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END)
-        ) as total_gastos,
-        -- ✅ IVA Repercutido (de ingresos)
-        (
-          SELECT 
-            COALESCE(
-              SUM(CASE WHEN dt2.is_issued = 1 AND dt2.es_abono = 0 THEN i.cuota ELSE 0 END) - 
-              SUM(CASE WHEN dt2.is_issued = 1 AND dt2.es_abono = 1 THEN i.cuota ELSE 0 END)
-            , 0)
-          FROM DocTypes dt2
-          LEFT JOIN impuestos_documento i ON dt2.id = i.documento_id
-          WHERE dt2.año_trimestre = dt.año_trimestre
-            AND dt2.num_trimestre = dt.num_trimestre
-            AND dt2.id_de_empresa = dt.id_de_empresa
+        COUNT(DISTINCT d.id) as total_documentos,
+        -- ✅ INGRESOS = Suma de importes NEGATIVOS (en valor absoluto)
+        COALESCE(SUM(CASE WHEN d.importe_sin_impuestos < 0 THEN ABS(d.importe_sin_impuestos) ELSE 0 END), 0) as total_ingresos,
+        -- ✅ GASTOS = Suma de importes POSITIVOS
+        COALESCE(SUM(CASE WHEN d.importe_sin_impuestos > 0 THEN d.importe_sin_impuestos ELSE 0 END), 0) as total_gastos,
+        -- ✅ IVA Repercutido = Subquery separada
+        COALESCE((
+          SELECT SUM(CASE WHEN i.cuota < 0 THEN ABS(i.cuota) ELSE 0 END)
+          FROM impuestos_documento i
+          JOIN documentos d2 ON i.documento_id = d2.id
+          WHERE d2.año_trimestre = d.año_trimestre
+            AND d2.num_trimestre = d.num_trimestre
+            AND d2.id_de_empresa = d.id_de_empresa
             AND (i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
-        ) as iva_repercutido,
-        -- ✅ IVA Soportado (de gastos)
-        (
-          SELECT 
-            COALESCE(
-              SUM(CASE WHEN dt2.is_issued = 0 AND dt2.es_abono = 0 THEN i.cuota ELSE 0 END) - 
-              SUM(CASE WHEN dt2.is_issued = 0 AND dt2.es_abono = 1 THEN i.cuota ELSE 0 END)
-            , 0)
-          FROM DocTypes dt2
-          LEFT JOIN impuestos_documento i ON dt2.id = i.documento_id
-          WHERE dt2.año_trimestre = dt.año_trimestre
-            AND dt2.num_trimestre = dt.num_trimestre
-            AND dt2.id_de_empresa = dt.id_de_empresa
+        ), 0) as iva_repercutido,
+        -- ✅ IVA Soportado = Subquery separada
+        COALESCE((
+          SELECT SUM(CASE WHEN i.cuota > 0 THEN i.cuota ELSE 0 END)
+          FROM impuestos_documento i
+          JOIN documentos d3 ON i.documento_id = d3.id
+          WHERE d3.año_trimestre = d.año_trimestre
+            AND d3.num_trimestre = d.num_trimestre
+            AND d3.id_de_empresa = d.id_de_empresa
             AND (i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
-        ) as iva_soportado,
+        ), 0) as iva_soportado,
         MAX(d.trimestre_cerrado) as cerrado,
         MAX(d.fecha_cierre_trimestre) as fecha_cierre
-      FROM DocTypes dt
-      LEFT JOIN empresas e ON dt.id_de_empresa = e.id
-      LEFT JOIN documentos d ON dt.id = d.id
-      GROUP BY dt.año_trimestre, dt.num_trimestre, dt.id_de_empresa, e.nombre_de_empresa
-      ORDER BY dt.año_trimestre DESC, dt.num_trimestre DESC, e.nombre_de_empresa ASC
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE ${whereClause}
+        AND (
+          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        )
+      GROUP BY d.año_trimestre, d.num_trimestre, d.id_de_empresa, e.nombre_de_empresa
+      ORDER BY d.año_trimestre DESC, d.num_trimestre DESC, e.nombre_de_empresa ASC
     `;
 
     console.log('📝 [getTrimestresList] Query ejecutándose...');
-    console.log('📝 [getTrimestresList] CIFs:', MY_COMPANY_FISCAL_IDS);
-    console.log('📝 [getTrimestresList] Params:', [...MY_COMPANY_FISCAL_IDS, ...params]);
+    console.log('📝 [getTrimestresList] Params:', params);
 
-    const [rows] = await conn.query<RowDataPacket[]>(
-      query, 
-      [...MY_COMPANY_FISCAL_IDS, ...params]
-    );
+    const [rows] = await conn.query<RowDataPacket[]>(query, params);
 
     console.log('📊 [getTrimestresList] Filas obtenidas:', rows.length);
 

@@ -23,15 +23,15 @@ import {
   TrendingDown,
   Receipt,
   Send,
-  Building2, // ✅ AGREGADO
+  Building2,
+  DollarSign, // ✅ NUEVO ICONO para Beneficio Bruto
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
 function TrimestresPageContent() {
-  const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext(); // ✅ Agregar isLoading
+  const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
   const { toast } = useToast();
 
-  //Currencies
   const formatNumber = (num: number | string): string => {
     const value = typeof num === 'string' ? parseFloat(num) : num;
     if (isNaN(value)) return '0';
@@ -72,9 +72,7 @@ function TrimestresPageContent() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [trimestreToClose, setTrimestreToClose] = React.useState<Trimestre | null>(null);
 
-  // Cargar lista de trimestres cuando cambian las empresas o el toggle
   React.useEffect(() => {
-    // ✅ NUEVO: Esperar a que el contexto termine de cargar
     if (isLoadingCompanies) {
       console.log('⏳ [Trimestres] Esperando a que carguen las empresas...');
       return;
@@ -82,11 +80,9 @@ function TrimestresPageContent() {
     
     console.log('🔄 [Trimestres] Cargando trimestres con empresas:', selectedCompanyIds);
     loadTrimestres();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño, isLoadingCompanies]); // ✅ Agregar isLoadingCompanies
+  }, [selectedCompanyIds, mostrarVacios, selectedAño, isLoadingCompanies]);
 
-  // Cargar documentos cuando cambia la selección de trimestre o empresas
   React.useEffect(() => {
-    // ✅ NUEVO: Esperar a que el contexto termine de cargar
     if (isLoadingCompanies) {
       console.log('⏳ [Trimestres] Esperando a que carguen las empresas para los documentos...');
       return;
@@ -94,13 +90,13 @@ function TrimestresPageContent() {
     
     console.log('🔄 [Trimestres] Cargando documentos con empresas:', selectedCompanyIds);
     loadDocumentos();
-  }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]); // ✅ Agregar isLoadingCompanies
+  }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]);
 
   const loadTrimestres = async () => {
     try {
       setIsLoading(true);
       
-      console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds); // ✅ Debug
+      console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds);
       
       const params = new URLSearchParams();
       
@@ -160,19 +156,16 @@ function TrimestresPageContent() {
 
       setTrimestres(trimestresFinales);
 
-      // ✅ MODIFICADO: Autoseleccionar trimestre más reciente con datos
       if (trimestresFinales.length > 0) {
         const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
         
         if (!tieneAñoActual) {
-          // Si no hay datos en el año seleccionado, ir al trimestre más reciente con datos
           const reciente = trimestresFinales[0];
           console.log('🔄 [loadTrimestres] Año actual sin datos, seleccionando trimestre más reciente:', reciente);
           setSelectedAño(reciente.año);
           setSelectedTrimestre(reciente.trimestre);
         }
       } else {
-        // Si no hay trimestres en absoluto, ir al año/trimestre actual
         console.log('⚠️ [loadTrimestres] No hay trimestres con datos');
         const now = new Date();
         const añoActual = now.getFullYear();
@@ -192,14 +185,12 @@ function TrimestresPageContent() {
     }
   };
 
-  // ✅ MODIFICADO: Agregar early return si no hay empresas seleccionadas
   const loadDocumentos = async () => {
     try {
       setIsLoadingDocs(true);
 
-      console.log('🔍 [loadDocumentos] Empresas seleccionadas:', selectedCompanyIds); // ✅ Debug
+      console.log('🔍 [loadDocumentos] Empresas seleccionadas:', selectedCompanyIds);
 
-      // ✅ NUEVA VALIDACIÓN: Si no hay empresas seleccionadas, limpiar y retornar
       if (selectedCompanyIds.length === 0) {
         console.log('⚠️ [loadDocumentos] No hay empresas seleccionadas, limpiando documentos');
         setDocumentos([]);
@@ -269,7 +260,6 @@ function TrimestresPageContent() {
 
       setDialogOpen(false);
 
-      // ✅ SI SE MARCÓ "ENVIAR AL SII", REDIRIGIR CON DATOS
       if (enviarAlSII) {
         const params = new URLSearchParams({
           año: trimestreToClose.año.toString(),
@@ -378,7 +368,6 @@ function TrimestresPageContent() {
 
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
           
-          {/* ✅ MODIFICADO: Solo mostrar selector si hay empresas seleccionadas */}
           {isLoading ? (
             <Skeleton className="h-12 sm:h-16 w-full" />
           ) : selectedCompanyIds.length > 0 ? (
@@ -446,15 +435,15 @@ function TrimestresPageContent() {
             </div>
           ) : null}
 
-          {/* ✅ MODIFICADO: Solo mostrar stats si hay empresas seleccionadas */}
+          {/* ✅ MODIFICADO: Ahora con 5 cards en grid-cols-5 */}
           {isLoading ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-              {[...Array(4)].map((_, i) => (
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5">
+              {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
               ))}
             </div>
           ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4" data-tutorial="trimestres-stats">
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5" data-tutorial="trimestres-stats">
               <TrimestreStatsCard
                 title="Total Documentos"
                 value={trimestreAgregado.total_documentos}
@@ -474,6 +463,20 @@ function TrimestresPageContent() {
                 icon={TrendingDown}
                 description="Total gastado"
                 trend="down"
+              />
+              {/* ✅ NUEVA CARD: Beneficio Bruto */}
+              <TrimestreStatsCard
+                title="Beneficio Bruto"
+                value={formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos)}
+                icon={DollarSign}
+                description="Ingresos - Gastos"
+                trend={
+                  (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) > 0 
+                    ? 'up' 
+                    : (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) < 0 
+                      ? 'down' 
+                      : 'neutral'
+                }
               />
               <TrimestreStatsCard
                 title="IVA Neto"
@@ -496,13 +499,12 @@ function TrimestresPageContent() {
             </div>
           )}
 
-          {/* ✅ MODIFICADO: Mostrar mensaje si no hay empresas seleccionadas */}
           {isLoadingDocs ? (
             <Skeleton className="h-64 sm:h-80 lg:h-96 w-full rounded-lg" />
           ) : selectedCompanyIds.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center bg-muted/20">
               <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center mb-4">
-                <Building2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <Building2 className="h-8 w-8 text-violet-600 dark:text-violet-400" />
               </div>
               <h3 className="text-base sm:text-lg font-semibold mb-2">
                 Selecciona una empresa
@@ -514,14 +516,12 @@ function TrimestresPageContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  // Hacer scroll suave hasta el selector de empresas
                   const selector = document.querySelector('[data-tutorial="trimestres-company-selector"]');
                   selector?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   
-                  // Añadir efecto visual temporal
-                  selector?.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+                  selector?.classList.add('ring-2', 'ring-violet-500', 'ring-offset-2');
                   setTimeout(() => {
-                    selector?.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+                    selector?.classList.remove('ring-2', 'ring-violet-500', 'ring-offset-2');
                   }, 2000);
                 }}
                 className="gap-2"
