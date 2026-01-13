@@ -7,7 +7,7 @@ import { Euro, Calendar, ArrowRight } from "lucide-react";
 
 interface ProductCardProps {
     product: DocumentLine;
-    providerId: string;
+    providerFiscalId: string;
 }
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
@@ -43,10 +43,10 @@ const formatDate = (date: string | null | undefined) => {
     }
 };
 
-export function ProductCard({ product, providerId }: ProductCardProps) {
+export function ProductCard({ product, providerFiscalId }: ProductCardProps) {
     if (!product.descripcion) return null;
 
-    const productUrl = `/proveedores/${encodeURIComponent(providerId)}/${encodeURIComponent(product.codigo || 'null')}`;
+    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${encodeURIComponent(product.codigo || 'null')}`;
     
     return (
         <Link href={productUrl} className="group">

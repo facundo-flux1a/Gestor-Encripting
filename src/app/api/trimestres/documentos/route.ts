@@ -28,16 +28,16 @@ export async function GET(req: NextRequest) {
       empresaIds: empresaIdsParam
     });
 
-    // ✅ CAMBIO: Convertir a array de números (o undefined si está vacío)
+    // ✅ MODIFICADO: Convertir a array de números (o array vacío si no hay empresas)
     const empresaIds = empresaIdsParam.length > 0 
       ? empresaIdsParam.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
-      : undefined;
+      : []; // ✅ Array vacío en lugar de undefined
 
     console.log('🔍 [API-TRIMESTRES-DOCS] Llamando getDocumentosByTrimestre con:', {
       userId: session.userId,
       año: parseInt(año),
       trimestre: parseInt(trimestre),
-      empresaIds
+      empresaIds: empresaIds.length > 0 ? empresaIds : 'sin empresas (retornará [])'
     });
 
     const documentos = await getDocumentosByTrimestre(

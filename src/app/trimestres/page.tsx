@@ -22,11 +22,13 @@ import {
   TrendingUp,
   TrendingDown,
   Receipt,
+  Send,
+  Building2, // ✅ AGREGADO
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
 function TrimestresPageContent() {
-  const { selectedCompanyIds } = useCompanyContext();
+  const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext(); // ✅ Agregar isLoading
   const { toast } = useToast();
 
   //Currencies
@@ -72,17 +74,33 @@ function TrimestresPageContent() {
 
   // Cargar lista de trimestres cuando cambian las empresas o el toggle
   React.useEffect(() => {
+    // ✅ NUEVO: Esperar a que el contexto termine de cargar
+    if (isLoadingCompanies) {
+      console.log('⏳ [Trimestres] Esperando a que carguen las empresas...');
+      return;
+    }
+    
+    console.log('🔄 [Trimestres] Cargando trimestres con empresas:', selectedCompanyIds);
     loadTrimestres();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño]);
+  }, [selectedCompanyIds, mostrarVacios, selectedAño, isLoadingCompanies]); // ✅ Agregar isLoadingCompanies
 
   // Cargar documentos cuando cambia la selección de trimestre o empresas
   React.useEffect(() => {
+    // ✅ NUEVO: Esperar a que el contexto termine de cargar
+    if (isLoadingCompanies) {
+      console.log('⏳ [Trimestres] Esperando a que carguen las empresas para los documentos...');
+      return;
+    }
+    
+    console.log('🔄 [Trimestres] Cargando documentos con empresas:', selectedCompanyIds);
     loadDocumentos();
-  }, [selectedAño, selectedTrimestre, selectedCompanyIds]);
+  }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]); // ✅ Agregar isLoadingCompanies
 
   const loadTrimestres = async () => {
     try {
       setIsLoading(true);
+      
+      console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds); // ✅ Debug
       
       const params = new URLSearchParams();
       
@@ -142,14 +160,25 @@ function TrimestresPageContent() {
 
       setTrimestres(trimestresFinales);
 
+      // ✅ MODIFICADO: Autoseleccionar trimestre más reciente con datos
       if (trimestresFinales.length > 0) {
         const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
         
         if (!tieneAñoActual) {
+          // Si no hay datos en el año seleccionado, ir al trimestre más reciente con datos
           const reciente = trimestresFinales[0];
+          console.log('🔄 [loadTrimestres] Año actual sin datos, seleccionando trimestre más reciente:', reciente);
           setSelectedAño(reciente.año);
           setSelectedTrimestre(reciente.trimestre);
         }
+      } else {
+        // Si no hay trimestres en absoluto, ir al año/trimestre actual
+        console.log('⚠️ [loadTrimestres] No hay trimestres con datos');
+        const now = new Date();
+        const añoActual = now.getFullYear();
+        const trimestreActual = Math.ceil((now.getMonth() + 1) / 3);
+        setSelectedAño(añoActual);
+        setSelectedTrimestre(trimestreActual);
       }
     } catch (error) {
       console.error('❌ Error loading trimestres:', error);
@@ -163,20 +192,28 @@ function TrimestresPageContent() {
     }
   };
 
+  // ✅ MODIFICADO: Agregar early return si no hay empresas seleccionadas
   const loadDocumentos = async () => {
     try {
       setIsLoadingDocs(true);
+
+      console.log('🔍 [loadDocumentos] Empresas seleccionadas:', selectedCompanyIds); // ✅ Debug
+
+      // ✅ NUEVA VALIDACIÓN: Si no hay empresas seleccionadas, limpiar y retornar
+      if (selectedCompanyIds.length === 0) {
+        console.log('⚠️ [loadDocumentos] No hay empresas seleccionadas, limpiando documentos');
+        setDocumentos([]);
+        return;
+      }
 
       const params = new URLSearchParams({
         año: selectedAño.toString(),
         trimestre: selectedTrimestre.toString(),
       });
 
-      if (selectedCompanyIds.length > 0) {
-        selectedCompanyIds.forEach(id => {
-          params.append('empresa_id', id.toString());
-        });
-      }
+      selectedCompanyIds.forEach(id => {
+        params.append('empresa_id', id.toString());
+      });
 
       console.log('📡 [loadDocumentos] Fetching con params:', params.toString());
 
@@ -204,7 +241,7 @@ function TrimestresPageContent() {
     setSelectedTrimestre(1);
   };
 
-  const handleCerrarTrimestre = async (empresaId: number | null) => {
+  const handleCerrarTrimestre = async (empresaId: number | null, enviarAlSII: boolean = false) => {
     if (!trimestreToClose) return;
 
     try {
@@ -231,6 +268,18 @@ function TrimestresPageContent() {
       });
 
       setDialogOpen(false);
+
+      // ✅ SI SE MARCÓ "ENVIAR AL SII", REDIRIGIR CON DATOS
+      if (enviarAlSII) {
+        const params = new URLSearchParams({
+          año: trimestreToClose.año.toString(),
+          trimestre: trimestreToClose.trimestre.toString(),
+          empresa_id: empresaId?.toString() || 'all'
+        });
+        
+        window.location.href = `/sii-test?${params.toString()}`;
+      }
+
     } catch (error) {
       console.error('❌ Error closing trimestre:', error);
       toast({
@@ -290,6 +339,7 @@ function TrimestresPageContent() {
   }, [trimestres]);
 
   const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
+  const puedeEnviarAlSII = trimestreAgregado && trimestreAgregado.cerrado;
 
   return (
     <>
@@ -328,9 +378,10 @@ function TrimestresPageContent() {
 
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
           
+          {/* ✅ MODIFICADO: Solo mostrar selector si hay empresas seleccionadas */}
           {isLoading ? (
             <Skeleton className="h-12 sm:h-16 w-full" />
-          ) : (
+          ) : selectedCompanyIds.length > 0 ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="w-full sm:flex-1 sm:min-w-0" data-tutorial="trimestres-selector">
                 <TrimestreSelector
@@ -350,6 +401,7 @@ function TrimestresPageContent() {
               {trimestreAgregado && (
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <QuarterBadge cerrado={trimestreAgregado.cerrado} />
+                  
                   {puedeCerrarse && (
                     <Button
                       variant="destructive"
@@ -368,18 +420,40 @@ function TrimestresPageContent() {
                       <span className="xs:hidden">Cerrar</span>
                     </Button>
                   )}
+
+                  {puedeEnviarAlSII && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-2 text-xs sm:text-sm h-8 sm:h-9 bg-blue-600 hover:bg-blue-700"
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          año: selectedAño.toString(),
+                          trimestre: selectedTrimestre.toString(),
+                          empresa_id: trimestreAgregado.empresa_id?.toString() || 'all'
+                        });
+                        
+                        window.location.href = `/sii-test?${params.toString()}`;
+                      }}
+                    >
+                      <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                      <span className="hidden xs:inline">Enviar al SII</span>
+                      <span className="xs:hidden">Enviar</span>
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
+          {/* ✅ MODIFICADO: Solo mostrar stats si hay empresas seleccionadas */}
           {isLoading ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
               {[...Array(4)].map((_, i) => (
                 <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
               ))}
             </div>
-          ) : trimestreAgregado ? (
+          ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4" data-tutorial="trimestres-stats">
               <TrimestreStatsCard
                 title="Total Documentos"
@@ -422,8 +496,40 @@ function TrimestresPageContent() {
             </div>
           )}
 
+          {/* ✅ MODIFICADO: Mostrar mensaje si no hay empresas seleccionadas */}
           {isLoadingDocs ? (
             <Skeleton className="h-64 sm:h-80 lg:h-96 w-full rounded-lg" />
+          ) : selectedCompanyIds.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center bg-muted/20">
+              <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+                <Building2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">
+                Selecciona una empresa
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                Para visualizar los documentos del trimestre, primero debes seleccionar al menos una empresa.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Hacer scroll suave hasta el selector de empresas
+                  const selector = document.querySelector('[data-tutorial="trimestres-company-selector"]');
+                  selector?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  
+                  // Añadir efecto visual temporal
+                  selector?.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+                  setTimeout(() => {
+                    selector?.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+                  }, 2000);
+                }}
+                className="gap-2"
+              >
+                <Building2 className="h-4 w-4" />
+                Ir al selector de empresas
+              </Button>
+            </div>
           ) : (
             <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
               <TrimestreTable documentos={documentos} />

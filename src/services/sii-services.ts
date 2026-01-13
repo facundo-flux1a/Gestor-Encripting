@@ -1,11 +1,10 @@
-// src/services/sii-service.ts
+// src/services/sii-services.ts
 import soap from 'soap';
 import forge from 'node-forge';
 import https from 'https';
 import dns from 'dns';
 import { promisify } from 'util';
 import path from 'path';
-import fs from 'fs';
 import axios from 'axios';
 
 const dnsResolve = promisify(dns.resolve4);
@@ -92,7 +91,6 @@ class SIIService {
   private cargarCertificado(certificadoBase64: string, password: string) {
     console.log('🔐 [SII] Cargando certificado...');
     
-    const certificadoBuffer = Buffer.from(certificadoBase64, 'base64');
     const p12Der = forge.util.decode64(certificadoBase64);
     const p12Asn1 = forge.asn1.fromDer(p12Der);
     const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
@@ -114,7 +112,11 @@ class SIIService {
     console.log(`📋 [SII] Subject: ${cert.cert.subject.attributes.map((a: any) => `${a.shortName}=${a.value}`).join(', ')}`);
     console.log(`📅 [SII] Válido hasta: ${cert.cert.validity.notAfter}`);
 
-    return { certPem, keyPem, certificadoBuffer };
+    return { 
+      certPem, 
+      keyPem, 
+      certificado: cert.cert 
+    };
   }
 
   // ============================================================
@@ -139,11 +141,6 @@ class SIIService {
   private crearCustomRequest(certPem: string, keyPem: string) {
     return async (options: any, callback: Function) => {
       console.log('📤 [SII] Enviando petición SOAP...');
-      console.log('📍 [SII] URL:', {
-        url: options.url || options.uri,
-        method: options.method,
-        headers: options.headers
-      });
 
       try {
         const axiosConfig = {
@@ -160,26 +157,21 @@ class SIIService {
             keepAlive: false
           }),
           maxRedirects: 0,
-          validateStatus: () => true, // Aceptar cualquier status
-          transformResponse: [(data: any) => data], // No transformar
+          validateStatus: () => true,
+          transformResponse: [(data: any) => data],
         };
 
         const response = await axios(axiosConfig);
         
-        console.log('✅ [SII] Respuesta recibida');
-        console.log('📊 [SII] Status:', response.status);
-        console.log('📦 [SII] Headers:', response.headers);
+        console.log('✅ [SII] Respuesta recibida - Status:', response.status);
         
-        // Si es un redirect (302), es un error de autenticación
         if (response.status === 302) {
           const error = new Error('Error 403: No se detecta certificado electrónico (redirect 302)');
           console.error('❌ [SII] Redirect detectado - Certificado no válido');
-          console.error('📍 [SII] Location:', response.headers.location);
           callback(error);
           return;
         }
         
-        // Si no es 200, también es error
         if (response.status !== 200) {
           const error = new Error(`Error HTTP ${response.status}: ${response.statusText || 'Error desconocido'}`);
           console.error('❌ [SII] Error HTTP:', response.status);
@@ -187,7 +179,6 @@ class SIIService {
           return;
         }
         
-        // node-soap espera este formato específico
         callback(null, {
           body: response.data,
           statusCode: response.status,
@@ -195,13 +186,7 @@ class SIIService {
         }, response.data);
         
       } catch (error: any) {
-        console.error('❌ [SII] Error en petición:', {
-          message: error.message,
-          code: error.code,
-          response: error.response?.status
-        });
-        
-        // Pasar el error en el formato que espera node-soap
+        console.error('❌ [SII] Error en petición:', error.message);
         callback(error);
       }
     };
@@ -216,17 +201,10 @@ class SIIService {
 
     const wsdlUrl = this.usarWSDLLocal ? WSDL_LOCAL[this.entorno] : SII_CONFIG[this.entorno].wsdl;
 
-    if (this.usarWSDLLocal) {
-      console.log(`📁 [SII] Usando WSDL local: ${wsdlUrl}`);
-    }
-
     console.log('🔌 [SII] Creando cliente SOAP con mTLS...');
 
     const httpsAgent = this.crearAgenteHTTPS(certPem, keyPem);
     const customRequest = this.crearCustomRequest(certPem, keyPem);
-
-    console.log('🔐 [SII] Agente HTTPS con certificado cliente creado');
-    console.log(`   TLS: 1.2-1.3, Validación SSL: ${this.entorno === 'produccion'}`);
 
     const client = await soap.createClientAsync(wsdlUrl, {
       endpoint: SII_CONFIG[this.entorno].endpoint,
@@ -234,7 +212,7 @@ class SIIService {
         httpsAgent,
         timeout: 30000,
       },
-      request: customRequest, // ← Request personalizado con axios
+      request: customRequest,
     });
 
     console.log('✅ [SII] Cliente SOAP creado con mTLS');
@@ -243,14 +221,14 @@ class SIIService {
   }
 
   // ============================================================
-  // TEST DE CONEXIÓN
+  // TEST DE CONEXIÓN (nombre en inglés)
   // ============================================================
 
-  async testConexion(certificadoBase64: string, password: string) {
+  async testConnection(certificadoBase64: string, password: string) {
     console.log('🧪 [SII] Iniciando test de conexión...');
 
     try {
-      const { certPem, keyPem } = this.cargarCertificado(certificadoBase64, password);
+      const { certPem, keyPem, certificado } = this.cargarCertificado(certificadoBase64, password);
       const client = await this.crearCliente(certPem, keyPem);
 
       console.log('✅ [SII] WSDL cargado correctamente');
@@ -267,15 +245,30 @@ class SIIService {
       console.log(`   Operaciones: ${operations.length}`);
 
       return {
-        exito: true,
-        entorno: this.entorno,
-        endpoint: SII_CONFIG[this.entorno].endpoint,
-        servicios: serviceNames,
-        operaciones: operations,
+        success: true,
+        entorno: this.entorno.toUpperCase(),
+        mensaje: 'Conexión establecida correctamente con el SII',
+        details: {
+          endpoint: SII_CONFIG[this.entorno].endpoint,
+          services: serviceNames,
+          operations: operations,
+          certificate: {
+            subject: certificado.subject.attributes.map((a: any) => `${a.shortName}=${a.value}`).join(', '),
+            issuer: certificado.issuer.attributes.map((a: any) => `${a.shortName}=${a.value}`).join(', '),
+            validFrom: certificado.validity.notBefore.toISOString(),
+            validTo: certificado.validity.notAfter.toISOString(),
+            serialNumber: certificado.serialNumber,
+          }
+        }
       };
     } catch (error: any) {
       console.error('❌ [SII] Error en test:', error);
-      throw error;
+      return {
+        success: false,
+        entorno: this.entorno.toUpperCase(),
+        mensaje: 'Error al conectar con el SII',
+        error: error.message
+      };
     }
   }
 
@@ -284,11 +277,8 @@ class SIIService {
   // ============================================================
 
   private formatearFecha(fecha: string): string {
-    // Convertir de YYYY-MM-DD (ISO) a DD-MM-YYYY (AEAT)
     const [year, month, day] = fecha.split('-');
-    const fechaFormateada = `${day}-${month}-${year}`;
-    console.log(`📅 [SII] Fecha formateada: ${fecha} -> ${fechaFormateada}`);
-    return fechaFormateada;
+    return `${day}-${month}-${year}`;
   }
 
   // ============================================================
@@ -357,30 +347,20 @@ class SIIService {
         RegistroLRFacturasEmitidas: registros,
       };
 
-      console.log('📝 [SII] XML construido:', JSON.stringify(soapBody, null, 2));
-      console.log('🔍 [SII] Verificando método SOAP...');
+      console.log('📝 [SII] XML construido');
 
       if (!client.SuministroLRFacturasEmitidasAsync) {
-        throw new Error('Método SuministroLRFacturasEmitidasAsync no encontrado en el cliente SOAP');
+        throw new Error('Método SuministroLRFacturasEmitidasAsync no encontrado');
       }
 
-      console.log('✅ [SII] Método encontrado, llamando...');
-
-      // Llamada SOAP con async/await
       const [result] = await client.SuministroLRFacturasEmitidasAsync(soapBody);
 
       console.log('📥 [SII] Respuesta recibida de AEAT');
-      console.log('📦 [SII] Result:', JSON.stringify(result, null, 2));
 
-      // Parsear respuesta
       const respuesta = result?.RespuestaLinea || result;
       const estadoEnvio = result?.EstadoEnvio || 'Desconocido';
       const csv = result?.CSV || 'N/A';
 
-      console.log('📊 [SII] Estado del envío:', estadoEnvio);
-      console.log('📋 [SII] CSV:', csv);
-
-      // Procesar detalles de facturas
       let facturasArray = [];
       if (Array.isArray(respuesta)) {
         facturasArray = respuesta;
@@ -399,14 +379,8 @@ class SIIService {
           })));
         }
 
-        console.log(`📋 [SII] Detalle de factura:`);
-        console.log(`   Estado: ${estado}`);
-        if (errores.length > 0) {
-          errores.forEach(e => console.log(`   ❌ [${e.codigo}] ${e.descripcion}`));
-        }
-
         return {
-          numeroFactura: factura.IDFactura?.NumSerieFacturaEmisor || 'N/A',
+          numero_factura: factura.IDFactura?.NumSerieFacturaEmisor || 'N/A',
           estado,
           errores,
         };
@@ -426,17 +400,24 @@ class SIIService {
         facturas_aceptadas: facturasAceptadas,
         facturas_rechazadas: facturasRechazadas,
         detalles,
-        respuestaAEAT: result,
+        error_general: estadoEnvio !== 'Correcto' ? 'Algunas facturas fueron rechazadas' : null
       };
 
     } catch (error: any) {
       console.error('❌ [SII] Error al enviar facturas:', error.message);
-      console.error('❌ [SII] Error stack:', error.stack);
       
-      throw new Error(`Error al enviar facturas al SII: ${error.message}`);
+      return {
+        success: false,
+        csv: null,
+        estado: 'Error',
+        facturas_aceptadas: 0,
+        facturas_rechazadas: payload.facturas_emitidas.length,
+        detalles: [],
+        error_general: error.message
+      };
     }
   }
 }
 
-// Exportar instancia singleton
+// ✅ Exportar instancia singleton
 export const siiService = new SIIService();

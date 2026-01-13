@@ -1945,6 +1945,7 @@ export async function getDashboardAnalytics(
         ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
         : "'NEVER_MATCH'";
     
+    // ✅ NUEVA LÓGICA: Los abonos YA vienen negativos en BD, solo sumarlos directamente
     const [kpiRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
@@ -1952,15 +1953,7 @@ export async function getDashboardAnalytics(
                 d.tipo_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                -- ✅ NUEVO: Marcar si es abono (están en positivo en BD)
-                CASE 
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-                    THEN 1
-                    ELSE 0
-                END as es_abono,
-                -- ✅ Calcular IVA (también en positivo en BD)
+                -- ✅ Calcular IVA (puede ser negativo para abonos)
                 (SELECT SUM(di.cuota) 
                  FROM impuestos_documento di 
                  WHERE di.documento_id = d.id 
@@ -1969,7 +1962,7 @@ export async function getDashboardAnalytics(
                  FROM impuestos_documento di 
                  WHERE di.documento_id = d.id 
                    AND di.tipo_impuesto LIKE '%retencion%') as total_retencion,
-                MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol IN ('emisor', 'proveedor') AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             WHERE 1=1 ${whereDocType}
@@ -1978,27 +1971,11 @@ export async function getDashboardAnalytics(
             GROUP BY d.id
         )
         SELECT
-          -- ✅ CRÍTICO: Facturas suman, abonos restan
-          -- Total Ingresos = Σ(Facturas emitidas) - Σ(Abonos emitidos)
-          (SELECT 
-              SUM(CASE WHEN es_abono = 0 THEN importe_sin_impuestos ELSE 0 END) - 
-              SUM(CASE WHEN es_abono = 1 THEN importe_sin_impuestos ELSE 0 END)
-           FROM DocTypes WHERE is_issued = 1) as totalIngresos,
-          -- Total Gastos = Σ(Facturas recibidas) - Σ(Abonos recibidos)
-          (SELECT 
-              SUM(CASE WHEN es_abono = 0 THEN importe_sin_impuestos ELSE 0 END) - 
-              SUM(CASE WHEN es_abono = 1 THEN importe_sin_impuestos ELSE 0 END)
-           FROM DocTypes WHERE is_issued = 0) as totalGastos,
-          -- IVA Repercutido = Σ(IVA facturas emitidas) - Σ(IVA abonos emitidos)
-          (SELECT 
-              SUM(CASE WHEN es_abono = 0 THEN total_iva ELSE 0 END) - 
-              SUM(CASE WHEN es_abono = 1 THEN total_iva ELSE 0 END)
-           FROM DocTypes WHERE is_issued = 1) as ivaRepercutido,
-          -- IVA Soportado = Σ(IVA facturas recibidas) - Σ(IVA abonos recibidos)
-          (SELECT 
-              SUM(CASE WHEN es_abono = 0 THEN total_iva ELSE 0 END) - 
-              SUM(CASE WHEN es_abono = 1 THEN total_iva ELSE 0 END)
-           FROM DocTypes WHERE is_issued = 0) as ivaSoportado,
+          -- ✅ CRÍTICO: Simplemente SUMAR todos los importes (los negativos ya restan automáticamente)
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN importe_sin_impuestos ELSE 0 END), 0) as totalIngresos,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN importe_sin_impuestos ELSE 0 END), 0) as totalGastos,
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN total_iva ELSE 0 END), 0) as ivaRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN total_iva ELSE 0 END), 0) as ivaSoportado,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 1) as totalFacturasIngreso,
           (SELECT COUNT(id) FROM DocTypes WHERE is_issued = 0) as totalFacturasGasto,
           (SELECT COUNT(*) FROM incidencias_documento i 
@@ -2039,6 +2016,7 @@ export async function getDashboardAnalytics(
            )
            ${hasEmpresaFilter ? 'AND d5.id_de_empresa IN (?)' : ''}
            ${whereTrimestreFilter.replace(/d\./g, 'd5.')}) as totalDocs
+        FROM DocTypes
     `, [
         ...MY_COMPANY_FISCAL_IDS,
         ...(hasEmpresaFilter ? [empresaIds] : []),
@@ -2065,21 +2043,14 @@ export async function getDashboardAnalytics(
         totalDocs: kpis.totalDocs
     });
 
+    // ✅ MODIFICADO: Lógica simplificada para quarterlySummary
     const [quarterlyRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
                 d.fecha_emision,
                 d.importe_sin_impuestos,
-                -- ✅ Marcar si es abono
-                CASE 
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-                    THEN 1
-                    ELSE 0
-                END as es_abono,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             WHERE (
@@ -2092,12 +2063,8 @@ export async function getDashboardAnalytics(
         )
         SELECT
           CONCAT('T', QUARTER(dt.fecha_emision)) as quarter,
-          -- Ingresos = Facturas emitidas - Abonos emitidos
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as ingresos,
-          -- Gastos = Facturas recibidas - Abonos recibidos
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 0 THEN dt.importe_sin_impuestos ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 1 THEN dt.importe_sin_impuestos ELSE 0 END) as gastos
+          COALESCE(SUM(CASE WHEN dt.is_issued = 1 THEN dt.importe_sin_impuestos ELSE 0 END), 0) as ingresos,
+          COALESCE(SUM(CASE WHEN dt.is_issued = 0 THEN dt.importe_sin_impuestos ELSE 0 END), 0) as gastos
         FROM DocTypes dt
         WHERE YEAR(dt.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'}
         GROUP BY quarter
@@ -2131,20 +2098,12 @@ export async function getDashboardAnalytics(
         ...(hasTrimestreFilter ? [año, trimestre] : [])
     ]);
 
+    // ✅ MODIFICADO: Lógica simplificada para IVA
     const [ivaRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
-                d.tipo_documento,
-                -- ✅ Detectar si es abono
-                CASE 
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-                      OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-                    THEN 1
-                    ELSE 0
-                END as es_abono,
-                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) > 0 as is_issued
+                MAX(CASE WHEN e.rol = 'emisor' AND e.identificador_fiscal IN (${cifPlaceholders}) THEN 1 ELSE 0 END) as is_issued
             FROM documentos d
             LEFT JOIN entidades_documento e ON d.id = e.documento_id
             WHERE (
@@ -2157,12 +2116,8 @@ export async function getDashboardAnalytics(
         )
         SELECT
           CONCAT('T', QUARTER(d.fecha_emision)) as quarter,
-          -- IVA Repercutido = IVA facturas emitidas - IVA abonos emitidos
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 0 THEN i.cuota ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 1 AND dt.es_abono = 1 THEN i.cuota ELSE 0 END) as repercutido,
-          -- IVA Soportado = IVA facturas recibidas - IVA abonos recibidos
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 0 THEN i.cuota ELSE 0 END) - 
-          SUM(CASE WHEN dt.is_issued = 0 AND dt.es_abono = 1 THEN i.cuota ELSE 0 END) as soportado
+          COALESCE(SUM(CASE WHEN dt.is_issued = 1 THEN i.cuota ELSE 0 END), 0) as repercutido,
+          COALESCE(SUM(CASE WHEN dt.is_issued = 0 THEN i.cuota ELSE 0 END), 0) as soportado
         FROM documentos d
         JOIN impuestos_documento i ON d.id = i.documento_id
         JOIN DocTypes dt ON d.id = dt.id
@@ -2191,25 +2146,12 @@ export async function getDashboardAnalytics(
         }
     });
 
+    // ✅ MODIFICADO: Lógica simplificada para topProviders
     const [topProvidersRows] = await db.query<RowDataPacket[]>(`
         SELECT 
             e.nombre, 
-            e.identificador_fiscal, 
-            -- Total = Facturas - Abonos
-            SUM(CASE 
-                WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-                  OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-                  OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-                THEN 0
-                ELSE d.importe_total
-            END) - 
-            SUM(CASE 
-                WHEN LOWER(d.tipo_documento) LIKE '%abono%' 
-                  OR LOWER(d.tipo_documento) LIKE '%nota%crédito%' 
-                  OR LOWER(d.tipo_documento) LIKE '%nota%credito%'
-                THEN d.importe_total
-                ELSE 0
-            END) as total
+            e.identificador_fiscal,
+            COALESCE(SUM(d.importe_total), 0) as total
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE (e.rol = 'proveedor' OR e.rol = 'emisor') 
@@ -2470,6 +2412,14 @@ export async function getTrimestresList(
  * Obtiene documentos de un trimestre específico
  * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
  */
+// ✅ MODIFICACIÓN EN: src/services/document-service.ts
+// Reemplazar la función getDocumentosByTrimestre (línea ~2650) con esta versión:
+
+/**
+ * Obtiene documentos de un trimestre específico
+ * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
+ * ✅ ARREGLADO: Ahora filtra por tipo de documento (igual que getTrimestresList)
+ */
 export async function getDocumentosByTrimestre(
   userId: number,
   año: number,
@@ -2477,6 +2427,12 @@ export async function getDocumentosByTrimestre(
   empresaIds?: number[] | null
 ): Promise<Document[]> {
   try {
+    // ✅ VALIDACIÓN: Si no hay empresas, retornar array vacío
+    if (!empresaIds || empresaIds.length === 0) {
+      console.log('⚠️ [getDocumentosByTrimestre] No hay empresas seleccionadas, retornando []');
+      return [];
+    }
+
     let whereConditions = [
       'e.id_de_usuario = ?',
       'd.año_trimestre = ?',
@@ -2484,12 +2440,16 @@ export async function getDocumentosByTrimestre(
     ];
     const params: any[] = [userId, año, trimestre];
 
-    // ✅ CAMBIO: Aceptar array de empresas
-    if (empresaIds && empresaIds.length > 0) {
-      const placeholders = empresaIds.map(() => '?').join(',');
-      whereConditions.push(`d.id_de_empresa IN (${placeholders})`);
-      params.push(...empresaIds);
-    }
+    // ✅ AHORA SIEMPRE hay empresaIds (validado arriba)
+    const placeholders = empresaIds.map(() => '?').join(',');
+    whereConditions.push(`d.id_de_empresa IN (${placeholders})`);
+    params.push(...empresaIds);
+
+    // ✅ NUEVO: Agregar filtro de tipo de documento (igual que getTrimestresList)
+    whereConditions.push(`(
+      (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+      OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+    )`);
 
     const whereClause = whereConditions.join(' AND ');
 
@@ -2532,7 +2492,6 @@ export async function getDocumentosByTrimestre(
     throw error;
   }
 }
-
 /**
  * Cierra un trimestre (bloqueo permanente)
  */

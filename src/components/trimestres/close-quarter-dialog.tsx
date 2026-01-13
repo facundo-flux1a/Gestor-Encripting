@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Lock, AlertTriangle } from 'lucide-react';
+import { Lock, AlertTriangle, Send } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -20,10 +20,9 @@ interface CloseQuarterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trimestre: Trimestre | null;
-  onConfirm: (empresaId: number | null) => Promise<void>;
+  onConfirm: (empresaId: number | null, enviarAlSII?: boolean) => Promise<void>;
 }
 
-// 🎯 FUNCIONES DE FORMATO MANUAL
 const formatCurrency = (amount: number | string): string => {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return '0,00 €';
@@ -48,26 +47,24 @@ export function CloseQuarterDialog({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const { toast } = useToast();
 
-  // 🔥 DEBUG - Ver si el componente se renderiza
   React.useEffect(() => {
     console.log('🔵 [CloseQuarterDialog] Renderizado:', { open, trimestre });
   }, [open, trimestre]);
 
-  // ⚠️ NO retornar null si no hay trimestre, porque el Dialog necesita controlar su propio estado
-  // En su lugar, simplemente no mostramos nada dentro del contenido
-
-  const handleConfirm = async () => {
+  const handleConfirm = async (enviarAlSII: boolean = false) => {
     if (!trimestre) return;
     
     try {
       setIsSubmitting(true);
       
       const empresaId = scope === 'empresa' ? trimestre.empresa_id : null;
-      await onConfirm(empresaId);
+      await onConfirm(empresaId, enviarAlSII);
 
       toast({
-        title: '✅ Trimestre cerrado',
-        description: `T${trimestre.trimestre} ${trimestre.año} ha sido cerrado exitosamente.`,
+        title: enviarAlSII ? '✅ Trimestre cerrado y enviando al SII' : '✅ Trimestre cerrado',
+        description: enviarAlSII 
+          ? `T${trimestre.trimestre} ${trimestre.año} cerrado. Redirigiendo al panel SII...`
+          : `T${trimestre.trimestre} ${trimestre.año} ha sido cerrado exitosamente.`,
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
 
@@ -87,7 +84,6 @@ export function CloseQuarterDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[500px] max-h-[90vh] overflow-y-auto z-[100]">
-        {/* Solo mostramos el contenido si hay trimestre */}
         {trimestre && (
           <>
             <DialogHeader>
@@ -105,7 +101,7 @@ export function CloseQuarterDialog({
             </DialogHeader>
 
             <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
-              {/* ⚠️ ADVERTENCIA */}
+              {/* ADVERTENCIA */}
               <div className="flex items-start gap-2 sm:gap-3 rounded-lg border border-yellow-200 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 dark:border-yellow-900 p-2.5 sm:p-3 transition-all duration-300 hover:shadow-md hover:scale-[1.01]">
                 <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 shrink-0 animate-pulse" />
                 <div className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200 min-w-0">
@@ -150,7 +146,7 @@ export function CloseQuarterDialog({
                 </RadioGroup>
               </div>
 
-              {/* RESUMEN CON FORMATO DE MONEDA */}
+              {/* RESUMEN */}
               <div className="rounded-lg bg-gradient-to-br from-muted to-muted/50 p-2.5 sm:p-3 space-y-1.5 sm:space-y-2 hover:shadow-md transition-all duration-300">
                 <div className="flex justify-between items-center text-xs sm:text-sm group">
                   <span className="text-muted-foreground group-hover:text-foreground transition-colors duration-200">
@@ -179,20 +175,20 @@ export function CloseQuarterDialog({
               </div>
             </div>
 
-            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+            <DialogFooter className="flex-col sm:flex-row gap-2">
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
-                className="w-full sm:w-auto order-2 sm:order-1 hover:bg-accent transition-all duration-200 hover:scale-105"
+                className="w-full sm:w-auto hover:bg-accent transition-all duration-200"
               >
                 Cancelar
               </Button>
               <Button
                 variant="destructive"
-                onClick={handleConfirm}
+                onClick={() => handleConfirm(false)}
                 disabled={isSubmitting}
-                className="w-full sm:w-auto order-1 sm:order-2 transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed group"
+                className="w-full sm:w-auto transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed group"
               >
                 {isSubmitting ? (
                   <>
@@ -202,7 +198,25 @@ export function CloseQuarterDialog({
                 ) : (
                   <>
                     <Lock className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-                    Cerrar Trimestre
+                    Solo Cerrar
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => handleConfirm(true)}
+                disabled={isSubmitting}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 transition-all duration-200 hover:scale-105 group"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Send className="mr-2 h-4 w-4 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                    Cerrar y Enviar al SII
                   </>
                 )}
               </Button>

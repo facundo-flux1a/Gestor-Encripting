@@ -1,12 +1,17 @@
 // src/app/sii-test/page.tsx
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, XCircle, Upload, Send } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Upload, Send, FileText, ArrowLeft } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+// ============================================================
+// INTERFACES
+// ============================================================
 
 interface TestResult {
   success: boolean;
@@ -27,57 +32,227 @@ interface TestResult {
   };
 }
 
-interface SendResult {
-  success: boolean;
-  mensaje?: string;
-  error?: string;
-  respuestaAEAT?: any;
-  estadoEnvio?: string;
+interface DocumentoSII {
+  id: number;
+  num_factura: string;
+  fecha_factura: string;
+  descripcion: string;
+  nombre_empresa: string;
+  nombre_cliente: string;
+  base_imponible: string;
+  cuota_iva: string;
 }
 
-export default function SIITestPage() {
+// ============================================================
+// COMPONENTES
+// ============================================================
+
+const PageHeader = ({ onBack }: { onBack: () => void }) => (
+  <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-700">
+    <Button
+      onClick={onBack}
+      variant="outline"
+      size="lg"
+      className="group hover:bg-violet-50 dark:hover:bg-violet-950 hover:border-violet-300 transition-all duration-300 hover:shadow-lg hover:scale-105"
+    >
+      <ArrowLeft className="h-5 w-5 mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
+      <span>Volver</span>
+    </Button>
+    <div className="text-center">
+      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">
+        Envío al SII
+      </h1>
+      <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
+        Sistema de Suministro Inmediato de Información
+      </p>
+    </div>
+  </div>
+);
+
+const CertificateUpload = ({ 
+  onFileChange, 
+  certificado, 
+  password, 
+  onPasswordChange 
+}: { 
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  certificado: string;
+  password: string;
+  onPasswordChange: (value: string) => void;
+}) => (
+  <>
+    <div className="group">
+      <label className="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+        📜 Certificado Digital
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          type="file"
+          accept=".pfx,.p12"
+          onChange={onFileChange}
+          className="block w-full text-xs sm:text-sm file:mr-2 sm:file:mr-4 file:py-2 sm:file:py-3 file:px-4 sm:file:px-6 file:rounded-full file:border-0 file:text-xs sm:file:text-sm file:font-semibold file:bg-violet-100 file:text-violet-700 hover:file:bg-violet-200 dark:file:bg-violet-900 dark:file:text-violet-300 file:transition-all file:duration-300 cursor-pointer"
+        />
+        {certificado && <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-500 animate-in zoom-in duration-300 shrink-0" />}
+      </div>
+    </div>
+
+    <div className="group">
+      <label className="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+        🔐 Contraseña
+      </label>
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => onPasswordChange(e.target.value)}
+        placeholder="Escribe la contraseña"
+        className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-violet-400 dark:focus:border-violet-600 focus:ring-2 sm:focus:ring-4 focus:ring-violet-100 dark:focus:ring-violet-900 transition-all duration-300 bg-white dark:bg-gray-800"
+      />
+    </div>
+  </>
+);
+
+const ConnectionDetails = ({ details }: { details: TestResult['details'] }) => {
+  if (!details) return null;
+
+  return (
+    <Card className="border-2 border-green-200 dark:border-green-800 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+          <span className="text-xl sm:text-2xl">📋</span>
+          Detalles de la Conexión
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 sm:space-y-4 pt-4 sm:pt-6 p-4 sm:p-6">
+        <InfoSection title="🔌 Endpoint" className="bg-gray-100 dark:bg-gray-900">
+          <p className="text-xs font-mono break-all text-gray-900 dark:text-gray-100">{details.endpoint}</p>
+        </InfoSection>
+
+        <InfoSection title="📦 Servicios" className="bg-blue-50 dark:bg-blue-950">
+          <p className="text-xs text-blue-900 dark:text-blue-100">{details.services.join(', ')}</p>
+        </InfoSection>
+
+        <InfoSection title={`⚙️ Operaciones (${details.operations.length})`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {details.operations.map((op, idx) => (
+              <div key={idx} className="text-xs bg-violet-50 dark:bg-violet-950 text-violet-900 dark:text-violet-100 p-2 rounded hover:bg-violet-100 dark:hover:bg-violet-900 transition-all duration-300">
+                {op}
+              </div>
+            ))}
+          </div>
+        </InfoSection>
+
+        <div className="border-t-2 pt-3 sm:pt-4">
+          <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+            <span className="text-lg sm:text-xl">🔐</span> Certificado
+          </p>
+          <div className="space-y-2 text-xs">
+            <InfoBlock label="Subject" value={details.certificate.subject} />
+            <InfoBlock label="Emisor" value={details.certificate.issuer} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <InfoBlock label="Válido desde" value={new Date(details.certificate.validFrom).toLocaleDateString('es-ES')} className="bg-green-50 dark:bg-green-950" />
+              <InfoBlock label="Válido hasta" value={new Date(details.certificate.validTo).toLocaleDateString('es-ES')} className="bg-green-50 dark:bg-green-950" />
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const InfoSection = ({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) => (
+  <div className="group hover:bg-gray-50 dark:hover:bg-gray-800 p-2 sm:p-3 rounded-lg transition-all duration-300">
+    <p className="text-xs sm:text-sm font-semibold mb-2">{title}</p>
+    <div className={`p-2 sm:p-3 rounded ${className}`}>{children}</div>
+  </div>
+);
+
+const InfoBlock = ({ label, value, className = '' }: { label: string; value: string; className?: string }) => (
+  <div className={`p-2 sm:p-3 rounded hover:opacity-80 transition-all duration-300 ${className || 'bg-gray-50 dark:bg-gray-800'}`}>
+    <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}:</p>
+    <p className="font-mono text-gray-900 dark:text-gray-100 break-all">{value}</p>
+  </div>
+);
+
+const DocumentCard = ({ doc }: { doc: DocumentoSII }) => (
+  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-violet-200 dark:border-violet-700 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-lg transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02] group gap-2 sm:gap-0">
+    <div className="flex-1 w-full sm:w-auto">
+      <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors duration-300">
+        {doc.num_factura}
+      </p>
+      <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-1">
+        📅 {doc.fecha_factura} • {doc.descripcion}
+      </p>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+        {doc.nombre_empresa} → {doc.nombre_cliente || 'Cliente'}
+      </p>
+    </div>
+    <div className="text-left sm:text-right w-full sm:w-auto sm:ml-4">
+      <p className="font-bold text-sm sm:text-base text-violet-700 dark:text-violet-300">
+        {parseFloat(doc.base_imponible).toFixed(2)}€
+      </p>
+      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+        IVA: {parseFloat(doc.cuota_iva).toFixed(2)}€
+      </p>
+    </div>
+  </div>
+);
+
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
+
+export default function SIIPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { toast } = useToast();
+
   const [testing, setTesting] = useState(false);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
-  const [sendResult, setSendResult] = useState<SendResult | null>(null);
-  const [certificado, setCertificado] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
+  const [certificado, setCertificado] = useState('');
+  const [password, setPassword] = useState('');
+  const [documentos, setDocumentos] = useState<DocumentoSII[]>([]);
+  const [trimestreInfo, setTrimestreInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Datos de factura de prueba (valores por defecto editables)
-  const [facturaTest, setFacturaTest] = useState({
-    nif_empresa: 'B12345678',
-    num_factura: 'TEST-001',
-    fecha_factura: new Date().toISOString().split('T')[0],
-    tipo_factura: 'F1',
-    clave_regimen: '01',
-    descripcion: 'Factura de prueba SII',
-    base_imponible: '1000.00',
-    tipo_iva: '21',
-    cuota_iva: '210.00',
-    nif_cliente: 'B87654321',
-    nombre_cliente: 'Cliente Prueba SL',
-    pais_cliente: 'ES'
-  });
+  useEffect(() => {
+    const año = searchParams.get('año');
+    const trimestre = searchParams.get('trimestre');
+    const empresaId = searchParams.get('empresa_id');
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    if (año && trimestre) {
+      cargarDocumentos(año, trimestre, empresaId);
+    }
+  }, [searchParams]);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result?.toString().split(',')[1];
-      if (base64) {
-        setCertificado(base64);
+  const cargarDocumentos = async (año: string, trimestre: string, empresaId: string | null) => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({ año, trimestre });
+      if (empresaId && empresaId !== 'all') params.append('empresa_id', empresaId);
+
+      const response = await fetch(`/api/trimestres/documentos-sii?${params}`);
+      if (!response.ok) throw new Error('Error al cargar documentos');
+
+      const data = await response.json();
+      if (data.success) {
+        setDocumentos(data.documentos);
+        setTrimestreInfo({ año: data.año, trimestre: data.trimestre, total: data.total_documentos });
+        toast({
+          title: '✅ Documentos cargados',
+          description: `${data.total_documentos} documentos listos`,
+          className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
+        });
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudieron cargar los documentos', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const testConnection = async () => {
-    if (!certificado || !password) {
-      alert('Sube un certificado y escribe la contraseña');
-      return;
-    }
+    if (!certificado || !password) return alert('Sube un certificado y escribe la contraseña');
 
     setTesting(true);
     setResult(null);
@@ -86,472 +261,194 @@ export default function SIITestPage() {
       const response = await fetch('/api/sii/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          certificado_pfx: certificado,
-          password: password
-        })
+        body: JSON.stringify({ certificado_pfx: certificado, password })
       });
-
-      const data = await response.json();
-      setResult(data);
-
+      setResult(await response.json());
     } catch (error) {
-      setResult({
-        success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
-      });
+      setResult({ success: false, error: error instanceof Error ? error.message : 'Error desconocido' });
     } finally {
       setTesting(false);
     }
   };
 
-  const enviarFacturaPrueba = async () => {
-    if (!certificado || !password) {
-      alert('Primero debes probar la conexión');
-      return;
-    }
+  const enviarDocumentos = async () => {
+    if (!certificado || !password) return alert('Primero prueba la conexión');
+    if (documentos.length === 0) return alert('No hay documentos');
 
     setSending(true);
-    setSendResult(null);
-
     try {
-      const response = await fetch('/api/sii/enviar-factura', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          certificado_pfx: certificado,
-          password: password,
-          factura: facturaTest
+      const resultados = await Promise.all(
+        documentos.map(async (doc) => {
+          const response = await fetch('/api/sii/enviar-factura', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ certificado_pfx: certificado, password, factura: doc })
+          });
+          const data = await response.json();
+          return { documento: doc.num_factura, ...data };
         })
+      );
+
+      const exitosos = resultados.filter(r => r.success).length;
+      toast({
+        title: exitosos === resultados.length ? '✅ Envío completo' : '⚠️ Envío parcial',
+        description: `${exitosos}/${resultados.length} facturas enviadas`,
+        variant: exitosos === resultados.length ? 'default' : 'destructive',
       });
-
-      const data = await response.json();
-      setSendResult(data);
-
     } catch (error) {
-      setSendResult({
-        success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
-      });
+      toast({ title: 'Error', description: 'Error al enviar', variant: 'destructive' });
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div className="container max-w-6xl mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950">
+      <div className="container max-w-6xl mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+        
+        <PageHeader onBack={() => router.push('/trimestres')} />
       
-      {/* CARD 1: Test de Conexión */}
-      <Card>
-        <CardHeader>
-          <CardTitle>🧪 Test de Conexión SII - Hacienda</CardTitle>
-          <CardDescription>
-            Prueba la conexión con los servicios de la Agencia Tributaria
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          
-          {/* Upload certificado */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Certificado Digital (.pfx o .p12)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept=".pfx,.p12"
-                onChange={handleFileUpload}
-                className="block w-full text-sm"
-              />
-              {certificado && <CheckCircle className="h-5 w-5 text-green-500" />}
-            </div>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Contraseña del certificado
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Escribe la contraseña"
-              className="w-full px-3 py-2 border rounded"
-            />
-          </div>
-
-          {/* Botón test */}
-          <Button
-            onClick={testConnection}
-            disabled={testing || !certificado || !password}
-            className="w-full"
-          >
-            {testing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Probando conexión...
-              </>
-            ) : (
-              <>
-                <Upload className="mr-2 h-4 w-4" />
-                Probar Conexión
-              </>
-            )}
-          </Button>
-
-          {/* Resultado */}
-          {result && (
-            <div className="space-y-4">
-              <Alert variant={result.success ? 'default' : 'destructive'}>
-                {result.success ? (
-                  <CheckCircle className="h-4 w-4" />
-                ) : (
-                  <XCircle className="h-4 w-4" />
-                )}
-                <AlertDescription>
-                  <div className="space-y-2">
-                    <p className="font-semibold">
-                      {result.success ? '✅ Conexión exitosa' : '❌ Error de conexión'}
-                    </p>
-                    <p className="text-sm">
-                      <strong>Entorno:</strong> {result.entorno?.toUpperCase()}
-                    </p>
-                    <p className="text-sm">{result.mensaje}</p>
-                    {result.error && (
-                      <p className="text-xs text-red-600 mt-2">
-                        {result.error}
-                      </p>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
-
-              {/* Detalles de la conexión */}
-              {result.success && result.details && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">📋 Detalles de la Conexión</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    
-                    {/* Endpoint */}
-                    <div>
-                      <p className="text-sm font-semibold mb-1">🔌 Endpoint:</p>
-                      <p className="text-xs bg-gray-100 text-gray-900 p-2 rounded font-mono break-all">
-                        {result.details.endpoint}
-                      </p>
-                    </div>
-
-                    {/* Servicios */}
-                    <div>
-                      <p className="text-sm font-semibold mb-1">📦 Servicios disponibles:</p>
-                      <p className="text-xs bg-gray-100 text-gray-900 p-2 rounded">
-                        {result.details.services.join(', ')}
-                      </p>
-                    </div>
-
-                    {/* Operaciones */}
-                    <div>
-                      <p className="text-sm font-semibold mb-2">⚙️ Operaciones ({result.details.operations.length}):</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {result.details.operations.map((op, idx) => (
-                          <div key={idx} className="text-xs bg-blue-50 text-blue-900 p-2 rounded">
-                            {op}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Certificado */}
-                    <div className="border-t pt-4">
-                      <p className="text-sm font-semibold mb-2">🔐 Información del Certificado:</p>
-                      <div className="space-y-2 text-xs">
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="font-semibold text-gray-700">Subject:</p>
-                          <p className="font-mono text-gray-900">{result.details.certificate.subject}</p>
-                        </div>
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="font-semibold text-gray-700">Emisor:</p>
-                          <p className="font-mono text-gray-900">{result.details.certificate.issuer}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-green-50 p-2 rounded">
-                            <p className="font-semibold text-gray-700">Válido desde:</p>
-                            <p className="text-gray-900">{new Date(result.details.certificate.validFrom).toLocaleDateString('es-ES')}</p>
-                          </div>
-                          <div className="bg-green-50 p-2 rounded">
-                            <p className="font-semibold text-gray-700">Válido hasta:</p>
-                            <p className="text-gray-900">{new Date(result.details.certificate.validTo).toLocaleDateString('es-ES')}</p>
-                          </div>
-                        </div>
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="font-semibold text-gray-700">Serial Number:</p>
-                          <p className="font-mono break-all text-gray-900">{result.details.certificate.serialNumber}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Info */}
-          <Alert>
-            <AlertDescription className="text-xs space-y-1">
-              <p><strong>Entorno actual:</strong> {process.env.NEXT_PUBLIC_SII_ENVIRONMENT || 'PRUEBAS'}</p>
-              <p>En pruebas puedes usar cualquier certificado válido (.pfx)</p>
-              <p>Para producción necesitarás un certificado real de la FNMT</p>
-            </AlertDescription>
-          </Alert>
-
-        </CardContent>
-      </Card>
-
-      {/* CARD 2: Enviar Factura de Prueba */}
-      {result?.success && (
-        <Card className="border-2 border-blue-200">
-          <CardHeader>
-            <CardTitle>📄 Enviar Factura de Prueba</CardTitle>
-            <CardDescription>
-              Configura los datos y envía una factura al SII (entorno de pruebas)
+        {/* Test de Conexión */}
+        <Card className="animate-in fade-in slide-in-from-bottom-4 duration-700 hover:shadow-2xl transition-all duration-500 border-2 hover:border-violet-200 dark:hover:border-violet-800">
+          <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950 dark:to-indigo-950 border-b p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl lg:text-2xl flex items-center gap-2 sm:gap-3">
+              <span className="text-2xl sm:text-3xl animate-pulse">🧪</span>
+              <span className="bg-gradient-to-r from-violet-700 to-indigo-700 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">
+                Conexión con AEAT
+              </span>
+            </CardTitle>
+            <CardDescription className="text-sm sm:text-base mt-1 sm:mt-2">
+              Valida tu certificado digital
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6 p-4 sm:p-6">
             
-            {/* Grid de campos de factura */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">NIF Empresa Emisora</label>
-                <input
-                  type="text"
-                  value={facturaTest.nif_empresa}
-                  onChange={(e) => setFacturaTest({...facturaTest, nif_empresa: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="B12345678"
-                />
-              </div>
+            <CertificateUpload 
+              onFileChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const base64 = event.target?.result?.toString().split(',')[1];
+                    if (base64) setCertificado(base64);
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+              certificado={certificado}
+              password={password}
+              onPasswordChange={setPassword}
+            />
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Número Factura</label>
-                <input
-                  type="text"
-                  value={facturaTest.num_factura}
-                  onChange={(e) => setFacturaTest({...facturaTest, num_factura: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="TEST-001"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Fecha Factura</label>
-                <input
-                  type="date"
-                  value={facturaTest.fecha_factura}
-                  onChange={(e) => setFacturaTest({...facturaTest, fecha_factura: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Tipo Factura</label>
-                <select
-                  value={facturaTest.tipo_factura}
-                  onChange={(e) => setFacturaTest({...facturaTest, tipo_factura: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                >
-                  <option value="F1">F1 - Factura</option>
-                  <option value="F2">F2 - Factura Simplificada</option>
-                  <option value="R1">R1 - Factura Rectificativa</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Clave Régimen</label>
-                <select
-                  value={facturaTest.clave_regimen}
-                  onChange={(e) => setFacturaTest({...facturaTest, clave_regimen: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                >
-                  <option value="01">01 - General</option>
-                  <option value="02">02 - Exportación</option>
-                  <option value="03">03 - Operaciones UE</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Descripción</label>
-                <input
-                  type="text"
-                  value={facturaTest.descripcion}
-                  onChange={(e) => setFacturaTest({...facturaTest, descripcion: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="Servicios de consultoría"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Base Imponible (€)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={facturaTest.base_imponible}
-                  onChange={(e) => setFacturaTest({...facturaTest, base_imponible: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Tipo IVA (%)</label>
-                <select
-                  value={facturaTest.tipo_iva}
-                  onChange={(e) => {
-                    const iva = e.target.value;
-                    const base = parseFloat(facturaTest.base_imponible);
-                    const cuota = (base * parseFloat(iva) / 100).toFixed(2);
-                    setFacturaTest({...facturaTest, tipo_iva: iva, cuota_iva: cuota});
-                  }}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                >
-                  <option value="21">21%</option>
-                  <option value="10">10%</option>
-                  <option value="4">4%</option>
-                  <option value="0">0%</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Cuota IVA (€)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={facturaTest.cuota_iva}
-                  onChange={(e) => setFacturaTest({...facturaTest, cuota_iva: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  readOnly
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">NIF Cliente</label>
-                <input
-                  type="text"
-                  value={facturaTest.nif_cliente}
-                  onChange={(e) => setFacturaTest({...facturaTest, nif_cliente: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="B87654321"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre Cliente</label>
-                <input
-                  type="text"
-                  value={facturaTest.nombre_cliente}
-                  onChange={(e) => setFacturaTest({...facturaTest, nombre_cliente: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="Cliente SL"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">País Cliente</label>
-                <input
-                  type="text"
-                  value={facturaTest.pais_cliente}
-                  onChange={(e) => setFacturaTest({...facturaTest, pais_cliente: e.target.value})}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  placeholder="ES"
-                  maxLength={2}
-                />
-              </div>
-            </div>
-
-            {/* Resumen */}
-            <div className="bg-blue-50 p-4 rounded">
-              <p className="font-semibold text-sm mb-2">📊 Resumen:</p>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Base:</span>
-                  <span className="ml-2 font-semibold">{facturaTest.base_imponible}€</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">IVA ({facturaTest.tipo_iva}%):</span>
-                  <span className="ml-2 font-semibold">{facturaTest.cuota_iva}€</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Total:</span>
-                  <span className="ml-2 font-semibold text-lg">
-                    {(parseFloat(facturaTest.base_imponible) + parseFloat(facturaTest.cuota_iva)).toFixed(2)}€
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Botón enviar */}
             <Button
-              onClick={enviarFacturaPrueba}
-              disabled={sending}
-              className="w-full"
-              variant="default"
+              onClick={testConnection}
+              disabled={testing || !certificado || !password}
+              className="w-full py-4 sm:py-6 text-sm sm:text-base font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 transition-all duration-300 hover:shadow-lg hover:scale-105 disabled:opacity-50"
             >
-              {sending ? (
+              {testing ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enviando factura...
+                  <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+                  Probando...
                 </>
               ) : (
                 <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Enviar Factura al SII
+                  <Upload className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                  Probar Conexión
                 </>
               )}
             </Button>
 
-            {/* Resultado envío */}
-            {sendResult && (
-              <Alert variant={sendResult.success ? 'default' : 'destructive'}>
-                {sendResult.success ? (
-                  <CheckCircle className="h-4 w-4" />
-                ) : (
-                  <XCircle className="h-4 w-4" />
-                )}
-                <AlertDescription>
-                  <div className="space-y-2">
-                    <p className="font-semibold">
-                      {sendResult.success ? '✅ Factura enviada' : '❌ Error al enviar'}
-                    </p>
-                    <p className="text-sm">{sendResult.mensaje}</p>
-                    {sendResult.error && (
-                      <p className="text-xs text-red-600">{sendResult.error}</p>
-                    )}
-                    {sendResult.respuestaAEAT && (
-                      <div className="mt-2">
-                        <p className="text-xs font-semibold mb-1">Respuesta AEAT:</p>
-                        <pre className="text-xs bg-gray-900 text-green-400 p-2 rounded overflow-x-auto">
-                          {JSON.stringify(sendResult.respuestaAEAT, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
+            {result && (
+              <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <Alert variant={result.success ? 'default' : 'destructive'} className="border-2">
+                  {result.success ? <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5" /> : <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />}
+                  <AlertDescription>
+                    <div className="space-y-1 sm:space-y-2">
+                      <p className="font-bold text-sm sm:text-base">{result.success ? '✅ Conexión exitosa' : '❌ Error'}</p>
+                      <p className="text-xs sm:text-sm"><strong>Entorno:</strong> {result.entorno}</p>
+                      <p className="text-xs sm:text-sm">{result.mensaje}</p>
+                      {result.error && <p className="text-xs text-red-600 dark:text-red-400">{result.error}</p>}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+
+                <ConnectionDetails details={result.details} />
+              </div>
             )}
 
-            <Alert>
-              <AlertDescription className="text-xs">
-                <p className="font-semibold mb-1">⚠️ Importante:</p>
-                <p>Estás en entorno de PRUEBAS. Esta factura no afecta datos reales.</p>
-                <p className="mt-1">Los datos son ficticios y se pueden editar para probar diferentes escenarios.</p>
+            <Alert className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
+              <AlertDescription className="text-xs space-y-1 text-gray-900 dark:text-gray-100">
+                <p className="font-semibold">ℹ️ Información</p>
+                <p>Entorno: <strong>{process.env.NEXT_PUBLIC_SII_ENVIRONMENT || 'PRUEBAS'}</strong></p>
               </AlertDescription>
             </Alert>
 
           </CardContent>
         </Card>
-      )}
 
+        {/* Documentos del Trimestre */}
+        {trimestreInfo && (
+          <Card className="animate-in fade-in slide-in-from-bottom-6 duration-700 border-2 border-violet-300 dark:border-violet-700 hover:shadow-2xl transition-all duration-500 bg-gradient-to-br from-violet-50 to-indigo-100 dark:from-violet-950 dark:to-indigo-950">
+            <CardHeader className="border-b border-violet-200 dark:border-violet-800 p-4 sm:p-6">
+              <CardTitle className="flex items-center gap-2 sm:gap-3 text-violet-900 dark:text-violet-100 text-lg sm:text-xl lg:text-2xl">
+                <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-violet-600 dark:text-violet-400 animate-pulse" />
+                T{trimestreInfo.trimestre} {trimestreInfo.año}
+              </CardTitle>
+              <CardDescription className="text-violet-700 dark:text-violet-300 text-sm sm:text-base mt-1 sm:mt-2">
+                {documentos.length} documentos listos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 sm:pt-6 p-4 sm:p-6">
+              {loading ? (
+                <div className="flex items-center justify-center p-8 sm:p-12">
+                  <Loader2 className="h-8 w-8 sm:h-12 sm:w-12 animate-spin text-violet-600 dark:text-violet-400" />
+                  <span className="ml-3 sm:ml-4 text-base sm:text-lg text-violet-900 dark:text-violet-100">Cargando...</span>
+                </div>
+              ) : documentos.length > 0 ? (
+                <>
+                  <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto mb-4 sm:mb-6 pr-1 sm:pr-2">
+                    {documentos.map((doc, idx) => <DocumentCard key={idx} doc={doc} />)}
+                  </div>
+
+                  <Button
+                    onClick={enviarDocumentos}
+                    disabled={sending || !result?.success}
+                    size="lg"
+                    className="w-full py-4 sm:py-6 text-sm sm:text-base font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 transition-all duration-300 hover:shadow-lg hover:scale-105 disabled:opacity-50"
+                  >
+                    {sending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+                        Enviando {documentos.length} facturas...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                        Enviar {documentos.length} facturas
+                      </>
+                    )}
+                  </Button>
+
+                  {!result?.success && (
+                    <Alert className="mt-3 sm:mt-4 border-2 border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950">
+                      <AlertDescription className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 font-semibold">
+                        ⚠️ Primero valida tu certificado
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              ) : (
+                <Alert className="border-2">
+                  <AlertDescription className="text-gray-900 dark:text-gray-100 text-sm">
+                    No hay documentos en este trimestre
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+      </div>
     </div>
   );
 }
