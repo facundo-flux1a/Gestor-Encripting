@@ -1,5 +1,3 @@
-// src/app/api/trimestres/documentos-sii/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
 import pool from '@/lib/db';
@@ -25,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📥 [API-TRIMESTRES-DOCS-SII] Parámetros:', { año, trimestre, empresaId });
 
-    // Query para obtener documentos con datos de entidades
+    // ✅ Query modificado con filtros
     let query = `
       SELECT 
         d.id,
@@ -57,6 +55,11 @@ export async function GET(request: NextRequest) {
         d.año_trimestre = ? 
         AND d.num_trimestre = ?
         AND d.trimestre_cerrado = 1
+        AND d.enviado_sii = 0
+        AND (
+          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        )
     `;
 
     const params: any[] = [año, trimestre];
@@ -96,16 +99,14 @@ export async function GET(request: NextRequest) {
         // Datos para SII (formato factura)
         num_factura: doc.numero_documento,
         fecha_factura: doc.fecha_emision,
-        tipo_factura: 'F1', // Por defecto, ajustar según tipo_documento
+        tipo_factura: 'F1',
         clave_regimen: '01',
         descripcion: doc.tipo_documento,
         base_imponible: baseImponible.toFixed(2),
         tipo_iva: tipoIVA,
         cuota_iva: cuotaIVA.toFixed(2),
         
-        // Datos cliente/emisor (dependiendo si es ingreso o gasto)
-        // Si la empresa es el emisor, el cliente es el receptor
-        // Si la empresa es el cliente, el emisor es el proveedor
+        // Datos cliente/emisor
         nif_cliente: doc.cliente_cif || doc.emisor_cif,
         nombre_cliente: doc.cliente_nombre || doc.emisor_nombre,
         pais_cliente: 'ES'

@@ -120,108 +120,276 @@ class SIIService {
   }
 
   // ============================================================
-  // CREACIÓN DE AGENTE HTTPS
-  // ============================================================
-
-  private crearAgenteHTTPS(certPem: string, keyPem: string) {
-    return new https.Agent({
-      cert: certPem,
-      key: keyPem,
-      rejectUnauthorized: this.entorno === 'produccion',
-      minVersion: 'TLSv1.2',
-      maxVersion: 'TLSv1.3',
-      keepAlive: false
-    });
-  }
-
-  // ============================================================
-  // REQUEST PERSONALIZADO CON AXIOS
-  // ============================================================
-
-  private crearCustomRequest(certPem: string, keyPem: string) {
-    return async (options: any, callback: Function) => {
-      console.log('📤 [SII] Enviando petición SOAP...');
-
-      try {
-        const axiosConfig = {
-          method: options.method || 'POST',
-          url: options.url || options.uri,
-          data: options.body,
-          headers: options.headers || {},
-          httpsAgent: new https.Agent({
-            cert: certPem,
-            key: keyPem,
-            rejectUnauthorized: this.entorno === 'produccion',
-            minVersion: 'TLSv1.2',
-            maxVersion: 'TLSv1.3',
-            keepAlive: false
-          }),
-          maxRedirects: 0,
-          validateStatus: () => true,
-          transformResponse: [(data: any) => data],
-        };
-
-        const response = await axios(axiosConfig);
-        
-        console.log('✅ [SII] Respuesta recibida - Status:', response.status);
-        
-        if (response.status === 302) {
-          const error = new Error('Error 403: No se detecta certificado electrónico (redirect 302)');
-          console.error('❌ [SII] Redirect detectado - Certificado no válido');
-          callback(error);
-          return;
-        }
-        
-        if (response.status !== 200) {
-          const error = new Error(`Error HTTP ${response.status}: ${response.statusText || 'Error desconocido'}`);
-          console.error('❌ [SII] Error HTTP:', response.status);
-          callback(error);
-          return;
-        }
-        
-        callback(null, {
-          body: response.data,
-          statusCode: response.status,
-          headers: response.headers
-        }, response.data);
-        
-      } catch (error: any) {
-        console.error('❌ [SII] Error en petición:', error.message);
-        callback(error);
-      }
-    };
-  }
-
-  // ============================================================
-  // CREACIÓN DE CLIENTE SOAP
+  // CREACIÓN DE CLIENTE SOAP CON AXIOS
   // ============================================================
 
   private async crearCliente(certPem: string, keyPem: string): Promise<soap.Client> {
+    console.log('🔌 [SII] Creando cliente SOAP...');
+    
     await this.configurarDNS();
 
     const wsdlUrl = this.usarWSDLLocal ? WSDL_LOCAL[this.entorno] : SII_CONFIG[this.entorno].wsdl;
+    console.log(`📄 [SII] WSDL: ${wsdlUrl}`);
 
-    console.log('🔌 [SII] Creando cliente SOAP con mTLS...');
-
-    const httpsAgent = this.crearAgenteHTTPS(certPem, keyPem);
-    const customRequest = this.crearCustomRequest(certPem, keyPem);
-
-    const client = await soap.createClientAsync(wsdlUrl, {
-      endpoint: SII_CONFIG[this.entorno].endpoint,
-      wsdl_options: {
-        httpsAgent,
-        timeout: 30000,
-      },
-      request: customRequest,
+    // ✅ Crear agente HTTPS con el certificado
+    const httpsAgent = new https.Agent({
+      cert: certPem,
+      key: keyPem,
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2',
+      maxVersion: 'TLSv1.3',
+      keepAlive: true,
+      timeout: 30000,
     });
 
-    console.log('✅ [SII] Cliente SOAP creado con mTLS');
+    console.log('🔒 [SII] Agente HTTPS configurado con certificado mTLS');
 
-    return client;
+    try {
+      // ✅ Crear instancia de axios con el agente HTTPS
+      const axiosInstance = axios.create({
+        httpsAgent,
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'text/xml;charset=UTF-8',
+          'SOAPAction': '',
+        },
+      });
+
+      console.log('✅ [SII] Instancia de axios creada con certificado');
+
+      // ✅ Crear cliente SOAP con axios como transporte
+      const client = await soap.createClientAsync(wsdlUrl, {
+        endpoint: SII_CONFIG[this.entorno].endpoint,
+        request: axiosInstance,
+        wsdl_options: {
+          httpsAgent,
+        },
+      });
+
+      console.log('✅ [SII] Cliente SOAP creado correctamente');
+
+      // ✅ Verificar servicios disponibles
+      const services = client.describe();
+      const serviceNames = Object.keys(services);
+      console.log(`📋 [SII] Servicios disponibles: ${serviceNames.join(', ')}`);
+
+      if (serviceNames.length > 0) {
+        const operations = Object.keys(services[serviceNames[0]]).flatMap(port => 
+          Object.keys(services[serviceNames[0]][port])
+        );
+        console.log(`📋 [SII] Operaciones disponibles: ${operations.length}`);
+      }
+
+      return client;
+
+    } catch (error: any) {
+      console.error('❌ [SII] Error al crear cliente SOAP:', error);
+      console.error('📋 [SII] Mensaje:', error.message);
+      if (error.response) {
+        console.error('📋 [SII] Response status:', error.response.status);
+        console.error('📋 [SII] Response data:', error.response.data?.substring(0, 500));
+      }
+      throw error;
+    }
   }
 
   // ============================================================
-  // TEST DE CONEXIÓN (nombre en inglés)
+  // FORMATEO DE FECHA
+  // ============================================================
+
+  private formatearFecha(fecha: string): string {
+    const fechaISO = fecha.split('T')[0];
+    const [year, month, day] = fechaISO.split('-');
+    const resultado = `${day}-${month}-${year}`;
+    console.log(`📅 [SII] Fecha formateada: ${fecha} -> ${resultado}`);
+    return resultado;
+  }
+
+  // ============================================================
+  // ENVÍO DE FACTURAS EMITIDAS
+  // ============================================================
+
+  async enviarFacturasEmitidas(
+    payload: SIIPayload,
+    certificadoBase64: string,
+    password: string
+  ) {
+    console.log('📤 [SII] Enviando facturas emitidas...');
+    console.log(`   🏢 Empresa: ${payload.empresa_nombre} (${payload.empresa_nif})`);
+    console.log(`   📅 Periodo: ${payload.ejercicio}-${payload.periodo}`);
+    console.log(`   📄 Facturas: ${payload.facturas_emitidas.length}`);
+
+    try {
+      const { certPem, keyPem } = this.cargarCertificado(certificadoBase64, password);
+      const client = await this.crearCliente(certPem, keyPem);
+
+      console.log('📝 [SII] Construyendo XML SOAP...');
+      
+      const registros = payload.facturas_emitidas.map(factura => {
+        const registro = {
+          PeriodoLiquidacion: {
+            Ejercicio: payload.ejercicio.toString(),
+            Periodo: payload.periodo,
+          },
+          IDFactura: {
+            IDEmisorFactura: {
+              NIF: factura.nif_emisor,
+            },
+            NumSerieFacturaEmisor: factura.numero,
+            FechaExpedicionFacturaEmisor: this.formatearFecha(factura.fecha),
+          },
+          FacturaExpedida: {
+            TipoFactura: factura.tipo_factura || 'F1',
+            ClaveRegimenEspecialOTrascendencia: factura.clave_regimen || '01',
+            DescripcionOperacion: factura.descripcion,
+            ImporteTotal: factura.total.toFixed(2),
+            TipoDesglose: {
+              DesgloseFactura: {
+                Sujeta: {
+                  NoExenta: {
+                    TipoNoExenta: 'S1',
+                    DesgloseIVA: {
+                      DetalleIVA: [{
+                        TipoImpositivo: factura.tipo_iva.toFixed(2),
+                        BaseImponible: factura.base_imponible.toFixed(2),
+                        CuotaRepercutida: factura.cuota_iva.toFixed(2),
+                      }],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        };
+        
+        if (factura.nif_receptor) {
+          (registro.FacturaExpedida as any).Contraparte = {
+            NombreRazon: 'Cliente',
+            NIF: factura.nif_receptor,
+          };
+        }
+        
+        return registro;
+      });
+
+      const soapBody = {
+        Cabecera: {
+          IDVersionSii: '1.1',
+          Titular: {
+            NombreRazon: payload.empresa_nombre,
+            NIF: payload.empresa_nif,
+          },
+          TipoComunicacion: 'A0',
+        },
+        RegistroLRFacturasEmitidas: registros,
+      };
+
+      console.log('📝 [SII] XML SOAP construido');
+      console.log('📋 [SII] Body preview:', JSON.stringify(soapBody, null, 2).substring(0, 500));
+
+      if (!client.SuministroLRFacturasEmitidasAsync) {
+        const methods = Object.keys(client);
+        console.error('❌ [SII] Método SuministroLRFacturasEmitidasAsync no encontrado');
+        console.error('📋 [SII] Métodos disponibles:', methods.join(', '));
+        throw new Error('Método SuministroLRFacturasEmitidasAsync no encontrado en el cliente SOAP');
+      }
+
+      console.log('🚀 [SII] Enviando petición al SII...');
+      
+      const [result] = await client.SuministroLRFacturasEmitidasAsync(soapBody);
+      
+      console.log('✅ [SII] Respuesta recibida del SII');
+      console.log('📋 [SII] Respuesta completa:', JSON.stringify(result, null, 2).substring(0, 1000));
+
+      const respuesta = result?.RespuestaLinea || result;
+      const estadoEnvio = result?.EstadoEnvio || 'Desconocido';
+      const csv = result?.CSV || 'N/A';
+
+      let facturasArray = [];
+      if (Array.isArray(respuesta)) {
+        facturasArray = respuesta;
+      } else if (respuesta) {
+        facturasArray = [respuesta];
+      }
+
+      const detalles = facturasArray.map((factura: any) => {
+        const estado = factura.EstadoRegistro || 'Desconocido';
+        const errores = [];
+
+        if (factura.RegistroSiiFaltas?.length > 0) {
+          errores.push(...factura.RegistroSiiFaltas.map((e: any) => ({
+            codigo: e.CodigoErrorRegistro,
+            descripcion: e.DescripcionErrorRegistro
+          })));
+        }
+
+        return {
+          numero_factura: factura.IDFactura?.NumSerieFacturaEmisor || 'N/A',
+          estado,
+          errores,
+        };
+      });
+
+      const facturasAceptadas = detalles.filter((d: any) => d.estado === 'Correcto').length;
+      const facturasRechazadas = detalles.filter((d: any) => d.estado !== 'Correcto').length;
+
+      console.log('✅ [SII] Proceso completado');
+      console.log(`   ✔️  Aceptadas: ${facturasAceptadas}`);
+      console.log(`   ❌ Rechazadas: ${facturasRechazadas}`);
+
+      return {
+        success: estadoEnvio === 'Correcto',
+        csv,
+        estado: estadoEnvio,
+        facturas_aceptadas: facturasAceptadas,
+        facturas_rechazadas: facturasRechazadas,
+        detalles,
+        error_general: estadoEnvio !== 'Correcto' ? 'Algunas facturas fueron rechazadas' : null
+      };
+
+    } catch (error: any) {
+      console.error('❌ [SII] Error al enviar facturas:', error.message);
+      
+      const errorInfo: any = {
+        message: error.message,
+        stack: error.stack?.substring(0, 500),
+      };
+
+      if (error.response) {
+        errorInfo.response = {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          headers: error.response.headers,
+          data: typeof error.response.data === 'string' 
+            ? error.response.data.substring(0, 1000) 
+            : JSON.stringify(error.response.data).substring(0, 1000)
+        };
+      }
+
+      if (error.config) {
+        errorInfo.request = {
+          url: error.config.url,
+          method: error.config.method,
+          headers: error.config.headers,
+        };
+      }
+      
+      console.error('📋 [SII] Error detallado:', JSON.stringify(errorInfo, null, 2));
+      
+      return {
+        success: false,
+        csv: null,
+        estado: 'Error',
+        facturas_aceptadas: 0,
+        facturas_rechazadas: payload.facturas_emitidas.length,
+        detalles: [],
+        error_general: error.message || 'Error desconocido al conectar con AEAT'
+      };
+    }
+  }
+
+  // ============================================================
+  // TEST DE CONEXIÓN
   // ============================================================
 
   async testConnection(certificadoBase64: string, password: string) {
@@ -268,152 +436,6 @@ class SIIService {
         entorno: this.entorno.toUpperCase(),
         mensaje: 'Error al conectar con el SII',
         error: error.message
-      };
-    }
-  }
-
-  // ============================================================
-  // FORMATEO DE FECHA
-  // ============================================================
-
-  private formatearFecha(fecha: string): string {
-    const [year, month, day] = fecha.split('-');
-    return `${day}-${month}-${year}`;
-  }
-
-  // ============================================================
-  // ENVÍO DE FACTURAS EMITIDAS
-  // ============================================================
-
-  async enviarFacturasEmitidas(
-    payload: SIIPayload,
-    certificadoBase64: string,
-    password: string
-  ) {
-    console.log('📤 [SII] Enviando facturas emitidas...');
-    console.log(`   Empresa: ${payload.empresa_nombre} (${payload.empresa_nif})`);
-    console.log(`   Periodo: ${payload.ejercicio}-${payload.periodo}`);
-    console.log(`   Facturas: ${payload.facturas_emitidas.length}`);
-
-    try {
-      const { certPem, keyPem } = this.cargarCertificado(certificadoBase64, password);
-      const client = await this.crearCliente(certPem, keyPem);
-
-      const registros = payload.facturas_emitidas.map(factura => ({
-        PeriodoLiquidacion: {
-          Ejercicio: payload.ejercicio.toString(),
-          Periodo: payload.periodo,
-        },
-        IDFactura: {
-          IDEmisorFactura: {
-            NIF: factura.nif_emisor,
-          },
-          NumSerieFacturaEmisor: factura.numero,
-          FechaExpedicionFacturaEmisor: this.formatearFecha(factura.fecha),
-        },
-        FacturaExpedida: {
-          TipoFactura: factura.tipo_factura || 'F1',
-          ClaveRegimenEspecialOTrascendencia: factura.clave_regimen || '01',
-          DescripcionOperacion: factura.descripcion,
-          ImporteTotal: factura.total.toFixed(2),
-          TipoDesglose: {
-            DesgloseFactura: {
-              Sujeta: {
-                NoExenta: {
-                  TipoNoExenta: 'S1',
-                  DesgloseIVA: {
-                    DetalleIVA: [{
-                      TipoImpositivo: factura.tipo_iva.toFixed(2),
-                      BaseImponible: factura.base_imponible.toFixed(2),
-                      CuotaRepercutida: factura.cuota_iva.toFixed(2),
-                    }],
-                  },
-                },
-              },
-            },
-          },
-        },
-      }));
-
-      const soapBody = {
-        Cabecera: {
-          IDVersionSii: '1.1',
-          Titular: {
-            NombreRazon: payload.empresa_nombre,
-            NIF: payload.empresa_nif,
-          },
-          TipoComunicacion: 'A0',
-        },
-        RegistroLRFacturasEmitidas: registros,
-      };
-
-      console.log('📝 [SII] XML construido');
-
-      if (!client.SuministroLRFacturasEmitidasAsync) {
-        throw new Error('Método SuministroLRFacturasEmitidasAsync no encontrado');
-      }
-
-      const [result] = await client.SuministroLRFacturasEmitidasAsync(soapBody);
-
-      console.log('📥 [SII] Respuesta recibida de AEAT');
-
-      const respuesta = result?.RespuestaLinea || result;
-      const estadoEnvio = result?.EstadoEnvio || 'Desconocido';
-      const csv = result?.CSV || 'N/A';
-
-      let facturasArray = [];
-      if (Array.isArray(respuesta)) {
-        facturasArray = respuesta;
-      } else if (respuesta) {
-        facturasArray = [respuesta];
-      }
-
-      const detalles = facturasArray.map((factura: any) => {
-        const estado = factura.EstadoRegistro || 'Desconocido';
-        const errores = [];
-
-        if (factura.RegistroSiiFaltas?.length > 0) {
-          errores.push(...factura.RegistroSiiFaltas.map((e: any) => ({
-            codigo: e.CodigoErrorRegistro,
-            descripcion: e.DescripcionErrorRegistro
-          })));
-        }
-
-        return {
-          numero_factura: factura.IDFactura?.NumSerieFacturaEmisor || 'N/A',
-          estado,
-          errores,
-        };
-      });
-
-      const facturasAceptadas = detalles.filter((d: any) => d.estado === 'Correcto').length;
-      const facturasRechazadas = detalles.filter((d: any) => d.estado !== 'Correcto').length;
-
-      console.log('✅ [SII] Proceso completado');
-      console.log(`   Aceptadas: ${facturasAceptadas}`);
-      console.log(`   Rechazadas: ${facturasRechazadas}`);
-
-      return {
-        success: estadoEnvio === 'Correcto',
-        csv,
-        estado: estadoEnvio,
-        facturas_aceptadas: facturasAceptadas,
-        facturas_rechazadas: facturasRechazadas,
-        detalles,
-        error_general: estadoEnvio !== 'Correcto' ? 'Algunas facturas fueron rechazadas' : null
-      };
-
-    } catch (error: any) {
-      console.error('❌ [SII] Error al enviar facturas:', error.message);
-      
-      return {
-        success: false,
-        csv: null,
-        estado: 'Error',
-        facturas_aceptadas: 0,
-        facturas_rechazadas: payload.facturas_emitidas.length,
-        detalles: [],
-        error_general: error.message
       };
     }
   }

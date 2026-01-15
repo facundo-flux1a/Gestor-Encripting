@@ -2,10 +2,9 @@
 
 import type { DocumentEntity } from "@/lib/types";
 import { StatsCard } from "./stats-card";
-import { Euro, Package, ShoppingCart, Hash } from "lucide-react";
+import { Euro, Package, ShoppingCart, Hash, TrendingUp } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, LabelList } from "recharts";
-import { ProviderPurchaseHistory } from "./provider-purchase-history";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from "recharts";
 
 export type ProviderAnalyticsData = {
     provider: DocumentEntity;
@@ -51,9 +50,14 @@ const formatCurrency = (amount: number | string | null | undefined, minimumFract
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    // Formatear label como "Mes Año"
+    const [year, month] = label.split('-');
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const formattedLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+    
     return (
       <div className="rounded-lg border bg-background p-2 sm:p-3 shadow-sm max-w-[200px]">
-        <p className="font-semibold text-xs sm:text-sm break-words">{label}</p>
+        <p className="font-semibold text-xs sm:text-sm break-words">{formattedLabel}</p>
         <p className="text-primary text-xs sm:text-sm tabular-nums">
             {formatCurrency(payload[0].value)}
         </p>
@@ -64,6 +68,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
+    // 🎯 Determinar tipo de gráfico según cantidad de datos
+    const monthCount = data.monthlySpend.length;
+    const useBarChart = monthCount === 1; // Si solo hay 1 mes, usar barra
     
     return (
         <div className="space-y-4 sm:space-y-6 lg:space-y-8">
@@ -97,110 +104,130 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
 
             {/* Charts */}
             <section className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-5">
-                {/* Purchase History Chart */}
+                {/* ✅ Purchase History Chart - Adaptable según cantidad de datos */}
                 <div className="lg:col-span-3">
-                    <ProviderPurchaseHistory data={data.monthlySpend} />
-                </div>
-                
-                {/* Top Products Chart */}
-                <div className="lg:col-span-2">
                     <Card className="h-full transition-all duration-300 hover:shadow-xl hover:shadow-primary/10">
                         <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
-                            <CardTitle className="text-base sm:text-lg bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                Top 5 Productos por Gasto
+                            <CardTitle className="text-base sm:text-lg bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text flex items-center gap-2">
+                                <TrendingUp className="h-5 w-5" />
+                                Evolución del Gasto Mensual
                             </CardTitle>
                             <CardDescription className="text-xs sm:text-sm">
-                                Productos con mayor volumen de gasto de este proveedor.
+                                {monthCount === 1 
+                                    ? 'Único mes con compras registradas'
+                                    : `Historial de compras con este proveedor (${monthCount} meses)`
+                                }
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
-                            {data.topProductsBySpend.length > 0 ? (
-                              <>
-                                {/* Mobile Chart */}
-                                <ResponsiveContainer width="100%" height={280} className="sm:hidden">
-                                    <BarChart 
-                                        layout="vertical" 
-                                        data={data.topProductsBySpend} 
-                                        margin={{ top: 5, right: 60, left: 5, bottom: 5 }}
-                                    >
-                                        <XAxis type="number" hide />
-                                        <YAxis 
-                                            type="category" 
-                                            dataKey="descripcion" 
-                                            stroke="hsl(var(--muted-foreground))"
-                                            fontSize={9}
-                                            tickLine={false}
-                                            axisLine={false}
-                                            width={80}
-                                            tickFormatter={value => value.length > 12 ? `${value.substring(0, 12)}...` : value}
-                                        />
-                                        <Tooltip 
-                                            cursor={{ fill: 'hsl(var(--muted))' }} 
-                                            content={<CustomTooltip />} 
-                                        />
-                                        <Bar 
-                                            dataKey="total" 
-                                            name="Total Gastado" 
-                                            radius={[0, 4, 4, 0]} 
-                                            fill="hsl(var(--primary))"
+                            {data.monthlySpend.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={300}>
+                                    {useBarChart ? (
+                                        // 📊 Gráfico de barras para 1 solo mes
+                                        <BarChart 
+                                            data={data.monthlySpend}
+                                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                         >
-                                            <LabelList 
-                                                dataKey="total" 
-                                                position="right" 
-                                                formatter={(value: number) => `${(value/1000).toFixed(0)}k`}
-                                                className="font-semibold text-[9px]"
-                                                style={{ fill: 'hsl(var(--foreground))' }}
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                                            <XAxis 
+                                                dataKey="month" 
+                                                stroke="hsl(var(--muted-foreground))"
+                                                fontSize={12}
+                                                tickFormatter={(value) => {
+                                                    const [year, month] = value.split('-');
+                                                    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                                                    return `${monthNames[parseInt(month) - 1]} ${year}`;
+                                                }}
                                             />
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-
-                                {/* Desktop Chart */}
-                                <ResponsiveContainer width="100%" height={350} className="hidden sm:block">
-                                    <BarChart 
-                                        layout="vertical" 
-                                        data={data.topProductsBySpend} 
-                                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                                    >
-                                        <XAxis type="number" hide />
-                                        <YAxis 
-                                            type="category" 
-                                            dataKey="descripcion" 
-                                            stroke="hsl(var(--muted-foreground))"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                            width={120}
-                                            tickFormatter={value => value.length > 15 ? `${value.substring(0, 15)}...` : value}
-                                        />
-                                        <Tooltip 
-                                            cursor={{ fill: 'hsl(var(--muted))' }} 
-                                            content={<CustomTooltip />} 
-                                        />
-                                        <Bar 
-                                            dataKey="total" 
-                                            name="Total Gastado" 
-                                            radius={[0, 4, 4, 0]} 
-                                            fill="hsl(var(--primary))"
+                                            <YAxis 
+                                                stroke="hsl(var(--muted-foreground))"
+                                                fontSize={12}
+                                                tickFormatter={(value) => formatCurrency(value, 0)}
+                                            />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Bar 
+                                                dataKey="total" 
+                                                fill="hsl(var(--primary))"
+                                                radius={[8, 8, 0, 0]}
+                                                maxBarSize={100}
+                                            />
+                                        </BarChart>
+                                    ) : (
+                                        // 📈 Gráfico de líneas para 2+ meses
+                                        <LineChart 
+                                            data={data.monthlySpend}
+                                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                         >
-                                            <LabelList 
-                                                dataKey="total" 
-                                                position="right" 
-                                                formatter={(value: number) => formatCurrency(value, 0)} 
-                                                className="font-semibold text-sm"
-                                                style={{ fill: 'hsl(var(--foreground))' }}
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                                            <XAxis 
+                                                dataKey="month" 
+                                                stroke="hsl(var(--muted-foreground))"
+                                                fontSize={12}
+                                                tickFormatter={(value) => {
+                                                    const [year, month] = value.split('-');
+                                                    return `${month}/${year.slice(2)}`;
+                                                }}
                                             />
-                                        </Bar>
-                                    </BarChart>
+                                            <YAxis 
+                                                stroke="hsl(var(--muted-foreground))"
+                                                fontSize={12}
+                                                tickFormatter={(value) => {
+                                                    if (value >= 1000) return `${(value/1000).toFixed(0)}k €`;
+                                                    return `${value} €`;
+                                                }}
+                                            />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Line 
+                                                type="monotone"
+                                                dataKey="total" 
+                                                stroke="hsl(var(--primary))"
+                                                strokeWidth={3}
+                                                dot={{ fill: 'hsl(var(--primary))', r: 5 }}
+                                                activeDot={{ r: 7 }}
+                                            />
+                                        </LineChart>
+                                    )}
                                 </ResponsiveContainer>
-                              </>
                             ) : (
-                              <div className="flex h-[280px] sm:h-[350px] w-full items-center justify-center text-muted-foreground text-xs sm:text-sm">
-                                <div className="text-center space-y-2">
-                                  <Package className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                                  <p>No hay productos para mostrar.</p>
+                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                                    <div className="text-center space-y-2">
+                                        <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                                        <p className="text-xs sm:text-sm">No hay historial de compras.</p>
+                                    </div>
                                 </div>
-                              </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Top Products */}
+                <div className="lg:col-span-2">
+                    <Card className="h-full">
+                        <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
+                            <CardTitle className="text-base sm:text-lg">Top 5 Productos</CardTitle>
+                            <CardDescription className="text-xs sm:text-sm">
+                                Productos con mayor gasto
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-6">
+                            {data.topProductsBySpend.length > 0 ? (
+                                <div className="space-y-3">
+                                    {data.topProductsBySpend.map((product, index) => (
+                                        <div key={product.codigo} className="flex items-center justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">{product.descripcion}</p>
+                                                <p className="text-xs text-muted-foreground">{product.codigo}</p>
+                                            </div>
+                                            <p className="text-sm font-semibold tabular-nums whitespace-nowrap">
+                                                {formatCurrency(product.total, 0)}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex h-[200px] items-center justify-center text-muted-foreground">
+                                    <p className="text-xs sm:text-sm">No hay productos registrados</p>
+                                </div>
                             )}
                         </CardContent>
                     </Card>

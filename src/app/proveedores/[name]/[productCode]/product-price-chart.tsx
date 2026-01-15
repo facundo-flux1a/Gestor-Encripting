@@ -1,6 +1,6 @@
 'use client';
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { DocumentLine } from '@/lib/types';
 
 interface ProductPriceChartProps {
@@ -38,49 +38,96 @@ export function ProductPriceChart({ history }: ProductPriceChartProps) {
         documento: item.numero_documento,
     }));
 
+    // 🎯 Determinar tipo de gráfico según cantidad de datos
+    const useBarChart = chartData.length <= 3;
+
     return (
         <ResponsiveContainer width="100%" height={350}>
-            <LineChart
-                data={chartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                    dataKey="fecha" 
-                    className="text-xs"
-                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                />
-                <YAxis 
-                    className="text-xs"
-                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                    tickFormatter={(value) => `${value.toFixed(2)}€`}
-                />
-                <Tooltip
-                    contentStyle={{
-                        backgroundColor: 'hsl(var(--background))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                    }}
-                    formatter={(value: number) => [formatCurrency(value), 'Precio']}
-                    labelFormatter={(label, payload) => {
-                        if (payload && payload.length > 0) {
-                            const item = payload[0].payload;
-                            return `${item.fechaCompleta} - ${item.documento || 'Sin documento'}`;
-                        }
-                        return label;
-                    }}
-                />
-                <Legend />
-                <Line
-                    type="monotone"
-                    dataKey="precio"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                    activeDot={{ r: 6 }}
-                    name="Precio Unitario"
-                />
-            </LineChart>
+            {useBarChart ? (
+                // 📊 Gráfico de barras para 1-3 compras
+                <BarChart
+                    data={chartData}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                        dataKey="fecha" 
+                        className="text-xs"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <YAxis 
+                        className="text-xs"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        tickFormatter={(value) => `${value.toFixed(2)}€`}
+                    />
+                    <Tooltip
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                        }}
+                        formatter={(value: number) => [formatCurrency(value), 'Precio']}
+                        labelFormatter={(label, payload) => {
+                            if (payload && payload.length > 0) {
+                                const item = payload[0].payload;
+                                return `${item.fechaCompleta} - ${item.documento || 'Sin documento'}`;
+                            }
+                            return label;
+                        }}
+                    />
+                    <Legend />
+                    <Bar
+                        dataKey="precio"
+                        fill="hsl(var(--primary))"
+                        name="Precio Unitario"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={100}
+                    />
+                </BarChart>
+            ) : (
+                // 📈 Gráfico de líneas para 4+ compras
+                <LineChart
+                    data={chartData}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                        dataKey="fecha" 
+                        className="text-xs"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <YAxis 
+                        className="text-xs"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        tickFormatter={(value) => `${value.toFixed(2)}€`}
+                    />
+                    <Tooltip
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                        }}
+                        formatter={(value: number) => [formatCurrency(value), 'Precio']}
+                        labelFormatter={(label, payload) => {
+                            if (payload && payload.length > 0) {
+                                const item = payload[0].payload;
+                                return `${item.fechaCompleta} - ${item.documento || 'Sin documento'}`;
+                            }
+                            return label;
+                        }}
+                    />
+                    <Legend />
+                    <Line
+                        type="monotone"
+                        dataKey="precio"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                        activeDot={{ r: 6 }}
+                        name="Precio Unitario"
+                    />
+                </LineChart>
+            )}
         </ResponsiveContainer>
     );
 }

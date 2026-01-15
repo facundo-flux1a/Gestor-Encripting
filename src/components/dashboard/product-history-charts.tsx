@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import type { DocumentLine } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, ShoppingCart } from 'lucide-react';
 
 const formatCurrency = (amount: number | string | null | undefined) => {
@@ -57,6 +57,9 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
             .sort((a, b) => new Date(a.fecha_emision!).getTime() - new Date(b.fecha_emision!).getTime());
     }, [history]);
 
+    // 🎯 Determinar si usar BarChart (1-3 datos) o LineChart (4+)
+    const useBarChart = chartData.length <= 3;
+
     return (
         <div className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-2">
             {/* Chart 1 - Precio */}
@@ -67,74 +70,143 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
                         <span className="truncate">Evolución del Precio Unitario</span>
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                        Seguimiento del precio del producto a lo largo del tiempo.
+                        {chartData.length === 1 
+                            ? 'Única compra registrada'
+                            : `Historial de ${chartData.length} compras`
+                        }
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
-                    {/* Mobile Chart */}
-                    <ResponsiveContainer width="100%" height={250} className="sm:hidden">
-                        <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                                dataKey="fecha" 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={9}
-                                tickLine={false} 
-                                axisLine={false}
-                                interval="preserveStartEnd"
-                            />
-                            <YAxis 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={9}
-                                tickLine={false} 
-                                axisLine={false}
-                                tickFormatter={(value) => `${(value).toFixed(0)}€`}
-                                width={35}
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Line 
-                                type="monotone" 
-                                dataKey="precio_unitario" 
-                                name="Precio" 
-                                stroke="hsl(var(--primary))" 
-                                strokeWidth={2} 
-                                dot={{ r: 3 }} 
-                                activeDot={{ r: 5 }} 
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                    {chartData.length === 0 ? (
+                        <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground">
+                            <p className="text-sm">No hay historial de precios</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Mobile Chart */}
+                            <ResponsiveContainer width="100%" height={250} className="sm:hidden">
+                                {useBarChart ? (
+                                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            tickFormatter={(value) => `${(value).toFixed(0)}€`}
+                                            width={35}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar 
+                                            dataKey="precio_unitario" 
+                                            name="Precio"
+                                            fill="hsl(var(--primary))"
+                                            radius={[8, 8, 0, 0]}
+                                            maxBarSize={80}
+                                        />
+                                    </BarChart>
+                                ) : (
+                                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            interval="preserveStartEnd"
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            tickFormatter={(value) => `${(value).toFixed(0)}€`}
+                                            width={35}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="precio_unitario" 
+                                            name="Precio" 
+                                            stroke="hsl(var(--primary))" 
+                                            strokeWidth={2} 
+                                            dot={{ r: 3 }} 
+                                            activeDot={{ r: 5 }} 
+                                        />
+                                    </LineChart>
+                                )}
+                            </ResponsiveContainer>
 
-                    {/* Desktop Chart */}
-                    <ResponsiveContainer width="100%" height={300} className="hidden sm:block">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                                dataKey="fecha" 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={12}
-                                tickLine={false} 
-                                axisLine={false} 
-                            />
-                            <YAxis 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={12}
-                                tickLine={false} 
-                                axisLine={false}
-                                tickFormatter={(value) => formatCurrency(value as number)} 
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                            <Line 
-                                type="monotone" 
-                                dataKey="precio_unitario" 
-                                name="Precio" 
-                                stroke="hsl(var(--primary))" 
-                                strokeWidth={2} 
-                                dot={{ r: 4 }} 
-                                activeDot={{ r: 6 }} 
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                            {/* Desktop Chart */}
+                            <ResponsiveContainer width="100%" height={300} className="hidden sm:block">
+                                {useBarChart ? (
+                                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            tickFormatter={(value) => formatCurrency(value as number)} 
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend iconType="square" wrapperStyle={{ fontSize: '12px' }} />
+                                        <Bar 
+                                            dataKey="precio_unitario" 
+                                            name="Precio"
+                                            fill="hsl(var(--primary))"
+                                            radius={[8, 8, 0, 0]}
+                                            maxBarSize={100}
+                                        />
+                                    </BarChart>
+                                ) : (
+                                    <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            tickFormatter={(value) => formatCurrency(value as number)} 
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="precio_unitario" 
+                                            name="Precio" 
+                                            stroke="hsl(var(--primary))" 
+                                            strokeWidth={2} 
+                                            dot={{ r: 4 }} 
+                                            activeDot={{ r: 6 }} 
+                                        />
+                                    </LineChart>
+                                )}
+                            </ResponsiveContainer>
+                        </>
+                    )}
                 </CardContent>
             </Card>
 
@@ -146,72 +218,139 @@ export function ProductHistoryCharts({ history }: { history: DocumentLine[] }) {
                         <span className="truncate">Historial de Cantidad Comprada</span>
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                        Volumen de unidades compradas en cada transacción.
+                        {chartData.length === 1 
+                            ? 'Única compra registrada'
+                            : `Volumen en ${chartData.length} compras`
+                        }
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
-                    {/* Mobile Chart */}
-                    <ResponsiveContainer width="100%" height={250} className="sm:hidden">
-                        <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                                dataKey="fecha" 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={9}
-                                tickLine={false} 
-                                axisLine={false}
-                                interval="preserveStartEnd"
-                            />
-                            <YAxis 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={9}
-                                tickLine={false} 
-                                axisLine={false}
-                                width={30}
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Line 
-                                type="monotone" 
-                                dataKey="cantidad" 
-                                name="Cantidad" 
-                                stroke="hsl(var(--chart-3))" 
-                                strokeWidth={2} 
-                                dot={{ r: 3 }} 
-                                activeDot={{ r: 5 }} 
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                    {chartData.length === 0 ? (
+                        <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground">
+                            <p className="text-sm">No hay historial de cantidades</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Mobile Chart */}
+                            <ResponsiveContainer width="100%" height={250} className="sm:hidden">
+                                {useBarChart ? (
+                                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            width={30}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar 
+                                            dataKey="cantidad" 
+                                            name="Cantidad"
+                                            fill="hsl(var(--chart-3))"
+                                            radius={[8, 8, 0, 0]}
+                                            maxBarSize={80}
+                                        />
+                                    </BarChart>
+                                ) : (
+                                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            interval="preserveStartEnd"
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={9}
+                                            tickLine={false} 
+                                            axisLine={false}
+                                            width={30}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="cantidad" 
+                                            name="Cantidad" 
+                                            stroke="hsl(var(--chart-3))" 
+                                            strokeWidth={2} 
+                                            dot={{ r: 3 }} 
+                                            activeDot={{ r: 5 }} 
+                                        />
+                                    </LineChart>
+                                )}
+                            </ResponsiveContainer>
 
-                    {/* Desktop Chart */}
-                    <ResponsiveContainer width="100%" height={300} className="hidden sm:block">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                                dataKey="fecha" 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={12}
-                                tickLine={false} 
-                                axisLine={false} 
-                            />
-                            <YAxis 
-                                stroke="hsl(var(--muted-foreground))" 
-                                fontSize={12}
-                                tickLine={false} 
-                                axisLine={false} 
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                            <Line 
-                                type="monotone" 
-                                dataKey="cantidad" 
-                                name="Cantidad" 
-                                stroke="hsl(var(--chart-3))" 
-                                strokeWidth={2} 
-                                dot={{ r: 4 }} 
-                                activeDot={{ r: 6 }} 
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                            {/* Desktop Chart */}
+                            <ResponsiveContainer width="100%" height={300} className="hidden sm:block">
+                                {useBarChart ? (
+                                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend iconType="square" wrapperStyle={{ fontSize: '12px' }} />
+                                        <Bar 
+                                            dataKey="cantidad" 
+                                            name="Cantidad"
+                                            fill="hsl(var(--chart-3))"
+                                            radius={[8, 8, 0, 0]}
+                                            maxBarSize={100}
+                                        />
+                                    </BarChart>
+                                ) : (
+                                    <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis 
+                                            dataKey="fecha" 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <YAxis 
+                                            stroke="hsl(var(--muted-foreground))" 
+                                            fontSize={12}
+                                            tickLine={false} 
+                                            axisLine={false} 
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="cantidad" 
+                                            name="Cantidad" 
+                                            stroke="hsl(var(--chart-3))" 
+                                            strokeWidth={2} 
+                                            dot={{ r: 4 }} 
+                                            activeDot={{ r: 6 }} 
+                                        />
+                                    </LineChart>
+                                )}
+                            </ResponsiveContainer>
+                        </>
+                    )}
                 </CardContent>
             </Card>
         </div>

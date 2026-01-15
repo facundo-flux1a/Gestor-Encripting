@@ -15,7 +15,7 @@ export const UserSchema = z.object({
   tutorial_actividad: z.number().optional(),
   tutorial_individual: z.number().optional(),
   tutorial_incidencias: z.number().optional(),
-  tutorial_proveedores: z.number().optional(), // ⬅️ NUEVO
+  tutorial_proveedores: z.number().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -30,7 +30,7 @@ export const SessionPayloadSchema = z.object({
   tutorialActividad: z.number().optional(),
   tutorialIndividual: z.number().optional(),
   tutorialIncidencias: z.number().optional(),
-  tutorialProveedores: z.number().optional(), // ⬅️ NUEVO
+  tutorialProveedores: z.number().optional(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 
@@ -163,6 +163,7 @@ export type Document = {
   trimestre_cerrado?: number;
 };
 
+// ✅ MODIFICADO: Agregar campos de trimestre
 export const DocumentUpdateSchema = z.object({
   numero_documento: z.string().min(1, "El número de documento es obligatorio.").nullable(),
   fecha_emision: z.string().min(1, "La fecha es obligatoria.").nullable(),
@@ -175,6 +176,9 @@ export const DocumentUpdateSchema = z.object({
   entidades: z.array(DocumentEntitySchema),
   lineas: z.array(DocumentLineSchema),
   iva_details: z.array(IvaDetailSchema),
+  // ✅ NUEVO: Campos de trimestre
+  año_trimestre: z.number().optional(),
+  num_trimestre: z.number().min(1).max(4).optional(),
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;
