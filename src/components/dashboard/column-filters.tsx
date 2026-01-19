@@ -1,6 +1,6 @@
 'use client';
 
-import { Column } from '@tanstack/react-table';
+import { Column, Table } from '@tanstack/react-table';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -96,37 +96,74 @@ export function DataTableFacetedFilter<TData, TValue>({
   );
 }
 
-// ✅ Filtro de Cliente con carga dinámica
+// ✅ Filtro de Cliente: Trae todos desde API y filtra por los que están en la tabla
 export function ClienteFilter<TData, TValue>({
   column,
+  table,
 }: {
   column?: Column<TData, TValue>;
+  table?: Table<TData>;
 }) {
   const [clientes, setClientes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { selectedCompanyIds } = useCompanyContext();
 
   useEffect(() => {
-    async function fetchClientes() {
+    async function fetchAndFilterClientes() {
+      if (!table) {
+        console.warn('⚠️ [ClienteFilter] No se proporcionó table');
+        return;
+      }
+
       setLoading(true);
       try {
+        // 1️⃣ Traer TODOS los clientes desde la API (sin filtrar)
         const params = new URLSearchParams();
         if (selectedCompanyIds.length > 0) {
           params.set('empresaIds', JSON.stringify(selectedCompanyIds));
         }
 
+        console.log('📡 [ClienteFilter] Llamando API para traer todos los clientes...');
         const response = await fetch(`/api/filters/clientes?${params}`);
         const data = await response.json();
-        setClientes(data.clientes || []);
+        const todosLosClientes = data.clientes || [];
+
+        console.log('📦 [ClienteFilter] Clientes totales de API:', todosLosClientes.length);
+
+        // 2️⃣ Extraer clientes que REALMENTE están en la tabla actual
+        const allRows = table.getPreFilteredRowModel().rows;
+        const clientesEnTabla = new Set<string>();
+        
+        allRows.forEach((row: any) => {
+          const cliente = row.original.entidades?.find(
+            (e: any) => e.rol === 'cliente' || e.rol === 'receptor'
+          );
+          
+          if (cliente?.nombre && cliente.nombre !== 'Sin cliente') {
+            clientesEnTabla.add(cliente.nombre);
+          }
+        });
+
+        console.log('📊 [ClienteFilter] Clientes en tabla actual:', clientesEnTabla.size);
+
+        // 3️⃣ Filtrar: Solo mostrar los que están en AMBOS lados
+        const clientesFiltrados = todosLosClientes
+          .filter((nombre: string) => clientesEnTabla.has(nombre))
+          .sort();
+
+        console.log('✅ [ClienteFilter] Clientes filtrados para mostrar:', clientesFiltrados.length);
+        
+        setClientes(clientesFiltrados);
       } catch (error) {
         console.error('❌ Error al cargar clientes:', error);
+        setClientes([]);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchClientes();
-  }, [selectedCompanyIds]);
+    fetchAndFilterClientes();
+  }, [selectedCompanyIds, table]);
 
   return (
     <DataTableFacetedFilter
@@ -137,37 +174,72 @@ export function ClienteFilter<TData, TValue>({
   );
 }
 
-// ✅ Filtro de Proveedor con carga dinámica
+// ✅ Filtro de Proveedor: Trae todos desde API y filtra por los que están en la tabla
 export function ProveedorFilter<TData, TValue>({
   column,
+  table,
 }: {
   column?: Column<TData, TValue>;
+  table?: Table<TData>;
 }) {
   const [proveedores, setProveedores] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { selectedCompanyIds } = useCompanyContext();
 
   useEffect(() => {
-    async function fetchProveedores() {
+    async function fetchAndFilterProveedores() {
+      if (!table) {
+        console.warn('⚠️ [ProveedorFilter] No se proporcionó table');
+        return;
+      }
+
       setLoading(true);
       try {
+        // 1️⃣ Traer TODOS los proveedores desde la API (sin filtrar)
         const params = new URLSearchParams();
         if (selectedCompanyIds.length > 0) {
           params.set('empresaIds', JSON.stringify(selectedCompanyIds));
         }
 
+        console.log('📡 [ProveedorFilter] Llamando API para traer todos los proveedores...');
         const response = await fetch(`/api/filters/proveedores?${params}`);
         const data = await response.json();
-        setProveedores(data.proveedores || []);
+        const todosLosProveedores = data.proveedores || [];
+
+        console.log('📦 [ProveedorFilter] Proveedores totales de API:', todosLosProveedores.length);
+
+        // 2️⃣ Extraer proveedores que REALMENTE están en la tabla actual
+        const allRows = table.getPreFilteredRowModel().rows;
+        const proveedoresEnTabla = new Set<string>();
+        
+        allRows.forEach((row: any) => {
+          const proveedor = row.original.proveedor;
+          
+          if (proveedor && proveedor !== 'N/A' && proveedor !== 'Sin proveedor') {
+            proveedoresEnTabla.add(proveedor);
+          }
+        });
+
+        console.log('📊 [ProveedorFilter] Proveedores en tabla actual:', proveedoresEnTabla.size);
+
+        // 3️⃣ Filtrar: Solo mostrar los que están en AMBOS lados
+        const proveedoresFiltrados = todosLosProveedores
+          .filter((nombre: string) => proveedoresEnTabla.has(nombre))
+          .sort();
+
+        console.log('✅ [ProveedorFilter] Proveedores filtrados para mostrar:', proveedoresFiltrados.length);
+        
+        setProveedores(proveedoresFiltrados);
       } catch (error) {
         console.error('❌ Error al cargar proveedores:', error);
+        setProveedores([]);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchProveedores();
-  }, [selectedCompanyIds]);
+    fetchAndFilterProveedores();
+  }, [selectedCompanyIds, table]);
 
   return (
     <DataTableFacetedFilter

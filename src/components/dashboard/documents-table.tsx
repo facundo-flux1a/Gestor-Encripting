@@ -32,7 +32,6 @@ import { confirmDocument } from '@/services/document-client-service';
 import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
 import { deleteDocument } from '@/services/document-service';
 
-// 🎯 FUNCIONES DE FORMATO MANUAL
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
   if (isNaN(value)) return '0';
@@ -68,7 +67,6 @@ const getColumns = (
     duplicates: Set<number> = new Set()
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
-    // 🎯 COLUMNA DE ACCIONES
     {
       id: 'actions',
       header: 'Acciones',
@@ -182,7 +180,6 @@ const getColumns = (
       enableHiding: false,
     },
 
-    // 🎯 COLUMNA SELECT + ID
     {
       id: 'select',
       header: ({ table }) => {
@@ -226,17 +223,16 @@ const getColumns = (
       footer: () => <span className="font-bold text-sm">Totales</span>,
     },
 
-    // 🎯 COLUMNA CLIENTE CON FILTRO
     {
       id: 'empresa_factura',
       accessorFn: (row) => {
         const cliente = row.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         return cliente?.nombre || 'Sin cliente';
       },
-      header: ({ column }) => (
+      header: ({ column, table }) => (
         <div className="flex items-center gap-2">
           <span>Cliente</span>
-          <ClienteFilter column={column} />
+          <ClienteFilter column={column} table={table} />
         </div>
       ),
       cell: ({ row }) => {
@@ -255,7 +251,8 @@ const getColumns = (
         return value.includes(nombre);
       },
       footer: () => null,
-    },// 🎯 COLUMNA EMPRESA SISTEMA
+    },
+
     {
       id: 'empresa_sistema',
       header: 'Empresa (Sistema)',
@@ -270,7 +267,6 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA NÚMERO DE FACTURA
     {
       accessorKey: 'numero_documento',
       header: 'Nº Factura',
@@ -292,7 +288,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA FECHA CONTABLE
     {
       accessorKey: 'fecha_emision',
       header: 'Fecha Contable',
@@ -312,7 +307,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA FECHA DE CARGA
     {
       accessorKey: 'fecha_creacion',
       header: 'Fecha de Carga',
@@ -343,7 +337,6 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA TRIMESTRE
     {
       id: 'trimestre',
       header: 'Trimestre',
@@ -375,14 +368,13 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA PROVEEDOR CON FILTRO
     {
       id: 'proveedor',
       accessorFn: (row) => row.proveedor,
-      header: ({ column }) => (
+      header: ({ column, table }) => (
         <div className="flex items-center gap-2">
           <span>Proveedor</span>
-          <ProveedorFilter column={column} />
+          <ProveedorFilter column={column} table={table} />
         </div>
       ),
       cell: ({ row, table }) => {
@@ -404,7 +396,6 @@ const getColumns = (
       },
     },
 
-    // 🎯 COLUMNA CIF
     {
       accessorKey: 'cif',
       header: 'CIF',
@@ -423,7 +414,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA CONCEPTO
     {
       accessorKey: 'observaciones',
       header: 'Concepto',
@@ -442,7 +432,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA INCIDENCIA
     {
       id: 'incidencia_motivo',
       header: 'Motivo Incidencia',
@@ -489,7 +478,6 @@ const getColumns = (
       minSize: 200,
     },
 
-    // 🎯 COLUMNA TIPO DOCUMENTO
     {
       accessorKey: 'tipo_documento',
       header: 'Tipo Documento',
@@ -506,9 +494,7 @@ const getColumns = (
           />
         );
       }
-    },
-    // 🎯 COLUMNAS DE IVA - Base e IVA para cada porcentaje (21%, 10%, 4%, 0%)
-    ...[21, 10, 4, 0].flatMap(rate => ([
+    },...[21, 10, 4, 0].flatMap(rate => ([
       {
         id: `base_${rate}`,
         header: `Base ${rate}%`,
@@ -563,7 +549,6 @@ const getColumns = (
       }
     ])),
 
-    // 🎯 COLUMNA RETENCIÓN
     {
       accessorKey: 'retencion',
       header: 'Retención',
@@ -591,7 +576,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA TOTAL BASE IMPONIBLE
     {
       accessorKey: 'base_imponible',
       header: 'Total Base',
@@ -615,7 +599,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA TOTAL IVA
     {
       accessorKey: 'iva',
       header: 'Total IVA',
@@ -639,7 +622,6 @@ const getColumns = (
       }
     },
 
-    // 🎯 COLUMNA TOTAL FINAL
     {
       accessorKey: 'total',
       header: 'Total',
@@ -665,7 +647,8 @@ const getColumns = (
   ];
 
   return columns;
-}// 🎯 COMPONENTE PRINCIPAL DocumentsTable
+}
+
 export function DocumentsTable({ 
   documents, 
   hiddenColumns = [], 
@@ -685,7 +668,6 @@ export function DocumentsTable({
   enableColumnPersistence?: boolean,
   onDocumentChanged?: () => void,
 }) {
-  // 🎨 STATES
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -701,12 +683,10 @@ export function DocumentsTable({
 
   const { selectedCompanyIds } = useCompanyContext();
 
-  // Hook de detección de duplicados
   const { checkDuplicates, duplicates } = useDuplicateDetection();
   
   console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));
   
-  // Verificar duplicados cuando cambian los documentos
   useEffect(() => {
     if (documents.length > 0) {
       const timer = setTimeout(async () => {
@@ -723,7 +703,6 @@ export function DocumentsTable({
     console.log('🎯 [DocumentsTable] Total duplicados:', duplicates.size);
   }, [duplicates]);
 
-  // 🎨 HANDLERS
   const handleUpdate = useCallback(async (docId: number, fieldName: string, value: any) => {
     console.log('📝 [handleUpdate] Actualización:', { docId, fieldName, value });
     
@@ -864,10 +843,7 @@ export function DocumentsTable({
   ), [handleUpdate, showConfirmButton, duplicates]);
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
-  const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
-  
-  // 🎨 RENDER
-  return (
+  const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;return (
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -989,9 +965,7 @@ export function DocumentsTable({
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      </AlertDialog><AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-lg">
