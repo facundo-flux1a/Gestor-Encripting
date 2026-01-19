@@ -116,7 +116,7 @@ export function UploadDialog({
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (!selectedCompanyId || files.length === 0) {
       toast({
         title: "⚠️ Datos incompletos",
@@ -137,11 +137,17 @@ export function UploadDialog({
     }
 
     setIsUploading(true);
-    let successCount = 0;
-    let errorCount = 0;
+    
+    // Iniciar uploads en segundo plano (sin await)
+    const filesToUpload = [...files];
+    const companyId = selectedCompanyId;
+    
+    // Proceso en segundo plano
+    (async () => {
+      let successCount = 0;
+      let errorCount = 0;
 
-    try {
-      for (const file of files) {
+      for (const file of filesToUpload) {
         try {
           const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
@@ -153,12 +159,11 @@ export function UploadDialog({
           
           const formData = new FormData();
           formData.append('file', file);
-          formData.append('empresaId', selectedCompanyId);
+          formData.append('empresaId', companyId);
           formData.append('uploadId', uploadId);
 
           await uploadDocument(formData);
           successCount++;
-          
         } catch (error: any) {
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
           errorCount++;
@@ -175,27 +180,38 @@ export function UploadDialog({
         }
       }
 
+      // Mostrar toast de resultado al final
       if (successCount > 0) {
         toast({
-          title: "✅ Archivos enviados",
-          description: `${successCount} archivo(s) en procesamiento${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
+          title: "✅ Archivos procesados",
+          description: `${successCount} archivo(s) completados${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
         });
-
-        // 🔥 DISPARAR EVENTO PARA EL TUTORIAL
-        console.log('🎯 [UploadDialog] Disparando evento documentUploaded');
-        window.dispatchEvent(new Event('documentUploaded'));
       }
-    } finally {
+    })();
+
+    // Mostrar toast inmediato
+    toast({
+      title: "✅ Archivos enviados",
+      description: `${filesToUpload.length} archivo(s) en procesamiento`,
+    });
+
+    // 🔥 DISPARAR EVENTO PARA EL TUTORIAL
+    console.log('🎯 [UploadDialog] Disparando evento documentUploaded');
+    window.dispatchEvent(new Event('documentUploaded'));
+
+    // ⏱️ CERRAR DESPUÉS DE 2 SEGUNDOS
+    console.log('⏱️ [UploadDialog] Iniciando timeout de 2 segundos...');
+    setTimeout(() => {
+      console.log('🔒 [UploadDialog] ¡CERRANDO MODAL AHORA!');
       setFiles([]);
       setSelectedCompanyId('');
       setIsUploading(false);
-      
       onClose();
       
       setTimeout(() => {
         onUploadComplete?.();
       }, 100);
-    }
+    }, 2000);
   };
 
   const handleClose = () => {
@@ -217,7 +233,7 @@ export function UploadDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
+      if (!open && !isUploading) {
         handleClose();
       }
     }}>
