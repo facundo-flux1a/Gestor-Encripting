@@ -2932,3 +2932,96 @@ export async function getDashboardExportData(
     throw error;
   }
 }
+/**
+ * Obtiene lista única de clientes para filtros
+ * ✅ NUEVA FUNCIÓN: Acepta filtro por empresas
+ */
+export async function getUniqueClients(empresaIds?: number[]): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    let query = `
+      SELECT DISTINCT e.nombre
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE (e.rol = 'receptor' OR e.rol = 'cliente')
+        AND e.nombre IS NOT NULL
+        AND e.nombre != ''
+        AND emp.id_de_usuario = ?
+    `;
+
+    const params: any[] = [user.id];
+
+    // ✅ Filtro por empresas si se especifica
+    if (empresaIds && empresaIds.length > 0) {
+      const placeholders = empresaIds.map(() => '?').join(',');
+      query += ` AND d.id_de_empresa IN (${placeholders})`;
+      params.push(...empresaIds);
+    }
+
+    query += ` ORDER BY e.nombre ASC`;
+
+    console.log('📝 [getUniqueClients] Query:', query);
+    console.log('📝 [getUniqueClients] Params:', params);
+
+    const [rows] = await db.query<RowDataPacket[]>(query, params);
+
+    const clientes = rows.map(r => r.nombre);
+
+    console.log('✅ [getUniqueClients] Clientes encontrados:', clientes.length);
+
+    return clientes;
+  } catch (error) {
+    console.error('❌ [getUniqueClients] Error:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene lista única de proveedores para filtros (NOMBRES, no entities)
+ * ✅ REEMPLAZA la función existente getUniqueProviders() que retorna DocumentEntity[]
+ */
+export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    let query = `
+      SELECT DISTINCT e.nombre
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE (e.rol = 'proveedor' OR e.rol = 'emisor')
+        AND e.nombre IS NOT NULL
+        AND e.nombre != ''
+        AND emp.id_de_usuario = ?
+    `;
+
+    const params: any[] = [user.id];
+
+    // ✅ Filtro por empresas si se especifica
+    if (empresaIds && empresaIds.length > 0) {
+      const placeholders = empresaIds.map(() => '?').join(',');
+      query += ` AND d.id_de_empresa IN (${placeholders})`;
+      params.push(...empresaIds);
+    }
+
+    query += ` ORDER BY e.nombre ASC`;
+
+    console.log('📝 [getUniqueProvidersNames] Query:', query);
+    console.log('📝 [getUniqueProvidersNames] Params:', params);
+
+    const [rows] = await db.query<RowDataPacket[]>(query, params);
+
+    const proveedores = rows.map(r => r.nombre);
+
+    console.log('✅ [getUniqueProvidersNames] Proveedores encontrados:', proveedores.length);
+
+    return proveedores;
+  } catch (error) {
+    console.error('❌ [getUniqueProvidersNames] Error:', error);
+    return [];
+  }
+}

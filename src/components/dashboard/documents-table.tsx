@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DocumentPreviewDialog } from './document-preview-dialog';
-import { CleanDuplicatesButton } from './clean-duplicates-button'; // ⬅️ NUEVO
+import { CleanDuplicatesButton } from './clean-duplicates-button';
+import { ClienteFilter, ProveedorFilter } from './column-filters';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
@@ -15,7 +16,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
 import { useToast } from '@/hooks/use-toast';
-import { useCompanyContext } from '@/context/CompanyProvider'; // ⬅️ NUEVO
+import { useCompanyContext } from '@/context/CompanyProvider';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +30,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { confirmDocument } from '@/services/document-client-service';
 import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
+import { deleteDocument } from '@/services/document-service';
 
 // 🎯 FUNCIONES DE FORMATO MANUAL
 const formatNumber = (num: number | string): string => {
@@ -224,10 +226,19 @@ const getColumns = (
       footer: () => <span className="font-bold text-sm">Totales</span>,
     },
 
-    // 🎯 COLUMNA CLIENTE
+    // 🎯 COLUMNA CLIENTE CON FILTRO
     {
       id: 'empresa_factura',
-      header: 'Cliente',
+      accessorFn: (row) => {
+        const cliente = row.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        return cliente?.nombre || 'Sin cliente';
+      },
+      header: ({ column }) => (
+        <div className="flex items-center gap-2">
+          <span>Cliente</span>
+          <ClienteFilter column={column} />
+        </div>
+      ),
       cell: ({ row }) => {
         const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
@@ -237,10 +248,14 @@ const getColumns = (
           </div>
         );
       },
+      filterFn: (row, id, value) => {
+        if (!value || value.length === 0) return true;
+        const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const nombre = cliente?.nombre || 'Sin cliente';
+        return value.includes(nombre);
+      },
       footer: () => null,
-    },
-
-    // 🎯 COLUMNA EMPRESA SISTEMA
+    },// 🎯 COLUMNA EMPRESA SISTEMA
     {
       id: 'empresa_sistema',
       header: 'Empresa (Sistema)',
@@ -360,10 +375,16 @@ const getColumns = (
       footer: () => null,
     },
 
-    // 🎯 COLUMNA PROVEEDOR
+    // 🎯 COLUMNA PROVEEDOR CON FILTRO
     {
-      accessorKey: 'proveedor',
-      header: 'Proveedor',
+      id: 'proveedor',
+      accessorFn: (row) => row.proveedor,
+      header: ({ column }) => (
+        <div className="flex items-center gap-2">
+          <span>Proveedor</span>
+          <ProveedorFilter column={column} />
+        </div>
+      ),
       cell: ({ row, table }) => {
         return (
           <EditableCell 
@@ -376,7 +397,11 @@ const getColumns = (
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
         );
-      }
+      },
+      filterFn: (row, id, value) => {
+        if (!value || value.length === 0) return true;
+        return value.includes(row.original.proveedor);
+      },
     },
 
     // 🎯 COLUMNA CIF
@@ -640,9 +665,7 @@ const getColumns = (
   ];
 
   return columns;
-}
-
-// 🎯 COMPONENTE PRINCIPAL DocumentsTable
+}// 🎯 COMPONENTE PRINCIPAL DocumentsTable
 export function DocumentsTable({ 
   documents, 
   hiddenColumns = [], 
@@ -676,7 +699,6 @@ export function DocumentsTable({
   const router = useRouter();
   const { toast } = useToast();
 
-  // ⬅️ NUEVO: Context para obtener empresa seleccionada
   const { selectedCompanyIds } = useCompanyContext();
 
   // Hook de detección de duplicados
@@ -702,23 +724,22 @@ export function DocumentsTable({
   }, [duplicates]);
 
   // 🎨 HANDLERS
- const handleUpdate = useCallback(async (docId: number, fieldName: string, value: any) => {
-  console.log('📝 [handleUpdate] Actualización:', { docId, fieldName, value });
-  
-  // ✅ REFRESCAR data desde el servidor
-  if (onDocumentChanged) {
-    console.log('🔄 [handleUpdate] Refrescando documentos desde el servidor...');
-    onDocumentChanged();
-  }
-  
-  // ✅ Si es número de documento, verificar duplicados
-  if (fieldName === 'numero_documento') {
-    setTimeout(async () => {
-      console.log('🔍 [handleUpdate] Verificando duplicados después de editar...');
-      await checkDuplicates();
-    }, 500);
-  }
-}, [checkDuplicates, onDocumentChanged]);
+  const handleUpdate = useCallback(async (docId: number, fieldName: string, value: any) => {
+    console.log('📝 [handleUpdate] Actualización:', { docId, fieldName, value });
+    
+    if (onDocumentChanged) {
+      console.log('🔄 [handleUpdate] Refrescando documentos desde el servidor...');
+      onDocumentChanged();
+    }
+    
+    if (fieldName === 'numero_documento') {
+      setTimeout(async () => {
+        console.log('🔍 [handleUpdate] Verificando duplicados después de editar...');
+        await checkDuplicates();
+      }, 500);
+    }
+  }, [checkDuplicates, onDocumentChanged]);
+
   const handleSummarize = (doc: Document) => {
     setSelectedDocForSummary(doc);
     setIsSummarizeOpen(true);
@@ -844,11 +865,11 @@ export function DocumentsTable({
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
   const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
+  
   // 🎨 RENDER
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        {/* ⬅️ NUEVO: Toolbar con botón de limpiar duplicados */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
@@ -862,7 +883,6 @@ export function DocumentsTable({
             )}
           </div>
           
-          {/* ⬅️ NUEVO: Botón Limpiar Duplicados */}
           <CleanDuplicatesButton
             empresaId={selectedCompanyIds[0] || null}
             onComplete={() => {
@@ -876,9 +896,7 @@ export function DocumentsTable({
           />
         </div>
         
-        {/* Wrapper con scroll horizontal optimizado */}
         <div className="relative w-full group" data-tutorial="documents-table">
-          {/* Contenedor de scroll optimizado con sombra sutil */}
           <div className="w-full overflow-x-auto rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border">
             <DataTable 
               columns={columns} 
@@ -891,7 +909,6 @@ export function DocumentsTable({
             />
           </div>
           
-          {/* Indicador de scroll mejorado - solo visible en mobile */}
           <div className="lg:hidden text-center text-xs text-muted-foreground mt-3 py-1.5 flex items-center justify-center gap-2 transition-opacity duration-300 opacity-70 hover:opacity-100">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
             <span className="font-medium">Desliza horizontalmente para ver más</span>
@@ -900,14 +917,12 @@ export function DocumentsTable({
         </div>
       </div>
       
-      {/* 🎨 DIALOG: Resumir con IA */}
       <SummarizeDialog 
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
       />
 
-      {/* 🎨 DIALOG: Preview del Documento */}
       <DocumentPreviewDialog
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
@@ -915,7 +930,6 @@ export function DocumentsTable({
         documentName={previewName}
       />
 
-      {/* 🎨 ALERT DIALOG: Confirmar Documento */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
@@ -977,7 +991,6 @@ export function DocumentsTable({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 🎨 ALERT DIALOG: Eliminar Documento */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
