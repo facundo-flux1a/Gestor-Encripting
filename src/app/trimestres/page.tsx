@@ -24,7 +24,9 @@ import {
   Receipt,
   Send,
   Building2,
-  DollarSign, // ✅ NUEVO ICONO para Beneficio Bruto
+  DollarSign,
+  ArrowUpCircle, // ✅ NUEVO: Para IVA Repercutido
+  ArrowDownCircle, // ✅ NUEVO: Para IVA Soportado
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
@@ -435,21 +437,25 @@ function TrimestresPageContent() {
             </div>
           ) : null}
 
-          {/* ✅ MODIFICADO: Ahora con 5 cards en grid-cols-5 */}
+          {/* ✅ MODIFICADO: Ahora con 7 cards en grid-cols-7 */}
           {isLoading ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5">
-              {[...Array(5)].map((_, i) => (
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7">
+              {[...Array(7)].map((_, i) => (
                 <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
               ))}
             </div>
           ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5" data-tutorial="trimestres-stats">
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7" data-tutorial="trimestres-stats">
+              
+              {/* 1️⃣ Total Documentos */}
               <TrimestreStatsCard
                 title="Total Documentos"
                 value={trimestreAgregado.total_documentos}
                 icon={FileText}
                 description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
               />
+              
+              {/* 2️⃣ Ingresos */}
               <TrimestreStatsCard
                 title="Ingresos"
                 value={formatCurrency(trimestreAgregado.total_ingresos)}
@@ -457,6 +463,8 @@ function TrimestresPageContent() {
                 description="Total facturado"
                 trend="up"
               />
+              
+              {/* 3️⃣ Gastos */}
               <TrimestreStatsCard
                 title="Gastos"
                 value={formatCurrency(trimestreAgregado.total_gastos)}
@@ -464,7 +472,8 @@ function TrimestresPageContent() {
                 description="Total gastado"
                 trend="down"
               />
-              {/* ✅ NUEVA CARD: Beneficio Bruto */}
+              
+              {/* 4️⃣ Beneficio Bruto */}
               <TrimestreStatsCard
                 title="Beneficio Bruto"
                 value={formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos)}
@@ -478,12 +487,46 @@ function TrimestresPageContent() {
                       : 'neutral'
                 }
               />
+              
+              {/* 🆕 5️⃣ IVA REPERCUTIDO (lo que COBRAS - facturas emitidas) */}
+              <TrimestreStatsCard
+                title="IVA Repercutido"
+                value={formatCurrency(trimestreAgregado.iva_repercutido)}
+                icon={ArrowUpCircle}
+                description="IVA cobrado"
+                trend="neutral"
+              />
+              
+              {/* 🆕 6️⃣ IVA SOPORTADO (lo que PAGAS - facturas recibidas) */}
+              <TrimestreStatsCard
+                title="IVA Soportado"
+                value={formatCurrency(trimestreAgregado.iva_soportado)}
+                icon={ArrowDownCircle}
+                description="IVA pagado"
+                trend="neutral"
+              />
+              
+              {/* 🆕 7️⃣ IVA NETO (diferencia: a pagar o a devolver) */}
               <TrimestreStatsCard
                 title="IVA Neto"
                 value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
                 icon={Receipt}
-                description="Repercutido - Soportado"
+                description={
+                  (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) > 0
+                    ? "A pagar a Hacienda"
+                    : (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) < 0
+                      ? "A devolver por Hacienda"
+                      : "Sin diferencia"
+                }
+                trend={
+                  (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) > 0
+                    ? 'down' // Rojo porque hay que pagar
+                    : (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) < 0
+                      ? 'up' // Verde porque te devuelven
+                      : 'neutral'
+                }
               />
+              
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center">
