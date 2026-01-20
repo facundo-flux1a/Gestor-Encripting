@@ -38,6 +38,15 @@ import { DeleteActivityDialog } from '@/components/DeleteActivityDialog';
 import { DeleteAllActivitiesDialog } from '@/components/DeleteAllActivitiesDialog';
 import { ActivityErrorModal } from '@/components/ActivityErrorModal';
 import { useToast } from '@/hooks/use-toast';
+// ✅ IMPORTAR EL COMPONENTE TABLE DE SHADCN
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface Activity {
   id: number;
@@ -142,7 +151,9 @@ export default function ActivityTable({
     { value: 'fallido', label: 'Fallido' },
     { value: 'interrumpido', label: 'Interrumpido' },
     { value: 'subiendo', label: 'En proceso' },
-  ];useEffect(() => {
+  ];
+
+  useEffect(() => {
     checkAuth();
   }, []);
 
@@ -487,7 +498,9 @@ export default function ActivityTable({
 
   const isSubDocument = (docName: string): boolean => {
     return /^[Ss]ub-/.test(docName);
-  };const organizeActivities = () => {
+  };
+
+  const organizeActivities = () => {
     const sortedActivities = sortActivities(activities);
     
     const childFiles = sortedActivities.filter(a => a.parent_upload_id);
@@ -667,7 +680,6 @@ export default function ActivityTable({
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(status);
     const isError = canRetry;
     
-    // ⬅️ NUEVO: Identificar si es la primera fila
     const isFirstRow = !isChild && activities.indexOf(activity) === 0;
 
     const handleRowClick = () => {
@@ -679,15 +691,15 @@ export default function ActivityTable({
     };
 
     return (
-      <tr
+      <TableRow
         key={activity.id}
-        className={`transition-all duration-200 border-b border-border/50 hover:bg-accent/50 ${
+        className={`transition-all duration-200 hover:bg-accent/50 ${
           isChild ? 'bg-muted/30' : ''
         } ${canNavigate || isError ? 'cursor-pointer' : ''} animate-fade-in group`}
         style={{ animationDelay: `${activities.indexOf(activity) * 50}ms` }}
         onClick={handleRowClick}
       >
-        <td 
+        <TableCell 
           className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap"
           data-tutorial={isFirstRow ? "actividad-badges" : undefined}
         >
@@ -698,8 +710,8 @@ export default function ActivityTable({
             {getStatusBadge(activity.status)}
             {renderNewBadge(activity)}
           </div>
-        </td>
-        <td className="px-3 sm:px-6 py-3 sm:py-4">
+        </TableCell>
+        <TableCell className="px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex items-start gap-2 sm:gap-3">
             <div className="flex items-center gap-2 flex-shrink-0">
               {isChild && <div className="w-4 h-px bg-border ml-2 hidden sm:block" />}
@@ -726,8 +738,8 @@ export default function ActivityTable({
               )}
             </div>
           </div>
-        </td>
-        <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
+        </TableCell>
+        <TableCell className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
           <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:scale-110 transition-all duration-200" />
             <div className="min-w-0">
@@ -735,14 +747,14 @@ export default function ActivityTable({
               <p className="text-xs text-muted-foreground truncate">{activity.CIF}</p>
             </div>
           </div>
-        </td>
-        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+        </TableCell>
+        <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
             <p className="text-xs sm:text-sm text-muted-foreground">{formatDate(activity.created_at)}</p>
           </div>
-        </td>
-        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
+        </TableCell>
+        <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
               <div
@@ -760,8 +772,8 @@ export default function ActivityTable({
               {activity.progress}%
             </span>
           </div>
-        </td>
-        <td 
+        </TableCell>
+        <TableCell 
           className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" 
           onClick={(e) => e.stopPropagation()}
           data-tutorial={isFirstRow ? "actividad-actions" : undefined}
@@ -803,8 +815,8 @@ export default function ActivityTable({
               <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-destructive shrink-0 group-hover/delete:scale-110 transition-transform" />
             </button>
           </div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
     );
   };
 
@@ -812,20 +824,19 @@ export default function ActivityTable({
     const isExpanded = expandedZips.has(zipActivity.upload_id);
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(zipActivity.status.toLowerCase());
     
-    // ⬅️ NUEVO: Identificar si es la primera fila ZIP
     const isFirstZip = activities.indexOf(zipActivity) === 0;
 
     return (
       <React.Fragment key={zipActivity.upload_id}>
-        <tr
-          className={`transition-all duration-200 cursor-pointer border-b border-border/50 hover:bg-accent/50 animate-fade-in group ${
+        <TableRow
+          className={`transition-all duration-200 cursor-pointer hover:bg-accent/50 animate-fade-in group ${
             isExpanded ? 'bg-muted/50' : ''
           }`}
           style={{ animationDelay: `${activities.indexOf(zipActivity) * 50}ms` }}
           onClick={() => toggleZip(zipActivity.upload_id)}
           data-tutorial={isFirstZip ? "actividad-zip" : undefined}
         >
-          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <div className="group-hover:scale-110 transition-transform duration-200">
                 {getStatusIcon(zipActivity.status)}
@@ -833,8 +844,8 @@ export default function ActivityTable({
               {getStatusBadge(zipActivity.status)}
               {renderNewBadge(zipActivity, children)}
             </div>
-          </td>
-          <td className="px-3 sm:px-6 py-3 sm:py-4">
+          </TableCell>
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4">
             <div className="flex items-start gap-2 sm:gap-3">
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isExpanded ? (
@@ -862,8 +873,8 @@ export default function ActivityTable({
                 )}
               </div>
             </div>
-          </td>
-          <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
+          </TableCell>
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:scale-110 transition-all duration-200" />
               <div className="min-w-0">
@@ -871,14 +882,14 @@ export default function ActivityTable({
                 <p className="text-xs text-muted-foreground truncate">{zipActivity.CIF}</p>
               </div>
             </div>
-          </td>
-          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+          </TableCell>
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
               <p className="text-xs sm:text-sm text-muted-foreground">{formatDate(zipActivity.created_at)}</p>
             </div>
-          </td>
-          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
+          </TableCell>
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
                 <div
@@ -896,8 +907,8 @@ export default function ActivityTable({
                 {zipActivity.progress}%
               </span>
             </div>
-          </td>
-          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          </TableCell>
+          <TableCell className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-1 sm:gap-2">
               <div className="hidden sm:flex">
                 {getSourceIcon(zipActivity['dashboard-correo'])}
@@ -921,8 +932,8 @@ export default function ActivityTable({
                 <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-destructive shrink-0 group-hover/delete:scale-110 transition-transform" />
               </button>
             </div>
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
         {isExpanded && children.map(child => renderActivityRow(child, true))}
       </React.Fragment>
     );
@@ -993,91 +1004,82 @@ export default function ActivityTable({
               <span className="font-semibold text-foreground">{pagination.total}</span>
             </p>
           </div>
-          {/* ✅ CAMBIO: justify-between en móvil, flex-start en desktop */}
-<div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
-  {/* Marcar todos como leídos */}
-  {unreadCount > 0 && (
-    <button
-      onClick={markAllAsRead}
-      disabled={isMarkingRead}
-      data-tutorial="actividad-mark-read"
-      title="Marcar todos como leídos"
-      className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
-    >
-      <CheckCheck className={`w-4 h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
-      {/* ✅ Mostrar texto solo en desktop */}
-      <span className="hidden sm:inline">Marcar leídos</span>
-      {/* Badge de contador */}
-      {unreadCount > 0 && (
-        <span className="bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold min-w-[20px] text-center">
-          {unreadCount}
-        </span>
-      )}
-    </button>
-  )}
-  
-  {/* Eliminar todos */}
-  {pagination.total > 0 && (
-    <button
-      onClick={handleDeleteAllClick}
-      disabled={isDeletingAll}
-      title="Eliminar todas las actividades"
-      className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-destructive/90 hover:bg-destructive text-destructive-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-destructive disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
-    >
-      <Trash2 className="w-4 h-4 shrink-0 group-hover:scale-110 transition-transform" />
-      {/* ✅ Mostrar texto solo en desktop */}
-      <span className="hidden sm:inline">Eliminar</span>
-    </button>
-  )}
-  
-  {/* Filtros */}
-  <button
-    onClick={() => setShowFilters(!showFilters)}
-    data-tutorial="actividad-filters"
-    title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
-    className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
-      showFilters || activeFiltersCount > 0
-        ? 'bg-primary text-primary-foreground border-primary'
-        : 'bg-secondary hover:bg-secondary/80 border-border'
-    }`}
-  >
-    <Filter className="w-4 h-4 shrink-0" />
-    {/* ✅ Mostrar texto solo en desktop */}
-    <span className="hidden sm:inline">Filtros</span>
-    {/* Badge de contador de filtros activos */}
-    {activeFiltersCount > 0 && (
-      <span className="bg-primary-foreground text-primary rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-        {activeFiltersCount}
-      </span>
-    )}
-  </button>
-  
-  {/* Auto refresh */}
-  <div className="relative" data-tutorial="actividad-autorefresh">
-    <button
-      onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-      title={autoRefreshEnabled ? "Desactivar actualización automática" : "Activar actualización automática"}
-      className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
-        autoRefreshEnabled 
-          ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30' 
-          : 'bg-secondary hover:bg-secondary/80 border-border'
-      }`}
-    >
-      <RefreshCw className={`w-4 h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
-      {/* ✅ Mostrar texto solo en desktop */}
-      <span className="hidden sm:inline">Auto</span>
-      {/* Badge de estado ON/OFF */}
-      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-        autoRefreshEnabled 
-          ? 'bg-green-500/30 text-green-600 dark:text-green-400' 
-          : 'bg-muted text-muted-foreground'
-      }`}>
-        {autoRefreshEnabled ? 'ON' : 'OFF'}
-      </span>
-    </button>
-  </div>
-</div>
-</div>{showFilters && (
+          
+          <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                disabled={isMarkingRead}
+                data-tutorial="actividad-mark-read"
+                title="Marcar todos como leídos"
+                className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-primary/90 hover:bg-primary text-primary-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-primary disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
+              >
+                <CheckCheck className={`w-4 h-4 shrink-0 ${isMarkingRead ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} />
+                <span className="hidden sm:inline">Marcar leídos</span>
+                {unreadCount > 0 && (
+                  <span className="bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold min-w-[20px] text-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            )}
+            
+            {pagination.total > 0 && (
+              <button
+                onClick={handleDeleteAllClick}
+                disabled={isDeletingAll}
+                title="Eliminar todas las actividades"
+                className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-destructive/90 hover:bg-destructive text-destructive-foreground rounded-lg transition-all duration-200 backdrop-blur-sm border border-destructive disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 group"
+              >
+                <Trash2 className="w-4 h-4 shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Eliminar</span>
+              </button>
+            )}
+            
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              data-tutorial="actividad-filters"
+              title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
+                showFilters || activeFiltersCount > 0
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-secondary hover:bg-secondary/80 border-border'
+              }`}
+            >
+              <Filter className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Filtros</span>
+              {activeFiltersCount > 0 && (
+                <span className="bg-primary-foreground text-primary rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+            
+            <div className="relative" data-tutorial="actividad-autorefresh">
+              <button
+                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                title={autoRefreshEnabled ? "Desactivar actualización automática" : "Activar actualización automática"}
+                className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
+                  autoRefreshEnabled 
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30' 
+                    : 'bg-secondary hover:bg-secondary/80 border-border'
+                }`}
+              >
+                <RefreshCw className={`w-4 h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Auto</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  autoRefreshEnabled 
+                    ? 'bg-green-500/30 text-green-600 dark:text-green-400' 
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {autoRefreshEnabled ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {showFilters && (
           <div className="bg-muted/50 border rounded-lg p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div>
@@ -1138,70 +1140,69 @@ export default function ActivityTable({
           </div>
         )}
 
+        {/* ✅ TABLA CON COMPONENTE SHADCN */}
         <div className="bg-card border rounded-lg overflow-hidden shadow-sm backdrop-blur-sm animate-fade-in" style={{ animationDelay: '150ms' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto min-w-[640px]" data-tutorial="actividad-table">
-              <thead className="bg-muted/50 backdrop-blur-sm border-b">
-                <tr>
-                  <th 
-                    onClick={() => handleSort('status')}
-                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
-                  >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span>Estado</span>
-                      {getSortIcon('status')}
-                    </div>
-                  </th>
-                  <th 
-                    onClick={() => handleSort('documento')}
-                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
-                  >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span>Documento</span>
-                      {getSortIcon('documento')}
-                    </div>
-                  </th>
-                  <th 
-                    onClick={() => handleSort('empresa')}
-                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden md:table-cell group"
-                  >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span>Empresa</span>
-                      {getSortIcon('empresa')}
-                    </div>
-                  </th>
-                  <th 
-                    onClick={() => handleSort('fecha')}
-                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden lg:table-cell group"
-                  >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span>Fecha</span>
-                      {getSortIcon('fecha')}
-                    </div>
-                  </th>
-                  <th 
-                    onClick={() => handleSort('progreso')}
-                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden sm:table-cell group"
-                  >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span>Progreso</span>
-                      {getSortIcon('progreso')}
-                    </div>
-                  </th>
-                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {parentFiles.map(activity => {
-                  if (zipUploadIds.has(activity.upload_id)) {
-                    const children = childrenMap.get(activity.upload_id) || [];
-                    return renderZipRow(activity, children);
-                  }
-                  return renderActivityRow(activity);
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table data-tutorial="actividad-table">
+            <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
+              <TableRow>
+                <TableHead 
+                  onClick={() => handleSort('status')}
+                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span>Estado</span>
+                    {getSortIcon('status')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  onClick={() => handleSort('documento')}
+                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span>Documento</span>
+                    {getSortIcon('documento')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  onClick={() => handleSort('empresa')}
+                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden md:table-cell group"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span>Empresa</span>
+                    {getSortIcon('empresa')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  onClick={() => handleSort('fecha')}
+                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden lg:table-cell group"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span>Fecha</span>
+                    {getSortIcon('fecha')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  onClick={() => handleSort('progreso')}
+                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden sm:table-cell group"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span>Progreso</span>
+                    {getSortIcon('progreso')}
+                  </div>
+                </TableHead>
+                <TableHead className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border/50">
+              {parentFiles.map(activity => {
+                if (zipUploadIds.has(activity.upload_id)) {
+                  const children = childrenMap.get(activity.upload_id) || [];
+                  return renderZipRow(activity, children);
+                }
+                return renderActivityRow(activity);
+              })}
+            </TableBody>
+          </Table>
         </div>
 
         {pagination.hasMore && (

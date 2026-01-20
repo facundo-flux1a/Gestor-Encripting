@@ -269,7 +269,7 @@ function TrimestresPageContent() {
           empresa_id: empresaId?.toString() || 'all'
         });
         
-        window.location.href = `/sii-test?${params.toString()}`;
+        window.location.href = `/sii?${params.toString()}`;
       }
 
     } catch (error) {
@@ -424,7 +424,7 @@ function TrimestresPageContent() {
                           empresa_id: trimestreAgregado.empresa_id?.toString() || 'all'
                         });
                         
-                        window.location.href = `/sii-test?${params.toString()}`;
+                        window.location.href = `/sii?${params.toString()}`;
                       }}
                     >
                       <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
