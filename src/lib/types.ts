@@ -163,7 +163,6 @@ export type Document = {
   trimestre_cerrado?: number;
 };
 
-// ✅ MODIFICADO: Agregar campos de trimestre
 export const DocumentUpdateSchema = z.object({
   numero_documento: z.string().min(1, "El número de documento es obligatorio.").nullable(),
   fecha_emision: z.string().min(1, "La fecha es obligatoria.").nullable(),
@@ -176,7 +175,6 @@ export const DocumentUpdateSchema = z.object({
   entidades: z.array(DocumentEntitySchema),
   lineas: z.array(DocumentLineSchema),
   iva_details: z.array(IvaDetailSchema),
-  // ✅ NUEVO: Campos de trimestre
   año_trimestre: z.number().optional(),
   num_trimestre: z.number().min(1).max(4).optional(),
 });
@@ -189,9 +187,7 @@ export const IncidentAnalysisResultSchema = z.object({
   calculationErrors: z.number().describe('Number of documents with calculation errors.'),
   message: z.string().describe('A summary message of the operation.'),
 });
-export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;
-
-// =====================================
+export type IncidentAnalysisResult = z.infer<typeof IncidentAnalysisResultSchema>;// =====================================
 // VALIDACIÓN DE IMPUESTOS
 // =====================================
 
@@ -237,6 +233,39 @@ export type CreateDocumentPayload = {
 };
 
 // =====================================
+// ✅ DASHBOARD ANALYTICS - ACTUALIZADO
+// =====================================
+
+export type DashboardAnalytics = {
+  kpis: {
+    totalIngresos: number;              // ✅ CON IVA
+    totalGastos: number;                // ✅ CON IVA
+    totalIngresosSinIva: number;        // ✅ NUEVO - SIN IVA
+    totalGastosSinIva: number;          // ✅ NUEVO - SIN IVA
+    totalFacturasIngreso: number;
+    totalFacturasGasto: number;
+    beneficio: number;                  // ✅ CON IVA
+    beneficioSinIva: number;            // ✅ NUEVO - SIN IVA
+    ivaRepercutido: number;
+    ivaSoportado: number;
+    resultadoIva: number;
+    incidenciasAbiertas: number;
+    totalProveedores: number;
+    totalProductos: number;
+    incidentRate: number;
+    totalDocs: number;
+  };
+  quarterlySummary: {
+    [key: string]: { ingresos: number; gastos: number };
+  };
+  documentDistribution: { name: string; value: number }[];
+  ivaSummary: {
+    [key: string]: { repercutido: number; soportado: number };
+  };
+  topProviders: { name: string; total: number; fiscalId: string }[];
+}
+
+// =====================================
 // UTILIDADES
 // =====================================
 
@@ -262,6 +291,8 @@ export const TrimestreSchema = z.object({
   total_documentos: z.number(),
   total_ingresos: z.number(),
   total_gastos: z.number(),
+  total_ingresos_sin_iva: z.number(),
+  total_gastos_sin_iva: z.number(),
   iva_repercutido: z.number(),
   iva_soportado: z.number(),
   cerrado: z.boolean(),
@@ -281,9 +312,7 @@ export const TrimestreFiltersSchema = z.object({
   año: z.number().optional(),
   mostrar_vacios: z.boolean().optional().default(false),
 });
-export type TrimestreFilters = z.infer<typeof TrimestreFiltersSchema>;
-
-// =====================================
+export type TrimestreFilters = z.infer<typeof TrimestreFiltersSchema>;// =====================================
 // ACTIVIDAD
 // =====================================
 

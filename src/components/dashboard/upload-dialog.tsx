@@ -146,6 +146,7 @@ export function UploadDialog({
     (async () => {
       let successCount = 0;
       let errorCount = 0;
+      let duplicateCount = 0;
 
       for (const file of filesToUpload) {
         try {
@@ -162,29 +163,89 @@ export function UploadDialog({
           formData.append('empresaId', companyId);
           formData.append('uploadId', uploadId);
 
-          await uploadDocument(formData);
-          successCount++;
+          const result = await uploadDocument(formData);
+          
+          // 🔥 VERIFICAR SI ES DUPLICADO
+          if (result.isDuplicate) {
+            duplicateCount++;
+            console.log(`⚠️ [UploadDialog] Archivo duplicado: ${file.name}`);
+          } else {
+            successCount++;
+          }
+          
         } catch (error: any) {
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
           errorCount++;
           
-          const errorMessage = error.message?.includes('413') || error.message?.includes('Body exceeded')
-            ? `El archivo "${file.name}" es demasiado grande. Límite: 10MB`
-            : `Error al subir "${file.name}": ${error.message || 'Error desconocido'}`;
+          // 🔥 NORMALIZAR MENSAJE DE ERROR (sin exponer detalles técnicos)
+          let userMessage = '';
+          
+          // Casos específicos que SÍ queremos mostrar al usuario
+          if (error.message?.includes('413') || error.message?.includes('Body exceeded')) {
+            userMessage = `El archivo "${file.name}" es demasiado grande. Límite: 10MB`;
+          } else if (error.message?.includes('duplicado') || error.message?.includes('Archivo duplicado')) {
+            userMessage = error.message; // Los mensajes de duplicado son user-friendly
+            duplicateCount++;
+            errorCount--; // No contar duplicados como errores
+          } else {
+            // 🔥 CUALQUIER OTRO ERROR → MENSAJE GENÉRICO
+            userMessage = `Ocurrió un error al procesar "${file.name}". Por favor, inténtalo nuevamente.`;
+          }
 
-          toast({
-            title: "❌ Error al subir archivo",
-            description: errorMessage,
-            variant: "destructive",
-          });
+          // Solo mostrar toast de error para errores reales (no duplicados)
+          if (!error.message?.includes('duplicado')) {
+            toast({
+              title: "❌ Error al procesar archivo",
+              description: userMessage,
+              variant: "destructive",
+            });
+          }
         }
       }
 
-      // Mostrar toast de resultado al final
-      if (successCount > 0) {
+      // 🔥 MOSTRAR TOAST SEGÚN EL RESULTADO FINAL
+      const totalProcessed = successCount + duplicateCount + errorCount;
+      
+      if (errorCount === totalProcessed && errorCount > 0) {
+        // 🔴 TODOS FALLARON
         toast({
-          title: "✅ Archivos procesados",
-          description: `${successCount} archivo(s) completados${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`,
+          title: "❌ No se pudo procesar ningún archivo",
+          description: "Ocurrió un error al procesar todos los archivos. Por favor, inténtalo nuevamente.",
+          variant: "destructive",
+        });
+      } else if (successCount === totalProcessed && successCount > 0) {
+        // 🟢 TODOS EXITOSOS
+        toast({
+          title: "✅ Archivos procesados exitosamente",
+          description: `${successCount} archivo(s) completados`,
+        });
+      } else if (duplicateCount === totalProcessed && duplicateCount > 0) {
+        // 🟡 TODOS DUPLICADOS
+        toast({
+          title: "⚠️ Archivos duplicados",
+          description: `${duplicateCount} archivo(s) ya existían en el sistema`,
+          variant: "destructive",
+        });
+      } else if (successCount > 0) {
+        // 🟠 MIXTO CON ALGUNOS EXITOSOS
+        const parts = [`${successCount} archivo(s) completados`];
+        if (duplicateCount > 0) parts.push(`${duplicateCount} duplicados`);
+        if (errorCount > 0) parts.push(`${errorCount} fallaron`);
+        
+        toast({
+          title: "✅ Procesamiento completado",
+          description: parts.join(', '),
+        });
+      } else {
+        // 🟠 SOLO DUPLICADOS Y ERRORES (SIN ÉXITOS)
+        const parts = [];
+        if (duplicateCount > 0) parts.push(`${duplicateCount} duplicados`);
+        if (errorCount > 0) parts.push(`${errorCount} fallaron`);
+        
+        toast({
+          title: "⚠️ No se procesaron archivos nuevos",
+          description: parts.join(', '),
+          variant: "destructive",
         });
       }
     })();

@@ -1,3 +1,4 @@
+// app/api/documents-confirm/route.ts
 import { NextResponse } from 'next/server';
 import connection from '@/lib/db';
 import { getSession } from '@/services/auth-service';
@@ -19,50 +20,77 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     console.log('✅ Body:', body);
     
+    // ✅ CAMBIO: Ahora aceptamos documentId O documentIds (array)
     const documentId = body.documentId;
+    const documentIds = body.documentIds;
 
-    if (!documentId) {
-      console.log('❌ No documentId');
-      return NextResponse.json({ error: 'ID de documento requerido' }, { status: 400 });
+    // Validar que venga al menos uno
+    if (!documentId && (!documentIds || documentIds.length === 0)) {
+      console.log('❌ No documentId ni documentIds');
+      return NextResponse.json({ error: 'ID(s) de documento requerido(s)' }, { status: 400 });
     }
-    console.log('✅ documentId:', documentId);
 
+    // ✅ NUEVO: Normalizar a array
+    const idsToConfirm = documentIds && documentIds.length > 0 
+      ? documentIds 
+      : [documentId];
+
+    console.log('✅ IDs a confirmar:', idsToConfirm);
+
+    // ✅ NUEVO: Verificar que todos los documentos pertenecen al usuario
+    const placeholders = idsToConfirm.map(() => '?').join(',');
+    
     console.log('3️⃣ Consultando base de datos...');
     const [checkRows] = await connection.query(
       `SELECT d.id, d.tipo_documento, e.id_de_usuario
        FROM erp49.documentos d
        INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
-       WHERE d.id = ? AND e.id_de_usuario = ?`,
-      [documentId, session.userId]
+       WHERE d.id IN (${placeholders}) AND e.id_de_usuario = ?`,
+      [...idsToConfirm, session.userId]
     );
     console.log('✅ Filas encontradas:', (checkRows as any[]).length);
 
     if ((checkRows as any[]).length === 0) {
-      console.log('❌ Documento no encontrado');
-      return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
+      console.log('❌ Documentos no encontrados');
+      return NextResponse.json({ error: 'Documentos no encontrados' }, { status: 404 });
     }
 
-    const documento = (checkRows as any[])[0];
-    console.log('✅ Documento encontrado:', documento);
-    
-    const tipoActual = documento.tipo_documento || '';
-    const nuevoTipo = tipoActual.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim();
-    console.log('✅ Tipos:', { tipoActual, nuevoTipo });
+    // ✅ NUEVO: Procesar todos los documentos
+    const resultados = (checkRows as any[]).map((doc: any) => {
+      const tipoActual = doc.tipo_documento || '';
+      const nuevoTipo = tipoActual.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim();
+      
+      return {
+        id: doc.id,
+        tipo_anterior: tipoActual,
+        tipo_nuevo: nuevoTipo
+      };
+    });
 
-    console.log('4️⃣ Actualizando documento...');
+    console.log('✅ Resultados:', resultados);
+
+    // ✅ NUEVO: Actualizar todos de una vez
+    console.log('4️⃣ Actualizando documentos...');
+    
+    // Construir CASE para UPDATE múltiple
+    const caseStatements = resultados.map((r: any) => 
+      `WHEN id = ${r.id} THEN '${r.tipo_nuevo.replace(/'/g, "''")}'`
+    ).join(' ');
+
     await connection.query(
       `UPDATE erp49.documentos 
-       SET tipo_documento = ?
-       WHERE id = ?`,
-      [nuevoTipo, documentId]
+       SET tipo_documento = CASE ${caseStatements} END
+       WHERE id IN (${placeholders})`,
+      idsToConfirm
     );
+    
     console.log('✅ Actualización completa');
 
     return NextResponse.json({
       success: true,
-      message: 'Documento confirmado correctamente',
-      tipo_anterior: tipoActual,
-      tipo_nuevo: nuevoTipo,
+      message: `${resultados.length} documento(s) confirmado(s) correctamente`,
+      confirmados: resultados.length,
+      detalles: resultados,
     });
 
   } catch (error: any) {

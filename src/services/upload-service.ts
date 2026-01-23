@@ -2,7 +2,6 @@
 
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-// Los imports de trimestre ya no son necesarios - el cálculo se hace en n8n
 import crypto from 'crypto';
 import connection from '@/lib/db';
 import JSZip from 'jszip';
@@ -21,60 +20,28 @@ const UploadResponseSchema = z.object({
 });
 
 /**
+ * 🔥 NORMALIZA EL NOMBRE DEL ARCHIVO: REEMPLAZA ESPACIOS POR GUIONES
+ * Esto garantiza URLs limpias sin codificación %20
+ */
+function normalizeFileName(fileName: string): string {
+  return fileName.replace(/ /g, '-');
+}
+
+/**
  * Normaliza el tipo de archivo basándose en el MIME type y la extensión
- * Retorna un valor consistente independientemente de las variaciones
  */
 function getNormalizedFileType(mimeType: string, extension?: string): string {
   const mime = mimeType.toLowerCase();
   const ext = extension?.toLowerCase() || '';
 
-  // Archivos comprimidos
-  if (mime === 'application/zip' || ext === 'zip') {
-    return 'zip';
-  }
-  if (
-    mime === 'application/x-rar-compressed' ||
-    mime === 'application/vnd.rar' ||
-    mime === 'application/x-rar' ||
-    ext === 'rar'
-  ) {
-    return 'rar';
-  }
+  if (mime === 'application/zip' || ext === 'zip') return 'zip';
+  if (mime === 'application/x-rar-compressed' || mime === 'application/vnd.rar' || mime === 'application/x-rar' || ext === 'rar') return 'rar';
+  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (mime === 'image/jpeg' || mime === 'image/jpg' || ext === 'jpg' || ext === 'jpeg') return 'jpeg';
+  if (mime === 'image/png' || ext === 'png') return 'png';
+  if (mime === 'application/msword' || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'doc' || ext === 'docx') return 'word';
+  if (mime === 'application/vnd.ms-excel' || mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || ext === 'xls' || ext === 'xlsx') return 'excel';
 
-  // PDF
-  if (mime === 'application/pdf' || ext === 'pdf') {
-    return 'pdf';
-  }
-
-  // Imágenes
-  if (mime === 'image/jpeg' || mime === 'image/jpg' || ext === 'jpg' || ext === 'jpeg') {
-    return 'jpeg';
-  }
-  if (mime === 'image/png' || ext === 'png') {
-    return 'png';
-  }
-
-  // Word
-  if (
-    mime === 'application/msword' ||
-    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    ext === 'doc' ||
-    ext === 'docx'
-  ) {
-    return 'word';
-  }
-
-  // Excel
-  if (
-    mime === 'application/vnd.ms-excel' ||
-    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-    ext === 'xls' ||
-    ext === 'xlsx'
-  ) {
-    return 'excel';
-  }
-
-  // Default: retornar la extensión o "unknown"
   return ext || 'unknown';
 }
 
@@ -93,7 +60,7 @@ async function calculateFileHash(fileBuffer: ArrayBuffer): Promise<string> {
 async function checkDuplicate(fileHash: string, empresaId: string): Promise<any> {
   try {
     const [rows] = await connection.query(
-      `SELECT file_hash, file_name, uploaded_at 
+      `SELECT file_hash, numero_documento as file_name, fecha_creacion as uploaded_at 
        FROM documentos 
        WHERE file_hash = ? AND id_de_empresa = ?
        ORDER BY fecha_creacion DESC
@@ -111,23 +78,31 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
 
 /**
  * Descomprime un ZIP y calcula el hash SHA-256 de cada archivo individual
- * ⚠️ SOLO FUNCIONA CON ARCHIVOS ZIP (JSZip no soporta RAR)
+ * 🔥 NORMALIZA LOS NOMBRES DE ARCHIVO (quita espacios)
  */
 async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileName: string]: string }> {
   const zip = new JSZip();
   const zipContent = await zip.loadAsync(Buffer.from(fileBuffer));
   const fileHashes: { [fileName: string]: string } = {};
 
-  for (const [fileName, zipEntry] of Object.entries(zipContent.files)) {
+  for (const [originalFileName, zipEntry] of Object.entries(zipContent.files)) {
     if (!zipEntry.dir) {
-      const fileData = await zipEntry.async('arraybuffer');
+      // 🔥 NORMALIZAR NOMBRE (quitar espacios)
+      const normalizedFileName = normalizeFileName(originalFileName);
       
+      const fileData = await zipEntry.async('arraybuffer');
       const hash = crypto.createHash('sha256');
       hash.update(Buffer.from(fileData));
       const fileHash = hash.digest('hex');
       
-      fileHashes[fileName] = fileHash;
-      console.log(`  [ZIP] ${fileName} → Hash: ${fileHash}`);
+      // 🔥 GUARDAR CON NOMBRE NORMALIZADO
+      fileHashes[normalizedFileName] = fileHash;
+      
+      if (normalizedFileName !== originalFileName) {
+        console.log(`  [ZIP] "${originalFileName}" → "${normalizedFileName}" (Hash: ${fileHash})`);
+      } else {
+        console.log(`  [ZIP] ${normalizedFileName} → Hash: ${fileHash}`);
+      }
     }
   }
 
@@ -135,8 +110,8 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
 }
 
 /**
- * 🆕 Extrae archivos RAR usando el microservicio de Railway
- * Retorna los hashes y uploadIds individuales de cada archivo
+ * Extrae archivos RAR usando el microservicio de Railway
+ * 🔥 NORMALIZA los nombres que vienen del microservicio
  */
 async function extractAndHashRarFiles(
   fileBuffer: ArrayBuffer, 
@@ -148,9 +123,7 @@ async function extractAndHashRarFiles(
   const RAILWAY_RAR_SERVICE = 'https://rar-extractor.onrender.com/api/extract-rar';
   
   console.log(`  [RAR] 🔄 Llamando al microservicio de Railway...`);
-  console.log(`  [RAR] 🆔 parentUploadId: ${parentUploadId}`);
 
-  // Crear FormData con el archivo RAR y el parentUploadId
   const formData = new FormData();
   const blob = new Blob([fileBuffer], { type: 'application/vnd.rar' });
   formData.append('file', blob, 'archive.rar');
@@ -168,22 +141,36 @@ async function extractAndHashRarFiles(
     }
 
     const result = await response.json();
-    
-    console.log(`  [RAR] ✅ Respuesta del microservicio:`, result);
-    console.log(`  [RAR] 📋 Archivos extraídos: ${result.totalFiles}`);
+    console.log(`  [RAR] ✅ Archivos extraídos: ${result.totalFiles}`);
 
     if (!result.success || !result.fileHashes || !result.uploadIds) {
       throw new Error('Respuesta inválida del microservicio RAR');
     }
 
-    // Devolver los hashes y uploadIds generados por el microservicio
-    return {
-      fileHashes: result.fileHashes,
-      uploadIds: result.uploadIds
-    };
+    // 🔥 NORMALIZAR LOS NOMBRES DE ARCHIVO QUE VIENEN DEL MICROSERVICIO
+    const normalizedFileHashes: { [fileName: string]: string } = {};
+    const normalizedUploadIds: { [fileName: string]: string } = {};
+    
+    for (const [originalFileName, hash] of Object.entries(result.fileHashes)) {
+      const normalizedFileName = normalizeFileName(originalFileName);
+      normalizedFileHashes[normalizedFileName] = hash as string;
+      
+      if (normalizedFileName !== originalFileName) {
+        console.log(`  [RAR] "${originalFileName}" → "${normalizedFileName}"`);
+      }
+    }
+    
+    for (const [originalFileName, uploadId] of Object.entries(result.uploadIds)) {
+      const normalizedFileName = normalizeFileName(originalFileName);
+      normalizedUploadIds[normalizedFileName] = uploadId as string;
+    }
 
+    return {
+      fileHashes: normalizedFileHashes,
+      uploadIds: normalizedUploadIds
+    };
   } catch (error: any) {
-    console.error(`  [RAR] ❌ Error al extraer RAR:`, error.message);
+    console.error(`  [RAR] ❌ Error:`, error.message);
     throw new Error(`No se pudo procesar el archivo RAR: ${error.message}`);
   }
 }
@@ -215,10 +202,98 @@ async function createActivityRecord(
         'Archivo recibido, preparando para procesamiento'
       ]
     );
-    console.log(`[${fileName}] ✅ Registro de actividad creado en BD (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''})`);
+    console.log(`[${fileName}] ✅ Registro de actividad creado (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''})`);
   } catch (error) {
     console.error(`[${fileName}] ❌ Error al crear registro de actividad:`, error);
-    // No lanzamos error para no interrumpir el flujo principal
+  }
+}
+
+/**
+ * 🔥 Marca el upload como fallido en la BD con mensaje genérico
+ */
+async function markUploadAsFailed(
+  uploadId: string,
+  errorMessage: string,
+  errorNode?: string
+): Promise<void> {
+  try {
+    console.log(`❌ [Upload] Marcando como fallido: ${uploadId}`);
+    console.log(`❌ [Upload] Mensaje para usuario: ${errorMessage}`);
+    console.log(`❌ [Upload] Nodo: ${errorNode || 'Error general'}`);
+    
+    await connection.query(
+      `UPDATE erp49.actividad 
+       SET status = 'Fallido', 
+           step = ?, 
+           progress = 0, 
+           mensaje = ?, 
+           updated_at = NOW()
+       WHERE upload_id = ?`,
+      [errorNode || 'Error', errorMessage, uploadId]
+    );
+    
+    console.log(`✅ [Upload] Registro padre actualizado: ${uploadId}`);
+    
+    const [childRows] = await connection.query(
+      `SELECT upload_id FROM erp49.actividad WHERE parent_upload_id = ?`,
+      [uploadId]
+    ) as any;
+    
+    if (childRows.length > 0) {
+      console.log(`❌ [Upload] Marcando ${childRows.length} archivos hijos como fallidos...`);
+      
+      await connection.query(
+        `UPDATE erp49.actividad 
+         SET status = 'Fallido', 
+             step = 'Error en archivo padre', 
+             progress = 0, 
+             mensaje = 'El archivo comprimido padre falló', 
+             updated_at = NOW()
+         WHERE parent_upload_id = ?`,
+        [uploadId]
+      );
+      
+      console.log(`✅ [Upload] ${childRows.length} archivos hijos actualizados`);
+    }
+    
+  } catch (error) {
+    console.error(`❌ [Upload] Error al marcar como fallido:`, error);
+  }
+}
+
+/**
+ * 🔥 Notifica al frontend sobre el error via API con mensaje genérico
+ */
+async function notifyFrontendError(
+  uploadId: string,
+  errorMessage: string,
+  errorNode?: string
+): Promise<void> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:9002';
+    
+    console.log(`📡 [Upload] Notificando error al frontend: ${uploadId}`);
+    
+    const response = await fetch(`${baseUrl}/api/upload-progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uploadId: uploadId,
+        status: 'Fallido',
+        step: errorNode || 'Error',
+        progress: 0,
+        message: errorMessage,
+      }),
+    });
+    
+    if (response.ok) {
+      console.log(`✅ [Upload] Frontend notificado exitosamente`);
+    } else {
+      const errorText = await response.text();
+      console.error(`❌ [Upload] Error al notificar frontend (${response.status}): ${errorText}`);
+    }
+  } catch (error) {
+    console.error(`❌ [Upload] Error en notifyFrontendError:`, error);
   }
 }
 
@@ -249,16 +324,25 @@ export async function uploadDocument(
   }
 
   const originalFileName = file.name;
+  
+  // 🔥 NORMALIZAR NOMBRE DE ARCHIVO (quitar espacios)
+  const normalizedFileName = normalizeFileName(originalFileName);
+  
+  // Loguear solo si hubo cambios
+  if (normalizedFileName !== originalFileName) {
+    console.log(`📤 [UploadService] Nombre normalizado: "${originalFileName}" → "${normalizedFileName}"`);
+  }
+  
   const fileSize = file.size;
   const fileMimeType = file.type;
-  const fileExtension = originalFileName.toLowerCase().split('.').pop();
+  const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
   const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
 
   console.log(`📤 [UploadService] MIME Type: ${fileMimeType}`);
   console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
   console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
-  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCAL';
+  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!N8N_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
@@ -267,20 +351,15 @@ export async function uploadDocument(
   }
 
   try {
-    console.log(`[${originalFileName}] Leyendo archivo (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
+    console.log(`[${normalizedFileName}] Leyendo archivo (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = await file.arrayBuffer();
 
-    console.log(`[${originalFileName}] Calculando hash SHA-256...`);
+    console.log(`[${normalizedFileName}] Calculando hash SHA-256...`);
     const mainFileHash = await calculateFileHash(fileBuffer);
-    console.log(`[${originalFileName}] Hash del archivo: ${mainFileHash}`);
+    console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
 
-    console.log(`[${originalFileName}] Consultando CIF para empresaId: ${empresaId}`);
-    
-    const [rows] = await connection.query(
-      'SELECT CIF FROM empresas WHERE id = ?',
-      [empresaId]
-    );
-
+    console.log(`[${normalizedFileName}] Consultando CIF para empresaId: ${empresaId}`);
+    const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
     const empresaData = rows as { CIF: string }[];
     
     if (!empresaData || empresaData.length === 0) {
@@ -288,7 +367,7 @@ export async function uploadDocument(
     }
 
     const cif = empresaData[0].CIF;
-    console.log(`[${originalFileName}] CIF: ${cif}`);
+    console.log(`[${normalizedFileName}] CIF: ${cif}`);
 
     let individualFileHashes: { [fileName: string]: string } = {};
     let individualUploadIds: { [fileName: string]: string } = {};
@@ -297,99 +376,98 @@ export async function uploadDocument(
     // 🔥 PROCESAR ARCHIVOS COMPRIMIDOS (ZIP O RAR)
     if (normalizedFileType === 'zip') {
       isCompressedFile = true;
-      console.log(`[${originalFileName}] 📦 Detectado archivo ZIP. Calculando hashes individuales...`);
+      console.log(`[${normalizedFileName}] 📦 Detectado archivo ZIP`);
       
       try {
+        // 🔥 extractAndHashZipFiles ya normaliza los nombres internamente
         individualFileHashes = await extractAndHashZipFiles(fileBuffer);
-        console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales`);
+        console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes`);
         
-        // GENERAR UPLOAD IDS INDIVIDUALES PARA ARCHIVOS DEL ZIP
-        console.log(`[${originalFileName}] 🆔 Generando uploadIds individuales para archivos del ZIP...`);
         for (const fileName of Object.keys(individualFileHashes)) {
           const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
           individualUploadIds[fileName] = childUploadId;
           
-          // REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
           await createActivityRecord(
             childUploadId,
             empresaId,
-            fileName,
+            fileName, // Ya está normalizado
             fileName.split('.').pop() || 'unknown',
-            uploadId  // parentUploadId
+            uploadId
           );
           
           console.log(`  [ZIP] ${fileName} → UploadId: ${childUploadId}`);
         }
         
-        console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales`);
-        
-        // REGISTRAR EL ZIP PADRE
-        await createActivityRecord(
-          uploadId,
-          empresaId,
-          originalFileName,
-          normalizedFileType
-        );
+        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
         
       } catch (zipError: any) {
-        console.error(`[${originalFileName}] ❌ Error al extraer ZIP:`, zipError.message);
-        throw new Error(`No se pudo procesar el archivo ZIP: ${zipError.message}`);
+        console.error(`[${normalizedFileName}] ❌ Error al extraer ZIP:`, zipError.message);
+        
+        const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+        await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+        await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+        
+        throw new Error(userFriendlyMessage);
       }
       
     } else if (normalizedFileType === 'rar') {
-      // 🆕 ARCHIVOS RAR - EXTRAER CON MICROSERVICIO DE RAILWAY
       isCompressedFile = true;
-      console.log(`[${originalFileName}] 📦 Detectado archivo RAR. Llamando al microservicio...`);
+      console.log(`[${normalizedFileName}] 📦 Detectado archivo RAR`);
       
       try {
-        // 🔥 LLAMAR AL MICROSERVICIO DE RAILWAY
+        // 🔥 extractAndHashRarFiles ya normaliza los nombres internamente
         const { fileHashes, uploadIds } = await extractAndHashRarFiles(fileBuffer, uploadId);
-        
         individualFileHashes = fileHashes;
         individualUploadIds = uploadIds;
         
-        console.log(`[${originalFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes individuales (RAR)`);
-        console.log(`[${originalFileName}] ✅ Generados ${Object.keys(individualUploadIds).length} uploadIds individuales (RAR)`);
+        console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes (RAR)`);
         
-        // REGISTRAR ACTIVIDAD INDIVIDUAL PARA CADA ARCHIVO HIJO
         for (const fileName of Object.keys(individualFileHashes)) {
           const childUploadId = individualUploadIds[fileName];
-          
           await createActivityRecord(
             childUploadId,
             empresaId,
-            fileName,
+            fileName, // Ya está normalizado
             fileName.split('.').pop() || 'unknown',
-            uploadId  // parentUploadId
+            uploadId
           );
           
           console.log(`  [RAR] ${fileName} → UploadId: ${childUploadId}`);
         }
         
-        // REGISTRAR EL RAR PADRE
-        await createActivityRecord(
-          uploadId,
-          empresaId,
-          originalFileName,
-          normalizedFileType
-        );
+        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
         
       } catch (rarError: any) {
-        console.error(`[${originalFileName}] ❌ Error al extraer RAR:`, rarError.message);
-        throw new Error(`No se pudo procesar el archivo RAR: ${rarError.message}`);
+        console.error(`[${normalizedFileName}] ❌ Error al extraer RAR:`, rarError.message);
+        
+        const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+        await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+        await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+        
+        throw new Error(userFriendlyMessage);
       }
       
     } else {
       // ARCHIVOS NORMALES (NO COMPRIMIDOS)
-      console.log(`[${originalFileName}] Verificando si ya existe este archivo...`);
+      console.log(`[${normalizedFileName}] Verificando duplicados...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
 
       if (duplicateRecord) {
-        console.warn(`\n❌ DUPLICADO DETECTADO:\n`);
-        console.warn(`   Archivo nuevo: ${originalFileName}`);
-        console.warn(`   Archivo existente: ${duplicateRecord.file_name}`);
-        console.warn(`   Fecha de carga: ${duplicateRecord.uploaded_at}`);
-        console.warn(`   Hash: ${duplicateRecord.file_hash.substring(0, 8)}...\n`);
+        console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
+        
+        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+        
+        await markUploadAsFailed(
+          uploadId, 
+          `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`, 
+          'Verificación de duplicados'
+        );
+        
+        await notifyFrontendError(
+          uploadId, 
+          `❌ Archivo duplicado (subido el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')})`,
+          'Duplicado detectado'
+        );
         
         return {
           success: false,
@@ -404,30 +482,26 @@ export async function uploadDocument(
         };
       }
 
-      console.log(`[${originalFileName}] ✓ No se encontraron duplicados. Procediendo con la subida...`);
-      
-      // REGISTRAR ARCHIVO NORMAL
-      await createActivityRecord(
-        uploadId,
-        empresaId,
-        originalFileName,
-        normalizedFileType
-      );
+      console.log(`[${normalizedFileName}] ✓ No hay duplicados`);
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
     }
 
+    // 🔥 SUBIR A MINIO CON NOMBRE NORMALIZADO
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
-    const fileNameWithoutExt = originalFileName.includes('.') 
-      ? originalFileName.substring(0, originalFileName.lastIndexOf('.')) 
-      : originalFileName;
-    const fileExt = originalFileName.includes('.') 
-      ? originalFileName.substring(originalFileName.lastIndexOf('.')) 
+    
+    // 🔥 USAR normalizedFileName en lugar de originalFileName
+    const fileNameWithoutExt = normalizedFileName.includes('.') 
+      ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) 
+      : normalizedFileName;
+    const fileExt = normalizedFileName.includes('.') 
+      ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) 
       : '';
     
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
     const filePath = `archivos/${uniqueFileName}`;
 
-    console.log(`[${originalFileName}] Subiendo a MinIO: ${filePath}`);
+    console.log(`[${normalizedFileName}] Subiendo a MinIO: ${filePath}`);
     const s3Client = new S3Client({
       region: process.env.MINIO_REGION || "us-east-1",
       endpoint: MINIO_ENDPOINT,
@@ -447,69 +521,89 @@ export async function uploadDocument(
     }));
     
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
-    console.log(`[${originalFileName}] ✅ Subida a MinIO completada`);
+    console.log(`[${normalizedFileName}] ✅ Subida a MinIO completada`);
+    console.log(`[${normalizedFileName}] 🔗 URL: ${publicUrl}`);
 
-    const fechaSubida = now;
-    console.log(`[${originalFileName}] ⏰ Fecha de subida: ${fechaSubida.toISOString()}`);
-    console.log(`[${originalFileName}] ℹ️ El trimestre será calculado por n8n usando la fecha de emisión del documento`);
-
-    // PREPARAR PAYLOAD
+    // 🔥 PREPARAR PAYLOAD PARA N8N (con nombre normalizado)
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
       fileHash: mainFileHash,
       uploadId: uploadId,
-      fileName: originalFileName,
+      fileName: normalizedFileName, // 🔥 Nombre normalizado
+      originalFileName: originalFileName, // Conservamos el original por si acaso
       fileSize: fileSize,
       publicUrl: publicUrl,
       isCompressedFile: isCompressedFile,
       mimeType: fileMimeType,
       normalizedFileType: normalizedFileType,
       fileExtension: fileExtension,
-      fechaSubida: fechaSubida.toISOString(),
+      fechaSubida: now.toISOString(),
     };
 
-    // 🔥 AGREGAR HASHES INDIVIDUALES SI ES ZIP O RAR
     if ((normalizedFileType === 'zip' || normalizedFileType === 'rar') && Object.keys(individualFileHashes).length > 0) {
       webhookPayload.individualFileHashes = individualFileHashes;
       webhookPayload.individualUploadIds = individualUploadIds;
-      
-      console.log(`[${originalFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales del ${normalizedFileType.toUpperCase()} al webhook`);
-      console.log(`[${originalFileName}] 📋 Mapa de hashes:`, individualFileHashes);
-      console.log(`[${originalFileName}] 🆔 Mapa de uploadIds:`, individualUploadIds);
+      console.log(`[${normalizedFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales`);
     }
 
-    console.log(`[${originalFileName}] Notificando a webhook...`);
-    console.log(`[${originalFileName}] 🆔 Enviando uploadId padre: ${uploadId}`);
-    console.log(`[${originalFileName}] 📦 Tipo normalizado: ${normalizedFileType}`);
-
+    // 🔥 LLAMAR A N8N Y CAPTURAR ERRORES CON MENSAJE GENÉRICO
+    console.log(`[${normalizedFileName}] 📡 Llamando a n8n webhook...`);
+    console.log(`[${normalizedFileName}] 🆔 UploadId que enviamos: ${uploadId}`);
+    
     const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
     });
 
+    // 🔥 VERIFICAR SI N8N RETORNÓ ERROR (status code != 200)
     if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.warn(`[${originalFileName}] ⚠️ Webhook respondió con error (${webhookResponse.status}): ${errorText}`);
-      throw new Error(`Error al procesar el documento`);
+      console.error(`❌ [${normalizedFileName}] n8n retornó error HTTP: ${webhookResponse.status}`);
+      
+      let internalErrorDetails = ''; // Para logs internos
+      
+      try {
+        const errorData = await webhookResponse.json();
+        internalErrorDetails = errorData.message || errorData.error || 'Error desconocido';
+        console.error(`❌ [${normalizedFileName}] Error JSON:`, JSON.stringify(errorData, null, 2));
+      } catch {
+        const textError = await webhookResponse.text();
+        internalErrorDetails = `HTTP ${webhookResponse.status}: ${webhookResponse.statusText}`;
+        console.error(`❌ [${normalizedFileName}] Error TEXT:`, textError);
+      }
+
+      // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin mencionar n8n o detalles técnicos)
+      const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+
+      console.log(`❌ [${normalizedFileName}] Marcando como fallido usando uploadId del scope: ${uploadId}`);
+      console.log(`❌ [${normalizedFileName}] Detalles internos: ${internalErrorDetails}`);
+      
+      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+
+      return {
+        success: false,
+        message: userFriendlyMessage,
+      };
     }
 
+    console.log(`✅ [${normalizedFileName}] n8n respondió OK (${webhookResponse.status})`);
+    
     let webhookResult: any = null;
     const responseText = await webhookResponse.text();
 
     try {
       webhookResult = JSON.parse(responseText);
-      console.log(`[${originalFileName}] Respuesta del webhook (JSON):`, webhookResult);
+      console.log(`[${normalizedFileName}] Respuesta n8n (JSON):`, webhookResult);
     } catch (jsonError) {
-      console.warn(`[${originalFileName}] Respuesta del webhook (TEXT):`, responseText);
+      console.warn(`[${normalizedFileName}] Respuesta n8n (TEXT):`, responseText);
       webhookResult = { mensaje: responseText };
     }
 
     if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
-      console.warn(`\n❌ DUPLICADO DETECTADO POR N8N:\n`);
-      console.warn(`   ${webhookResult.mensaje || responseText}\n`);
+      console.warn(`❌ DUPLICADO DETECTADO POR N8N: ${normalizedFileName}`);
       
       return {
         success: false,
@@ -517,25 +611,39 @@ export async function uploadDocument(
         message: webhookResult.mensaje || responseText || '❌ Este documento ya existe en la empresa.',
         fileHash: mainFileHash,
         duplicateInfo: {
-          fileName: webhookResult.numero_documento_original || originalFileName,
+          fileName: webhookResult.numero_documento_original || normalizedFileName,
           uploadedAt: webhookResult.fecha_original || 'Fecha desconocida',
           empresaId: empresaId,
         },
       };
     }
 
-    console.log(`[${originalFileName}] ✅ PROCESO COMPLETADO EXITOSAMENTE\n`);
+    console.log(`✅ [${normalizedFileName}] PROCESO COMPLETADO EXITOSAMENTE`);
 
     return {
       success: true,
       isDuplicate: false,
-      message: webhookResult.mensaje || `✅ Archivo "${originalFileName}" subido exitosamente.`,
+      message: webhookResult.mensaje || `✅ Archivo "${normalizedFileName}" subido exitosamente.`,
       url: publicUrl,
       fileHash: mainFileHash,
     };
 
   } catch (error: any) {
-    console.error(`[${originalFileName}] ❌ Error:`, error.message);
-    throw new Error(error.message || `Ocurrió un error inesperado al procesar ${originalFileName}.`);
+    console.error(`❌ [${normalizedFileName}] Error general en uploadDocument:`, error.message);
+    console.error(`❌ [${normalizedFileName}] Stack trace:`, error.stack);
+    
+    // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin detalles técnicos)
+    const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+    
+    if (uploadId) {
+      console.log(`❌ Marcando como fallido usando uploadId del scope: ${uploadId}`);
+      console.log(`❌ Error interno: ${error.message}`);
+      
+      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+    }
+    
+    // 🔥 LANZAR ERROR GENÉRICO AL CLIENTE
+    throw new Error(userFriendlyMessage);
   }
 }

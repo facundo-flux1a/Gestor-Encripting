@@ -25,8 +25,8 @@ import {
   Send,
   Building2,
   DollarSign,
-  ArrowUpCircle, // ✅ NUEVO: Para IVA Repercutido
-  ArrowDownCircle, // ✅ NUEVO: Para IVA Soportado
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
@@ -145,6 +145,8 @@ function TrimestresPageContent() {
               total_documentos: 0,
               total_ingresos: 0,
               total_gastos: 0,
+              total_ingresos_sin_iva: 0,
+              total_gastos_sin_iva: 0,
               iva_repercutido: 0,
               iva_soportado: 0,
               cerrado: false,
@@ -299,8 +301,15 @@ function TrimestresPageContent() {
       empresa_id: null,
       empresa_nombre: `${trimestresDelPeriodo.length} empresas`,
       total_documentos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_documentos, 0),
+      
+      // ✅ TOTALES CON IVA (principal)
       total_ingresos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_ingresos, 0),
       total_gastos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_gastos, 0),
+      
+      // ✅ TOTALES SIN IVA (para breakdown)
+      total_ingresos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_ingresos_sin_iva || 0), 0),
+      total_gastos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_gastos_sin_iva || 0), 0),
+      
       iva_repercutido: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_repercutido, 0),
       iva_soportado: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_soportado, 0),
       cerrado: trimestresDelPeriodo.every(t => t.cerrado),
@@ -437,7 +446,7 @@ function TrimestresPageContent() {
             </div>
           ) : null}
 
-          {/* ✅ MODIFICADO: Ahora con 7 cards en grid-cols-7 */}
+          {/* CONTINUACIÓN EN PARTE 2 */}{/* ✅ MODIFICADO: Ahora con 7 cards CON BREAKDOWN que muestra CON IVA + SIN IVA */}
           {isLoading ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7">
               {[...Array(7)].map((_, i) => (
@@ -447,38 +456,84 @@ function TrimestresPageContent() {
           ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7" data-tutorial="trimestres-stats">
               
-              {/* 1️⃣ Total Documentos */}
+              {/* 1️⃣ Total Documentos - SIN CAMBIOS */}
               <TrimestreStatsCard
                 title="Total Documentos"
                 value={trimestreAgregado.total_documentos}
                 icon={FileText}
                 description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
+                breakdown={[
+                  {
+                    label: "Facturas del Sistema",
+                    value: formatNumber(trimestreAgregado.total_documentos),
+                    className: "text-foreground"
+                  },
+                  {
+                    label: "Trimestre",
+                    value: `T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`,
+                    className: "text-muted-foreground"
+                  }
+                ]}
               />
               
-              {/* 2️⃣ Ingresos */}
+              {/* 2️⃣ Ingresos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Ingresos"
                 value={formatCurrency(trimestreAgregado.total_ingresos)}
                 icon={TrendingUp}
-                description="Total facturado"
+                description="Total CON IVA"
                 trend="up"
+                breakdown={[
+                  {
+                    label: "Base (sin IVA)",
+                    value: formatCurrency(trimestreAgregado.total_ingresos_sin_iva || 0),
+                    className: "text-muted-foreground"
+                  },
+                  {
+                    label: "IVA Repercutido",
+                    value: formatCurrency(trimestreAgregado.iva_repercutido),
+                    className: "text-green-600 dark:text-green-500"
+                  },
+                  {
+                    label: "Total CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_ingresos),
+                    className: "text-green-600 dark:text-green-500 font-bold"
+                  }
+                ]}
               />
               
-              {/* 3️⃣ Gastos */}
+              {/* 3️⃣ Gastos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Gastos"
                 value={formatCurrency(trimestreAgregado.total_gastos)}
                 icon={TrendingDown}
-                description="Total gastado"
+                description="Total CON IVA"
                 trend="down"
+                breakdown={[
+                  {
+                    label: "Base (sin IVA)",
+                    value: formatCurrency(trimestreAgregado.total_gastos_sin_iva || 0),
+                    className: "text-muted-foreground"
+                  },
+                  {
+                    label: "IVA Soportado",
+                    value: formatCurrency(trimestreAgregado.iva_soportado),
+                    className: "text-red-600 dark:text-red-500"
+                  },
+                  {
+                    label: "Total CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_gastos),
+                    className: "text-red-600 dark:text-red-500 font-bold"
+                  }
+                ]}
               />
               
-              {/* 4️⃣ Beneficio Bruto */}
+              {/* 4️⃣ Beneficio Bruto - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="Beneficio Bruto"
                 value={formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos)}
                 icon={DollarSign}
-                description="Ingresos - Gastos"
+                description="CON IVA incluido"
                 trend={
                   (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) > 0 
                     ? 'up' 
@@ -486,27 +541,93 @@ function TrimestresPageContent() {
                       ? 'down' 
                       : 'neutral'
                 }
+                breakdown={[
+                  {
+                    label: "Ingresos CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_ingresos),
+                    className: "text-green-600 dark:text-green-500"
+                  },
+                  {
+                    label: "Gastos CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_gastos),
+                    className: "text-red-600 dark:text-red-500"
+                  },
+                  {
+                    label: "Beneficio CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos),
+                    className: (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) >= 0 
+                      ? 'text-green-600 dark:text-green-500 font-bold' 
+                      : 'text-red-600 dark:text-red-500 font-bold'
+                  },
+                  {
+                    label: "---",
+                    value: "---",
+                    className: "text-muted-foreground"
+                  },
+                  {
+                    label: "Beneficio SIN IVA",
+                    value: formatCurrency(
+                      (trimestreAgregado.total_ingresos_sin_iva || 0) - 
+                      (trimestreAgregado.total_gastos_sin_iva || 0)
+                    ),
+                    className: "text-muted-foreground italic"
+                  }
+                ]}
               />
               
-              {/* 🆕 5️⃣ IVA REPERCUTIDO (lo que COBRAS - facturas emitidas) */}
+              {/* 5️⃣ IVA REPERCUTIDO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Repercutido"
                 value={formatCurrency(trimestreAgregado.iva_repercutido)}
                 icon={ArrowUpCircle}
                 description="IVA cobrado"
                 trend="neutral"
+                breakdown={[
+                  {
+                    label: "Base Facturas Emitidas",
+                    value: formatCurrency(trimestreAgregado.total_ingresos_sin_iva || 0),
+                    className: "text-muted-foreground"
+                  },
+                  {
+                    label: "IVA Repercutido",
+                    value: formatCurrency(trimestreAgregado.iva_repercutido),
+                    className: "text-green-600 dark:text-green-500 font-bold"
+                  },
+                  {
+                    label: "Total Ingresos CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_ingresos),
+                    className: "text-green-600 dark:text-green-500"
+                  }
+                ]}
               />
               
-              {/* 🆕 6️⃣ IVA SOPORTADO (lo que PAGAS - facturas recibidas) */}
+              {/* 6️⃣ IVA SOPORTADO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Soportado"
                 value={formatCurrency(trimestreAgregado.iva_soportado)}
                 icon={ArrowDownCircle}
                 description="IVA pagado"
                 trend="neutral"
+                breakdown={[
+                  {
+                    label: "Base Facturas Recibidas",
+                    value: formatCurrency(trimestreAgregado.total_gastos_sin_iva || 0),
+                    className: "text-muted-foreground"
+                  },
+                  {
+                    label: "IVA Soportado",
+                    value: formatCurrency(trimestreAgregado.iva_soportado),
+                    className: "text-red-600 dark:text-red-500 font-bold"
+                  },
+                  {
+                    label: "Total Gastos CON IVA",
+                    value: formatCurrency(trimestreAgregado.total_gastos),
+                    className: "text-red-600 dark:text-red-500"
+                  }
+                ]}
               />
               
-              {/* 🆕 7️⃣ IVA NETO (diferencia: a pagar o a devolver) */}
+              {/* 7️⃣ IVA NETO - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="IVA Neto"
                 value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
@@ -520,11 +641,30 @@ function TrimestresPageContent() {
                 }
                 trend={
                   (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) > 0
-                    ? 'down' // Rojo porque hay que pagar
+                    ? 'down'
                     : (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) < 0
-                      ? 'up' // Verde porque te devuelven
+                      ? 'up'
                       : 'neutral'
                 }
+                breakdown={[
+                  {
+                    label: "IVA Repercutido",
+                    value: formatCurrency(trimestreAgregado.iva_repercutido),
+                    className: "text-green-600 dark:text-green-500"
+                  },
+                  {
+                    label: "IVA Soportado",
+                    value: formatCurrency(trimestreAgregado.iva_soportado),
+                    className: "text-red-600 dark:text-red-500"
+                  },
+                  {
+                    label: "Resultado IVA",
+                    value: formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado),
+                    className: (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) >= 0 
+                      ? 'text-red-600 dark:text-red-500 font-bold' 
+                      : 'text-green-600 dark:text-green-500 font-bold'
+                  }
+                ]}
               />
               
             </div>

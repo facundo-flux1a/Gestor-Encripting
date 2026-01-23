@@ -293,34 +293,30 @@ export default function DashboardPage() {
     }
   };
 
-  // FUNCIÓN MODIFICADA: Ahora formatea con separador de millares
-  // Función manual: Formatea números con separador de millares
-const formatNumber = (num: number | string): string => {
-  const value = typeof num === 'string' ? parseFloat(num) : num;
-  if (isNaN(value)) return '0';
-  
-  const parts = value.toString().split('.');
-  const integerPart = parts[0];
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
-  return formattedInteger;
-};
+  const formatNumber = (num: number | string): string => {
+    const value = typeof num === 'string' ? parseFloat(num) : num;
+    if (isNaN(value)) return '0';
+    
+    const parts = value.toString().split('.');
+    const integerPart = parts[0];
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return formattedInteger;
+  };
 
-// Función manual: Formatea moneda con separador de millares
-const formatCurrency = (amount: number | string): string => {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0,00 €';
-  
-  const fixed = num.toFixed(2);
-  const parts = fixed.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
-  
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
-  return `${formattedInteger},${decimalPart} €`;
-};
-  const FilterSheet = () => (
+  const formatCurrency = (amount: number | string): string => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(num)) return '0,00 €';
+    
+    const fixed = num.toFixed(2);
+    const parts = fixed.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${formattedInteger},${decimalPart} €`;
+  };const FilterSheet = () => (
     <Sheet>
       <SheetTrigger asChild>
         <Button 
@@ -455,7 +451,6 @@ const formatCurrency = (amount: number | string): string => {
     </AlertDialog>
   );
 
-  // Estados de carga y sin datos
   if (isLoading) {
     return (
       <MainLayout>
@@ -517,7 +512,9 @@ const formatCurrency = (amount: number | string): string => {
     { name: 'T2', ivaRepercutido: analytics.ivaSummary.T2.repercutido, ivaSoportado: analytics.ivaSummary.T2.soportado },
     { name: 'T3', ivaRepercutido: analytics.ivaSummary.T3.repercutido, ivaSoportado: analytics.ivaSummary.T3.soportado },
     { name: 'T4', ivaRepercutido: analytics.ivaSummary.T4.repercutido, ivaSoportado: analytics.ivaSummary.T4.soportado },
-  ];return (
+  ];
+
+  return (
     <MainLayout>
       <DashboardTutorial />
       <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
@@ -528,7 +525,6 @@ const formatCurrency = (amount: number | string): string => {
                 Dashboard
               </h2>
               
-              {/* Filtros en desktop */}
               <div data-tutorial="filters" className="hidden md:flex items-center gap-2">
                 <Select
                   value={selectedAño?.toString() || 'all'}
@@ -578,7 +574,6 @@ const formatCurrency = (amount: number | string): string => {
               </div>
             </div>
             
-            {/* Botones de acción */}
             <div className="flex items-center gap-2 shrink-0">
               <FilterSheet />
               <Button
@@ -605,41 +600,95 @@ const formatCurrency = (amount: number | string): string => {
               <CleanButton />
             </div>
           </div>
-        </MainLayoutHeader>
-
-        <div className="space-y-4">
-          {/* KPIs Grid - MODIFICADO: Ahora usa formatNumber para números enteros */}
+        </MainLayoutHeader><div className="space-y-4">
           <div data-tutorial="kpis" className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {/* ✅ TARJETA 1: TOTAL INGRESOS - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '0ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
-                  title="Total Ingresos"
+                  title="Total Ingresos (con IVA)"
                   value={formatCurrency(analytics.kpis.totalIngresos)}
                   icon={ArrowUpRight}
                   description={`${formatNumber(analytics.kpis.totalFacturasIngreso)} facturas`}
+                  breakdown={[
+                    {
+                      label: "Base Imponible",
+                      value: formatCurrency(analytics.kpis.totalIngresosSinIva),
+                      className: "text-muted-foreground"
+                    },
+                    {
+                      label: "IVA Repercutido",
+                      value: formatCurrency(analytics.kpis.ivaRepercutido),
+                      className: "text-muted-foreground"
+                    },
+                    {
+                      label: "Total con IVA",
+                      value: formatCurrency(analytics.kpis.totalIngresos),
+                      className: "text-green-600 dark:text-green-500 font-semibold"
+                    }
+                  ]}
                 />
               </div>
             </div>
+            
+            {/* ✅ TARJETA 2: TOTAL GASTOS - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '50ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
-                  title="Total Gastos"
+                  title="Total Gastos (con IVA)"
                   value={formatCurrency(analytics.kpis.totalGastos)}
                   icon={ArrowDownLeft}
                   description={`${formatNumber(analytics.kpis.totalFacturasGasto)} facturas`}
+                  breakdown={[
+                    {
+                      label: "Base Imponible",
+                      value: formatCurrency(analytics.kpis.totalGastosSinIva),
+                      className: "text-muted-foreground"
+                    },
+                    {
+                      label: "IVA Soportado",
+                      value: formatCurrency(analytics.kpis.ivaSoportado),
+                      className: "text-muted-foreground"
+                    },
+                    {
+                      label: "Total con IVA",
+                      value: formatCurrency(analytics.kpis.totalGastos),
+                      className: "text-red-600 dark:text-red-500 font-semibold"
+                    }
+                  ]}
                 />
               </div>
             </div>
+            
+            {/* ✅ TARJETA 3: BENEFICIO BRUTO - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '100ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
-                  title="Beneficio Bruto"
+                  title="Beneficio Bruto (con IVA)"
                   value={formatCurrency(analytics.kpis.beneficio)}
                   icon={Scale}
                   description="Ingresos - Gastos"
+                  breakdown={[
+                    {
+                      label: "Beneficio sin IVA",
+                      value: formatCurrency(analytics.kpis.beneficioSinIva),
+                      className: "text-muted-foreground"
+                    },
+                    {
+                      label: "Resultado IVA",
+                      value: formatCurrency(analytics.kpis.resultadoIva),
+                      className: analytics.kpis.resultadoIva >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
+                    },
+                    {
+                      label: "Beneficio con IVA",
+                      value: formatCurrency(analytics.kpis.beneficio),
+                      className: analytics.kpis.beneficio >= 0 ? 'text-green-600 dark:text-green-500 font-semibold' : 'text-red-600 dark:text-red-500 font-semibold'
+                    }
+                  ]}
                 />
               </div>
             </div>
+            
             <div className="animate-fade-in group" style={{ animationDelay: '150ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
@@ -647,9 +696,27 @@ const formatCurrency = (amount: number | string): string => {
                   value={formatCurrency(analytics.kpis.resultadoIva)}
                   icon={Banknote}
                   description="Repercutido - Soportado"
+                  breakdown={[
+                    {
+                      label: "IVA Repercutido",
+                      value: formatCurrency(analytics.kpis.ivaRepercutido),
+                      className: "text-green-600 dark:text-green-500"
+                    },
+                    {
+                      label: "IVA Soportado",
+                      value: formatCurrency(analytics.kpis.ivaSoportado),
+                      className: "text-red-600 dark:text-red-500"
+                    },
+                    {
+                      label: "Resultado",
+                      value: formatCurrency(analytics.kpis.resultadoIva),
+                      className: analytics.kpis.resultadoIva >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'
+                    }
+                  ]}
                 />
               </div>
             </div>
+            
             <div className="animate-fade-in group" style={{ animationDelay: '200ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
@@ -657,13 +724,28 @@ const formatCurrency = (amount: number | string): string => {
                   value={formatNumber(analytics.kpis.totalDocs)}
                   icon={FileText}
                   description="En el sistema"
+                  breakdown={[
+                    {
+                      label: "Facturas Emitidas",
+                      value: formatNumber(analytics.kpis.totalFacturasIngreso),
+                      className: "text-green-600 dark:text-green-500"
+                    },
+                    {
+                      label: "Facturas Recibidas",
+                      value: formatNumber(analytics.kpis.totalFacturasGasto),
+                      className: "text-red-600 dark:text-red-500"
+                    },
+                    {
+                      label: "Total Sistema",
+                      value: formatNumber(analytics.kpis.totalDocs),
+                      className: "text-foreground"
+                    }
+                  ]}
                 />
               </div>
             </div>
           </div>
-          
 
-          {/* Charts Grid */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
             <div data-tutorial="financial-chart" className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '250ms' }}>
               <FinancialSummary data={financialSummaryData} />
@@ -721,22 +803,25 @@ const formatCurrency = (amount: number | string): string => {
           from {
             opacity: 0;
             transform: translateY(10px);
-}
-to {
-opacity: 1;
-transform: translateY(0);
-}
-}.animate-fade-in {
-      animation: fade-in 0.5s ease-out forwards;
-      opacity: 0;
-    }
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out forwards;
+          opacity: 0;
+        }
 
-    @media (prefers-reduced-motion: reduce) {
-      .animate-fade-in {
-        animation: none;
-        opacity: 1;
-      }
-    }
-  `}</style>
-</MainLayout>);
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-in {
+            animation: none;
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </MainLayout>
+  );
 }

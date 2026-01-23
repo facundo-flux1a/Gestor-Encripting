@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     
     const { 
       uploadId,
-      parentUploadId,  // 🆕 NUEVO
+      parentUploadId,
       status,
       step,
       progress,
@@ -35,7 +35,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'uploadId requerido' }, { status: 400 });
     }
 
-    // 🆕 ACTUALIZAR EN LA BASE DE DATOS
+    // 🔥 MANEJO ESPECIAL PARA ERRORES
+    if (status === 'Fallido' || status === 'Error' || status === 'error') {
+      console.error(`❌ [POST] Marcando como fallido: ${uploadId}`);
+      
+      await connection.query(
+        `UPDATE actividad 
+         SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, updated_at = NOW()
+         WHERE upload_id = ?`,
+        [step || 'Error', message || 'Error al procesar', uploadId]
+      );
+
+      // 🔥 SI TIENE PARENT, TAMBIÉN MARCAR AL PADRE
+      if (parentUploadId) {
+        await markParentAsFailed(parentUploadId, message);
+      }
+
+      return NextResponse.json({ 
+        success: true,
+        uploadId,
+        status: 'Fallido',
+        stored: true
+      });
+    }
+
+    // 🔥 ACTUALIZACIÓN NORMAL
     await connection.query(
       `UPDATE actividad 
        SET status = ?, step = ?, progress = ?, mensaje = ?, updated_at = NOW()
@@ -45,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ [POST] Actualizado: ${uploadId} - ${step} (${progress}%)`);
 
-    // 🆕 SI TIENE PARENT, ACTUALIZAR EL PROGRESO DEL PADRE
+    // 🔥 SI TIENE PARENT, ACTUALIZAR EL PROGRESO DEL PADRE
     if (parentUploadId) {
       await updateParentProgress(parentUploadId);
     }
@@ -65,7 +89,27 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 🆕 FUNCIÓN PARA CALCULAR Y ACTUALIZAR EL PROGRESO DEL PADRE
+// 🆕 FUNCIÓN PARA MARCAR AL PADRE COMO FALLIDO
+async function markParentAsFailed(parentUploadId: string, errorMessage?: string) {
+  try {
+    await connection.query(
+      `UPDATE actividad 
+       SET status = 'Fallido', 
+           step = 'Error en procesamiento', 
+           progress = 0, 
+           mensaje = ?, 
+           updated_at = NOW()
+       WHERE upload_id = ?`,
+      [errorMessage || 'Uno o más archivos fallaron en el procesamiento', parentUploadId]
+    );
+
+    console.log(`❌ [Parent Update] Padre marcado como fallido: ${parentUploadId}`);
+  } catch (error) {
+    console.error('❌ [Parent Update] Error al marcar padre como fallido:', error);
+  }
+}
+
+// 🔥 FUNCIÓN PARA CALCULAR Y ACTUALIZAR EL PROGRESO DEL PADRE
 async function updateParentProgress(parentUploadId: string) {
   try {
     // Obtener todos los hijos
@@ -93,9 +137,11 @@ async function updateParentProgress(parentUploadId: string) {
       parentStep = 'Completado';
       parentMessage = `✅ ${children.length} archivos procesados exitosamente`;
     } else if (anyFailed) {
+      // 🔥 SI ALGÚN HIJO FALLÓ, MARCAR AL PADRE COMO FALLIDO
       parentStatus = 'Fallido';
-      parentStep = 'Error';
-      parentMessage = `Algunos archivos fallaron en el procesamiento`;
+      parentStep = 'Error en procesamiento';
+      const failedCount = children.filter((child: any) => child.status === 'Fallido').length;
+      parentMessage = `❌ ${failedCount} de ${children.length} archivos fallaron`;
     }
 
     // Actualizar el padre
@@ -106,7 +152,7 @@ async function updateParentProgress(parentUploadId: string) {
       [parentStatus, parentStep, averageProgress, parentMessage, parentUploadId]
     );
 
-    console.log(`✅ [Parent Update] ${parentUploadId} - ${averageProgress}% (${children.length} hijos)`);
+    console.log(`✅ [Parent Update] ${parentUploadId} - ${parentStatus} ${averageProgress}% (${children.length} hijos)`);
   } catch (error) {
     console.error('❌ [Parent Update] Error:', error);
   }
@@ -149,7 +195,7 @@ export async function GET(request: NextRequest) {
 
     const mainRecord = rows[0];
 
-    // 🆕 SI ES UN PADRE (archivo comprimido), obtener sus hijos
+    // 🔥 SI ES UN PADRE (archivo comprimido), obtener sus hijos
     let children = [];
     if (mainRecord.parent_upload_id === null) {
       const [childRows] = await connection.query(
@@ -165,8 +211,8 @@ export async function GET(request: NextRequest) {
       progress: mainRecord.progress,
       message: mainRecord.mensaje,
       timestamp: Date.now(),
-      isCompressed: children.length > 0,  // 🆕 Indica si es un ZIP
-      children: children.map((child: any) => ({  // 🆕 Lista de archivos hijos
+      isCompressed: children.length > 0,
+      children: children.map((child: any) => ({
         uploadId: child.upload_id,
         fileName: child.documento_nombre,
         status: child.status,
