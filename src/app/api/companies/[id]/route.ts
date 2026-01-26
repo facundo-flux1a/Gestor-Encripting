@@ -3,6 +3,7 @@ import { deleteCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
 import db from '@/lib/db';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { validateCompanyDocuments } from '@/services/incidents-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +14,9 @@ export async function GET(
 ) {
   try {
     console.log('📊 [API-COUNT-DOCS] Iniciando conteo...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-COUNT-DOCS] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
@@ -23,7 +24,7 @@ export async function GET(
 
     const params = await context.params;
     const empresaId = parseInt(params.id, 10);
-    
+
     if (isNaN(empresaId)) {
       return NextResponse.json({ error: 'ID de empresa inválido' }, { status: 400 });
     }
@@ -48,7 +49,7 @@ export async function GET(
     );
 
     const count = countResult[0]?.count || 0;
-    
+
     console.log('✅ [API-COUNT-DOCS] Documentos encontrados:', count);
 
     return NextResponse.json({ count });
@@ -69,9 +70,9 @@ export async function PATCH(
 ) {
   try {
     console.log('✏️ [API-UPDATE-COMPANY] Iniciando actualización...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-UPDATE-COMPANY] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
@@ -79,7 +80,7 @@ export async function PATCH(
 
     const params = await context.params;
     const empresaId = parseInt(params.id, 10);
-    
+
     if (isNaN(empresaId)) {
       return NextResponse.json({ error: 'ID de empresa inválido' }, { status: 400 });
     }
@@ -205,6 +206,11 @@ export async function PATCH(
 
     console.log('✅ [API-UPDATE-COMPANY] Empresa actualizada exitosamente');
 
+    // ✅ FIRE AND FORGET: Revalidar incidencias por cambio de contexto
+    validateCompanyDocuments(empresaId).catch(err => {
+      console.error('❌ [Background] Error en validación de empresa:', err);
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Empresa actualizada correctamente',
@@ -227,9 +233,9 @@ export async function DELETE(
 ) {
   try {
     console.log('🗑️ [API-DELETE-COMPANY] Iniciando eliminación...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-DELETE-COMPANY] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
@@ -237,7 +243,7 @@ export async function DELETE(
 
     const params = await context.params;
     const companyId = parseInt(params.id);
-    
+
     if (isNaN(companyId)) {
       return NextResponse.json({ error: 'ID de empresa inválido' }, { status: 400 });
     }
@@ -252,10 +258,10 @@ export async function DELETE(
 
     console.log('✅ [API-DELETE-COMPANY] Empresa eliminada exitosamente');
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: result.documentsDeleted 
-        ? `Empresa eliminada junto con ${result.documentsDeleted} documento(s)` 
+      message: result.documentsDeleted
+        ? `Empresa eliminada junto con ${result.documentsDeleted} documento(s)`
         : 'Empresa eliminada correctamente',
       documentsDeleted: result.documentsDeleted
     });

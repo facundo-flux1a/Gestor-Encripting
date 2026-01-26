@@ -1,24 +1,25 @@
 import { Suspense } from 'react';
 import ActivityTable from '@/components/ActivityTable';
-import { Loader2 } from 'lucide-react';
+import { Activity, Loader2 } from 'lucide-react';
 import { ActividadProvider } from '@/context/ActividadProvider';
 import { ActividadTutorial } from '@/components/actividad/ActividadTutorial';
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function ActividadPage() {
   return (
     <ActividadProvider>
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="mb-4 sm:mb-6" data-tutorial="actividad-welcome">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Historial de Actividad</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">
-            Seguimiento de todos los documentos subidos y su estado de procesamiento
-          </p>
-        </div>
+        <PageHeader
+          title="Registro de Actividad"
+          icon={Activity}
+          description="Historial completo de acciones y eventos del sistema"
+          hideSidebarTrigger
+        />
 
         <Suspense fallback={<ActivitySkeleton />}>
           <ActivityTable />
         </Suspense>
-        
+
         <ActividadTutorial />
       </div>
     </ActividadProvider>

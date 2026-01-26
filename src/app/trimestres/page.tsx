@@ -3,8 +3,9 @@
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { TrimestresProvider } from '@/context/TrimestresProvider';
-import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
+import { MainLayout } from '@/components/layout/main-layout';
 import { TrimestreSelector } from '@/components/trimestres/trimestre-selector';
+import { PageHeader } from '@/components/layout/page-header';
 import { TrimestreStatsCard } from '@/components/trimestres/trimestre-stats-card';
 import { TrimestreTable } from '@/components/trimestres/trimestres-table';
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
@@ -27,6 +28,7 @@ import {
   DollarSign,
   ArrowUpCircle,
   ArrowDownCircle,
+  Calendar,
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 
@@ -37,25 +39,25 @@ function TrimestresPageContent() {
   const formatNumber = (num: number | string): string => {
     const value = typeof num === 'string' ? parseFloat(num) : num;
     if (isNaN(value)) return '0';
-    
+
     const parts = value.toString().split('.');
     const integerPart = parts[0];
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    
+
     return formattedInteger;
   };
 
   const formatCurrency = (amount: number | string): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
     if (isNaN(num)) return '0,00 €';
-    
+
     const fixed = num.toFixed(2);
     const parts = fixed.split('.');
     const integerPart = parts[0];
     const decimalPart = parts[1];
-    
+
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    
+
     return `${formattedInteger},${decimalPart} €`;
   };
 
@@ -65,11 +67,11 @@ function TrimestresPageContent() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
   const [mostrarVacios, setMostrarVacios] = React.useState(false);
-  
+
   // Trimestre seleccionado
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
   const [selectedTrimestre, setSelectedTrimestre] = React.useState<number>(1);
-  
+
   // Dialog de cierre
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [trimestreToClose, setTrimestreToClose] = React.useState<Trimestre | null>(null);
@@ -79,7 +81,7 @@ function TrimestresPageContent() {
       console.log('⏳ [Trimestres] Esperando a que carguen las empresas...');
       return;
     }
-    
+
     console.log('🔄 [Trimestres] Cargando trimestres con empresas:', selectedCompanyIds);
     loadTrimestres();
   }, [selectedCompanyIds, mostrarVacios, selectedAño, isLoadingCompanies]);
@@ -89,7 +91,7 @@ function TrimestresPageContent() {
       console.log('⏳ [Trimestres] Esperando a que carguen las empresas para los documentos...');
       return;
     }
-    
+
     console.log('🔄 [Trimestres] Cargando documentos con empresas:', selectedCompanyIds);
     loadDocumentos();
   }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]);
@@ -97,23 +99,23 @@ function TrimestresPageContent() {
   const loadTrimestres = async () => {
     try {
       setIsLoading(true);
-      
+
       console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds);
-      
+
       const params = new URLSearchParams();
-      
+
       if (selectedCompanyIds.length > 0) {
         selectedCompanyIds.forEach(id => {
           params.append('empresa_id', id.toString());
         });
       }
-      
+
       params.append('mostrar_vacios', 'false');
 
       console.log('📡 [loadTrimestres] Fetching con params:', params.toString());
 
       const response = await fetch(`/api/trimestres?${params}`);
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('❌ Error response:', errorData);
@@ -162,7 +164,7 @@ function TrimestresPageContent() {
 
       if (trimestresFinales.length > 0) {
         const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
-        
+
         if (!tieneAñoActual) {
           const reciente = trimestresFinales[0];
           console.log('🔄 [loadTrimestres] Año actual sin datos, seleccionando trimestre más reciente:', reciente);
@@ -270,7 +272,7 @@ function TrimestresPageContent() {
           trimestre: trimestreToClose.trimestre.toString(),
           empresa_id: empresaId?.toString() || 'all'
         });
-        
+
         window.location.href = `/sii?${params.toString()}`;
       }
 
@@ -301,15 +303,15 @@ function TrimestresPageContent() {
       empresa_id: null,
       empresa_nombre: `${trimestresDelPeriodo.length} empresas`,
       total_documentos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_documentos, 0),
-      
+
       // ✅ TOTALES CON IVA (principal)
       total_ingresos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_ingresos, 0),
       total_gastos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_gastos, 0),
-      
+
       // ✅ TOTALES SIN IVA (para breakdown)
       total_ingresos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_ingresos_sin_iva || 0), 0),
       total_gastos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_gastos_sin_iva || 0), 0),
-      
+
       iva_repercutido: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_repercutido, 0),
       iva_soportado: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_soportado, 0),
       cerrado: trimestresDelPeriodo.every(t => t.cerrado),
@@ -319,11 +321,11 @@ function TrimestresPageContent() {
 
   const trimestresParaSelector = React.useMemo(() => {
     const unique = new Map<string, Trimestre>();
-    
+
     trimestres.forEach(t => {
       const key = `${t.año}-${t.trimestre}`;
       if (!unique.has(key)) {
-        unique.set(key, { 
+        unique.set(key, {
           ...t,
           empresa_id: null,
           empresa_nombre: null,
@@ -345,40 +347,33 @@ function TrimestresPageContent() {
   return (
     <>
       <TrimestresTutorial />
-      
-      <MainLayout>
-        <MainLayoutHeader data-tutorial="trimestres-welcome">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 w-full">
-            <div className="flex flex-col gap-1 min-w-0 flex-1">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">
-                Gestión de Trimestres
-              </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                Visualiza y cierra los trimestres fiscales
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-3 shrink-0 mb-6 sm:mb-0">
-              <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
-                <Switch
-                  id="mostrar-vacios"
-                  checked={mostrarVacios}
-                  onCheckedChange={setMostrarVacios}
-                />
-                <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
-                  Mostrar vacíos
-                </Label>
-              </div>
 
-              <div className="w-[200px]" data-tutorial="trimestres-company-selector">
-                <CompaniesHeaderSelector />
-              </div>
+      <MainLayout>
+        <PageHeader
+          title="Gestión de Trimestres"
+          icon={Calendar}
+          badgeCount={0} // Opcional, o null si no se necesita
+        >
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
+              <Switch
+                id="mostrar-vacios"
+                checked={mostrarVacios}
+                onCheckedChange={setMostrarVacios}
+              />
+              <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
+                Mostrar vacíos
+              </Label>
+            </div>
+
+            <div className="w-[200px]" data-tutorial="trimestres-company-selector">
+              <CompaniesHeaderSelector />
             </div>
           </div>
-        </MainLayoutHeader>
+        </PageHeader>
 
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
-          
+
           {isLoading ? (
             <Skeleton className="h-12 sm:h-16 w-full" />
           ) : selectedCompanyIds.length > 0 ? (
@@ -401,7 +396,7 @@ function TrimestresPageContent() {
               {trimestreAgregado && (
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <QuarterBadge cerrado={trimestreAgregado.cerrado} />
-                  
+
                   {puedeCerrarse && (
                     <Button
                       variant="destructive"
@@ -432,7 +427,7 @@ function TrimestresPageContent() {
                           trimestre: selectedTrimestre.toString(),
                           empresa_id: trimestreAgregado.empresa_id?.toString() || 'all'
                         });
-                        
+
                         window.location.href = `/sii?${params.toString()}`;
                       }}
                     >
@@ -455,7 +450,7 @@ function TrimestresPageContent() {
             </div>
           ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7" data-tutorial="trimestres-stats">
-              
+
               {/* 1️⃣ Total Documentos - SIN CAMBIOS */}
               <TrimestreStatsCard
                 title="Total Documentos"
@@ -475,7 +470,7 @@ function TrimestresPageContent() {
                   }
                 ]}
               />
-              
+
               {/* 2️⃣ Ingresos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Ingresos"
@@ -501,7 +496,7 @@ function TrimestresPageContent() {
                   }
                 ]}
               />
-              
+
               {/* 3️⃣ Gastos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Gastos"
@@ -527,7 +522,7 @@ function TrimestresPageContent() {
                   }
                 ]}
               />
-              
+
               {/* 4️⃣ Beneficio Bruto - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="Beneficio Bruto"
@@ -535,10 +530,10 @@ function TrimestresPageContent() {
                 icon={DollarSign}
                 description="CON IVA incluido"
                 trend={
-                  (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) > 0 
-                    ? 'up' 
-                    : (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) < 0 
-                      ? 'down' 
+                  (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) > 0
+                    ? 'up'
+                    : (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) < 0
+                      ? 'down'
                       : 'neutral'
                 }
                 breakdown={[
@@ -555,8 +550,8 @@ function TrimestresPageContent() {
                   {
                     label: "Beneficio CON IVA",
                     value: formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos),
-                    className: (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) >= 0 
-                      ? 'text-green-600 dark:text-green-500 font-bold' 
+                    className: (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) >= 0
+                      ? 'text-green-600 dark:text-green-500 font-bold'
                       : 'text-red-600 dark:text-red-500 font-bold'
                   },
                   {
@@ -567,14 +562,14 @@ function TrimestresPageContent() {
                   {
                     label: "Beneficio SIN IVA",
                     value: formatCurrency(
-                      (trimestreAgregado.total_ingresos_sin_iva || 0) - 
+                      (trimestreAgregado.total_ingresos_sin_iva || 0) -
                       (trimestreAgregado.total_gastos_sin_iva || 0)
                     ),
                     className: "text-muted-foreground italic"
                   }
                 ]}
               />
-              
+
               {/* 5️⃣ IVA REPERCUTIDO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Repercutido"
@@ -600,7 +595,7 @@ function TrimestresPageContent() {
                   }
                 ]}
               />
-              
+
               {/* 6️⃣ IVA SOPORTADO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Soportado"
@@ -626,7 +621,7 @@ function TrimestresPageContent() {
                   }
                 ]}
               />
-              
+
               {/* 7️⃣ IVA NETO - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="IVA Neto"
@@ -660,13 +655,13 @@ function TrimestresPageContent() {
                   {
                     label: "Resultado IVA",
                     value: formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado),
-                    className: (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) >= 0 
-                      ? 'text-red-600 dark:text-red-500 font-bold' 
+                    className: (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) >= 0
+                      ? 'text-red-600 dark:text-red-500 font-bold'
                       : 'text-green-600 dark:text-green-500 font-bold'
                   }
                 ]}
               />
-              
+
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center">
@@ -701,7 +696,7 @@ function TrimestresPageContent() {
                 onClick={() => {
                   const selector = document.querySelector('[data-tutorial="trimestres-company-selector"]');
                   selector?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  
+
                   selector?.classList.add('ring-2', 'ring-violet-500', 'ring-offset-2');
                   setTimeout(() => {
                     selector?.classList.remove('ring-2', 'ring-violet-500', 'ring-offset-2');

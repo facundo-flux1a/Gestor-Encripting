@@ -11,12 +11,13 @@ import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
+import { validateIncidentsAsync } from './incidents-service';
 
 
 
 function calcularTrimestre(fecha: Date): number {
   const mes = fecha.getMonth() + 1; // 0-11 -> 1-12
-  
+
   if (mes >= 1 && mes <= 3) return 1;
   if (mes >= 4 && mes <= 6) return 2;
   if (mes >= 7 && mes <= 9) return 3;
@@ -27,32 +28,32 @@ function isDateInCurrentQuarter(date: Date): boolean {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentQuarter = calcularTrimestre(now);
-  
+
   const docYear = date.getFullYear();
   const docQuarter = calcularTrimestre(date);
-  
+
   return docYear === currentYear && docQuarter === currentQuarter;
 }
 
 interface DocumentPacket extends RowDataPacket {
-    id: number;
-    tipo_documento: string;
-    numero_documento: string;
-    fecha_emision: string;
-    fecha_vencimiento: string | null;
-    importe_total: number;
-    importe_sin_impuestos: number;
-    moneda: string;
-    observaciones: string | null;
-    datos_extra: any | null;
-    fecha_creacion: string;
-    id_de_empresa: number | null;
-    empresa_nombre?: string | null;  // ⬅️ AGREGAR
-    empresa_cif?: string | null; 
-    is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
-     trimestre_cerrado: number;
-       año_trimestre?: number;        // ✅ AGREGAR
-    num_trimestre?: number; 
+  id: number;
+  tipo_documento: string;
+  numero_documento: string;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  importe_total: number;
+  importe_sin_impuestos: number;
+  moneda: string;
+  observaciones: string | null;
+  datos_extra: any | null;
+  fecha_creacion: string;
+  id_de_empresa: number | null;
+  empresa_nombre?: string | null;  // ⬅️ AGREGAR
+  empresa_cif?: string | null;
+  is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
+  trimestre_cerrado: number;
+  año_trimestre?: number;        // ✅ AGREGAR
+  num_trimestre?: number;
 }
 interface DatosExtra {
   EMPRESA_EMISORA?: {
@@ -66,73 +67,73 @@ interface DatosExtra {
 }
 
 interface ArchivoPacket extends RowDataPacket {
-    id: number;
-    tipo_archivo: string | null;
-    nombre_archivo: string | null;
-    ruta_archivo: string | null;
-    hash_archivo: string | null;
-    fecha_subida: string;
-    documento_id: number;
+  id: number;
+  tipo_archivo: string | null;
+  nombre_archivo: string | null;
+  ruta_archivo: string | null;
+  hash_archivo: string | null;
+  fecha_subida: string;
+  documento_id: number;
 }
 
 interface EntidadPacket extends RowDataPacket {
-    id: number;
-    rol: string;
-    nombre: string;
-    direccion: string | null;
-    identificador_fiscal: string | null;
-    telefono: string | null;
-    email: string | null;
-    datos_extra: any | null;
-    documento_id: number;
-    fecha_creacion: string;
+  id: number;
+  rol: string;
+  nombre: string;
+  direccion: string | null;
+  identificador_fiscal: string | null;
+  telefono: string | null;
+  email: string | null;
+  datos_extra: any | null;
+  documento_id: number;
+  fecha_creacion: string;
 }
 
 interface LineaPacket extends RowDataPacket {
-    id: number;
-    documento_id: number;
-    codigo: string | null;
-    descripcion: string | null;
-    cantidad: number;
-    unidad: string | null;
-    precio_unitario: number;
-    descuento_porcentaje: number;
-    precio_neto: number;
-    importe_linea: number;
-    datos_extra: any | null;
-    fecha_emision: string; // Joined from documentos table
-    numero_documento: string; // Joined from documentos table
-    fecha_creacion: string | null;
+  id: number;
+  documento_id: number;
+  codigo: string | null;
+  descripcion: string | null;
+  cantidad: number;
+  unidad: string | null;
+  precio_unitario: number;
+  descuento_porcentaje: number;
+  precio_neto: number;
+  importe_linea: number;
+  datos_extra: any | null;
+  fecha_emision: string; // Joined from documentos table
+  numero_documento: string; // Joined from documentos table
+  fecha_creacion: string | null;
 }
 
 interface ImpuestoPacket extends RowDataPacket {
-    id: number;
-    tipo_impuesto: string | null; // Can be null
-    porcentaje: number;
-    base_imponible: number;
-    cuota: number;
-    documento_id: number;
+  id: number;
+  tipo_impuesto: string | null; // Can be null
+  porcentaje: number;
+  base_imponible: number;
+  cuota: number;
+  documento_id: number;
 }
 
 interface ProviderStatsPacket extends RowDataPacket {
-    nombre: string;
-    identificador_fiscal: string;
-    totalSpent: number;
-    totalDocuments: number;
-    uniqueProducts: number;
+  nombre: string;
+  identificador_fiscal: string;
+  totalSpent: number;
+  totalDocuments: number;
+  uniqueProducts: number;
 }
 
 interface IncidenciaPacket extends RowDataPacket {
-    id: number;
-    documento_id: number;
-    descripcion: string | null;
-    validado: boolean;
-    fecha_incidencia: string;
+  id: number;
+  documento_id: number;
+  descripcion: string | null;
+  validado: boolean;
+  fecha_incidencia: string;
 }
 
 interface EmpresaPacket extends RowDataPacket {
-    id: number;
-    nombre: string;
+  id: number;
+  nombre: string;
 }
 
 export type DashboardAnalytics = {
@@ -163,180 +164,180 @@ export type DashboardAnalytics = {
 
 // Helper function to safely parse JSON. Ensures the output is an object or null.
 const safeJsonParse = (data: any): object | null => {
-    if (typeof data === 'string') {
-        try {
-            const parsed = JSON.parse(data);
-            return typeof parsed === 'object' && parsed !== null ? parsed : null;
-        } catch (e) {
-            return null;
-        }
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data);
+      return typeof parsed === 'object' && parsed !== null ? parsed : null;
+    } catch (e) {
+      return null;
     }
-    return (typeof data === 'object' && data !== null) ? data : null;
+  }
+  return (typeof data === 'object' && data !== null) ? data : null;
 };
 
 async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Promise<Document[]> {
-    if (!documentRows || documentRows.length === 0) {
-        return [];
-    }
-    const docIds = documentRows.map(doc => doc.id);
-    
-    const [fileRows] = await db.query<ArchivoPacket[]>('SELECT * FROM archivos_documento WHERE documento_id IN (?)', [docIds]);
-    const [entidadRows] = await db.query<EntidadPacket[]>("SELECT * FROM entidades_documento WHERE documento_id IN (?)", [docIds]);
-    const [lineaRows] = await db.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id IN (?)', [docIds]);
-    const [impuestoRows] = await db.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id IN (?)', [docIds]);
-    const [incidenciaRows] = await db.query<IncidenciaPacket[]>('SELECT * FROM incidencias_documento WHERE documento_id IN (?)', [docIds]);
+  if (!documentRows || documentRows.length === 0) {
+    return [];
+  }
+  const docIds = documentRows.map(doc => doc.id);
 
-    const documents = documentRows.map(doc => {
-        const currentFiles = fileRows.filter(f => f.documento_id === doc.id);
-        const currentEntidades = entidadRows.filter(e => e.documento_id === doc.id);
-        const currentLineas = lineaRows.filter(l => l.documento_id === doc.id);
-        const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
-        const currentIncidencias = incidenciaRows.filter(i => i.documento_id === doc.id);
-        
-        const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
-        const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
+  const [fileRows] = await db.query<ArchivoPacket[]>('SELECT * FROM archivos_documento WHERE documento_id IN (?)', [docIds]);
+  const [entidadRows] = await db.query<EntidadPacket[]>("SELECT * FROM entidades_documento WHERE documento_id IN (?)", [docIds]);
+  const [lineaRows] = await db.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id IN (?)', [docIds]);
+  const [impuestoRows] = await db.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id IN (?)', [docIds]);
+  const [incidenciaRows] = await db.query<IncidenciaPacket[]>('SELECT * FROM incidencias_documento WHERE documento_id IN (?)', [docIds]);
 
-        const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
-             id: i.id,
-             tipo_impuesto: i.tipo_impuesto,
-             porcentaje: i.porcentaje,
-             base_imponible: i.base_imponible,
-             cuota: i.cuota,
-        }));
-        
-        const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+  const documents = documentRows.map(doc => {
+    const currentFiles = fileRows.filter(f => f.documento_id === doc.id);
+    const currentEntidades = entidadRows.filter(e => e.documento_id === doc.id);
+    const currentLineas = lineaRows.filter(l => l.documento_id === doc.id);
+    const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
+    const currentIncidencias = incidenciaRows.filter(i => i.documento_id === doc.id);
 
-        const entidades: DocumentEntity[] = currentEntidades.map(e => ({
-            id: e.id,
-            rol: e.rol,
-            nombre: e.nombre,
-            direccion: e.direccion,
-            identificador_fiscal: e.identificador_fiscal,
-            telefono: e.telefono,
-            email: e.email,
-            datos_extra: safeJsonParse(e.datos_extra),
-            fecha_creacion: e.fecha_creacion,
-        }));
+    const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
+    const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
-        const lineas: DocumentLine[] = currentLineas.map(l => ({
-             id: l.id,
-             documento_id: l.documento_id,
-             codigo: l.codigo,
-             descripcion: l.descripcion,
-             cantidad: l.cantidad,
-             unidad: l.unidad,
-             precio_unitario: l.precio_unitario,
-             descuento_porcentaje: l.descuento_porcentaje,
-             precio_neto: l.precio_neto,
-             importe_linea: l.importe_linea,
-             datos_extra: safeJsonParse(l.datos_extra),
-             fecha_creacion: l.fecha_creacion,
-        }));
-        
-        const archivos: DocumentFile[] = currentFiles.map(f => ({
-            id: f.id,
-            documento_id: f.documento_id,
-            tipo_archivo: f.tipo_archivo,
-            nombre_archivo: f.nombre_archivo,
-            ruta_archivo: f.ruta_archivo,
-            hash_archivo: f.hash_archivo,
-            fecha_subida: f.fecha_subida,
-        }));
+    const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
+      id: i.id,
+      tipo_impuesto: i.tipo_impuesto,
+      porcentaje: i.porcentaje,
+      base_imponible: i.base_imponible,
+      cuota: i.cuota,
+    }));
 
-        const incidencias: Incident[] = currentIncidencias.map(i => ({
-            id: i.id,
-            documento_id: i.documento_id,
-            incidencia: true,
-            descripcion: i.descripcion,
-            validado: i.validado,
-            fecha_incidencia: i.fecha_incidencia,
-            fecha_validacion: null,
-            validado_por: null,
-        }));
+    const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
 
-        const pendientes = incidencias.filter(i => !i.validado).length;
-        const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
+    const entidades: DocumentEntity[] = currentEntidades.map(e => ({
+      id: e.id,
+      rol: e.rol,
+      nombre: e.nombre,
+      direccion: e.direccion,
+      identificador_fiscal: e.identificador_fiscal,
+      telefono: e.telefono,
+      email: e.email,
+      datos_extra: safeJsonParse(e.datos_extra),
+      fecha_creacion: e.fecha_creacion,
+    }));
 
-        return {
-            id_documento: doc.id,
-            numero_documento: doc.numero_documento,
-            tipo_documento: doc.tipo_documento,
-            verificado: !primeraIncidenciaPendiente,
-            incidencia: !!primeraIncidenciaPendiente,
-            incidencia_razon: primeraIncidenciaPendiente?.descripcion ?? null,
-            fecha_emision: doc.fecha_emision,
-            fecha_vencimiento: doc.fecha_vencimiento,
-            fecha_creacion: doc.fecha_creacion,
-            moneda: doc.moneda,
-            observaciones: doc.observaciones,
-            datos_extra: safeJsonParse(doc.datos_extra),
-            base_imponible: Number(doc.importe_sin_impuestos) || 0,
-            iva: total_iva,
-            total: Number(doc.importe_total) || 0,
-            entidades: entidades,
-            lineas: lineas,
-            iva_details: iva_details,
-            archivos: archivos,
-            incidencias: incidencias,
-            proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
-            cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
-            empresa_id: doc.id_de_empresa,
-            empresa_nombre: doc.empresa_nombre || 'Sin empresa',
-            empresa_cif: doc.empresa_cif || null,
-            is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
-                trimestre_cerrado: doc.trimestre_cerrado || false, 
-                    año_trimestre: doc.año_trimestre || null,      // ✅ AGREGAR
-          num_trimestre: doc.num_trimestre || null, 
-        };
-    });
-    
-    return JSON.parse(JSON.stringify(documents));
+    const lineas: DocumentLine[] = currentLineas.map(l => ({
+      id: l.id,
+      documento_id: l.documento_id,
+      codigo: l.codigo,
+      descripcion: l.descripcion,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precio_unitario: l.precio_unitario,
+      descuento_porcentaje: l.descuento_porcentaje,
+      precio_neto: l.precio_neto,
+      importe_linea: l.importe_linea,
+      datos_extra: safeJsonParse(l.datos_extra),
+      fecha_creacion: l.fecha_creacion,
+    }));
+
+    const archivos: DocumentFile[] = currentFiles.map(f => ({
+      id: f.id,
+      documento_id: f.documento_id,
+      tipo_archivo: f.tipo_archivo,
+      nombre_archivo: f.nombre_archivo,
+      ruta_archivo: f.ruta_archivo,
+      hash_archivo: f.hash_archivo,
+      fecha_subida: f.fecha_subida,
+    }));
+
+    const incidencias: Incident[] = currentIncidencias.map(i => ({
+      id: i.id,
+      documento_id: i.documento_id,
+      incidencia: true,
+      descripcion: i.descripcion,
+      validado: i.validado,
+      fecha_incidencia: i.fecha_incidencia,
+      fecha_validacion: null,
+      validado_por: null,
+    }));
+
+    const pendientes = incidencias.filter(i => !i.validado).length;
+    const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
+
+    return {
+      id_documento: doc.id,
+      numero_documento: doc.numero_documento,
+      tipo_documento: doc.tipo_documento,
+      verificado: !primeraIncidenciaPendiente,
+      incidencia: !!primeraIncidenciaPendiente,
+      incidencia_razon: primeraIncidenciaPendiente?.descripcion ?? null,
+      fecha_emision: doc.fecha_emision,
+      fecha_vencimiento: doc.fecha_vencimiento,
+      fecha_creacion: doc.fecha_creacion,
+      moneda: doc.moneda,
+      observaciones: doc.observaciones,
+      datos_extra: safeJsonParse(doc.datos_extra),
+      base_imponible: Number(doc.importe_sin_impuestos) || 0,
+      iva: total_iva,
+      total: Number(doc.importe_total) || 0,
+      entidades: entidades,
+      lineas: lineas,
+      iva_details: iva_details,
+      archivos: archivos,
+      incidencias: incidencias,
+      proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
+      cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
+      empresa_id: doc.id_de_empresa,
+      empresa_nombre: doc.empresa_nombre || 'Sin empresa',
+      empresa_cif: doc.empresa_cif || null,
+      is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
+      trimestre_cerrado: doc.trimestre_cerrado || false,
+      año_trimestre: doc.año_trimestre || null,      // ✅ AGREGAR
+      num_trimestre: doc.num_trimestre || null,
+    };
+  });
+
+  return JSON.parse(JSON.stringify(documents));
 }
 
 /**
  * Obtiene todas las empresas del usuario actual
  */
 export async function getCompanies(): Promise<Company[]> {
-    try {
-        console.log('🔍 [getCompanies] Iniciando...');
-        
-        const user = await getCurrentUser();
-        
-        console.log('👤 [getCompanies] Usuario obtenido:', user);
-        
-        if (!user) {
-            console.warn('⚠️ [getCompanies] No hay usuario autenticado');
-            return [];
-        }
+  try {
+    console.log('🔍 [getCompanies] Iniciando...');
 
-        console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
+    const user = await getCurrentUser();
 
-        const query = 'SELECT id, nombre_de_empresa as name, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
-        
-        console.log('📝 [getCompanies] Query:', query);
-        console.log('📝 [getCompanies] Params:', [user.id]);
+    console.log('👤 [getCompanies] Usuario obtenido:', user);
 
-        const [rows] = await db.query<any[]>(query, [user.id]);
-
-        console.log('📊 [getCompanies] Filas obtenidas:', rows.length);
-        console.log('📋 [getCompanies] Datos RAW:', rows);
-
-        if (!rows || rows.length === 0) {
-            return [];
-        }
-
-        const companies = rows.map(row => ({
-            id: row.id,
-            name: row.name
-        }));
-        
-        console.log('✅ [getCompanies] Empresas mapeadas:', companies);
-
-        return companies as Company[];
-    } catch (error) {
-        console.error("❌ [getCompanies] Error:", error);
-        return [];
+    if (!user) {
+      console.warn('⚠️ [getCompanies] No hay usuario autenticado');
+      return [];
     }
+
+    console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
+
+    const query = 'SELECT id, nombre_de_empresa as name, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
+
+    console.log('📝 [getCompanies] Query:', query);
+    console.log('📝 [getCompanies] Params:', [user.id]);
+
+    const [rows] = await db.query<any[]>(query, [user.id]);
+
+    console.log('📊 [getCompanies] Filas obtenidas:', rows.length);
+    console.log('📋 [getCompanies] Datos RAW:', rows);
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    const companies = rows.map(row => ({
+      id: row.id,
+      name: row.name
+    }));
+
+    console.log('✅ [getCompanies] Empresas mapeadas:', companies);
+
+    return companies as Company[];
+  } catch (error) {
+    console.error("❌ [getCompanies] Error:", error);
+    return [];
+  }
 }
 
 /**
@@ -346,86 +347,86 @@ export async function getCompanies(): Promise<Company[]> {
  * Crea una nueva empresa para el usuario actual
  */
 export async function createCompany(data: {
-    name: string;
-    nombreFiscal?: string | null;
-    cif: string;
-    mailDeCarga?: string | null;
-  }): Promise<Company> {
-    try {
-      console.log('🏢 [createCompany] Iniciando creación de empresa:', data);
-      
-      const user = await getCurrentUser();
-      
-      if (!user) {
-        console.error('❌ [createCompany] No hay usuario autenticado');
-        throw new Error('Usuario no autenticado');
-      }
-  
-      console.log('👤 [createCompany] Usuario actual:', user.id);
-  
-      // Validaciones
-      if (!data.name || !data.name.trim()) {
-        throw new Error('El nombre de la empresa es obligatorio');
-      }
-  
-      if (!data.cif || !data.cif.trim()) {
-        throw new Error('El CIF es obligatorio');
-      }
-  
-      // Verificar si ya existe una empresa con el mismo CIF para este usuario
-      const [existingCompanies] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE CIF = ? AND id_de_usuario = ?',
-        [data.cif.trim(), user.id]
-      );
-  
-      if (existingCompanies.length > 0) {
-        throw new Error('Ya existe una empresa con este CIF');
-      }
-  
-      // Si se proporciona email, verificar que sea único globalmente
-      if (data.mailDeCarga?.trim()) {
-        const [existingEmail] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM empresas WHERE mail_de_carga = ?',
-          [data.mailDeCarga.trim()]
-        );
-  
-        if (existingEmail.length > 0) {
-          throw new Error('Ya existe una empresa con ese mail de carga');
-        }
-      }
-  
-      // Insertar la nueva empresa CON mail_de_carga
-      const [result] = await db.query<OkPacket>(
-        'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, id_de_usuario) VALUES (?, ?, ?, ?, ?)',
-        [
-          data.name.trim(), 
-          data.nombreFiscal?.trim() || null, 
-          data.cif.trim(), 
-          data.mailDeCarga?.trim() || null,
-          user.id
-        ]
-      );
-  
-      console.log('✅ [createCompany] Empresa creada con ID:', result.insertId);
-  
-      const newCompany: Company = {
-        id: result.insertId,
-        name: data.name.trim(),
-        nombreFiscal: data.nombreFiscal?.trim() || null,
-        cif: data.cif.trim()
-      };
-  
-      // Revalidar las rutas relevantes
-      revalidatePath('/documents');
-      revalidatePath('/dashboard');
-  
-      return newCompany;
-  
-    } catch (error) {
-      console.error('❌ [createCompany] Error:', error);
-      throw error;
+  name: string;
+  nombreFiscal?: string | null;
+  cif: string;
+  mailDeCarga?: string | null;
+}): Promise<Company> {
+  try {
+    console.log('🏢 [createCompany] Iniciando creación de empresa:', data);
+
+    const user = await getCurrentUser();
+
+    if (!user) {
+      console.error('❌ [createCompany] No hay usuario autenticado');
+      throw new Error('Usuario no autenticado');
     }
+
+    console.log('👤 [createCompany] Usuario actual:', user.id);
+
+    // Validaciones
+    if (!data.name || !data.name.trim()) {
+      throw new Error('El nombre de la empresa es obligatorio');
+    }
+
+    if (!data.cif || !data.cif.trim()) {
+      throw new Error('El CIF es obligatorio');
+    }
+
+    // Verificar si ya existe una empresa con el mismo CIF para este usuario
+    const [existingCompanies] = await db.query<RowDataPacket[]>(
+      'SELECT id FROM empresas WHERE CIF = ? AND id_de_usuario = ?',
+      [data.cif.trim(), user.id]
+    );
+
+    if (existingCompanies.length > 0) {
+      throw new Error('Ya existe una empresa con este CIF');
+    }
+
+    // Si se proporciona email, verificar que sea único globalmente
+    if (data.mailDeCarga?.trim()) {
+      const [existingEmail] = await db.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE mail_de_carga = ?',
+        [data.mailDeCarga.trim()]
+      );
+
+      if (existingEmail.length > 0) {
+        throw new Error('Ya existe una empresa con ese mail de carga');
+      }
+    }
+
+    // Insertar la nueva empresa CON mail_de_carga
+    const [result] = await db.query<OkPacket>(
+      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, id_de_usuario) VALUES (?, ?, ?, ?, ?)',
+      [
+        data.name.trim(),
+        data.nombreFiscal?.trim() || null,
+        data.cif.trim(),
+        data.mailDeCarga?.trim() || null,
+        user.id
+      ]
+    );
+
+    console.log('✅ [createCompany] Empresa creada con ID:', result.insertId);
+
+    const newCompany: Company = {
+      id: result.insertId,
+      name: data.name.trim(),
+      nombreFiscal: data.nombreFiscal?.trim() || null,
+      cif: data.cif.trim()
+    };
+
+    // Revalidar las rutas relevantes
+    revalidatePath('/documents');
+    revalidatePath('/dashboard');
+
+    return newCompany;
+
+  } catch (error) {
+    console.error('❌ [createCompany] Error:', error);
+    throw error;
   }
+}
 /**
  * Obtiene todos los documentos, opcionalmente filtrados por empresa
  */
@@ -436,16 +437,16 @@ export async function createCompany(data: {
  * Obtiene todos los documentos, opcionalmente filtrados por empresas
  */
 export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
-    console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds });
-    
-    try {
-        const user = await getCurrentUser();
-        if (!user) {
-            console.warn('⚠️ [document-service] No hay usuario autenticado');
-            return [];
-        }
+  console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds });
 
-        let query = `
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.warn('⚠️ [document-service] No hay usuario autenticado');
+      return [];
+    }
+
+    let query = `
             SELECT 
                 d.id,
                 d.tipo_documento,
@@ -469,55 +470,55 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
             LEFT JOIN empresas e ON d.id_de_empresa = e.id
             WHERE e.id_de_usuario = ?
         `;
-        
-        const params: any[] = [user.id];
-        
-        if (empresaIds && empresaIds.length > 0) {
-            query += ' AND d.id_de_empresa IN (?)';
-            params.push(empresaIds);
-        }
-        
-        query += ' ORDER BY d.fecha_emision DESC';
 
-        console.log('📝 [document-service] Query:', query);
-        console.log('📝 [document-service] Params:', params);
+    const params: any[] = [user.id];
 
-        const [documentRows] = await db.query<DocumentPacket[]>(query, params);
-        
-        console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
-        
-        // ⬅️ DEBUG: Ver trimestre_cerrado en los datos RAW
-        if (documentRows.length > 0) {
-            console.log('🔍 [document-service] Primer documento RAW:', {
-                id: documentRows[0].id,
-                is_new: documentRows[0].is_new,
-                trimestre_cerrado: documentRows[0].trimestre_cerrado,  // ⬅️ AGREGADO
-                numero: documentRows[0].numero_documento
-            });
-        }
-        
-        const result = await mapDocumentPacketsToDocuments(documentRows);
-        
-        console.log('✅ [document-service] Documentos mapeados:', result.length);
-        
-        return result;
-    } catch (error) {
-        console.error("❌ [document-service] Error al obtener documentos:", error);
-        return [];
+    if (empresaIds && empresaIds.length > 0) {
+      query += ' AND d.id_de_empresa IN (?)';
+      params.push(empresaIds);
     }
+
+    query += ' ORDER BY d.fecha_emision DESC';
+
+    console.log('📝 [document-service] Query:', query);
+    console.log('📝 [document-service] Params:', params);
+
+    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+    console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
+
+    // ⬅️ DEBUG: Ver trimestre_cerrado en los datos RAW
+    if (documentRows.length > 0) {
+      console.log('🔍 [document-service] Primer documento RAW:', {
+        id: documentRows[0].id,
+        is_new: documentRows[0].is_new,
+        trimestre_cerrado: documentRows[0].trimestre_cerrado,  // ⬅️ AGREGADO
+        numero: documentRows[0].numero_documento
+      });
+    }
+
+    const result = await mapDocumentPacketsToDocuments(documentRows);
+
+    console.log('✅ [document-service] Documentos mapeados:', result.length);
+
+    return result;
+  } catch (error) {
+    console.error("❌ [document-service] Error al obtener documentos:", error);
+    return [];
+  }
 }
 /**
  * Obtiene un documento por su ID
  */
 export async function getDocumentById(id: number): Promise<Document | null> {
-    try {
-        const user = await getCurrentUser();
-        if (!user) {
-            console.warn('⚠️ [document-service] No hay usuario autenticado');
-            return null;
-        }
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.warn('⚠️ [document-service] No hay usuario autenticado');
+      return null;
+    }
 
-        const query = `
+    const query = `
             SELECT 
                 d.id,
                 d.tipo_documento,
@@ -542,44 +543,44 @@ export async function getDocumentById(id: number): Promise<Document | null> {
             WHERE d.id = ? AND e.id_de_usuario = ?
         `;
 
-        console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
+    console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
 
-        const [documentRows] = await db.query<DocumentPacket[]>(query, [id, user.id]);
-        
-        if (documentRows.length === 0) {
-            console.log('⚠️ [document-service] Documento no encontrado:', id);
-            return null;
-        }
+    const [documentRows] = await db.query<DocumentPacket[]>(query, [id, user.id]);
 
-        console.log('✅ [document-service] Documento encontrado:', {
-            id: documentRows[0].id,
-            trimestre_cerrado: documentRows[0].trimestre_cerrado  // ⬅️ DEBUG
-        });
-        
-        const documents = await mapDocumentPacketsToDocuments(documentRows);
-        
-        return documents[0] || null;
-    } catch (error) {
-        console.error("❌ [document-service] Error al obtener documento por ID:", error);
-        return null;
+    if (documentRows.length === 0) {
+      console.log('⚠️ [document-service] Documento no encontrado:', id);
+      return null;
     }
+
+    console.log('✅ [document-service] Documento encontrado:', {
+      id: documentRows[0].id,
+      trimestre_cerrado: documentRows[0].trimestre_cerrado  // ⬅️ DEBUG
+    });
+
+    const documents = await mapDocumentPacketsToDocuments(documentRows);
+
+    return documents[0] || null;
+  } catch (error) {
+    console.error("❌ [document-service] Error al obtener documento por ID:", error);
+    return null;
+  }
 }
 
 export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
-    try {
-        const user = await getCurrentUser();
-        if (!user) {
-            console.warn('⚠️ [getIncidents] No hay usuario autenticado');
-            return [];
-        }
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.warn('⚠️ [getIncidents] No hay usuario autenticado');
+      return [];
+    }
 
-        // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
-        if (!empresaIds || empresaIds.length === 0) {
-            console.log('ℹ️ [getIncidents] No hay empresas seleccionadas');
-            return [];
-        }
+    // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
+    if (!empresaIds || empresaIds.length === 0) {
+      console.log('ℹ️ [getIncidents] No hay empresas seleccionadas');
+      return [];
+    }
 
-        let query = `
+    let query = `
             SELECT DISTINCT d.*,
                 e.nombre_de_empresa as empresa_nombre,
                 e.cif as empresa_cif
@@ -591,66 +592,66 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
               AND d.id_de_empresa IS NOT NULL
               AND d.id_de_empresa IN (?)
         `;
-        
-        const params: any[] = [user.id, empresaIds];
-        
-        query += ' ORDER BY d.fecha_emision DESC';
 
-        console.log('📝 [getIncidents] Query:', query);
-        console.log('📝 [getIncidents] Params:', params);
+    const params: any[] = [user.id, empresaIds];
 
-        const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+    query += ' ORDER BY d.fecha_emision DESC';
 
-        console.log('📊 [getIncidents] Incidencias encontradas:', documentRows.length);
+    console.log('📝 [getIncidents] Query:', query);
+    console.log('📝 [getIncidents] Params:', params);
 
-        return mapDocumentPacketsToDocuments(documentRows);
-    } catch (error) {
-        console.error("❌ [getIncidents] Error:", error);
-        return [];
-    }
+    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+    console.log('📊 [getIncidents] Incidencias encontradas:', documentRows.length);
+
+    return mapDocumentPacketsToDocuments(documentRows);
+  } catch (error) {
+    console.error("❌ [getIncidents] Error:", error);
+    return [];
+  }
 }
 
 
-export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{success: boolean}> {
-    const connection = await db.getConnection();
-    
-    try {
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log('🚀 [updateDocument] INICIO - ID:', id);
-        console.log('═══════════════════════════════════════════════════════════');
-        
-        await connection.beginTransaction();
-        console.log('✅ [updateDocument] Transacción iniciada');
-        
-        // ═══════════════════════════════════════════════════════════
-        // PASO 1: Verificar documento y trimestre cerrado
-        // ═══════════════════════════════════════════════════════════
-        const [docRows] = await connection.query<RowDataPacket[]>(
-            'SELECT trimestre_cerrado, año_trimestre, num_trimestre, id_de_empresa FROM documentos WHERE id = ?',
-            [id]
-        );
-        
-        if (docRows.length === 0) {
-            throw new Error('Documento no encontrado');
-        }
-        
-        if (docRows[0].trimestre_cerrado) {
-            throw new Error('No se puede modificar un documento de un trimestre cerrado');
-        }
+export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{ success: boolean }> {
+  const connection = await db.getConnection();
 
-        const empresaId = docRows[0].id_de_empresa;
-        console.log('📋 [updateDocument] Empresa ID:', empresaId);
+  try {
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('🚀 [updateDocument] INICIO - ID:', id);
+    console.log('═══════════════════════════════════════════════════════════');
 
-        // ═══════════════════════════════════════════════════════════
-        // PASO 2: Validar y crear trimestre si es necesario
-        // ═══════════════════════════════════════════════════════════
-        if (data.año_trimestre !== undefined && data.num_trimestre !== undefined) {
-            console.log('🔄 [updateDocument] Validando cambio de trimestre...');
-            console.log(`   Nuevo trimestre: ${data.año_trimestre}-T${data.num_trimestre}`);
-            
-            // ✅ Verificar si el trimestre de destino existe
-            const [trimestreExistente] = await connection.query<RowDataPacket[]>(
-                `SELECT DISTINCT 
+    await connection.beginTransaction();
+    console.log('✅ [updateDocument] Transacción iniciada');
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 1: Verificar documento y trimestre cerrado
+    // ═══════════════════════════════════════════════════════════
+    const [docRows] = await connection.query<RowDataPacket[]>(
+      'SELECT trimestre_cerrado, año_trimestre, num_trimestre, id_de_empresa FROM documentos WHERE id = ?',
+      [id]
+    );
+
+    if (docRows.length === 0) {
+      throw new Error('Documento no encontrado');
+    }
+
+    if (docRows[0].trimestre_cerrado) {
+      throw new Error('No se puede modificar un documento de un trimestre cerrado');
+    }
+
+    const empresaId = docRows[0].id_de_empresa;
+    console.log('📋 [updateDocument] Empresa ID:', empresaId);
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 2: Validar y crear trimestre si es necesario
+    // ═══════════════════════════════════════════════════════════
+    if (data.año_trimestre !== undefined && data.num_trimestre !== undefined) {
+      console.log('🔄 [updateDocument] Validando cambio de trimestre...');
+      console.log(`   Nuevo trimestre: ${data.año_trimestre}-T${data.num_trimestre}`);
+
+      // ✅ Verificar si el trimestre de destino existe
+      const [trimestreExistente] = await connection.query<RowDataPacket[]>(
+        `SELECT DISTINCT 
                    año_trimestre, 
                    num_trimestre,
                    MAX(trimestre_cerrado) as cerrado
@@ -659,141 +660,141 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                    AND año_trimestre = ? 
                    AND num_trimestre = ?
                  GROUP BY año_trimestre, num_trimestre`,
-                [empresaId, data.año_trimestre, data.num_trimestre]
-            );
-            
-            if (trimestreExistente.length > 0) {
-                // ✅ Trimestre existe - verificar que no esté cerrado
-                if (trimestreExistente[0].cerrado) {
-                    throw new Error('No se puede mover el documento a un trimestre cerrado');
-                }
-                console.log('✅ [updateDocument] Trimestre destino existe y está abierto');
-            } else {
-                // ✅ Trimestre NO existe - verificar que no exista en tabla trimestres cerrado
-                const [trimestreTabla] = await connection.query<RowDataPacket[]>(
-                    `SELECT cerrado FROM trimestres 
+        [empresaId, data.año_trimestre, data.num_trimestre]
+      );
+
+      if (trimestreExistente.length > 0) {
+        // ✅ Trimestre existe - verificar que no esté cerrado
+        if (trimestreExistente[0].cerrado) {
+          throw new Error('No se puede mover el documento a un trimestre cerrado');
+        }
+        console.log('✅ [updateDocument] Trimestre destino existe y está abierto');
+      } else {
+        // ✅ Trimestre NO existe - verificar que no exista en tabla trimestres cerrado
+        const [trimestreTabla] = await connection.query<RowDataPacket[]>(
+          `SELECT cerrado FROM trimestres 
                      WHERE id_de_empresa = ? 
                        AND año = ? 
                        AND num_trimestre = ?`,
-                    [empresaId, data.año_trimestre, data.num_trimestre]
-                );
-                
-                if (trimestreTabla.length > 0 && trimestreTabla[0].cerrado) {
-                    throw new Error('No se puede crear/mover a un trimestre cerrado');
-                }
-                
-                // ✅ Crear entrada en tabla trimestres (abierto por defecto)
-                console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
-                await connection.query(
-                    `INSERT INTO trimestres 
+          [empresaId, data.año_trimestre, data.num_trimestre]
+        );
+
+        if (trimestreTabla.length > 0 && trimestreTabla[0].cerrado) {
+          throw new Error('No se puede crear/mover a un trimestre cerrado');
+        }
+
+        // ✅ Crear entrada en tabla trimestres (abierto por defecto)
+        console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
+        await connection.query(
+          `INSERT INTO trimestres 
                      (año, num_trimestre, id_de_empresa, cerrado, total_documentos, total_ingresos, total_gastos, iva_repercutido, iva_soportado, fecha_creacion, fecha_actualizacion) 
                      VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
                      ON DUPLICATE KEY UPDATE fecha_actualizacion = NOW()`,
-                    [data.año_trimestre, data.num_trimestre, empresaId]
-                );
-                console.log('✅ [updateDocument] Trimestre creado en tabla trimestres');
-            }
-        }
+          [data.año_trimestre, data.num_trimestre, empresaId]
+        );
+        console.log('✅ [updateDocument] Trimestre creado en tabla trimestres');
+      }
+    }
 
-        // ═══════════════════════════════════════════════════════════
-        // PASO 3: Actualizar documento principal
-        // ═══════════════════════════════════════════════════════════
-        console.log('📝 [updateDocument] Actualizando documento principal...');
-        
-        const updateFields = [];
-        const updateValues = [];
-        
-        updateFields.push('tipo_documento = ?');
-        updateValues.push(data.tipo_documento || data.tipo);
-        
-        updateFields.push('numero_documento = ?');
-        updateValues.push(data.numero_documento);
-        
-        updateFields.push('fecha_emision = ?');
-        updateValues.push(data.fecha_emision || data.fecha_documento);
-        
-        updateFields.push('fecha_vencimiento = ?');
-        updateValues.push(data.fecha_vencimiento || data.fecha_recepcion);
-        
-        updateFields.push('observaciones = ?');
-        updateValues.push(data.observaciones || data.descripcion || data.notas);
-        
-        updateFields.push('importe_sin_impuestos = ?');
-        updateValues.push(data.importe_sin_impuestos || data.total_sin_impuesto);
-        
-        updateFields.push('importe_total = ?');
-        updateValues.push(data.importe_total || data.total_con_impuesto);
-        
-        updateFields.push('moneda = ?');
-        updateValues.push(data.moneda || 'EUR');
-        
-        // ✅ Actualizar trimestre si se especificó
-        if (data.año_trimestre !== undefined) {
-            updateFields.push('año_trimestre = ?');
-            updateValues.push(data.año_trimestre);
-        }
-        
-        if (data.num_trimestre !== undefined) {
-            updateFields.push('num_trimestre = ?');
-            updateValues.push(data.num_trimestre);
-        }
-        
-        updateValues.push(id);
-        
+    // ═══════════════════════════════════════════════════════════
+    // PASO 3: Actualizar documento principal
+    // ═══════════════════════════════════════════════════════════
+    console.log('📝 [updateDocument] Actualizando documento principal...');
+
+    const updateFields = [];
+    const updateValues = [];
+
+    updateFields.push('tipo_documento = ?');
+    updateValues.push(data.tipo_documento || data.tipo);
+
+    updateFields.push('numero_documento = ?');
+    updateValues.push(data.numero_documento);
+
+    updateFields.push('fecha_emision = ?');
+    updateValues.push(data.fecha_emision || data.fecha_documento);
+
+    updateFields.push('fecha_vencimiento = ?');
+    updateValues.push(data.fecha_vencimiento || data.fecha_recepcion);
+
+    updateFields.push('observaciones = ?');
+    updateValues.push(data.observaciones || data.descripcion || data.notas);
+
+    updateFields.push('importe_sin_impuestos = ?');
+    updateValues.push(data.importe_sin_impuestos || data.total_sin_impuesto);
+
+    updateFields.push('importe_total = ?');
+    updateValues.push(data.importe_total || data.total_con_impuesto);
+
+    updateFields.push('moneda = ?');
+    updateValues.push(data.moneda || 'EUR');
+
+    // ✅ Actualizar trimestre si se especificó
+    if (data.año_trimestre !== undefined) {
+      updateFields.push('año_trimestre = ?');
+      updateValues.push(data.año_trimestre);
+    }
+
+    if (data.num_trimestre !== undefined) {
+      updateFields.push('num_trimestre = ?');
+      updateValues.push(data.num_trimestre);
+    }
+
+    updateValues.push(id);
+
+    await connection.query(
+      `UPDATE documentos SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
+    );
+
+    console.log('✅ [updateDocument] Documento principal actualizado');
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 4: Actualizar entidades
+    // ═══════════════════════════════════════════════════════════
+    console.log('🔄 [updateDocument] Procesando entidades...');
+    await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
+
+    for (const entidad of data.entidades || []) {
+      await connection.query(
+        'INSERT INTO entidades_documento (documento_id, nombre, identificador_fiscal, direccion, telefono, email, rol, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          entidad.nombre || entidad.razon_social,
+          entidad.identificador_fiscal || entidad.cif,
+          entidad.direccion || entidad.domicilio,
+          entidad.telefono || '',
+          entidad.email || '',
+          entidad.rol || entidad.tipo_entidad,
+          JSON.stringify(entidad.datos_extra || {}),
+          data.id_de_empresa || null
+        ]
+      );
+    }
+    console.log('✅ [updateDocument] Entidades actualizadas');
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 5: Actualizar líneas (estrategia PATCH)
+    // ═══════════════════════════════════════════════════════════
+    console.log('🔄 [updateDocument] Procesando líneas (PATCH)...');
+
+    await connection.query('SET FOREIGN_KEY_CHECKS=0');
+
+    const [lineasExistentes] = await connection.query<RowDataPacket[]>(
+      'SELECT id FROM lineas_documento WHERE documento_id = ? ORDER BY id',
+      [id]
+    );
+
+    const lineasNuevas = data.lineas || [];
+    const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
+
+    for (let i = 0; i < maxLineas; i++) {
+      const lineaExistente = lineasExistentes[i];
+      const lineaNueva = lineasNuevas[i];
+
+      if (lineaExistente && lineaNueva) {
+        // UPDATE
         await connection.query(
-            `UPDATE documentos SET ${updateFields.join(', ')} WHERE id = ?`,
-            updateValues
-        );
-        
-        console.log('✅ [updateDocument] Documento principal actualizado');
-
-        // ═══════════════════════════════════════════════════════════
-        // PASO 4: Actualizar entidades
-        // ═══════════════════════════════════════════════════════════
-        console.log('🔄 [updateDocument] Procesando entidades...');
-        await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
-        
-        for (const entidad of data.entidades || []) {
-            await connection.query(
-                'INSERT INTO entidades_documento (documento_id, nombre, identificador_fiscal, direccion, telefono, email, rol, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [
-                    id,
-                    entidad.nombre || entidad.razon_social,
-                    entidad.identificador_fiscal || entidad.cif,
-                    entidad.direccion || entidad.domicilio,
-                    entidad.telefono || '',
-                    entidad.email || '',
-                    entidad.rol || entidad.tipo_entidad,
-                    JSON.stringify(entidad.datos_extra || {}),
-                    data.id_de_empresa || null
-                ]
-            );
-        }
-        console.log('✅ [updateDocument] Entidades actualizadas');
-
-        // ═══════════════════════════════════════════════════════════
-        // PASO 5: Actualizar líneas (estrategia PATCH)
-        // ═══════════════════════════════════════════════════════════
-        console.log('🔄 [updateDocument] Procesando líneas (PATCH)...');
-        
-        await connection.query('SET FOREIGN_KEY_CHECKS=0');
-        
-        const [lineasExistentes] = await connection.query<RowDataPacket[]>(
-            'SELECT id FROM lineas_documento WHERE documento_id = ? ORDER BY id',
-            [id]
-        );
-        
-        const lineasNuevas = data.lineas || [];
-        const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
-        
-        for (let i = 0; i < maxLineas; i++) {
-            const lineaExistente = lineasExistentes[i];
-            const lineaNueva = lineasNuevas[i];
-            
-            if (lineaExistente && lineaNueva) {
-                // UPDATE
-                await connection.query(
-                    `UPDATE lineas_documento SET 
+          `UPDATE lineas_documento SET 
                         codigo = ?,
                         descripcion = ?,
                         cantidad = ?,
@@ -805,334 +806,345 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                         datos_extra = ?,
                         id_de_empresa = ?
                     WHERE id = ?`,
-                    [
-                        lineaNueva.codigo || '',
-                        lineaNueva.descripcion,
-                        lineaNueva.cantidad,
-                        lineaNueva.unidad,
-                        lineaNueva.precio_unitario,
-                        lineaNueva.descuento_porcentaje,
-                        lineaNueva.precio_neto,
-                        lineaNueva.importe_linea,
-                        JSON.stringify(lineaNueva.datos_extra || {}),
-                        data.id_de_empresa || null,
-                        lineaExistente.id
-                    ]
-                );
-            } else if (!lineaExistente && lineaNueva) {
-                // INSERT
-                await connection.query(
-                    'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [
-                        id,
-                        lineaNueva.codigo || '',
-                        lineaNueva.descripcion,
-                        lineaNueva.cantidad,
-                        lineaNueva.unidad,
-                        lineaNueva.precio_unitario,
-                        lineaNueva.descuento_porcentaje,
-                        lineaNueva.precio_neto,
-                        lineaNueva.importe_linea,
-                        JSON.stringify(lineaNueva.datos_extra || {}),
-                        data.id_de_empresa || null
-                    ]
-                );
-            } else if (lineaExistente && !lineaNueva) {
-                // DELETE (marcar)
-                await connection.query(
-                    'UPDATE lineas_documento SET documento_id = -999999 WHERE id = ?',
-                    [lineaExistente.id]
-                );
-            }
-        }
-        
-        // Limpiar líneas marcadas
-        try {
-            await connection.query('DELETE FROM lineas_documento WHERE documento_id = -999999');
-        } catch (err) {
-            // Ignorar si no hay líneas para limpiar
-        }
-        
-        console.log('✅ [updateDocument] Líneas actualizadas');
-
-        // ═══════════════════════════════════════════════════════════
-        // PASO 6: Actualizar impuestos
-        // ═══════════════════════════════════════════════════════════
-        console.log('🔄 [updateDocument] Procesando impuestos...');
-        await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
-        
-        for (const iva of data.iva_details || []) {
-            const totalConImpuesto = iva.total_con_impuesto || (iva.base_imponible + iva.cuota);
-            await connection.query(
-                'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)',
-                [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
-            );
-        }
-        console.log('✅ [updateDocument] Impuestos actualizados');
-
-        await connection.query('SET FOREIGN_KEY_CHECKS=1');
-
-        // ═══════════════════════════════════════════════════════════
-        // PASO 7: Commit
-        // ═══════════════════════════════════════════════════════════
-        await connection.commit();
-        console.log('🎉 [updateDocument] Transacción completada exitosamente');
-        console.log('═══════════════════════════════════════════════════════════');
-        
-        return { success: true };
-    } catch (error: any) {
-        console.error('═══════════════════════════════════════════════════════════');
-        console.error('❌ [updateDocument] ERROR CRÍTICO');
-        console.error('═══════════════════════════════════════════════════════════');
-        console.error('❌ Error:', error);
-        console.error('❌ Error message:', error?.message);
-        console.error('═══════════════════════════════════════════════════════════');
-        
-        await connection.rollback();
-        console.log('🔄 [updateDocument] Rollback ejecutado');
-        throw error;
-    } finally {
-        connection.release();
-        console.log('🔌 [updateDocument] Conexión liberada');
-        console.log('═══════════════════════════════════════════════════════════');
+          [
+            lineaNueva.codigo || '',
+            lineaNueva.descripcion,
+            lineaNueva.cantidad,
+            lineaNueva.unidad,
+            lineaNueva.precio_unitario,
+            lineaNueva.descuento_porcentaje,
+            lineaNueva.precio_neto,
+            lineaNueva.importe_linea,
+            JSON.stringify(lineaNueva.datos_extra || {}),
+            data.id_de_empresa || null,
+            lineaExistente.id
+          ]
+        );
+      } else if (!lineaExistente && lineaNueva) {
+        // INSERT
+        await connection.query(
+          'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            id,
+            lineaNueva.codigo || '',
+            lineaNueva.descripcion,
+            lineaNueva.cantidad,
+            lineaNueva.unidad,
+            lineaNueva.precio_unitario,
+            lineaNueva.descuento_porcentaje,
+            lineaNueva.precio_neto,
+            lineaNueva.importe_linea,
+            JSON.stringify(lineaNueva.datos_extra || {}),
+            data.id_de_empresa || null
+          ]
+        );
+      } else if (lineaExistente && !lineaNueva) {
+        // DELETE (marcar)
+        await connection.query(
+          'UPDATE lineas_documento SET documento_id = -999999 WHERE id = ?',
+          [lineaExistente.id]
+        );
+      }
     }
+
+    // Limpiar líneas marcadas
+    try {
+      await connection.query('DELETE FROM lineas_documento WHERE documento_id = -999999');
+    } catch (err) {
+      // Ignorar si no hay líneas para limpiar
+    }
+
+    console.log('✅ [updateDocument] Líneas actualizadas');
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 6: Actualizar impuestos
+    // ═══════════════════════════════════════════════════════════
+    console.log('🔄 [updateDocument] Procesando impuestos...');
+    await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
+
+    for (const iva of data.iva_details || []) {
+      const totalConImpuesto = iva.total_con_impuesto || (iva.base_imponible + iva.cuota);
+      await connection.query(
+        'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
+      );
+    }
+    console.log('✅ [updateDocument] Impuestos actualizados');
+
+    await connection.query('SET FOREIGN_KEY_CHECKS=1');
+
+    // ═══════════════════════════════════════════════════════════
+    // PASO 7: Commit
+    // ═══════════════════════════════════════════════════════════
+    await connection.commit();
+    console.log('🎉 [updateDocument] Transacción completada exitosamente');
+    console.log('═══════════════════════════════════════════════════════════');
+
+    // 🚀 FIRE AND FORGET: Validación asíncrona de incidencias
+    validateIncidentsAsync(id).catch(err => {
+      console.error('❌ [Background] Error en validación de incidencias:', err);
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('❌ [updateDocument] ERROR CRÍTICO');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('❌ Error:', error);
+    console.error('❌ Error message:', error?.message);
+    console.error('═══════════════════════════════════════════════════════════');
+
+    await connection.rollback();
+    console.log('🔄 [updateDocument] Rollback ejecutado');
+    throw error;
+  } finally {
+    connection.release();
+    console.log('🔌 [updateDocument] Conexión liberada');
+    console.log('═══════════════════════════════════════════════════════════');
+  }
 }
 
 // ✅ ARREGLADO: Tipado de connection como PoolConnection
 async function recalculateDocumentTotals(docId: number, connection: any) {
-    // Recalculate base_imponible from lines
-    const [lineSumResult] = await connection.query(
-        'SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?', 
-        [docId]
-    ) as [RowDataPacket[], any];
-    const baseImponible = Number(lineSumResult[0].total_lines) || 0;
-    
-    // Recalculate total_iva from taxes (excluding retentions)
-    const [taxSumResult] = await connection.query(
-        'SELECT SUM(cuota) as total_tax FROM impuestos_documento WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', 
-        [docId, '%retencion%']
-    ) as [RowDataPacket[], any];
-    const totalIva = Number(taxSumResult[0].total_tax) || 0;
-    
-    // Get total retentions
-    const [retentionSumResult] = await connection.query(
-        'SELECT SUM(cuota) as total_retention FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', 
-        [docId, '%retencion%']
-    ) as [RowDataPacket[], any];
-    const totalRetention = Number(retentionSumResult[0].total_retention) || 0;
-    
-    // The total is base + taxes - retentions
-    const total = baseImponible + totalIva + totalRetention;
+  // Recalculate base_imponible from lines
+  const [lineSumResult] = await connection.query(
+    'SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?',
+    [docId]
+  ) as [RowDataPacket[], any];
+  const baseImponible = Number(lineSumResult[0].total_lines) || 0;
 
-    await connection.query(
-        'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
-        [baseImponible, total, docId]
-    );
+  // Recalculate total_iva from taxes (excluding retentions)
+  const [taxSumResult] = await connection.query(
+    'SELECT SUM(cuota) as total_tax FROM impuestos_documento WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)',
+    [docId, '%retencion%']
+  ) as [RowDataPacket[], any];
+  const totalIva = Number(taxSumResult[0].total_tax) || 0;
+
+  // Get total retentions
+  const [retentionSumResult] = await connection.query(
+    'SELECT SUM(cuota) as total_retention FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?',
+    [docId, '%retencion%']
+  ) as [RowDataPacket[], any];
+  const totalRetention = Number(retentionSumResult[0].total_retention) || 0;
+
+  // The total is base + taxes - retentions
+  const total = baseImponible + totalIva + totalRetention;
+
+  await connection.query(
+    'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
+    [baseImponible, total, docId]
+  );
 }
 
-export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{success: boolean}> {
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
+export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{ success: boolean }> {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
 
-        // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
-        const [docRows] = await connection.query<DocumentPacket[]>(
-            'SELECT trimestre_cerrado FROM documentos WHERE id = ?', 
-            [id]
-        );
-        
-        if (docRows.length === 0) {
-            throw new Error('Documento no encontrado.');
-        }
+    // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
+    const [docRows] = await connection.query<DocumentPacket[]>(
+      'SELECT trimestre_cerrado FROM documentos WHERE id = ?',
+      [id]
+    );
 
-        if (docRows[0].trimestre_cerrado === 1) {
-            throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
-        }
-
-        const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
-        
-        if (directDocumentFields.includes(fieldName)) {
-            const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
-                                fieldName === 'total' ? 'importe_total' :
-                                fieldName;
-            await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
-        } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
-            const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
-            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
-
-            if (existing.length > 0) {
-                await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
-            } else {
-                await connection.query('INSERT INTO entidades_documento (documento_id, rol, ??) VALUES (?, ?, ?)', [fieldToUpdate, id, 'proveedor', value]);
-            }
-        } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
-            const parts = fieldName.split('_');
-            const type = parts[1]; // 'base' or 'cuota'
-            const percentage = parseInt(parts[2], 10);
-            const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
-            
-            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [id, percentage, '%retencion%']);
-
-            if (existing.length > 0) {
-                await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
-            } else {
-                const base = type === 'base' ? value : 0;
-                const cuota = type === 'cuota' ? value : 0;
-                await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, `IVA`, percentage, base, cuota]);
-            }
-
-        } else if (fieldName === 'retencion') {
-            const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%retencion%']);
-             if (existing.length > 0) {
-                await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
-            } else {
-                await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
-            }
-        } else {
-            throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
-        }
-        
-        // Recalculate totals after any financial field is updated
-        await recalculateDocumentTotals(id, connection);
-
-        await connection.commit();
-        return { success: true };
-    } catch (error) {
-        await connection.rollback();
-        console.error('Failed to update field:', error);
-        throw error;
-    } finally {
-        connection.release();
+    if (docRows.length === 0) {
+      throw new Error('Documento no encontrado.');
     }
+
+    if (docRows[0].trimestre_cerrado === 1) {
+      throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
+    }
+
+    const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
+
+    if (directDocumentFields.includes(fieldName)) {
+      const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
+        fieldName === 'total' ? 'importe_total' :
+          fieldName;
+      await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
+    } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
+      const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
+      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
+
+      if (existing.length > 0) {
+        await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+      } else {
+        await connection.query('INSERT INTO entidades_documento (documento_id, rol, ??) VALUES (?, ?, ?)', [fieldToUpdate, id, 'proveedor', value]);
+      }
+    } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
+      const parts = fieldName.split('_');
+      const type = parts[1]; // 'base' or 'cuota'
+      const percentage = parseInt(parts[2], 10);
+      const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
+
+      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [id, percentage, '%retencion%']);
+
+      if (existing.length > 0) {
+        await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+      } else {
+        const base = type === 'base' ? value : 0;
+        const cuota = type === 'cuota' ? value : 0;
+        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, `IVA`, percentage, base, cuota]);
+      }
+
+    } else if (fieldName === 'retencion') {
+      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%retencion%']);
+      if (existing.length > 0) {
+        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
+      } else {
+        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
+      }
+    } else {
+      throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
+    }
+
+    // Recalculate totals after any financial field is updated
+    await recalculateDocumentTotals(id, connection);
+
+    await connection.commit();
+
+    // 🚀 FIRE AND FORGET: Validación asíncrona de incidencias
+    validateIncidentsAsync(id).catch(err => {
+      console.error('❌ [Background] Error en validación de incidencias:', err);
+    });
+
+    return { success: true };
+  } catch (error) {
+    await connection.rollback();
+    console.error('Failed to update field:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 /**
  * Crea un nuevo documento
  */
 export async function createDocument(payload: CreateDocumentPayload): Promise<{ success: boolean; id?: number; error?: string }> {
-    try {
-        const user = await getCurrentUser();
-        if (!user) {
-            return {
-                success: false,
-                error: 'Usuario no autenticado'
-            };
-        }
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return {
+        success: false,
+        error: 'Usuario no autenticado'
+      };
+    }
 
-        const { 
-            tipo_documento,
-            numero_documento, 
-            fecha_emision, 
-            fecha_vencimiento,
-            importe_total,
-            importe_sin_impuestos,
-            moneda,
-            observaciones,
-            empresa_id 
-        } = payload;
+    const {
+      tipo_documento,
+      numero_documento,
+      fecha_emision,
+      fecha_vencimiento,
+      importe_total,
+      importe_sin_impuestos,
+      moneda,
+      observaciones,
+      empresa_id
+    } = payload;
 
-        const [result] = await db.query<OkPacket>(
-            `INSERT INTO documentos 
+    const [result] = await db.query<OkPacket>(
+      `INSERT INTO documentos 
              (tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, id_de_empresa) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, empresa_id]
-        );
+      [tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, empresa_id]
+    );
 
-        revalidatePath('/documents');
-        return { success: true, id: result.insertId };
-    } catch (error) {
-        console.error('Error creating document:', error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Error desconocido al crear el documento'
-        };
-    }
+    revalidatePath('/documents');
+    return { success: true, id: result.insertId };
+  } catch (error) {
+    console.error('Error creating document:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido al crear el documento'
+    };
+  }
 }
 /**
  * Mueve un documento a otra empresa
  */
 export async function moveDocument(
-    documentId: number, 
-    newEmpresaId: number,
-    userId: number
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      console.log('🔄 [moveDocument] Iniciando - Doc:', documentId, 'Nueva empresa:', newEmpresaId);
-      
-      // Verificar que el documento existe y pertenece a una empresa del usuario
-      const [docRows] = await db.query<RowDataPacket[]>(
-        `SELECT d.id, d.id_de_empresa, e.id_de_usuario 
+  documentId: number,
+  newEmpresaId: number,
+  userId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('🔄 [moveDocument] Iniciando - Doc:', documentId, 'Nueva empresa:', newEmpresaId);
+
+    // Verificar que el documento existe y pertenece a una empresa del usuario
+    const [docRows] = await db.query<RowDataPacket[]>(
+      `SELECT d.id, d.id_de_empresa, e.id_de_usuario 
          FROM documentos d
          JOIN empresas e ON d.id_de_empresa = e.id
          WHERE d.id = ? AND e.id_de_usuario = ?`,
-        [documentId, userId]
-      );
-  
-      if (docRows.length === 0) {
-        console.error('❌ [moveDocument] Documento no encontrado o no pertenece al usuario');
-        return {
-          success: false,
-          error: 'Documento no encontrado o no tienes permisos para moverlo'
-        };
-      }
-  
-      const currentEmpresaId = docRows[0].id_de_empresa;
-      
-      if (currentEmpresaId === newEmpresaId) {
-        console.warn('⚠️ [moveDocument] El documento ya está en esa empresa');
-        return {
-          success: false,
-          error: 'El documento ya pertenece a esa empresa'
-        };
-      }
-  
-      // Verificar que la nueva empresa existe y pertenece al usuario
-      const [empresaRows] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
-        [newEmpresaId, userId]
-      );
-  
-      if (empresaRows.length === 0) {
-        console.error('❌ [moveDocument] Empresa destino no encontrada');
-        return {
-          success: false,
-          error: 'La empresa destino no existe o no tienes permisos'
-        };
-      }
-  
-      // Mover el documento
-      const [result] = await db.query<OkPacket>(
-        'UPDATE documentos SET id_de_empresa = ? WHERE id = ?',
-        [newEmpresaId, documentId]
-      );
-  
-      if (result.affectedRows === 0) {
-        console.error('❌ [moveDocument] No se pudo actualizar el documento');
-        return {
-          success: false,
-          error: 'No se pudo mover el documento'
-        };
-      }
-  
-      console.log('✅ [moveDocument] Documento movido exitosamente');
-      
-      // Revalidar rutas relevantes
-      revalidatePath('/documents');
-      revalidatePath('/dashboard');
-  
-      return { success: true };
-  
-    } catch (error) {
-      console.error('❌ [moveDocument] Error:', error);
+      [documentId, userId]
+    );
+
+    if (docRows.length === 0) {
+      console.error('❌ [moveDocument] Documento no encontrado o no pertenece al usuario');
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido al mover el documento'
+        error: 'Documento no encontrado o no tienes permisos para moverlo'
       };
     }
+
+    const currentEmpresaId = docRows[0].id_de_empresa;
+
+    if (currentEmpresaId === newEmpresaId) {
+      console.warn('⚠️ [moveDocument] El documento ya está en esa empresa');
+      return {
+        success: false,
+        error: 'El documento ya pertenece a esa empresa'
+      };
+    }
+
+    // Verificar que la nueva empresa existe y pertenece al usuario
+    const [empresaRows] = await db.query<RowDataPacket[]>(
+      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      [newEmpresaId, userId]
+    );
+
+    if (empresaRows.length === 0) {
+      console.error('❌ [moveDocument] Empresa destino no encontrada');
+      return {
+        success: false,
+        error: 'La empresa destino no existe o no tienes permisos'
+      };
+    }
+
+    // Mover el documento
+    const [result] = await db.query<OkPacket>(
+      'UPDATE documentos SET id_de_empresa = ? WHERE id = ?',
+      [newEmpresaId, documentId]
+    );
+
+    if (result.affectedRows === 0) {
+      console.error('❌ [moveDocument] No se pudo actualizar el documento');
+      return {
+        success: false,
+        error: 'No se pudo mover el documento'
+      };
+    }
+
+    console.log('✅ [moveDocument] Documento movido exitosamente');
+
+    // Revalidar rutas relevantes
+    revalidatePath('/documents');
+    revalidatePath('/dashboard');
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ [moveDocument] Error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido al mover el documento'
+    };
   }
-  /**
- * Elimina un documento del usuario actual
- */
+}
+/**
+* Elimina un documento del usuario actual
+*/
 /**
  * Elimina un documento del usuario actual
  */
@@ -1146,145 +1158,145 @@ export async function moveDocument(
  * Elimina un documento del usuario actual
  */
 export async function deleteDocument(
-    documentId: number
+  documentId: number
 ): Promise<{ success: boolean; error?: string }> {
-    try {
-        console.log('🗑️ [deleteDocument] Iniciando eliminación de documento:', documentId);
+  try {
+    console.log('🗑️ [deleteDocument] Iniciando eliminación de documento:', documentId);
 
-        // Obtener el usuario actual
-        const user = await getCurrentUser();
-        if (!user) {
-            console.error('❌ [deleteDocument] No hay usuario autenticado');
-            return { success: false, error: 'Usuario no autenticado' };
-        }
+    // Obtener el usuario actual
+    const user = await getCurrentUser();
+    if (!user) {
+      console.error('❌ [deleteDocument] No hay usuario autenticado');
+      return { success: false, error: 'Usuario no autenticado' };
+    }
 
-        // Verificar que el documento pertenece a una empresa del usuario
-        const [docCheck] = await db.query<RowDataPacket[]>(
-            `SELECT d.id 
+    // Verificar que el documento pertenece a una empresa del usuario
+    const [docCheck] = await db.query<RowDataPacket[]>(
+      `SELECT d.id 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
              WHERE d.id = ? AND e.id_de_usuario = ?`,
-            [documentId, user.id]
-        );
+      [documentId, user.id]
+    );
 
-        if (docCheck.length === 0) {
-            console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
-            return { success: false, error: 'Documento no encontrado' };
-        }
-
-        // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
-        const [result] = await db.query<OkPacket>(
-            'DELETE FROM documentos WHERE id = ?',
-            [documentId]
-        );
-
-        if (result.affectedRows === 0) {
-            console.error('❌ [deleteDocument] No se pudo eliminar el documento');
-            return { success: false, error: 'No se pudo eliminar el documento' };
-        }
-
-        console.log('✅ [deleteDocument] Documento eliminado correctamente');
-
-        // Revalidar rutas
-        revalidatePath('/documents');
-        revalidatePath('/dashboard');
-
-        return { success: true };
-
-    } catch (error) {
-        console.error('❌ [deleteDocument] Error:', error);
-        return { 
-            success: false, 
-            error: 'Error al eliminar el documento' 
-        };
+    if (docCheck.length === 0) {
+      console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
+      return { success: false, error: 'Documento no encontrado' };
     }
+
+    // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
+    const [result] = await db.query<OkPacket>(
+      'DELETE FROM documentos WHERE id = ?',
+      [documentId]
+    );
+
+    if (result.affectedRows === 0) {
+      console.error('❌ [deleteDocument] No se pudo eliminar el documento');
+      return { success: false, error: 'No se pudo eliminar el documento' };
+    }
+
+    console.log('✅ [deleteDocument] Documento eliminado correctamente');
+
+    // Revalidar rutas
+    revalidatePath('/documents');
+    revalidatePath('/dashboard');
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ [deleteDocument] Error:', error);
+    return {
+      success: false,
+      error: 'Error al eliminar el documento'
+    };
+  }
 }
-  
-  /**
-   * Elimina una empresa y TODOS sus documentos asociados
-   */
-  export async function deleteCompany(
-    empresaId: number,
-    userId: number
-  ): Promise<{ success: boolean; error?: string; documentsDeleted?: number }> {
-    try {
-      console.log('🗑️ [deleteCompany] Iniciando eliminación de empresa:', empresaId);
-  
-      // Verificar que la empresa pertenece al usuario
-      const [companyCheck] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
-        [empresaId, userId]
-      );
-  
-      if (companyCheck.length === 0) {
-        console.error('❌ [deleteCompany] Empresa no encontrada o no pertenece al usuario');
-        return { success: false, error: 'Empresa no encontrada' };
-      }
-  
-      // Contar documentos que se eliminarán
-      const [docCount] = await db.query<RowDataPacket[]>(
-        'SELECT COUNT(*) as count FROM documentos WHERE id_de_empresa = ?',
+
+/**
+ * Elimina una empresa y TODOS sus documentos asociados
+ */
+export async function deleteCompany(
+  empresaId: number,
+  userId: number
+): Promise<{ success: boolean; error?: string; documentsDeleted?: number }> {
+  try {
+    console.log('🗑️ [deleteCompany] Iniciando eliminación de empresa:', empresaId);
+
+    // Verificar que la empresa pertenece al usuario
+    const [companyCheck] = await db.query<RowDataPacket[]>(
+      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      [empresaId, userId]
+    );
+
+    if (companyCheck.length === 0) {
+      console.error('❌ [deleteCompany] Empresa no encontrada o no pertenece al usuario');
+      return { success: false, error: 'Empresa no encontrada' };
+    }
+
+    // Contar documentos que se eliminarán
+    const [docCount] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) as count FROM documentos WHERE id_de_empresa = ?',
+      [empresaId]
+    );
+
+    const documentsToDelete = docCount[0]?.count || 0;
+    console.log(`📄 [deleteCompany] Se eliminarán ${documentsToDelete} documento(s)`);
+
+    // Eliminar todos los documentos de la empresa
+    if (documentsToDelete > 0) {
+      await db.query(
+        'DELETE FROM documentos WHERE id_de_empresa = ?',
         [empresaId]
       );
-  
-      const documentsToDelete = docCount[0]?.count || 0;
-      console.log(`📄 [deleteCompany] Se eliminarán ${documentsToDelete} documento(s)`);
-  
-      // Eliminar todos los documentos de la empresa
-      if (documentsToDelete > 0) {
-        await db.query(
-          'DELETE FROM documentos WHERE id_de_empresa = ?',
-          [empresaId]
-        );
-        console.log(`✅ [deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
-      }
-  
-      // Eliminar la empresa
-      await db.query(
-        'DELETE FROM empresas WHERE id = ? AND id_de_usuario = ?',
-        [empresaId, userId]
-      );
-  
-      console.log('✅ [deleteCompany] Empresa eliminada correctamente');
-  
-      // Revalidar rutas
-      revalidatePath('/documents');
-      revalidatePath('/dashboard');
-  
-      return { 
-        success: true,
-        documentsDeleted: documentsToDelete
-      };
-  
-    } catch (error) {
-      console.error('❌ [deleteCompany] Error:', error);
-      return { 
-        success: false, 
-        error: 'Error al eliminar la empresa' 
-      };
+      console.log(`✅ [deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
     }
-  }
-export async function validateDocumentIncidents(documentId: number): Promise<{success: boolean}> {
-    await db.query<OkPacket>(
-        'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
-        ['system', documentId]
+
+    // Eliminar la empresa
+    await db.query(
+      'DELETE FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      [empresaId, userId]
     );
-    return { success: true };
+
+    console.log('✅ [deleteCompany] Empresa eliminada correctamente');
+
+    // Revalidar rutas
+    revalidatePath('/documents');
+    revalidatePath('/dashboard');
+
+    return {
+      success: true,
+      documentsDeleted: documentsToDelete
+    };
+
+  } catch (error) {
+    console.error('❌ [deleteCompany] Error:', error);
+    return {
+      success: false,
+      error: 'Error al eliminar la empresa'
+    };
+  }
+}
+export async function validateDocumentIncidents(documentId: number): Promise<{ success: boolean }> {
+  await db.query<OkPacket>(
+    'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
+    ['system', documentId]
+  );
+  return { success: true };
 }
 
 export async function getUniqueProvidersCount(): Promise<number> {
-    const [providerRows] = await db.query<RowDataPacket[]>(`
+  const [providerRows] = await db.query<RowDataPacket[]>(`
        SELECT COUNT(DISTINCT identificador_fiscal) as count
        FROM entidades_documento
        WHERE (rol = 'proveedor' OR rol = 'emisor')
          AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
     `);
 
-    return providerRows[0].count || 0;
+  return providerRows[0].count || 0;
 }
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
-    const [providerRows] = await db.query<EntidadPacket[]>(`
+  const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT 
             identificador_fiscal, 
             nombre,
@@ -1303,35 +1315,35 @@ export async function getUniqueProviders(): Promise<DocumentEntity[]> {
         ORDER BY nombre ASC
     `);
 
-    const providers: DocumentEntity[] = providerRows.map(p => ({
-        id: p.id,
-        rol: p.rol,
-        nombre: p.nombre,
-        direccion: p.direccion,
-        identificador_fiscal: p.identificador_fiscal,
-        telefono: p.telefono,
-        email: p.email,
-        datos_extra: safeJsonParse(p.datos_extra),
-        fecha_creacion: p.fecha_creacion,
-    }));
+  const providers: DocumentEntity[] = providerRows.map(p => ({
+    id: p.id,
+    rol: p.rol,
+    nombre: p.nombre,
+    direccion: p.direccion,
+    identificador_fiscal: p.identificador_fiscal,
+    telefono: p.telefono,
+    email: p.email,
+    datos_extra: safeJsonParse(p.datos_extra),
+    fecha_creacion: p.fecha_creacion,
+  }));
 
-    return JSON.parse(JSON.stringify(providers));
+  return JSON.parse(JSON.stringify(providers));
 }
 
 export async function getProvidersWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
-    if (!companyIds || companyIds.length === 0) return [];
-  
-    const placeholders = companyIds.map(() => '?').join(',');
-    const showCompanyName = companyIds.length > 1;
-    
-    // ✅ ARREGLADO: Filtro de tipo de documento (FACTURAS Y ABONOS)
-    const whereDocType = `AND (
+  if (!companyIds || companyIds.length === 0) return [];
+
+  const placeholders = companyIds.map(() => '?').join(',');
+  const showCompanyName = companyIds.length > 1;
+
+  // ✅ ARREGLADO: Filtro de tipo de documento (FACTURAS Y ABONOS)
+  const whereDocType = `AND (
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`;
-  
-    // ✅ PASO 1: Obtener proveedores y documentos
-    const [providerRows] = await db.query<any[]>(`
+
+  // ✅ PASO 1: Obtener proveedores y documentos
+  const [providerRows] = await db.query<any[]>(`
       SELECT 
           e.nombre,
           e.rol,
@@ -1351,13 +1363,13 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
         AND d.id_de_empresa IN (${placeholders})
         ${whereDocType}
     `, companyIds);
-  
-    console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
-  
-    // ✅ PASO 2: Obtener productos en query SEPARADA
-    const docIds = [...new Set(providerRows.map(r => r.documento_id))];
-    
-    const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
+
+  console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
+
+  // ✅ PASO 2: Obtener productos en query SEPARADA
+  const docIds = [...new Set(providerRows.map(r => r.documento_id))];
+
+  const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
       SELECT DISTINCT
           documento_id,
           codigo
@@ -1366,135 +1378,135 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
         AND codigo IS NOT NULL
         AND codigo != ''
     `, docIds) : [[]];
-  
-    console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
-  
-    // ✅ PASO 3: Crear mapa de productos por documento
-    const productsByDoc = new Map<number, Set<string>>();
-    productRows.forEach(p => {
-      if (!productsByDoc.has(p.documento_id)) {
-        productsByDoc.set(p.documento_id, new Set());
-      }
-      productsByDoc.get(p.documento_id)!.add(p.codigo);
-    });
-  
-    // ✅ PASO 4: Agrupar por identificador_fiscal
-    const providerMap = new Map<string, {
-      rol: string;
-      nombre: string;
-      direccion: string | null;
-      identificador_fiscal: string;
-      telefono: string | null;
-      email: string | null;
-      datos_extra: any;
-      fecha_creacion: string | null;
-      empresas: Set<string>;
-      totalSpent: number;
-      documentos: Set<number>;
-      productos: Set<string>;
-    }>();
-  
-    providerRows.forEach(row => {
-      const fiscalId = row.identificador_fiscal || 'SIN_CIF';
-      
-      if (!providerMap.has(fiscalId)) {
-        providerMap.set(fiscalId, {
-          rol: row.rol,
-          nombre: row.nombre,
-          direccion: row.direccion,
-          identificador_fiscal: row.identificador_fiscal,
-          telefono: row.telefono,
-          email: row.email,
-          datos_extra: row.datos_extra,
-          fecha_creacion: row.fecha_creacion,
-          empresas: new Set(),
-          totalSpent: 0,
-          documentos: new Set(),
-          productos: new Set(),
-        });
-      }
-  
-      const provider = providerMap.get(fiscalId)!;
-      
-      // Agregar empresa
-      if (row.empresaNombre) {
-        provider.empresas.add(row.empresaNombre);
-      }
-      
-      // ✅ CRÍTICO: Solo sumar UNA VEZ cada documento
-      if (!provider.documentos.has(row.documento_id)) {
-        provider.totalSpent += Number(row.importe_total || 0);
-        provider.documentos.add(row.documento_id);
-        
-        console.log(`💰 [${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR (Total: ${provider.totalSpent.toFixed(2)})`);
-      }
-      
-      // Agregar productos de este documento
-      const docProducts = productsByDoc.get(row.documento_id);
-      if (docProducts) {
-        docProducts.forEach(codigo => provider.productos.add(codigo));
-      }
-    });
-  
-    // ✅ PASO 5: Convertir Map a Array
-    const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
-     let datosExtra: DatosExtra = {};
-      try {
-        datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
-      } catch {}
-  
-      const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
-      
-      const empresasArray = Array.from(p.empresas);
-      const empresaNombre = showCompanyName && empresasArray.length > 0
-        ? empresasArray.join(', ')
-        : undefined;
-  
-      return {
-        rol: p.rol || 'N/A',
-        nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
-        direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
-        identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
-        telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
-        email: p.email || empresaEmisora.EMAIL || 'N/A',
-        totalSpent: p.totalSpent,
-        totalDocuments: p.documentos.size,
-        uniqueProducts: p.productos.size,
-        datos_extra: p.datos_extra || null,
-        fecha_creacion: p.fecha_creacion || null,
-        empresaNombre: empresaNombre,
-      };
-    });
-  
-    // Ordenar por gasto total descendente
-    providers.sort((a, b) => b.totalSpent - a.totalSpent);
-  
-    console.log('✅ [getProvidersWithStats] Proveedores procesados:', providers.length);
-    providers.slice(0, 5).forEach(p => {
-      console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR (${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
-    });
-  
-    return providers;
+
+  console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
+
+  // ✅ PASO 3: Crear mapa de productos por documento
+  const productsByDoc = new Map<number, Set<string>>();
+  productRows.forEach(p => {
+    if (!productsByDoc.has(p.documento_id)) {
+      productsByDoc.set(p.documento_id, new Set());
+    }
+    productsByDoc.get(p.documento_id)!.add(p.codigo);
+  });
+
+  // ✅ PASO 4: Agrupar por identificador_fiscal
+  const providerMap = new Map<string, {
+    rol: string;
+    nombre: string;
+    direccion: string | null;
+    identificador_fiscal: string;
+    telefono: string | null;
+    email: string | null;
+    datos_extra: any;
+    fecha_creacion: string | null;
+    empresas: Set<string>;
+    totalSpent: number;
+    documentos: Set<number>;
+    productos: Set<string>;
+  }>();
+
+  providerRows.forEach(row => {
+    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+
+    if (!providerMap.has(fiscalId)) {
+      providerMap.set(fiscalId, {
+        rol: row.rol,
+        nombre: row.nombre,
+        direccion: row.direccion,
+        identificador_fiscal: row.identificador_fiscal,
+        telefono: row.telefono,
+        email: row.email,
+        datos_extra: row.datos_extra,
+        fecha_creacion: row.fecha_creacion,
+        empresas: new Set(),
+        totalSpent: 0,
+        documentos: new Set(),
+        productos: new Set(),
+      });
+    }
+
+    const provider = providerMap.get(fiscalId)!;
+
+    // Agregar empresa
+    if (row.empresaNombre) {
+      provider.empresas.add(row.empresaNombre);
+    }
+
+    // ✅ CRÍTICO: Solo sumar UNA VEZ cada documento
+    if (!provider.documentos.has(row.documento_id)) {
+      provider.totalSpent += Number(row.importe_total || 0);
+      provider.documentos.add(row.documento_id);
+
+      console.log(`💰 [${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR (Total: ${provider.totalSpent.toFixed(2)})`);
+    }
+
+    // Agregar productos de este documento
+    const docProducts = productsByDoc.get(row.documento_id);
+    if (docProducts) {
+      docProducts.forEach(codigo => provider.productos.add(codigo));
+    }
+  });
+
+  // ✅ PASO 5: Convertir Map a Array
+  const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+    let datosExtra: DatosExtra = {};
+    try {
+      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+    } catch { }
+
+    const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
+
+    const empresasArray = Array.from(p.empresas);
+    const empresaNombre = showCompanyName && empresasArray.length > 0
+      ? empresasArray.join(', ')
+      : undefined;
+
+    return {
+      rol: p.rol || 'N/A',
+      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
+      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
+      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
+      email: p.email || empresaEmisora.EMAIL || 'N/A',
+      totalSpent: p.totalSpent,
+      totalDocuments: p.documentos.size,
+      uniqueProducts: p.productos.size,
+      datos_extra: p.datos_extra || null,
+      fecha_creacion: p.fecha_creacion || null,
+      empresaNombre: empresaNombre,
+    };
+  });
+
+  // Ordenar por gasto total descendente
+  providers.sort((a, b) => b.totalSpent - a.totalSpent);
+
+  console.log('✅ [getProvidersWithStats] Proveedores procesados:', providers.length);
+  providers.slice(0, 5).forEach(p => {
+    console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR (${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
+  });
+
+  return providers;
 }
 
 export async function getAllProducts(): Promise<number> {
-    const [lineaRows] = await db.query<RowDataPacket[]>(`
+  const [lineaRows] = await db.query<RowDataPacket[]>(`
         SELECT COUNT(DISTINCT codigo) as count
         FROM lineas_documento
         WHERE codigo IS NOT NULL AND codigo != ''
     `);
-    
-    return lineaRows[0].count || 0;
+
+  return lineaRows[0].count || 0;
 }
 
 // Get by fiscal Id, as name can be repeated or contain special chars
 export async function getDocumentsByProviderName(
-    fiscalId: string, 
-    empresaIds?: number[]
+  fiscalId: string,
+  empresaIds?: number[]
 ): Promise<Document[]> {
-    console.log('🔍 [getDocumentsByProviderName] Iniciando:', { fiscalId, empresaIds });
-    
-    let query = `
+  console.log('🔍 [getDocumentsByProviderName] Iniciando:', { fiscalId, empresaIds });
+
+  let query = `
         SELECT DISTINCT d.*,
                e.nombre_de_empresa as empresa_nombre,
                e.cif as empresa_cif
@@ -1504,62 +1516,62 @@ export async function getDocumentsByProviderName(
         WHERE ed.identificador_fiscal = ? 
           AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
     `;
-    
-    const params: any[] = [fiscalId];
-    
-    // ✅ Agregar filtro de empresas si se especifica
-    if (empresaIds && empresaIds.length > 0) {
-        const placeholders = empresaIds.map(() => '?').join(',');
-        query += ` AND d.id_de_empresa IN (${placeholders})`;
-        params.push(...empresaIds);
-    }
-    
-    query += ' ORDER BY d.fecha_emision DESC';
-    
-    console.log('📝 [getDocumentsByProviderName] Query:', query);
-    console.log('📝 [getDocumentsByProviderName] Params:', params);
-    
-    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
-    
-    console.log('📊 [getDocumentsByProviderName] Documentos encontrados:', documentRows.length);
-    
-    return mapDocumentPacketsToDocuments(documentRows);
+
+  const params: any[] = [fiscalId];
+
+  // ✅ Agregar filtro de empresas si se especifica
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    query += ` AND d.id_de_empresa IN (${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  query += ' ORDER BY d.fecha_emision DESC';
+
+  console.log('📝 [getDocumentsByProviderName] Query:', query);
+  console.log('📝 [getDocumentsByProviderName] Params:', params);
+
+  const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+  console.log('📊 [getDocumentsByProviderName] Documentos encontrados:', documentRows.length);
+
+  return mapDocumentPacketsToDocuments(documentRows);
 }
 
 export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
-    const [providerRows] = await db.query<EntidadPacket[]>(`
+  const [providerRows] = await db.query<EntidadPacket[]>(`
         SELECT *
         FROM entidades_documento
         WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
         LIMIT 1
     `, [fiscalId]);
 
-    if (providerRows.length === 0) {
-        return null;
-    }
-    const p = providerRows[0];
-    const provider: DocumentEntity = {
-        id: p.id,
-        rol: p.rol,
-        nombre: p.nombre,
-        direccion: p.direccion,
-        identificador_fiscal: p.identificador_fiscal,
-        telefono: p.telefono,
-        email: p.email,
-        datos_extra: safeJsonParse(p.datos_extra),
-        fecha_creacion: p.fecha_creacion
-    };
+  if (providerRows.length === 0) {
+    return null;
+  }
+  const p = providerRows[0];
+  const provider: DocumentEntity = {
+    id: p.id,
+    rol: p.rol,
+    nombre: p.nombre,
+    direccion: p.direccion,
+    identificador_fiscal: p.identificador_fiscal,
+    telefono: p.telefono,
+    email: p.email,
+    datos_extra: safeJsonParse(p.datos_extra),
+    fecha_creacion: p.fecha_creacion
+  };
 
-    return JSON.parse(JSON.stringify(provider));
+  return JSON.parse(JSON.stringify(provider));
 }
 
 export async function getProductsByProviderName(
-    fiscalId: string,
-    empresaIds?: number[]
+  fiscalId: string,
+  empresaIds?: number[]
 ): Promise<DocumentLine[]> {
-    console.log('🔍 [getProductsByProviderName] Iniciando:', { fiscalId, empresaIds });
-    
-    let baseQuery = `
+  console.log('🔍 [getProductsByProviderName] Iniciando:', { fiscalId, empresaIds });
+
+  let baseQuery = `
         WITH RankedLines AS (
             SELECT 
                 ld.*, 
@@ -1573,50 +1585,50 @@ export async function getProductsByProviderName(
               AND ld.codigo IS NOT NULL 
               AND ld.codigo != ''
     `;
-    
-    const params: any[] = [fiscalId];
-    
-    // ✅ Agregar filtro de empresas si se especifica
-    if (empresaIds && empresaIds.length > 0) {
-        const placeholders = empresaIds.map(() => '?').join(',');
-        baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
-        params.push(...empresaIds);
-    }
-    
-    baseQuery += `
+
+  const params: any[] = [fiscalId];
+
+  // ✅ Agregar filtro de empresas si se especifica
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  baseQuery += `
         )
         SELECT * FROM RankedLines WHERE rn = 1
         ORDER BY descripcion ASC
     `;
-    
-    console.log('📝 [getProductsByProviderName] Query:', baseQuery);
-    console.log('📝 [getProductsByProviderName] Params:', params);
-    
-    const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
-    
-    console.log('📊 [getProductsByProviderName] Productos encontrados:', lineaRows.length);
 
-    const products: DocumentLine[] = lineaRows.map(l => ({
-        id: l.id,
-        documento_id: l.documento_id,
-        codigo: l.codigo,
-        descripcion: l.descripcion,
-        cantidad: l.cantidad,
-        unidad: l.unidad,
-        precio_unitario: l.precio_unitario,
-        descuento_porcentaje: l.descuento_porcentaje,
-        precio_neto: l.precio_neto,
-        importe_linea: l.importe_linea,
-        datos_extra: safeJsonParse(l.datos_extra),
-        fecha_creacion: l.fecha_creacion,
-        fecha_emision: l.fecha_emision,
-    }));
+  console.log('📝 [getProductsByProviderName] Query:', baseQuery);
+  console.log('📝 [getProductsByProviderName] Params:', params);
 
-    return JSON.parse(JSON.stringify(products));
+  const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
+
+  console.log('📊 [getProductsByProviderName] Productos encontrados:', lineaRows.length);
+
+  const products: DocumentLine[] = lineaRows.map(l => ({
+    id: l.id,
+    documento_id: l.documento_id,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje,
+    precio_neto: l.precio_neto,
+    importe_linea: l.importe_linea,
+    datos_extra: safeJsonParse(l.datos_extra),
+    fecha_creacion: l.fecha_creacion,
+    fecha_emision: l.fecha_emision,
+  }));
+
+  return JSON.parse(JSON.stringify(products));
 }
 
 export async function getProductHistory(providerFiscalId: string, productCode: string): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
-    const [lineaRows] = await db.query<LineaPacket[]>(`
+  const [lineaRows] = await db.query<LineaPacket[]>(`
         SELECT 
             ld.*, 
             d.fecha_emision,
@@ -1630,59 +1642,59 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
         ORDER BY d.fecha_emision DESC;
     `, [providerFiscalId, productCode]);
 
-    if (lineaRows.length === 0) {
-        return { productInfo: null, history: [] };
-    }
+  if (lineaRows.length === 0) {
+    return { productInfo: null, history: [] };
+  }
 
-    const history: DocumentLine[] = lineaRows.map(l => ({
-        id: l.id,
-        documento_id: l.documento_id,
-        codigo: l.codigo,
-        descripcion: l.descripcion,
-        cantidad: l.cantidad,
-        unidad: l.unidad,
-        precio_unitario: l.precio_unitario,
-        descuento_porcentaje: l.descuento_porcentaje,
-        precio_neto: l.precio_neto,
-        importe_linea: l.importe_linea,
-        datos_extra: safeJsonParse(l.datos_extra),
-        fecha_emision: l.fecha_emision,
-        numero_documento: l.numero_documento,
-        fecha_creacion: null, // this field is not in the query
-   }));
+  const history: DocumentLine[] = lineaRows.map(l => ({
+    id: l.id,
+    documento_id: l.documento_id,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje,
+    precio_neto: l.precio_neto,
+    importe_linea: l.importe_linea,
+    datos_extra: safeJsonParse(l.datos_extra),
+    fecha_emision: l.fecha_emision,
+    numero_documento: l.numero_documento,
+    fecha_creacion: null, // this field is not in the query
+  }));
 
-    const productInfo = history[0]; // The first one is the most recent
+  const productInfo = history[0]; // The first one is the most recent
 
-    return JSON.parse(JSON.stringify({ productInfo, history }));
+  return JSON.parse(JSON.stringify({ productInfo, history }));
 }
 
 export async function getProviderAnalytics(
-    fiscalId: string,
-    empresaIds?: number[]
+  fiscalId: string,
+  empresaIds?: number[]
 ): Promise<ProviderAnalyticsData | null> {
-    const provider = await getProviderByFiscalId(fiscalId);
-    if (!provider) {
-        return null;
-    }
+  const provider = await getProviderByFiscalId(fiscalId);
+  if (!provider) {
+    return null;
+  }
 
-    // ✅ Construir filtro de empresa
-    let whereEmpresa = '';
-    let params: any[] = [fiscalId];
-    
-    if (empresaIds && empresaIds.length > 0) {
-        const placeholders = empresaIds.map(() => '?').join(',');
-        whereEmpresa = `AND d.id_de_empresa IN (${placeholders})`;
-        params.push(...empresaIds);
-    }
+  // ✅ Construir filtro de empresa
+  let whereEmpresa = '';
+  let params: any[] = [fiscalId];
 
-    // ✅ Filtro de tipo de documento (FACTURAS Y ABONOS)
-    const whereDocType = `AND (
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    whereEmpresa = `AND d.id_de_empresa IN (${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  // ✅ Filtro de tipo de documento (FACTURAS Y ABONOS)
+  const whereDocType = `AND (
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`;
 
-    // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
-    const [docs] = await db.query<DocumentPacket[]>(`
+  // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
+  const [docs] = await db.query<DocumentPacket[]>(`
         SELECT DISTINCT d.*
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
@@ -1692,90 +1704,90 @@ export async function getProviderAnalytics(
           ${whereEmpresa}
     `, params);
 
-    console.log(`📊 [getProviderAnalytics] Documentos encontrados para ${fiscalId}:`, docs.length);
-    console.log(`🏢 [getProviderAnalytics] Empresas filtradas:`, empresaIds); // ✅ AGREGADO
+  console.log(`📊 [getProviderAnalytics] Documentos encontrados para ${fiscalId}:`, docs.length);
+  console.log(`🏢 [getProviderAnalytics] Empresas filtradas:`, empresaIds); // ✅ AGREGADO
 
-    const docIds = docs.map(d => d.id);
-    const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
+  const docIds = docs.map(d => d.id);
+  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
 
-    const totalSpent = docs.reduce((acc, doc) => acc + Number(doc.importe_total || 0), 0);
-    const totalDocuments = docs.length;
-    const averagePurchaseValue = totalDocuments > 0 ? totalSpent / totalDocuments : 0;
-    
-    const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
-    lines.forEach(line => {
-        if (line.codigo && line.descripcion) {
-            if (!productSpend[line.codigo]) {
-                productSpend[line.codigo] = { codigo: line.codigo, descripcion: line.descripcion, total: 0 };
-            }
-            productSpend[line.codigo].total += Number(line.importe_linea || 0);
-        }
-    });
+  const totalSpent = docs.reduce((acc, doc) => acc + Number(doc.importe_total || 0), 0);
+  const totalDocuments = docs.length;
+  const averagePurchaseValue = totalDocuments > 0 ? totalSpent / totalDocuments : 0;
 
-    const topProductsBySpend = Object.values(productSpend)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 5);
+  const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
+  lines.forEach(line => {
+    if (line.codigo && line.descripcion) {
+      if (!productSpend[line.codigo]) {
+        productSpend[line.codigo] = { codigo: line.codigo, descripcion: line.descripcion, total: 0 };
+      }
+      productSpend[line.codigo].total += Number(line.importe_linea || 0);
+    }
+  });
 
-    const monthlySpendMap: { [key: string]: number } = {};
-    docs.forEach(doc => {
-        if (doc.fecha_emision) {
-            const month = new Date(doc.fecha_emision).toISOString().substring(0, 7);
-            monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
-        }
-    });
+  const topProductsBySpend = Object.values(productSpend)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
 
-    const monthlySpend = Object.entries(monthlySpendMap)
-        .map(([month, total]) => ({ month, total }))
-        .sort((a, b) => a.month.localeCompare(b.month));
+  const monthlySpendMap: { [key: string]: number } = {};
+  docs.forEach(doc => {
+    if (doc.fecha_emision) {
+      const month = new Date(doc.fecha_emision).toISOString().substring(0, 7);
+      monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
+    }
+  });
 
-    console.log(`💰 [getProviderAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
-    console.log(`📈 [getProviderAnalytics] Meses con compras: ${monthlySpend.length}`);
+  const monthlySpend = Object.entries(monthlySpendMap)
+    .map(([month, total]) => ({ month, total }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 
-    const analyticsData = {
-        provider,
-        totalSpent,
-        totalDocuments,
-        uniqueProducts: Object.keys(productSpend).length,
-        averagePurchaseValue,
-        topProductsBySpend,
-        monthlySpend
-    };
+  console.log(`💰 [getProviderAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
+  console.log(`📈 [getProviderAnalytics] Meses con compras: ${monthlySpend.length}`);
 
-    return JSON.parse(JSON.stringify(analyticsData));
+  const analyticsData = {
+    provider,
+    totalSpent,
+    totalDocuments,
+    uniqueProducts: Object.keys(productSpend).length,
+    averagePurchaseValue,
+    topProductsBySpend,
+    monthlySpend
+  };
+
+  return JSON.parse(JSON.stringify(analyticsData));
 }
 
 export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<IncidentsAnalyticsData> {
-    try {
-        const user = await getCurrentUser();
-        if (!user) {
-            console.warn('⚠️ [getIncidentsAnalytics] No hay usuario autenticado');
-            return {
-                totalOpen: 0,
-                totalValidated: 0,
-                byProvider: [],
-                byType: []
-            };
-        }
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.warn('⚠️ [getIncidentsAnalytics] No hay usuario autenticado');
+      return {
+        totalOpen: 0,
+        totalValidated: 0,
+        byProvider: [],
+        byType: []
+      };
+    }
 
-        // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
-        if (!empresaIds || empresaIds.length === 0) {
-            console.log('ℹ️ [getIncidentsAnalytics] No hay empresas seleccionadas');
-            return {
-                totalOpen: 0,
-                totalValidated: 0,
-                byProvider: [],
-                byType: []
-            };
-        }
+    // ✅ AGREGADO: Si no hay empresas seleccionadas, retornar vacío
+    if (!empresaIds || empresaIds.length === 0) {
+      console.log('ℹ️ [getIncidentsAnalytics] No hay empresas seleccionadas');
+      return {
+        totalOpen: 0,
+        totalValidated: 0,
+        byProvider: [],
+        byType: []
+      };
+    }
 
-        // ✅ Filtro de tipo de documento
-        const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
-        
-        // ✅ Filtro de empresas (ahora siempre presente)
-        const whereEmpresa = 'AND e2.id_de_usuario = ? AND d.id_de_empresa IN (?)';
-        const params: any[] = [user.id, empresaIds];
+    // ✅ Filtro de tipo de documento
+    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
 
-        const [summary] = await db.query<RowDataPacket[]>(`
+    // ✅ Filtro de empresas (ahora siempre presente)
+    const whereEmpresa = 'AND e2.id_de_usuario = ? AND d.id_de_empresa IN (?)';
+    const params: any[] = [user.id, empresaIds];
+
+    const [summary] = await db.query<RowDataPacket[]>(`
             SELECT 
                 SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
                 SUM(CASE WHEN i.validado = 1 THEN 1 ELSE 0 END) as totalValidated
@@ -1785,7 +1797,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             WHERE 1=1 ${whereDocType} ${whereEmpresa}
         `, params);
 
-        const [byProvider] = await db.query<RowDataPacket[]>(`
+    const [byProvider] = await db.query<RowDataPacket[]>(`
             SELECT e.nombre, COUNT(i.id) as count
             FROM incidencias_documento i
             JOIN documentos d ON i.documento_id = d.id
@@ -1800,7 +1812,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             LIMIT 5
         `, params);
 
-        const [byType] = await db.query<RowDataPacket[]>(`
+    const [byType] = await db.query<RowDataPacket[]>(`
             SELECT 
                 CASE 
                     WHEN i.descripcion LIKE '%duplicado%' THEN 'Duplicado'
@@ -1818,50 +1830,50 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             GROUP BY name
             ORDER BY count DESC
         `, params);
-        
-        const analyticsData = {
-            totalOpen: Number(summary[0]?.totalOpen || 0),
-            totalValidated: Number(summary[0]?.totalValidated || 0),
-            byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
-            byType: byType.map(t => ({ name: t.name, count: t.count })),
-        };
 
-        console.log('📊 [getIncidentsAnalytics] Resultado:', analyticsData);
+    const analyticsData = {
+      totalOpen: Number(summary[0]?.totalOpen || 0),
+      totalValidated: Number(summary[0]?.totalValidated || 0),
+      byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
+      byType: byType.map(t => ({ name: t.name, count: t.count })),
+    };
 
-        return JSON.parse(JSON.stringify(analyticsData));
-    } catch (error) {
-        console.error("❌ [getIncidentsAnalytics] Error:", error);
-        return {
-            totalOpen: 0,
-            totalValidated: 0,
-            byProvider: [],
-            byType: []
-        };
-    }
+    console.log('📊 [getIncidentsAnalytics] Resultado:', analyticsData);
+
+    return JSON.parse(JSON.stringify(analyticsData));
+  } catch (error) {
+    console.error("❌ [getIncidentsAnalytics] Error:", error);
+    return {
+      totalOpen: 0,
+      totalValidated: 0,
+      byProvider: [],
+      byType: []
+    };
+  }
 }
 
 // En src/services/document-service.ts - línea ~1950
 
 async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResult> {
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
+  const connection = await db.getConnection();
+  await connection.beginTransaction();
 
-    let newIncidentsFound = 0;
-    let duplicates = 0;
-    let calculationErrors = 0;
+  let newIncidentsFound = 0;
+  let duplicates = 0;
+  let calculationErrors = 0;
 
-    try {
-        if (docIds.length === 0) {
-            return {
-                newIncidentsFound: 0,
-                duplicates: 0,
-                calculationErrors: 0,
-                message: 'No se proporcionaron documentos para el análisis.'
-            };
-        }
-        
-        // ⬅️ CAMBIO: Ahora también obtenemos id_de_empresa
-        const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
+  try {
+    if (docIds.length === 0) {
+      return {
+        newIncidentsFound: 0,
+        duplicates: 0,
+        calculationErrors: 0,
+        message: 'No se proporcionaron documentos para el análisis.'
+      };
+    }
+
+    // ⬅️ CAMBIO: Ahora también obtenemos id_de_empresa
+    const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
             SELECT 
                 d.id,
                 d.id_de_empresa,
@@ -1876,232 +1888,245 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
             WHERE d.id IN (?)
         `, [docIds]);
 
-        // Check for incomplete documents
-        for (const doc of docsWithDetails) {
-            if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
-                const description = `Datos incompletos o faltantes en el documento.`;
-                const [existing] = await connection.query<RowDataPacket[]>(
-                    'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
-                    [doc.id, 'Datos incompletos%']
-                );
-                if (existing.length === 0) {
-                    await connection.query(
-                        'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
-                        [doc.id, doc.id_de_empresa, description]
-                    );
-                    newIncidentsFound++;
-                }
-            }
+    // Check for incomplete documents
+    for (const doc of docsWithDetails) {
+      if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {
+        const description = `Datos incompletos o faltantes en el documento.`;
+        const [existing] = await connection.query<RowDataPacket[]>(
+          'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
+          [doc.id, 'Datos incompletos%']
+        );
+        if (existing.length === 0) {
+          await connection.query(
+            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
+            [doc.id, doc.id_de_empresa, description]
+          );
+          newIncidentsFound++;
         }
-
-        const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
-
-        // ✅ CAMBIO CRÍTICO: Incluir empresa en la clave de duplicados
-        // Check for duplicates (solo DENTRO de cada empresa)
-        const docMap = new Map<string, Array<{id: number, id_de_empresa: number}>>();
-        for (const doc of validDocsForAnalysis) {
-            // ✅ ANTES: const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
-            // ✅ AHORA: Incluir empresa en la clave
-            const key = `${doc.id_de_empresa}|${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
-            
-            if (!docMap.has(key)) {
-                docMap.set(key, []);
-            }
-            docMap.get(key)!.push({id: doc.id, id_de_empresa: doc.id_de_empresa});
-        }
-
-        for (const [key, docs] of docMap.entries()) {
-            if (docs.length > 1) {
-                duplicates += docs.length;
-                const ids = docs.map(d => d.id);
-                const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(1, 3).join(' - ')}. IDs: ${ids.join(', ')}`;
-                
-                for (const doc of docs) {
-                    const [existing] = await connection.query<RowDataPacket[]>(
-                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
-                        [doc.id, 'Documento duplicado%']
-                    );
-                    if (existing.length === 0) {
-                        await connection.query(
-                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
-                            [doc.id, doc.id_de_empresa, description]
-                        );
-                        newIncidentsFound++;
-                    }
-                }
-            }
-        }
-
-        // Check for calculation errors
-        for (const doc of validDocsForAnalysis) {
-            // Check 1: Sum of line items vs Base Amount
-            if (doc.sum_line_items !== null) {
-                if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
-                    calculationErrors++;
-                    const description = `Error de cálculo en el subtotal. La suma de las líneas (${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento (${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
-                    const [existing] = await connection.query<RowDataPacket[]>(
-                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
-                        [doc.id, 'Error de cálculo en el subtotal%']
-                    );
-                    if (existing.length === 0) {
-                        await connection.query(
-                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
-                            [doc.id, doc.id_de_empresa, description]
-                        );
-                        newIncidentsFound++;
-                    }
-                }
-            }
-
-            // Check 2: Base Amount + Taxes vs Total Amount
-            if (doc.sum_cuota_iva !== null) { 
-                const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
-                if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) {
-                    calculationErrors++;
-                    const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
-                    const [existing] = await connection.query<RowDataPacket[]>(
-                        'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?', 
-                        [doc.id, 'Error de cálculo en el total%']
-                    );
-                    if (existing.length === 0) {
-                        await connection.query(
-                            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)', 
-                            [doc.id, doc.id_de_empresa, description]
-                        );
-                        newIncidentsFound++;
-                    }
-                }
-            }
-        }
-
-        await connection.commit();
-
-        console.log('✅ [analyzeDocuments] Análisis completo:', {
-            newIncidentsFound,
-            duplicates,
-            calculationErrors
-        });
-
-        return {
-            newIncidentsFound,
-            duplicates,
-            calculationErrors,
-            message: `Análisis completo. Se encontraron ${newIncidentsFound} nuevas incidencias.`
-        };
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("❌ [analyzeDocuments] Error:", error);
-        throw new Error('Falló el análisis de documentos en el servidor.');
-    } finally {
-        connection.release();
+      }
     }
+
+    const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
+
+    // ✅ CAMBIO CRÍTICO: Incluir empresa en la clave de duplicados
+    // Check for duplicates (solo DENTRO de cada empresa)
+    const docMap = new Map<string, Array<{ id: number, id_de_empresa: number }>>();
+    for (const doc of validDocsForAnalysis) {
+      // ✅ ANTES: const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+      // ✅ AHORA: Incluir empresa en la clave
+      const key = `${doc.id_de_empresa}|${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+
+      if (!docMap.has(key)) {
+        docMap.set(key, []);
+      }
+      docMap.get(key)!.push({ id: doc.id, id_de_empresa: doc.id_de_empresa });
+    }
+
+    for (const [key, docs] of docMap.entries()) {
+      if (docs.length > 1) {
+        duplicates += docs.length;
+        const ids = docs.map(d => d.id);
+        const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(1, 3).join(' - ')}. IDs: ${ids.join(', ')}`;
+
+        for (const doc of docs) {
+          const [existing] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
+            [doc.id, 'Documento duplicado%']
+          );
+          if (existing.length === 0) {
+            await connection.query(
+              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
+              [doc.id, doc.id_de_empresa, description]
+            );
+            newIncidentsFound++;
+          }
+        }
+      }
+    }
+
+    // Check for calculation errors
+    for (const doc of validDocsForAnalysis) {
+      // Check 1: Sum of line items vs Base Amount
+      if (doc.sum_line_items !== null) {
+        if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
+          calculationErrors++;
+          const description = `Error de cálculo en el subtotal. La suma de las líneas (${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento (${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
+          const [existing] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
+            [doc.id, 'Error de cálculo en el subtotal%']
+          );
+          if (existing.length === 0) {
+            await connection.query(
+              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
+              [doc.id, doc.id_de_empresa, description]
+            );
+            newIncidentsFound++;
+          }
+        }
+      }
+
+      // Check 2: Base Amount + Taxes vs Total Amount
+      if (doc.sum_cuota_iva !== null) {
+        const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
+        if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) {
+          calculationErrors++;
+          const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+          const [existing] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
+            [doc.id, 'Error de cálculo en el total%']
+          );
+          if (existing.length === 0) {
+            await connection.query(
+              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
+              [doc.id, doc.id_de_empresa, description]
+            );
+            newIncidentsFound++;
+          }
+        }
+      }
+    }
+
+    await connection.commit();
+
+    console.log('✅ [analyzeDocuments] Análisis completo:', {
+      newIncidentsFound,
+      duplicates,
+      calculationErrors
+    });
+
+    return {
+      newIncidentsFound,
+      duplicates,
+      calculationErrors,
+      message: `Análisis completo. Se encontraron ${newIncidentsFound} nuevas incidencias.`
+    };
+
+  } catch (error) {
+    await connection.rollback();
+    console.error("❌ [analyzeDocuments] Error:", error);
+    throw new Error('Falló el análisis de documentos en el servidor.');
+  } finally {
+    connection.release();
+  }
 }
 // En src/services/document-service.ts
 
 export async function markDocumentAsRead(documentId: number) {
-    try {
-      console.log('🔄 [MARK-READ] Marcando documento como leído:', documentId);
-      
-      const [result] = await db.query<OkPacket>(
-        'UPDATE documentos SET is_new = 0 WHERE id = ? AND is_new = 1',
-        [documentId]
-      );
-  
-      console.log('✅ [MARK-READ] Resultado:', { affectedRows: result.affectedRows });
-  
-      return {
-        success: true,
-        updated: result.affectedRows > 0
-      };
-    } catch (error) {
-      console.error('❌ [MARK-READ] Error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido'
-      };
-    }
+  try {
+    console.log('🔄 [MARK-READ] Marcando documento como leído:', documentId);
+
+    const [result] = await db.query<OkPacket>(
+      'UPDATE documentos SET is_new = 0 WHERE id = ? AND is_new = 1',
+      [documentId]
+    );
+
+    console.log('✅ [MARK-READ] Resultado:', { affectedRows: result.affectedRows });
+
+    return {
+      success: true,
+      updated: result.affectedRows > 0
+    };
+  } catch (error) {
+    console.error('❌ [MARK-READ] Error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido'
+    };
   }
+}
 // ✅ MODIFICAR esta función (línea ~2100)
 export async function runDocumentAnalysis(empresaIds?: number[]): Promise<IncidentAnalysisResult> {
-    let query = 'SELECT d.id FROM documentos d';
-    const params: any[] = [];
-    
-    // ✅ NUEVO: Filtro de tipo de documento (facturas Y abonos)
-    const conditions: string[] = [`(
+  let query = 'SELECT d.id FROM documentos d';
+  const params: any[] = [];
+
+  // ✅ NUEVO: Filtro de tipo de documento (facturas Y abonos)
+  const conditions: string[] = [`(
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`];
-    
-    // ✅ NUEVO: Filtrar por empresas si se especifican
-    if (empresaIds && empresaIds.length > 0) {
-        const placeholders = empresaIds.map(() => '?').join(',');
-        conditions.push(`d.id_de_empresa IN (${placeholders})`);
-        params.push(...empresaIds);
-    }
-    
-    if (conditions.length > 0) {
-        query += ` WHERE ${conditions.join(' AND ')}`;
-    }
-    
-    console.log('🔍 [runDocumentAnalysis] Query:', query);
-    console.log('🔍 [runDocumentAnalysis] Params:', params);
-    
-    const [allDocIds] = await db.query<RowDataPacket[]>(query, params);
-    const docIds = allDocIds.map(row => row.id);
-    
-    console.log(`📊 [runDocumentAnalysis] Analizando ${docIds.length} documentos`);
-    
-    return analyzeDocuments(docIds);
+
+  // ✅ NUEVO: Filtrar por empresas si se especifican
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    conditions.push(`d.id_de_empresa IN (${placeholders})`);
+    params.push(...empresaIds);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  console.log('🔍 [runDocumentAnalysis] Query:', query);
+  console.log('🔍 [runDocumentAnalysis] Params:', params);
+
+  const [allDocIds] = await db.query<RowDataPacket[]>(query, params);
+  const docIds = allDocIds.map(row => row.id);
+
+  console.log(`📊 [runDocumentAnalysis] Analizando ${docIds.length} documentos`);
+
+  return analyzeDocuments(docIds);
 }
 
 export async function runSingleDocumentAnalysis(documentId: number): Promise<IncidentAnalysisResult> {
-    return analyzeDocuments([documentId]);
+  return analyzeDocuments([documentId]);
 }
 export async function getDashboardAnalytics(
   empresaIds?: number[],
   año?: number,
   trimestre?: number
 ): Promise<DashboardAnalytics> {
-    console.log('🔥 [getDashboardAnalytics] Parámetros recibidos:', { empresaIds, año, trimestre });
-    
-    // Obtener CIFs dinámicamente
-    let MY_COMPANY_FISCAL_IDS: string[] = [];
-    
-    if (empresaIds && empresaIds.length > 0) {
-        const [empresasInfo] = await db.query<RowDataPacket[]>(
-            'SELECT cif FROM empresas WHERE id IN (?)',
-            [empresaIds]
-        );
-        MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
-    }
-    
-    console.log('🏢 [getDashboardAnalytics] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
+  console.log('🔥 [getDashboardAnalytics] Parámetros recibidos:', { empresaIds, año, trimestre });
 
-    const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
-    const hasTrimestreFilter = año !== undefined && trimestre !== undefined;
-    
-    console.log('🎯 [getDashboardAnalytics] Filtros:', { hasEmpresaFilter, hasTrimestreFilter });
-    
-    const whereDocType = `AND (
+  // Obtener CIFs dinámicamente
+  let MY_COMPANY_FISCAL_IDS: string[] = [];
+
+  if (empresaIds && empresaIds.length > 0) {
+    const [empresasInfo] = await db.query<RowDataPacket[]>(
+      'SELECT cif FROM empresas WHERE id IN (?)',
+      [empresaIds]
+    );
+    MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+  }
+
+  console.log('🏢 [getDashboardAnalytics] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
+
+  const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
+  const hasTrimestreFilter = año !== undefined && trimestre !== undefined;
+
+  console.log('🎯 [getDashboardAnalytics] Filtros:', { hasEmpresaFilter, hasTrimestreFilter });
+
+  const whereDocType = `AND (
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`;
-    
-    const whereTrimestreFilter = hasTrimestreFilter 
-      ? `AND d.\`año_trimestre\` = ? AND d.\`num_trimestre\` = ?`
-      : '';
 
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
-        ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
-        : "'NEVER_MATCH'";
-    
-    // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) en lugar de importe_sin_impuestos
-    const [kpiRows] = await db.query<RowDataPacket[]>(`
+  const whereTrimestreFilter = hasTrimestreFilter
+    ? `AND d.\`año_trimestre\` = ? AND d.\`num_trimestre\` = ?`
+    : '';
+
+  // ✅ AUTO-DETECT LATEST YEAR if not provided
+  let yearToUse = año;
+
+  if (año === undefined) {
+    const [yearRow] = await db.query<RowDataPacket[]>(
+      `SELECT MAX(YEAR(fecha_emision)) as maxYear FROM documentos ${hasEmpresaFilter ? 'WHERE id_de_empresa IN (?)' : ''
+      }`,
+      hasEmpresaFilter ? [empresaIds] : []
+    );
+    yearToUse = yearRow[0]?.maxYear || new Date().getFullYear();
+    console.log('📅 [getDashboardAnalytics] Auto-detected year:', yearToUse);
+  }
+
+  const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
+    ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+    : "'NEVER_MATCH'";
+
+  // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) en lugar de importe_sin_impuestos
+  const [kpiRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
@@ -2245,41 +2270,41 @@ export async function getDashboardAnalytics(
           COUNT(DISTINCT id) as totalDocs
         FROM DocTypes
     `, [
-        ...MY_COMPANY_FISCAL_IDS,
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
-        ...MY_COMPANY_FISCAL_IDS,
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : [])
-    ]);
+    ...MY_COMPANY_FISCAL_IDS,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : []),
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : []),
+    ...MY_COMPANY_FISCAL_IDS,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : []),
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : []),
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : [])
+  ]);
 
-    const kpis = kpiRows[0];
-    const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
-    
-    // ✅ BENEFICIO CON IVA Y SIN IVA
-    const beneficioConIva = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
-    const beneficioSinIva = (kpis.totalIngresosSinIva || 0) - (kpis.totalGastosSinIva || 0);
-    const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
+  const kpis = kpiRows[0];
+  const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
 
-    console.log('💰 [getDashboardAnalytics] KPIs calculados:', {
-        totalIngresos: kpis.totalIngresos,
-        totalGastos: kpis.totalGastos,
-        totalIngresosSinIva: kpis.totalIngresosSinIva,
-        totalGastosSinIva: kpis.totalGastosSinIva,
-        beneficioConIva,
-        beneficioSinIva,
-        resultadoIva,
-        totalDocs: kpis.totalDocs
-    });
+  // ✅ BENEFICIO CON IVA Y SIN IVA
+  const beneficioConIva = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
+  const beneficioSinIva = (kpis.totalIngresosSinIva || 0) - (kpis.totalGastosSinIva || 0);
+  const resultadoIva = (kpis.ivaRepercutido || 0) - (kpis.ivaSoportado || 0);
 
-    // ✅ QUARTERLY SUMMARY con importe_total (CON IVA)
-    const [quarterlyRows] = await db.query<RowDataPacket[]>(`
+  console.log('💰 [getDashboardAnalytics] KPIs calculados:', {
+    totalIngresos: kpis.totalIngresos,
+    totalGastos: kpis.totalGastos,
+    totalIngresosSinIva: kpis.totalIngresosSinIva,
+    totalGastosSinIva: kpis.totalGastosSinIva,
+    beneficioConIva,
+    beneficioSinIva,
+    resultadoIva,
+    totalDocs: kpis.totalDocs
+  });
+
+  // ✅ QUARTERLY SUMMARY con importe_total (CON IVA)
+  const [quarterlyRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
@@ -2305,7 +2330,7 @@ export async function getDashboardAnalytics(
                     ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
                 END as is_issued
             FROM documentos d
-            WHERE YEAR(d.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'}
+            WHERE YEAR(d.fecha_emision) = ?
               AND (
                   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -2336,29 +2361,29 @@ export async function getDashboardAnalytics(
         FROM DocTypes
         GROUP BY quarter
     `, [
-        ...MY_COMPANY_FISCAL_IDS,
-        ...(hasTrimestreFilter ? [año] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : [])
-    ]);
+    ...MY_COMPANY_FISCAL_IDS,
+    yearToUse,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : [])
+  ]);
 
-    const quarterlySummary = { 
-        T1: { ingresos: 0, gastos: 0 }, 
-        T2: { ingresos: 0, gastos: 0 }, 
-        T3: { ingresos: 0, gastos: 0 }, 
-        T4: { ingresos: 0, gastos: 0 } 
-    };
-    
-    quarterlyRows.forEach(r => {
-        if(r.quarter) {
-            quarterlySummary[r.quarter as keyof typeof quarterlySummary] = { 
-                ingresos: Number(r.ingresos), 
-                gastos: Number(r.gastos) 
-            };
-        }
-    });
+  const quarterlySummary = {
+    T1: { ingresos: 0, gastos: 0 },
+    T2: { ingresos: 0, gastos: 0 },
+    T3: { ingresos: 0, gastos: 0 },
+    T4: { ingresos: 0, gastos: 0 }
+  };
 
-    const [distributionRows] = await db.query<RowDataPacket[]>(`
+  quarterlyRows.forEach(r => {
+    if (r.quarter) {
+      quarterlySummary[r.quarter as keyof typeof quarterlySummary] = {
+        ingresos: Number(r.ingresos),
+        gastos: Number(r.gastos)
+      };
+    }
+  });
+
+  const [distributionRows] = await db.query<RowDataPacket[]>(`
         SELECT tipo_documento as name, COUNT(*) as value
         FROM documentos
         WHERE (
@@ -2370,11 +2395,11 @@ export async function getDashboardAnalytics(
         GROUP BY tipo_documento
         ORDER BY value DESC
     `, [
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : [])
-    ]);
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : [])
+  ]);
 
-    const [ivaRows] = await db.query<RowDataPacket[]>(`
+  const [ivaRows] = await db.query<RowDataPacket[]>(`
         WITH DocTypes AS (
             SELECT 
                 d.id,
@@ -2402,7 +2427,7 @@ export async function getDashboardAnalytics(
                 END as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
-            WHERE YEAR(d.fecha_emision) = ${hasTrimestreFilter ? '?' : 'YEAR(CURDATE())'} 
+            WHERE YEAR(d.fecha_emision) = ? 
               AND i.tipo_impuesto NOT LIKE '%retencion%'
               AND (
                   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -2434,29 +2459,29 @@ export async function getDashboardAnalytics(
         FROM DocTypes
         GROUP BY quarter
     `, [
-        ...MY_COMPANY_FISCAL_IDS,
-        ...(hasTrimestreFilter ? [año] : []),
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : [])
-    ]);
+    ...MY_COMPANY_FISCAL_IDS,
+    yearToUse,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : [])
+  ]);
 
-    const ivaSummary = { 
-        T1: { repercutido: 0, soportado: 0 }, 
-        T2: { repercutido: 0, soportado: 0 }, 
-        T3: { repercutido: 0, soportado: 0 }, 
-        T4: { repercutido: 0, soportado: 0 } 
-    };
-    
-    ivaRows.forEach(r => {
-        if(r.quarter) {
-            ivaSummary[r.quarter as keyof typeof ivaSummary] = { 
-                repercutido: Number(r.repercutido), 
-                soportado: Number(r.soportado) 
-            };
-        }
-    });
+  const ivaSummary = {
+    T1: { repercutido: 0, soportado: 0 },
+    T2: { repercutido: 0, soportado: 0 },
+    T3: { repercutido: 0, soportado: 0 },
+    T4: { repercutido: 0, soportado: 0 }
+  };
 
-    const [topProvidersRows] = await db.query<RowDataPacket[]>(`
+  ivaRows.forEach(r => {
+    if (r.quarter) {
+      ivaSummary[r.quarter as keyof typeof ivaSummary] = {
+        repercutido: Number(r.repercutido),
+        soportado: Number(r.soportado)
+      };
+    }
+  });
+
+  const [topProvidersRows] = await db.query<RowDataPacket[]>(`
         SELECT 
             e.nombre, 
             e.identificador_fiscal,
@@ -2475,39 +2500,39 @@ export async function getDashboardAnalytics(
         ORDER BY total DESC
         LIMIT 5
     `, [
-        ...MY_COMPANY_FISCAL_IDS, 
-        ...(hasEmpresaFilter ? [empresaIds] : []),
-        ...(hasTrimestreFilter ? [año, trimestre] : [])
-    ]);
+    ...MY_COMPANY_FISCAL_IDS,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...(hasTrimestreFilter ? [año, trimestre] : [])
+  ]);
 
-    const analyticsData = {
-        kpis: {
-            totalIngresos: Number(kpis.totalIngresos || 0),
-            totalGastos: Number(kpis.totalGastos || 0),
-            totalIngresosSinIva: Number(kpis.totalIngresosSinIva || 0),
-            totalGastosSinIva: Number(kpis.totalGastosSinIva || 0),
-            beneficio: Number(beneficioConIva),
-            beneficioSinIva: Number(beneficioSinIva),
-            ivaRepercutido: Number(kpis.ivaRepercutido || 0),
-            ivaSoportado: Number(kpis.ivaSoportado || 0),
-            resultadoIva: Number(resultadoIva),
-            totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
-            totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
-            incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
-            totalProveedores: Number(kpis.totalProveedores || 0),
-            totalProductos: Number(kpis.totalProductos || 0),
-            incidentRate: Number(incidentRate || 0),
-            totalDocs: Number(kpis.totalDocs || 0),
-        },
-        quarterlySummary,
-        documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
-        ivaSummary,
-        topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
-    };
+  const analyticsData = {
+    kpis: {
+      totalIngresos: Number(kpis.totalIngresos || 0),
+      totalGastos: Number(kpis.totalGastos || 0),
+      totalIngresosSinIva: Number(kpis.totalIngresosSinIva || 0),
+      totalGastosSinIva: Number(kpis.totalGastosSinIva || 0),
+      beneficio: Number(beneficioConIva),
+      beneficioSinIva: Number(beneficioSinIva),
+      ivaRepercutido: Number(kpis.ivaRepercutido || 0),
+      ivaSoportado: Number(kpis.ivaSoportado || 0),
+      resultadoIva: Number(resultadoIva),
+      totalFacturasIngreso: Number(kpis.totalFacturasIngreso || 0),
+      totalFacturasGasto: Number(kpis.totalFacturasGasto || 0),
+      incidenciasAbiertas: Number(kpis.incidenciasAbiertas || 0),
+      totalProveedores: Number(kpis.totalProveedores || 0),
+      totalProductos: Number(kpis.totalProductos || 0),
+      incidentRate: Number(incidentRate || 0),
+      totalDocs: Number(kpis.totalDocs || 0),
+    },
+    quarterlySummary,
+    documentDistribution: distributionRows.map(r => ({ name: r.name, value: Number(r.value) })),
+    ivaSummary,
+    topProviders: topProvidersRows.map(p => ({ name: p.nombre, total: Number(p.total), fiscalId: p.identificador_fiscal })),
+  };
 
-    console.log('📊 [getDashboardAnalytics] Resultado final:', analyticsData.kpis);
+  console.log('📊 [getDashboardAnalytics] Resultado final:', analyticsData.kpis);
 
-    return JSON.parse(JSON.stringify(analyticsData));
+  return JSON.parse(JSON.stringify(analyticsData));
 }
 // =====================================
 // 🆕 AGREGAR AL FINAL DE src/services/document-service.ts
@@ -2530,7 +2555,7 @@ export async function getTrimestresList(
   filters?: TrimestreFilters
 ): Promise<Trimestre[]> {
   const conn = await db.getConnection();
-  
+
   try {
     let whereConditions = ['e.id_de_usuario = ?'];
     const params: any[] = [userId];
@@ -2559,12 +2584,12 @@ export async function getTrimestresList(
 
     // ✅ OBTENER CIFs de las empresas para clasificar is_issued
     let MY_COMPANY_FISCAL_IDS: string[] = [];
-    
+
     if (filters?.empresa_id) {
-      const empresaIds = Array.isArray(filters.empresa_id) 
-        ? filters.empresa_id 
+      const empresaIds = Array.isArray(filters.empresa_id)
+        ? filters.empresa_id
         : [filters.empresa_id];
-      
+
       if (empresaIds.length > 0) {
         const [empresasInfo] = await conn.query<RowDataPacket[]>(
           'SELECT cif FROM empresas WHERE id IN (?)',
@@ -2574,7 +2599,7 @@ export async function getTrimestresList(
       }
     }
 
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
+    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
       ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
       : "'NEVER_MATCH'";
 
@@ -2695,15 +2720,15 @@ export async function getTrimestresList(
       empresa_id: row.empresa_id,
       empresa_nombre: row.empresa_nombre || 'Sin empresa',
       total_documentos: Number(row.total_documentos),
-      
+
       // ✅ TOTALES CON IVA (principal)
       total_ingresos: Number(row.total_ingresos || 0),
       total_gastos: Number(row.total_gastos || 0),
-      
+
       // ✅ NUEVOS: TOTALES SIN IVA (para breakdown)
       total_ingresos_sin_iva: Number(row.total_ingresos_sin_iva || 0),
       total_gastos_sin_iva: Number(row.total_gastos_sin_iva || 0),
-      
+
       iva_repercutido: Number(row.iva_repercutido || 0),
       iva_soportado: Number(row.iva_soportado || 0),
       cerrado: Boolean(row.cerrado),
@@ -2830,7 +2855,7 @@ export async function cerrarTrimestre(
   payload: CerrarTrimestrePayload
 ): Promise<{ affected: number }> {
   const conn = await db.getConnection();
-  
+
   try {
     await conn.beginTransaction();
 
@@ -2905,9 +2930,9 @@ export async function cerrarTrimestre(
 
     // ✅ OBTENER CIFs de las empresas
     let MY_COMPANY_FISCAL_IDS: string[] = [];
-    
-    const empresaIdsToQuery = payload.empresa_id !== null 
-      ? [payload.empresa_id] 
+
+    const empresaIdsToQuery = payload.empresa_id !== null
+      ? [payload.empresa_id]
       : [];
 
     if (empresaIdsToQuery.length > 0) {
@@ -2925,7 +2950,7 @@ export async function cerrarTrimestre(
       MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
     }
 
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0 
+    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
       ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
       : "'NEVER_MATCH'";
 
@@ -3141,9 +3166,9 @@ export async function createExport(payload: {
     return { success: true, exportId: result.insertId };
   } catch (error) {
     console.error('❌ [createExport] Error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Error al crear exportación' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al crear exportación'
     };
   }
 }
@@ -3160,7 +3185,7 @@ export async function updateExportStatus(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const fechaCompletado = status === 'completed' ? 'NOW()' : 'NULL';
-    
+
     await db.query<OkPacket>(
       `UPDATE exports 
        SET estado = ?, 
@@ -3175,9 +3200,9 @@ export async function updateExportStatus(
     return { success: true };
   } catch (error) {
     console.error('❌ [updateExportStatus] Error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Error al actualizar exportación' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al actualizar exportación'
     };
   }
 }
@@ -3216,23 +3241,23 @@ export async function getDashboardExportData(
 }> {
   try {
     console.log('📊 [getDashboardExportData] Iniciando con:', { empresaIds, año, trimestre });
-    
+
     // Obtener analytics
     const analytics = await getDashboardAnalytics(empresaIds, año, trimestre);
-    
+
     console.log('✅ [getDashboardExportData] Analytics:', JSON.stringify(analytics.kpis));
 
     // ✅ ARREGLADO: Query simple sin filtros extra
     const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
-    
+
     let query = `SELECT d.id FROM documentos d WHERE 1=1`;
     const params: any[] = [];
-    
+
     if (hasEmpresaFilter) {
       query += ` AND d.id_de_empresa IN (?)`;
       params.push(empresaIds);
     }
-    
+
     // ✅ SOLO agregar filtro de trimestre si está especificado
     if (año !== null && año !== undefined && trimestre !== null && trimestre !== undefined) {
       query += ` AND d.año_trimestre = ? AND d.num_trimestre = ?`;
@@ -3252,11 +3277,12 @@ export async function getDashboardExportData(
       documentIds,
       metadata: {
         empresaIds,
-        año,
+        año: analytics.yearUsed || año,
         trimestre,
         totalDocumentos: documentIds.length,
         fechaGeneracion: new Date().toISOString()
-      }
+      },
+      yearUsed: analytics.yearUsed || año,
     };
   } catch (error) {
     console.error('❌ [getDashboardExportData] Error:', error);
@@ -3354,5 +3380,47 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
   } catch (error) {
     console.error('❌ [getUniqueProvidersNames] Error:', error);
     return [];
+  }
+}
+
+/**
+ * Elimina múltiples documentos
+ */
+export async function deleteDocuments(ids: number[], userId: number): Promise<{ success: boolean; error?: string }> {
+  if (!ids || ids.length === 0) return { success: true };
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    console.log(`🗑️ [deleteDocuments] Eliminando ${ids.length} documentos para usuario ${userId}`);
+
+    // Primero borramos dependencias
+    await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (?)', [ids]);
+    await connection.query('DELETE FROM entidades_documento WHERE documento_id IN (?)', [ids]);
+    await connection.query('DELETE FROM lineas_documento WHERE documento_id IN (?)', [ids]);
+    await connection.query('DELETE FROM impuestos_documento WHERE documento_id IN (?)', [ids]);
+    await connection.query('DELETE FROM incidencias_documento WHERE documento_id IN (?)', [ids]);
+
+    // Finalmente el documento
+    const [result] = await connection.query<OkPacket>(`
+        DELETE d FROM documentos d 
+        LEFT JOIN empresas e ON d.id_de_empresa = e.id 
+        WHERE d.id IN (?) 
+        AND (e.id_de_usuario = ? OR d.id_de_empresa IS NULL)
+    `, [ids, userId]);
+
+    console.log(`✅ [deleteDocuments] Eliminados: ${result.affectedRows}`);
+
+    await connection.commit();
+    revalidatePath('/documents');
+    return { success: true };
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ [deleteDocuments] Error:', error);
+    return { success: false, error: 'Error al eliminar documentos' };
+  } finally {
+    connection.release();
   }
 }

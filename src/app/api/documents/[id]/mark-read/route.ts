@@ -7,20 +7,21 @@ export const dynamic = 'force-dynamic';
 // PATCH - Marcar documento como leído
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     console.log('👁️ [API-MARK-READ] Iniciando...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-MARK-READ] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
     const documentId = parseInt(params.id, 10);
-    
+
     if (isNaN(documentId)) {
       return NextResponse.json({ error: 'ID de documento inválido' }, { status: 400 });
     }
@@ -35,7 +36,7 @@ export async function PATCH(
 
     console.log('✅ [API-MARK-READ] Documento marcado como leído');
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       updated: result.updated
     });
@@ -48,4 +49,3 @@ export async function PATCH(
     );
   }
 }
-        

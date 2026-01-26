@@ -35,36 +35,39 @@ import { deleteDocument } from '@/services/document-service';
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
   if (isNaN(value)) return '0';
-  
+
   const parts = value.toString().split('.');
   const integerPart = parts[0];
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return formattedInteger;
 };
 
 const formatCurrency = (amount: number | string): string => {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return '0,00 €';
-  
+
   const fixed = num.toFixed(2);
   const parts = fixed.split('.');
   const integerPart = parts[0];
   const decimalPart = parts[1];
-  
+
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return `${formattedInteger},${decimalPart} €`;
 };
 
 const getColumns = (
-    onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
-    onSummarize: (doc: Document) => void,
-    onDelete: (doc: Document) => void,
-    onConfirm: (doc: Document) => void,
-    onPreview: (doc: Document) => void,
-    showConfirmButton: boolean = false,
-    duplicates: Set<number> = new Set()
+  onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
+  onSummarize: (doc: Document) => void,
+  onDelete: (doc: Document) => void,
+  onConfirm: (doc: Document) => void,
+  onPreview: (doc: Document) => void,
+  onValidateIncident: (doc: Document) => void,
+  onValidateSingleIncident: (incidentId: number) => void,
+  showConfirmButton: boolean = false,
+  isIncidentsPage: boolean = false,
+  duplicates: Set<number> = new Set()
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     {
@@ -73,14 +76,40 @@ const getColumns = (
       cell: ({ row }) => {
         const doc = row.original;
         const hasFile = doc.archivos && doc.archivos.length > 0 && doc.archivos[0]?.ruta_archivo;
-        
+
+        // Calcular si tiene incidencias activas
+        const hasIncidents = doc.incidencias && doc.incidencias.some(i => !i.validado);
+        const hasLegacyIncident = !hasIncidents && doc.incidencia && doc.incidencia_razon;
+        const showValidate = isIncidentsPage && (hasIncidents || hasLegacyIncident);
+
         return (
           <div className="flex items-center gap-2 relative z-10">
+            {showValidate && (
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-amber-600 hover:text-green-600 hover:bg-green-100 dark:text-amber-500 dark:hover:text-green-400 dark:hover:bg-green-950 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-green-500/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onValidateIncident(doc);
+                    }}
+                  >
+                    <span className="sr-only">Validar</span>
+                    <CheckCircle className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="z-[99999]">
+                  <p>Validar Incidencias</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
             {showConfirmButton && (
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-950 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-green-500/20"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -91,9 +120,9 @@ const getColumns = (
                     <CheckCircle className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent 
-                  side="bottom" 
-                  sideOffset={5} 
+                <TooltipContent
+                  side="bottom"
+                  sideOffset={5}
                   className="z-[99999]"
                   avoidCollisions={true}
                   collisionPadding={10}
@@ -102,11 +131,11 @@ const getColumns = (
                 </TooltipContent>
               </Tooltip>
             )}
-            
+
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-950 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/20 disabled:hover:scale-100 disabled:hover:shadow-none"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -118,9 +147,9 @@ const getColumns = (
                   <Eye className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent 
-                side="bottom" 
-                sideOffset={5} 
+              <TooltipContent
+                side="bottom"
+                sideOffset={5}
                 className="z-[99999]"
                 avoidCollisions={true}
                 collisionPadding={10}
@@ -128,11 +157,11 @@ const getColumns = (
                 <p>{hasFile ? 'Ver documento' : 'Sin archivo adjunto'}</p>
               </TooltipContent>
             </Tooltip>
-            
+
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -143,9 +172,9 @@ const getColumns = (
                   <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent 
-                side="bottom" 
-                sideOffset={5} 
+              <TooltipContent
+                side="bottom"
+                sideOffset={5}
                 className="z-[99999]"
                 avoidCollisions={true}
                 collisionPadding={10}
@@ -153,11 +182,11 @@ const getColumns = (
                 <p>Eliminar documento</p>
               </TooltipContent>
             </Tooltip>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   className="h-8 w-8 p-0 relative z-20 transition-all duration-300 hover:scale-110 hover:bg-accent"
                 >
                   <span className="sr-only">Ver más</span>
@@ -165,7 +194,7 @@ const getColumns = (
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="z-[99999]">
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => onSummarize(doc)}
                   className="cursor-pointer transition-colors duration-200"
                 >
@@ -245,10 +274,22 @@ const getColumns = (
         );
       },
       filterFn: (row, id, value) => {
-        if (!value || value.length === 0) return true;
+        if (!value || (Array.isArray(value) && value.length === 0)) return true;
+
         const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
-        return value.includes(nombre);
+
+        // Si es array (Filtro de faceta - Dropdown)
+        if (Array.isArray(value)) {
+          return value.includes(nombre);
+        }
+
+        // Si es string (Input de texto manual)
+        if (typeof value === 'string') {
+          return nombre.toLowerCase().includes(value.toLowerCase());
+        }
+
+        return true;
       },
       footer: () => null,
     },
@@ -272,14 +313,14 @@ const getColumns = (
       header: 'Nº Factura',
       cell: ({ row, table }) => {
         const isDuplicate = duplicates.has(row.original.id_documento);
-        
+
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('numero_documento')} 
-            fieldName="numero_documento" 
-            onUpdate={onUpdate} 
-            table={table} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('numero_documento')}
+            fieldName="numero_documento"
+            onUpdate={onUpdate}
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
             isDuplicate={isDuplicate}
@@ -293,13 +334,13 @@ const getColumns = (
       header: 'Fecha Contable',
       cell: ({ row, table }) => {
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('fecha_emision')} 
-            fieldName="fecha_emision" 
-            onUpdate={onUpdate} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('fecha_emision')}
+            fieldName="fecha_emision"
+            onUpdate={onUpdate}
             inputType="date"
-            table={table} 
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
@@ -315,7 +356,7 @@ const getColumns = (
         if (!fecha) {
           return <span className="text-muted-foreground">-</span>;
         }
-        
+
         const date = new Date(fecha as string);
         const fechaStr = date.toLocaleDateString('es-ES', {
           day: '2-digit',
@@ -326,7 +367,7 @@ const getColumns = (
           hour: '2-digit',
           minute: '2-digit'
         });
-        
+
         return (
           <div className="text-sm whitespace-nowrap transition-colors duration-300 hover:text-primary">
             <div className="font-medium">{fechaStr}</div>
@@ -343,20 +384,20 @@ const getColumns = (
       cell: ({ row }) => {
         const anio = row.original.año_trimestre;
         const trimestre = row.original.num_trimestre;
-        
+
         if (!anio || !trimestre) {
           return <span className="text-muted-foreground text-xs">Sin trimestre</span>;
         }
-        
+
         const colorClasses = {
           1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800',
           2: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800',
           3: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-800',
           4: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800',
         };
-        
+
         const colorClass = colorClasses[trimestre as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800';
-        
+
         return (
           <div className="text-sm">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-300 hover:scale-105 hover:shadow-md ${colorClass}`}>
@@ -379,20 +420,31 @@ const getColumns = (
       ),
       cell: ({ row, table }) => {
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('proveedor')} 
-            fieldName="proveedor" 
-            onUpdate={onUpdate} 
-            table={table} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('proveedor')}
+            fieldName="proveedor"
+            onUpdate={onUpdate}
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
         );
       },
       filterFn: (row, id, value) => {
-        if (!value || value.length === 0) return true;
-        return value.includes(row.original.proveedor);
+        if (!value || (Array.isArray(value) && value.length === 0)) return true;
+
+        // Si es array (Filtro de faceta - Dropdown)
+        if (Array.isArray(value)) {
+          return value.includes(row.original.proveedor);
+        }
+
+        // Si es string (Input de texto manual)
+        if (typeof value === 'string') {
+          return row.original.proveedor?.toLowerCase().includes(value.toLowerCase());
+        }
+
+        return true;
       },
     },
 
@@ -401,12 +453,12 @@ const getColumns = (
       header: 'CIF',
       cell: ({ row, table }) => {
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('cif')} 
-            fieldName="cif" 
-            onUpdate={onUpdate} 
-            table={table} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('cif')}
+            fieldName="cif"
+            onUpdate={onUpdate}
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
@@ -419,12 +471,12 @@ const getColumns = (
       header: 'Concepto',
       cell: ({ row, table }) => {
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('observaciones')} 
-            fieldName="observaciones" 
-            onUpdate={onUpdate} 
-            table={table} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('observaciones')}
+            fieldName="observaciones"
+            onUpdate={onUpdate}
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
@@ -434,19 +486,91 @@ const getColumns = (
 
     {
       id: 'incidencia_motivo',
-      header: 'Motivo Incidencia',
+      header: 'Incidencias',
       cell: ({ row }) => {
         const doc = row.original;
-        
-        if (!doc.incidencia || !doc.incidencia_razon) {
+
+        // Calcular incidencias activas (unificando array nuevo y campo legacy)
+        const incidenciasActivas = doc.incidencias
+          ? doc.incidencias.filter(i => !i.validado)
+          : [];
+
+        // Si no hay array pero sí el flag legacy
+        const hasLegacyIncident = !incidenciasActivas.length && doc.incidencia && doc.incidencia_razon;
+
+        if (incidenciasActivas.length === 0 && !hasLegacyIncident) {
           return (
             <div className="flex items-center gap-2 text-muted-foreground transition-all duration-300 hover:text-green-600">
               <span className="inline-flex h-2 w-2 rounded-full bg-green-500 shrink-0 transition-transform duration-300 hover:scale-125"></span>
-              <span className="text-xs">Sin incidencias</span>
+              <span className="text-xs">OK</span>
             </div>
           );
         }
-        
+
+        // CASO MÚLTIPLES INCIDENCIAS
+        if (incidenciasActivas.length > 0) {
+          return (
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 max-w-[300px] cursor-help transition-all duration-300 hover:scale-105">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate text-red-600 dark:text-red-400">
+                      {incidenciasActivas.length > 1
+                        ? `${incidenciasActivas.length} Incidencias`
+                        : incidenciasActivas[0].descripcion}
+                    </div>
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                className="max-w-[400px] z-[99999]"
+                avoidCollisions={true}
+                collisionPadding={10}
+              >
+                <div className="space-y-3 p-1">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm">Incidencias ({incidenciasActivas.length}):</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                      {incidenciasActivas.map(i => (
+                        <li key={i.id} className="text-sm text-red-600 dark:text-red-400 flex items-center justify-between gap-2 group/item">
+                          <span>#{i.id}: {i.descripcion}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 rounded-full p-0 opacity-0 group-hover/item:opacity-100 transition-all hover:bg-green-100 hover:text-green-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onValidateSingleIncident(i.id);
+                            }}
+                            title="Validar esta incidencia"
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs border-green-200 hover:bg-green-50 text-green-700 dark:border-green-800 dark:hover:bg-green-900/30 dark:text-green-400 gap-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onValidateIncident(doc);
+                    }}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    Validar Incidencias
+                  </Button>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+
+        // FALLBACK LEGACY (Solo 1)
         return (
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
@@ -459,8 +583,8 @@ const getColumns = (
                 </div>
               </div>
             </TooltipTrigger>
-            <TooltipContent 
-              side="bottom" 
+            <TooltipContent
+              side="bottom"
               className="max-w-[400px] z-[99999]"
               avoidCollisions={true}
               collisionPadding={10}
@@ -483,18 +607,18 @@ const getColumns = (
       header: 'Tipo Documento',
       cell: ({ row, table }) => {
         return (
-          <EditableCell 
-            docId={row.original.id_documento} 
-            initialValue={row.getValue('tipo_documento')} 
-            fieldName="tipo_documento" 
-            onUpdate={onUpdate} 
-            table={table} 
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('tipo_documento')}
+            fieldName="tipo_documento"
+            onUpdate={onUpdate}
+            table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
         );
       }
-    },...[21, 10, 4, 0].flatMap(rate => ([
+    }, ...[21, 10, 4, 0].flatMap(rate => ([
       {
         id: `base_${rate}`,
         header: `Base ${rate}%`,
@@ -649,19 +773,19 @@ const getColumns = (
   return columns;
 }
 
-export function DocumentsTable({ 
-  documents, 
-  hiddenColumns = [], 
-  isIncidentsPage = false, 
+export function DocumentsTable({
+  documents,
+  hiddenColumns = [],
+  isIncidentsPage = false,
   filename = 'documentos',
   showConfirmButton = false,
   viewId,
   enableColumnPersistence = true,
   onDocumentChanged,
-}: { 
-  documents: Document[], 
-  hiddenColumns?: string[], 
-  isIncidentsPage?: boolean, 
+}: {
+  documents: Document[],
+  hiddenColumns?: string[],
+  isIncidentsPage?: boolean,
   filename?: string,
   showConfirmButton?: boolean,
   viewId?: string,
@@ -684,16 +808,16 @@ export function DocumentsTable({
   const { selectedCompanyIds } = useCompanyContext();
 
   const { checkDuplicates, duplicates } = useDuplicateDetection();
-  
+
   console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));
-  
+
   useEffect(() => {
     if (documents.length > 0) {
       const timer = setTimeout(async () => {
         console.log('🔍 [DocumentsTable] Verificando duplicados...');
         await checkDuplicates();
       }, 1000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [documents.length, checkDuplicates]);
@@ -705,12 +829,12 @@ export function DocumentsTable({
 
   const handleUpdate = useCallback(async (docId: number, fieldName: string, value: any) => {
     console.log('📝 [handleUpdate] Actualización:', { docId, fieldName, value });
-    
+
     if (onDocumentChanged) {
       console.log('🔄 [handleUpdate] Refrescando documentos desde el servidor...');
       onDocumentChanged();
     }
-    
+
     if (fieldName === 'numero_documento') {
       setTimeout(async () => {
         console.log('🔍 [handleUpdate] Verificando duplicados después de editar...');
@@ -828,22 +952,211 @@ export function DocumentsTable({
     if (doc.is_new === 1) {
       handleMarkAsRead(doc.id_documento);
     }
-    
+
     router.push(`/documento/${doc.id_documento}`);
   }, [router, handleMarkAsRead]);
 
-  const columns = useMemo(() => getColumns(
-    handleUpdate as any, 
-    handleSummarize, 
-    handleDeleteClick, 
-    handleConfirmClick,
-    handlePreviewClick,
-    showConfirmButton,
-    duplicates
-  ), [handleUpdate, showConfirmButton, duplicates]);
+  // 🆕 ESTADO y LÓGICA PARA SELECCIÓN MÚLTIPLE
+  const [rowSelection, setRowSelection] = useState({});
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkValidating, setIsBulkValidating] = useState(false); // 🆕 Estado para validación masiva
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+
+  // Calcular IDs seleccionados - Asumiendo que rowSelection keys son índices de 'documents'
+  const selectedIds = useMemo(() => {
+    return Object.keys(rowSelection)
+      .map(key => documents[parseInt(key)]?.id_documento)
+      .filter(id => id !== undefined);
+  }, [rowSelection, documents]);
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleteDialogOpen(true);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setIsBulkDeleting(true);
+
+    try {
+      console.log('🗑️ [BulkDelete] Iniciando eliminación iterativa...', selectedIds);
+
+      // Función helper para procesar en lotes (concurrencia controlada)
+      const CONCURRENCY_LIMIT = 5;
+      const results: { id: number; success: boolean; error?: string }[] = [];
+
+      // Procesar IDs en chunks para no saturar
+      for (let i = 0; i < selectedIds.length; i += CONCURRENCY_LIMIT) {
+        const chunk = selectedIds.slice(i, i + CONCURRENCY_LIMIT);
+
+        const chunkPromises = chunk.map(id =>
+          fetch(`/api/documents/${id}`, { method: 'DELETE' })
+            .then(async (res) => {
+              if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Error');
+              }
+              return { id, success: true };
+            })
+            .catch(err => ({ id, success: false, error: err.message }))
+        );
+
+        const chunkResults = await Promise.all(chunkPromises);
+        results.push(...chunkResults);
+      }
+
+      const failures = results.filter(r => !r.success);
+      const successCount = results.length - failures.length;
+
+      if (failures.length > 0) {
+        console.error('❌ Errores en borrado masivo:', failures);
+        toast({
+          title: 'Eliminación parcial',
+          description: `Se eliminaron ${successCount} documentos. Fallaron ${failures.length}.`,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: '✅ Eliminación completada',
+          description: `Se eliminaron ${successCount} documentos correctamente.`,
+        });
+      }
+
+      setRowSelection({}); // Limpiar selección
+      if (onDocumentChanged) onDocumentChanged();
+
+    } catch (error) {
+      console.error('Error bulk delete', error);
+      toast({
+        title: 'Error crítico',
+        description: error instanceof Error ? error.message : 'Fallo inesperado',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsBulkDeleting(false);
+      setIsBulkDeleteDialogOpen(false);
+    }
+  };
+
+  const handleValidateIncident = useCallback(async (doc: Document) => {
+    try {
+      toast({
+        title: 'Validando incidencias...',
+        description: `Procesando documento #${doc.id_documento}`,
+      });
+
+      const response = await fetch(`/api/documents/${doc.id_documento}/validate`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) throw new Error('Error al validar');
+
+      toast({
+        title: '✅ Incidencias validadas',
+        description: 'El documento se ha marcado como correcto.',
+      });
+
+      if (onDocumentChanged) onDocumentChanged();
+    } catch (error) {
+      console.error('Error validating incident:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron validar las incidencias.',
+        variant: 'destructive',
+      });
+    }
+  }, [onDocumentChanged, toast]);
+
+  const handleBulkValidate = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkValidating(true);
+
+    try {
+      console.log('✅ [BulkValidate] Iniciando validación iterativa...', selectedIds);
+
+      const CONCURRENCY_LIMIT = 5;
+      const results: { id: number; success: boolean }[] = [];
+
+      for (let i = 0; i < selectedIds.length; i += CONCURRENCY_LIMIT) {
+        const chunk = selectedIds.slice(i, i + CONCURRENCY_LIMIT);
+        const chunkPromises = chunk.map(id =>
+          fetch(`/api/documents/${id}/validate`, { method: 'POST' })
+            .then(res => ({ id, success: res.ok }))
+            .catch(() => ({ id, success: false }))
+        );
+        results.push(...await Promise.all(chunkPromises));
+      }
+
+      const successCount = results.filter(r => r.success).length;
+
+      toast({
+        title: '✅ Validación masiva completada',
+        description: `Se validaron ${successCount} documentos correctamente.`,
+      });
+
+      setRowSelection({});
+      if (onDocumentChanged) onDocumentChanged();
+
+    } catch (error) {
+      console.error('Error bulk validate', error);
+      toast({ title: 'Error', description: 'Fallo en validación masiva', variant: 'destructive' });
+    } finally {
+      setIsBulkValidating(false);
+    }
+  };
+
+  const handleValidateSingleIncident = useCallback(async (incidentId: number) => {
+    try {
+      const response = await fetch(`/api/incidents/${incidentId}/validate`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) throw new Error('Error al validar incidencia individual');
+
+      toast({
+        title: '✅ Incidencia validada',
+        description: `La incidencia #${incidentId} ha sido marcada como resuelta.`,
+      });
+
+      if (onDocumentChanged) onDocumentChanged();
+    } catch (error) {
+      console.error('Error validating single incident:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo validar la incidencia.',
+        variant: 'destructive',
+      });
+    }
+  }, [onDocumentChanged, toast]);
+
+  const columns = useMemo(() => {
+    const cols = getColumns(
+      handleUpdate as any,
+      handleSummarize,
+      handleDeleteClick,
+      handleConfirmClick,
+      handlePreviewClick,
+      handleValidateIncident,
+      handleValidateSingleIncident,
+      showConfirmButton,
+      isIncidentsPage,
+      duplicates
+    );
+    // 🔧 FIX Z-INDEX: Ajustar columna de acciones
+    if (cols.length > 0 && cols[0].id === 'actions') {
+      const originalCell = cols[0].cell as any;
+      cols[0].cell = (props) => (
+        <div className="relative z-[100] flex justify-center w-full">
+          {originalCell(props)}
+        </div>
+      );
+    }
+    return cols;
+  }, [handleUpdate, showConfirmButton, duplicates]);
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
-  const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;return (
+  const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
+
+  return (
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -858,7 +1171,7 @@ export function DocumentsTable({
               </span>
             )}
           </div>
-          
+
           <CleanDuplicatesButton
             empresaId={selectedCompanyIds[0] || null}
             onComplete={() => {
@@ -871,29 +1184,88 @@ export function DocumentsTable({
             size="sm"
           />
         </div>
-        
+
         <div className="relative w-full group" data-tutorial="documents-table">
           <div className="w-full overflow-x-auto rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border">
-            <DataTable 
-              columns={columns} 
-              data={documents} 
-              hiddenColumns={hiddenColumns} 
+            <DataTable
+              columns={columns}
+              data={documents}
+              hiddenColumns={hiddenColumns}
               filename={filename}
               onRowClick={handleRowClick}
               viewId={viewId}
               enableColumnPersistence={enableColumnPersistence}
+              // 🆕 Pasar props de selección
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
             />
           </div>
-          
+
           <div className="lg:hidden text-center text-xs text-muted-foreground mt-3 py-1.5 flex items-center justify-center gap-2 transition-opacity duration-300 opacity-70 hover:opacity-100">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
             <span className="font-medium">Desliza horizontalmente para ver más</span>
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
           </div>
         </div>
+
+        {/* 🆕 FLOATING BULK ACTIONS BAR */}
+        {selectedIds.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-none">
+            <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 shadow-2xl flex items-center gap-4 border border-primary/20 bg-background/80 backdrop-blur-xl">
+              <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                <span className="font-bold text-primary">{selectedIds.length}</span> seleccionados
+              </span>
+              <div className="h-4 w-px bg-border"></div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/30"
+                onClick={handleBulkValidate}
+                disabled={isBulkValidating || isBulkDeleting}
+              >
+                {isBulkValidating ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    Validando...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Validar
+                  </span>
+                )}
+              </Button>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting || isBulkValidating}
+                className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all"
+              >
+                {isBulkDeleting ? (
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Eliminar {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setRowSelection({})}
+                className="rounded-full h-8 w-8 ml-1 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <span className="sr-only">Cancelar</span>
+                <div className="h-4 w-4 font-bold">✕</div>
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
-      
-      <SummarizeDialog 
+
+      <SummarizeDialog
         doc={selectedDocForSummary}
         isOpen={isSummarizeOpen}
         setIsOpen={setIsSummarizeOpen}
@@ -906,6 +1278,44 @@ export function DocumentsTable({
         documentName={previewName}
       />
 
+      <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              ¿Eliminar {selectedIds.length} documentos?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm space-y-2 pt-2">
+              <p>
+                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>.
+                Estás a punto de eliminar permanentemente <span className="font-bold text-foreground">{selectedIds.length} documentos</span> seleccionados.
+              </p>
+              <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1">
+                <p className="text-xs font-medium text-destructive flex items-center gap-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>
+                  Consecuencias:
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5 pl-3.5">
+                  <li>• Se eliminarán los {selectedIds.length} documentos y sus archivos.</li>
+                  <li>• Se perderán datos de IVA, líneas y empresas asociadas.</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-destructive/30"
+            >
+              {isBulkDeleting ? 'Eliminando...' : `Eliminar ${selectedIds.length} documentos`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ALERT DIALOGS EXISTENTES... */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
           <AlertDialogHeader>
@@ -918,10 +1328,10 @@ export function DocumentsTable({
                 Vas a confirmar el documento
                 {docToConfirm?.numero_documento && (
                   <span className="font-semibold text-foreground"> #{docToConfirm.numero_documento}</span>
-                )} 
+                )}
                 <span className="text-muted-foreground"> (ID: {docToConfirm?.id_documento})</span>
               </p>
-              
+
               <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 border border-border/50">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Tipo actual:</span>
@@ -936,14 +1346,14 @@ export function DocumentsTable({
                   </span>
                 </div>
               </div>
-              
+
               <p className="text-xs text-muted-foreground pt-1">
                 Esta acción moverá el documento de "Sin Confirmar" a su categoría correspondiente.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel 
+            <AlertDialogCancel
               disabled={isConfirming}
               className="transition-all duration-300 hover:scale-105"
             >
@@ -974,14 +1384,14 @@ export function DocumentsTable({
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm space-y-2 pt-2">
               <p>
-                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>. 
+                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>.
                 Se eliminará permanentemente el documento
                 {docToDelete?.numero_documento && (
                   <span className="font-semibold text-foreground"> #{docToDelete.numero_documento}</span>
-                )} 
+                )}
                 <span className="text-muted-foreground"> (ID: {docToDelete?.id_documento})</span>
               </p>
-              
+
               <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1">
                 <p className="text-xs font-medium text-destructive flex items-center gap-2">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>
@@ -996,7 +1406,7 @@ export function DocumentsTable({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel 
+            <AlertDialogCancel
               disabled={isDeleting}
               className="transition-all duration-300 hover:scale-105"
             >

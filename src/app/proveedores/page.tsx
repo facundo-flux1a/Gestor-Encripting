@@ -1,6 +1,7 @@
 'use client';
 
-import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
+import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { ProvidersTable } from "@/components/dashboard/providers-table";
 import { useCompanyContext } from "@/context/CompanyProvider";
 import { useEffect, useState } from "react";
@@ -56,14 +57,10 @@ function ProveedoresPageContent() {
         return (
             <MainLayout>
                 <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                    <MainLayoutHeader>
-                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                            <Building2 className="h-6 w-6 sm:h-7 sm:w-7 text-violet-500 shrink-0" />
-                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                Proveedores
-                            </h2>
-                        </div>
-                    </MainLayoutHeader>
+                    <PageHeader
+                        title="Proveedores"
+                        icon={Building2}
+                    />
                     <div className="space-y-4 sm:space-y-6">
                         <Skeleton className="h-[500px] w-full animate-pulse" />
                     </div>
@@ -75,31 +72,19 @@ function ProveedoresPageContent() {
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                <MainLayoutHeader>
-                    <div className="flex items-start sm:items-center justify-between w-full gap-2 flex-col sm:flex-row" data-tutorial="proveedores-header">
-                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                            <div className="p-2 bg-blue-500/10 rounded-xl shrink-0 animate-fade-in">
-                                <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-violet-500" />
-                            </div>
-                            <div className="flex-1 space-y-1 min-w-0">
-                                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                    Proveedores
-                                </h2>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                    Explora todos tus proveedores y sus métricas clave
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </MainLayoutHeader>
+                <PageHeader
+                    title="Proveedores"
+                    icon={Building2}
+                    description="Explora todos tus proveedores y sus métricas clave"
+                />
 
-                <div 
-                    className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" 
+                <div
+                    className="animate-fade-in transition-all duration-300 hover:scale-[1.005]"
                     style={{ animationDelay: '0ms' }}
                     data-tutorial="proveedores-tabla"
                 >
-                    <ProvidersTable 
-                        providers={providers} 
+                    <ProvidersTable
+                        providers={providers}
                         showCompanyColumn={showCompanyColumn}
                         onProviderUpdated={fetchProviders} // ✅ AGREGAR ESTA LÍNEA
                     />

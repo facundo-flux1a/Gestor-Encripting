@@ -30,7 +30,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
           container.scrollLeft += scrollDirection * scrollSpeed
           const after = container.scrollLeft
           const actualScroll = Math.abs(after - before)
-          
+
           frameCount++
           if (frameCount % 60 === 0) { // Log cada 60 frames (~1 segundo)
             console.log('🔍 Scroll Stats:', {
@@ -41,7 +41,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
               frameCount
             })
           }
-          
+
           animationFrameId = requestAnimationFrame(scroll)
         }
       }
@@ -112,7 +112,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
     }, [containerRef])
 
     return (
-      <div 
+      <div
         ref={containerRef}
         className="relative w-full overflow-auto custom-scrollbar"
       >

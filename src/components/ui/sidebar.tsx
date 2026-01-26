@@ -110,7 +110,7 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
-    
+
     // Hook para datos de usuario
     const { user, loading, error, updateUser, refetch } = useUserData()
 
@@ -170,35 +170,35 @@ const SidebarProvider = React.forwardRef<
     }), [user, loading, error, updateUser, refetch])
 
     // Estado para las empresas y la empresa seleccionada
-    const [companies, setCompanies] = React.useState<{id: number, nombre: string}[]>([]);
+    const [companies, setCompanies] = React.useState<{ id: number, nombre: string }[]>([]);
     const [selectedCompanyId, setSelectedCompanyId] = React.useState<number | null>(null);
     const [companiesLoading, setCompaniesLoading] = React.useState(true);
 
     // Hook para cargar las empresas al inicio
     React.useEffect(() => {
-    const fetchCompanies = async () => {
+      const fetchCompanies = async () => {
         try {
-            setCompaniesLoading(true);
-            
-            // ✅ USAR API ROUTE
-            const response = await fetch('/api/companies');
-            if (!response.ok) {
-                throw new Error('Error al cargar empresas');
-            }
-            const fetchedCompanies = await response.json();
-            
-            setCompanies(fetchedCompanies);
-            if (fetchedCompanies.length > 0) {
-                setSelectedCompanyId(fetchedCompanies[0].id);
-            }
+          setCompaniesLoading(true);
+
+          // ✅ USAR API ROUTE
+          const response = await fetch('/api/companies');
+          if (!response.ok) {
+            throw new Error('Error al cargar empresas');
+          }
+          const fetchedCompanies = await response.json();
+
+          setCompanies(fetchedCompanies);
+          if (fetchedCompanies.length > 0) {
+            setSelectedCompanyId(fetchedCompanies[0].id);
+          }
         } catch (err) {
-            console.error("Error fetching companies:", err);
+          console.error("Error fetching companies:", err);
         } finally {
-            setCompaniesLoading(false);
+          setCompaniesLoading(false);
         }
-    };
-    fetchCompanies();
-}, []);
+      };
+      fetchCompanies();
+    }, []);
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
@@ -703,7 +703,7 @@ const SidebarMenuAction = React.forwardRef<
         "peer-data-[size=lg]/menu-button:top-2.5",
         "group-data-[collapsible=icon]:hidden",
         showOnHover &&
-          "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
+        "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
         className
       )}
       {...props}
@@ -878,9 +878,9 @@ const SidebarUserSection = React.memo(() => {
           >
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
               {user.avatar ? (
-                <img 
-                  src={user.avatar} 
-                  alt={user.name} 
+                <img
+                  src={user.avatar}
+                  alt={user.name}
                   className="h-8 w-8 rounded-lg object-cover"
                 />
               ) : (
@@ -893,7 +893,7 @@ const SidebarUserSection = React.memo(() => {
             </div>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        
+
         {/* Mostrar opciones solo cuando el sidebar está expandido */}
         {state === "expanded" && (
           <>

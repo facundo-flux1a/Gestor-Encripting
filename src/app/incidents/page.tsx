@@ -1,6 +1,7 @@
 'use client';
 
-import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
+import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { IncidentsAnalytics } from "@/components/incidents/incidents-analytics";
 import { AnalyzeDocumentsCard } from "@/components/incidents/analyze-documents-card";
@@ -46,7 +47,7 @@ function IncidentsPageContent() {
                     docsRes.json(),
                     analyticsRes.json()
                 ]);
-                
+
                 setDocs(docsData);
                 setAnalyticsData(analyticsData);
                 console.log('✅ [IncidentsPage] Datos cargados:', {
@@ -74,14 +75,10 @@ function IncidentsPageContent() {
         return (
             <MainLayout>
                 <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                    <MainLayoutHeader>
-                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                            <AlertTriangle className="h-6 w-6 sm:h-7 sm:w-7 text-amber-500 shrink-0" />
-                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                Gestión de Incidencias
-                            </h2>
-                        </div>
-                    </MainLayoutHeader>
+                    <PageHeader
+                        title="Gestión de Incidencias"
+                        icon={AlertTriangle}
+                    />
                     <div className="space-y-4 sm:space-y-6">
                         <Skeleton className="h-[250px] sm:h-[300px] w-full animate-pulse" />
                         <Skeleton className="h-[300px] sm:h-[400px] w-full animate-pulse" />
@@ -95,25 +92,12 @@ function IncidentsPageContent() {
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                <MainLayoutHeader>
-                    {/* 🎯 data-tutorial="incidencias-header" */}
-                    <div className="flex items-start sm:items-center justify-between w-full gap-2 flex-col sm:flex-row" data-tutorial="incidencias-header">
-                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                            <div className="p-2 bg-amber-500/10 rounded-xl shrink-0 animate-fade-in">
-                                <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
-                            </div>
-                            <div className="flex-1 space-y-1 min-w-0">
-                                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                                    Gestión de Incidencias
-                                </h2>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                    Analiza, revisa y valida las incidencias de tus documentos
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </MainLayoutHeader>
-                
+                <PageHeader
+                    title="Gestión de Incidencias"
+                    icon={AlertTriangle}
+                    description="Analiza, revisa y valida las incidencias de tus documentos"
+                />
+
                 <div className="space-y-4 sm:space-y-6">
                     {/* Analytics y Card de Análisis - Grid Responsive con animaciones */}
                     <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-3">
@@ -136,8 +120,8 @@ function IncidentsPageContent() {
                     {/* Tabla de Incidencias de IA con animación y hover */}
                     {/* 🎯 data-tutorial="incidencias-ai-table" */}
                     <div className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '100ms' }} data-tutorial="incidencias-ai-table">
-                        <AIIncidentsTable 
-                            empresaIds={selectedCompanyIds} 
+                        <AIIncidentsTable
+                            empresaIds={selectedCompanyIds}
                             onRefresh={handleAnalysisComplete}
                         />
                     </div>
@@ -157,10 +141,10 @@ function IncidentsPageContent() {
                                 </p>
                             </div>
                         </div>
-                        <DocumentsTable 
-                            documents={docs} 
-                            isIncidentsPage={true} 
-                            filename="incidencias" 
+                        <DocumentsTable
+                            documents={docs}
+                            isIncidentsPage={true}
+                            filename="incidencias"
                         />
                     </div>
                 </div>

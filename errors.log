@@ -1,0 +1,190 @@
+
+> nextn@0.1.0 typecheck
+> tsc --noEmit
+
+.next/types/validator.ts(207,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/activity/[id]/mark-read/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/activity/[id]/mark-read">'.
+  Types of property 'PATCH' are incompatible.
+    Type '(request: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; updated: boolean; parentUpdated: boolean; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(216,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/activity/[id]/retry/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/activity/[id]/retry">'.
+  Types of property 'POST' are incompatible.
+    Type '(request: Request, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; message: string; uploadId: any; activityId: string; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(225,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/activity/[id]/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/activity/[id]">'.
+  Types of property 'DELETE' are incompatible.
+    Type '(request: Request, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; message: string; deleted: { activities: number; documents: number; }; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(387,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/documents/[id]/delete/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/documents/[id]/delete">'.
+  Types of property 'DELETE' are incompatible.
+    Type '(request: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string | undefined; }> | NextResponse<{ success: boolean; message: string; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(396,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/documents/[id]/field/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/documents/[id]/field">'.
+  Types of property 'PATCH' are incompatible.
+    Type '(request: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(414,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/documents/[id]/move/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/documents/[id]/move">'.
+  Types of property 'PATCH' are incompatible.
+    Type '(request: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; message: string; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+.next/types/validator.ts(432,31): error TS2344: Type 'typeof import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/app/api/documents/[id]/validate/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/documents/[id]/validate">'.
+  Types of property 'POST' are incompatible.
+    Type '(request: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ error: string; }> | NextResponse<{ success: boolean; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+src/app/api/extract-rar/route.ts(2,41): error TS7016: Could not find a declaration file for module 'unrar-js'. '/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/node_modules/unrar-js/unrar.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/unrar-js` if it exists or add a new declaration (.d.ts) file containing `declare module 'unrar-js';`
+src/app/api/send-dashboard-email/route.ts(58,7): error TS2561: Object literal may only specify known properties, but 'empresaId' does not exist in type '{ userId: number; tipoExport: string; añoFiltro?: number | null | undefined; trimestreFiltro?: number | null | undefined; empresasIds?: number[] | undefined; documentoIds?: number[] | undefined; filtrosAplicados?: any; }'. Did you mean to write 'empresasIds'?
+src/app/api/sii/enviar-factura/route.ts(49,13): error TS2339: Property 'importeTotal' does not exist on type '{ nifEmisor: any; numeroFactura: any; fechaExpedicion: any; tipoFactura: any; claveRegimen: any; descripcion: any; baseImponible: number; tipoImpositivo: number; cuotaIVA: number; nifCliente: any; nombreCliente: any; paisCliente: any; }'.
+src/app/api/sii/enviar-factura/route.ts(83,24): error TS2339: Property 'importeTotal' does not exist on type '{ nifEmisor: any; numeroFactura: any; fechaExpedicion: any; tipoFactura: any; claveRegimen: any; descripcion: any; baseImponible: number; tipoImpositivo: number; cuotaIVA: number; nifCliente: any; nombreCliente: any; paisCliente: any; }'.
+src/app/api/unrar/route.ts(45,7): error TS2740: Type 'Uint8Array<ArrayBuffer>' is missing the following properties from type 'ArrayBuffer': maxByteLength, resizable, resize, detached, and 2 more.
+src/app/api/user/tutorial-actividad/route.ts(21,59): error TS2367: This comparison appears to be unintentional because the types 'number | undefined' and 'boolean' have no overlap.
+src/app/api/user/tutorial-documentos/route.ts(21,60): error TS2367: This comparison appears to be unintentional because the types 'number | undefined' and 'boolean' have no overlap.
+src/app/api/user/tutorial-trimestres/route.ts(21,60): error TS2367: This comparison appears to be unintentional because the types 'number | undefined' and 'boolean' have no overlap.
+src/app/api/user/tutorial/route.ts(22,50): error TS2367: This comparison appears to be unintentional because the types 'number | undefined' and 'boolean' have no overlap.
+src/app/dashboard/page.tsx(612,60): error TS2551: Property 'totalIngresosSinIva' does not exist on type '{ totalIngresos: number; totalGastos: number; totalFacturasIngreso: number; totalFacturasGasto: number; beneficio: number; ivaRepercutido: number; ivaSoportado: number; resultadoIva: number; ... 4 more ...; totalDocs: number; }'. Did you mean 'totalIngresos'?
+src/app/dashboard/page.tsx(641,60): error TS2339: Property 'totalGastosSinIva' does not exist on type '{ totalIngresos: number; totalGastos: number; totalFacturasIngreso: number; totalFacturasGasto: number; beneficio: number; ivaRepercutido: number; ivaSoportado: number; resultadoIva: number; ... 4 more ...; totalDocs: number; }'.
+src/app/dashboard/page.tsx(670,60): error TS2339: Property 'beneficioSinIva' does not exist on type '{ totalIngresos: number; totalGastos: number; totalFacturasIngreso: number; totalFacturasGasto: number; beneficio: number; ivaRepercutido: number; ivaSoportado: number; resultadoIva: number; ... 4 more ...; totalDocs: number; }'.
+src/app/documento/[id]/page.tsx(135,25): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/app/documento/[id]/page.tsx(452,21): error TS2322: Type 'Document[]' is not assignable to type 'Row<any>[]'.
+  Type 'Document' is missing the following properties from type 'Row<any>': _getAllCellsByColumnId, _uniqueValuesCache, _valuesCache, depth, and 38 more.
+src/app/documento/[id]/page.tsx(578,17): error TS2322: Type 'Document[]' is not assignable to type 'Row<any>[]'.
+  Type 'Document' is missing the following properties from type 'Row<any>': _getAllCellsByColumnId, _uniqueValuesCache, _valuesCache, depth, and 38 more.
+src/app/documents/page.tsx(199,39): error TS2339: Property 'nombre' does not exist on type 'Company'.
+src/app/incidents/page.tsx(113,55): error TS2322: Type '() => void' is not assignable to type '() => Promise<void>'.
+  Type 'void' is not assignable to type 'Promise<void>'.
+src/app/proveedores/[name]/page.tsx(44,48): error TS18047: 'analytics' is possibly 'null'.
+src/app/proveedores/[name]/page.tsx(44,58): error TS2339: Property 'totalGastado' does not exist on type 'ProviderAnalyticsData'.
+src/app/proveedores/[name]/page.tsx(44,74): error TS18047: 'analytics' is possibly 'null'.
+src/app/proveedores/[name]/page.tsx(44,84): error TS2339: Property 'moneda' does not exist on type 'ProviderAnalyticsData'.
+src/app/proveedores/[name]/page.tsx(45,48): error TS18047: 'analytics' is possibly 'null'.
+src/app/proveedores/[name]/page.tsx(45,58): error TS2339: Property 'comprasPorMes' does not exist on type 'ProviderAnalyticsData'.
+src/app/proveedores/[name]/provider-detail-client.tsx(52,48): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/app/proveedores/[name]/provider-detail-client.tsx(53,47): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/app/proveedores/[name]/provider-detail-client.tsx(54,42): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/app/proveedores/[name]/provider-detail-client.tsx(60,52): error TS18047: 'newAnalytics' is possibly 'null'.
+src/app/proveedores/[name]/provider-detail-client.tsx(60,65): error TS2339: Property 'totalGastado' does not exist on type 'ProviderAnalyticsData'.
+src/app/proveedores/[name]/provider-detail-client.tsx(64,34): error TS2345: Argument of type 'ProviderAnalyticsData | null' is not assignable to parameter of type 'SetStateAction<ProviderAnalyticsData>'.
+  Type 'null' is not assignable to type 'SetStateAction<ProviderAnalyticsData>'.
+src/app/proveedores/[name]/provider-detail-client.tsx(194,41): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/components/ActivityTable.tsx(1251,9): error TS2322: Type '(activity: Activity) => Promise<void>' is not assignable to type '(activity: Activity) => void'.
+  Types of parameters 'activity' and 'activity' are incompatible.
+    Type 'Activity' is missing the following properties from type 'Activity': parent_upload_id, id_de_empresa, documento_id, completed_at
+src/components/actividad/ActividadTutorial.tsx(92,9): error TS2322: Type '{ element: string; popover: { title: string; description: string; side: string; align: string; }; }' is not assignable to type 'DriveStep'.
+  The types of 'popover.side' are incompatible between these types.
+    Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(111,13): error TS2322: Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(112,13): error TS2322: Type 'string' is not assignable to type 'Alignment | undefined'.
+src/components/actividad/ActividadTutorial.tsx(121,13): error TS2322: Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(122,13): error TS2322: Type 'string' is not assignable to type 'Alignment | undefined'.
+src/components/actividad/ActividadTutorial.tsx(131,13): error TS2322: Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(132,13): error TS2322: Type 'string' is not assignable to type 'Alignment | undefined'.
+src/components/actividad/ActividadTutorial.tsx(141,13): error TS2322: Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(142,13): error TS2322: Type 'string' is not assignable to type 'Alignment | undefined'.
+src/components/actividad/ActividadTutorial.tsx(151,13): error TS2322: Type 'string' is not assignable to type 'Side | undefined'.
+src/components/actividad/ActividadTutorial.tsx(152,13): error TS2322: Type 'string' is not assignable to type 'Alignment | undefined'.
+src/components/companies-selector.tsx(914,37): error TS2741: Property 'CIF' is missing in type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' but required in type 'Company'.
+src/components/companies-selector.tsx(921,37): error TS2345: Argument of type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' is not assignable to parameter of type 'Company'.
+  Property 'CIF' is missing in type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' but required in type 'Company'.
+src/components/companies-selector.tsx(1205,43): error TS2741: Property 'CIF' is missing in type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' but required in type 'Company'.
+src/components/companies-selector.tsx(1212,43): error TS2345: Argument of type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' is not assignable to parameter of type 'Company'.
+  Property 'CIF' is missing in type 'import("/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/src/lib/types").Company' but required in type 'Company'.
+src/components/dashboard/dashboard-tutorial.tsx(102,26): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/dashboard/dashboard-tutorial.tsx(103,11): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/dashboard/dashboard-tutorial.tsx(200,15): error TS2322: Type '"center"' is not assignable to type 'Side | undefined'.
+src/components/dashboard/dashboard-tutorial.tsx(288,15): error TS2322: Type '"center"' is not assignable to type 'Side | undefined'.
+src/components/dashboard/dashboard-tutorial.tsx(352,25): error TS2345: Argument of type 'Driver' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type 'Driver' provides no match for the signature '(prevState: null): null'.
+src/components/dashboard/document-view.tsx(129,97): error TS2322: Type 'string | number | { nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[] | { ...; }[] | { ...; }[]' is not assignable to type 'string | number | readonly string[] | undefined'.
+  Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[]' is not assignable to type 'string | number | readonly string[] | undefined'.
+    Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[]' is not assignable to type 'readonly string[]'.
+      Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }' is not assignable to type 'string'.
+src/components/dashboard/document-view.tsx(343,164): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/dashboard/documents-table.tsx(612,20): error TS7031: Binding element 'table' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(613,66): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(613,71): error TS7006: Parameter 'row' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(614,58): error TS7006: Parameter 'd' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(638,20): error TS7031: Binding element 'table' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(639,66): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(639,71): error TS7006: Parameter 'row' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(640,58): error TS7006: Parameter 'd' implicitly has an 'any' type.
+src/components/dashboard/documents-table.tsx(685,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | number'.
+src/components/dashboard/documents-table.tsx(708,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | number'.
+src/components/dashboard/documents-table.tsx(731,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | number'.
+src/components/dashboard/editable-cell.tsx(147,29): error TS2339: Property 'updateData' does not exist on type 'TableMeta<Document>'.
+src/components/dashboard/financial-details-card.tsx(75,37): error TS2322: Type 'string | number | { nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[] | { ...; }[] | { ...; }[]' is not assignable to type 'string | number | readonly string[] | undefined'.
+  Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[]' is not assignable to type 'string | number | readonly string[] | undefined'.
+    Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }[]' is not assignable to type 'readonly string[]'.
+      Type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }' is not assignable to type 'string'.
+src/components/dashboard/providers-table.tsx(120,75): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string | number | boolean'.
+  Type 'null' is not assignable to type 'string | number | boolean'.
+src/components/dashboard/providers-table.tsx(320,90): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/components/dashboard/summarize-dialog.tsx(40,48): error TS2741: Property 'numero_factura' is missing in type 'Document' but required in type '{ base_imponible: number; fecha_emision: string; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; entidades: { nombre: string | null; email: string | null; ... 6 more ...; fecha_creacion?: string | ... 1 more ... | undefined; }[]; ... 5 more ...; archivos: { ...; }[]; }'.
+src/components/dashboard/summarize-dialog.tsx(78,44): error TS2339: Property 'numero_factura' does not exist on type 'Document'.
+src/components/documento/IndividualTutorial.tsx(162,7): error TS2353: Object literal may only specify known properties, and 'overlayClickNext' does not exist in type 'Config'.
+src/components/incidencias/IncidenciasTutorial.tsx(116,7): error TS2353: Object literal may only specify known properties, and 'overlayClickNext' does not exist in type 'Config'.
+src/components/layout/theme-provider.tsx(6,41): error TS2307: Cannot find module 'next-themes/dist/types' or its corresponding type declarations.
+src/components/proveedores/ProveedoresTutorial.tsx(93,9): error TS2353: Object literal may only specify known properties, and 'overlayClickNext' does not exist in type 'Config'.
+src/components/proveedores/ProveedoresTutorial.tsx(239,9): error TS2353: Object literal may only specify known properties, and 'overlayClickNext' does not exist in type 'Config'.
+src/components/trimestres/TrimestresTutorial.tsx(133,15): error TS2322: Type '"center"' is not assignable to type 'Side | undefined'.
+src/components/tutorials/DocumentosTutorial.tsx(106,15): error TS2322: Type '"center"' is not assignable to type 'Side | undefined'.
+src/components/tutorials/DocumentosTutorial.tsx(162,15): error TS2322: Type '"center"' is not assignable to type 'Side | undefined'.
+src/components/tutorials/DocumentosTutorial.tsx(335,20): error TS18048: 'currentIndex' is possibly 'undefined'.
+src/components/ui/calendar.tsx(57,9): error TS2353: Object literal may only specify known properties, and 'IconLeft' does not exist in type 'Partial<CustomComponents>'.
+src/components/ui/calendar.tsx(57,22): error TS7031: Binding element 'className' implicitly has an 'any' type.
+src/components/ui/calendar.tsx(60,23): error TS7031: Binding element 'className' implicitly has an 'any' type.
+src/components/ui/data-table.tsx(495,46): error TS2322: Type 'TData' is not assignable to type 'object'.
+src/services/auth-service.ts(241,9): error TS2322: Type 'Promise<boolean> & void' is not assignable to type 'boolean'.
+src/services/auth-service.ts(241,63): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(password: string, hash: string): Promise<boolean>', gave the following error.
+    Argument of type 'string | null | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+  Overload 2 of 2, '(password: string, hash: string, callback?: Callback<boolean> | undefined, progressCallback?: ProgressCallback | undefined): void', gave the following error.
+    Argument of type 'string | null | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/document-service.ts(708,51): error TS2339: Property 'tipo' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(714,50): error TS2339: Property 'fecha_documento' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(717,54): error TS2339: Property 'fecha_recepcion' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(720,50): error TS2339: Property 'descripcion' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(720,70): error TS2339: Property 'notas' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(723,28): error TS2339: Property 'importe_sin_impuestos' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(723,58): error TS2339: Property 'total_sin_impuesto' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(726,28): error TS2339: Property 'importe_total' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(726,50): error TS2339: Property 'total_con_impuesto' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(762,37): error TS2339: Property 'razon_social' does not exist on type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }'.
+src/services/document-service.ts(763,51): error TS2339: Property 'cif' does not exist on type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }'.
+src/services/document-service.ts(764,40): error TS2339: Property 'domicilio' does not exist on type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }'.
+src/services/document-service.ts(767,34): error TS2339: Property 'tipo_entidad' does not exist on type '{ nombre: string | null; email: string | null; rol: string; direccion: string | null; identificador_fiscal: string | null; telefono: string | null; id?: number | undefined; datos_extra?: any; fecha_creacion?: string | ... 1 more ... | undefined; }'.
+src/services/document-service.ts(769,16): error TS2339: Property 'id_de_empresa' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(819,18): error TS2339: Property 'id_de_empresa' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(838,18): error TS2339: Property 'id_de_empresa' does not exist on type '{ base_imponible: number; fecha_emision: string | null; numero_documento: string | null; total: number; tipo_documento: string; fecha_vencimiento: string | null; moneda: string; observaciones: string | null; ... 4 more ...; num_trimestre?: number | undefined; }'.
+src/services/document-service.ts(866,36): error TS2339: Property 'total_con_impuesto' does not exist on type '{ porcentaje: number; base_imponible: number; cuota: number; id?: number | undefined; tipo_impuesto?: string | null | undefined; }'.
+src/services/incidents-service.ts(7,47): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.

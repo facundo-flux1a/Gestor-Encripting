@@ -58,7 +58,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     const [trimestresDisponibles, setTrimestresDisponibles] = useState<any[]>([]);
     const [loadingTrimestres, setLoadingTrimestres] = useState(false);
     const [showTrimestreConfirm, setShowTrimestreConfirm] = useState(false);
-    const [pendingTrimestre, setPendingTrimestre] = useState<{año: number, trimestre: number, existe: boolean} | null>(null);
+    const [pendingTrimestre, setPendingTrimestre] = useState<{ año: number, trimestre: number, existe: boolean } | null>(null);
     const isInitializedRef = useRef(false);
     const provider = useMemo(() => doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'), [doc.entidades]);
 
@@ -107,16 +107,16 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     const filteredLineaFields = useMemo(() => {
         let fields = lineaFields.map((field, index) => ({ field, originalIndex: index }));
         if (!lineaFilters.length) return fields;
-        return fields.filter(({ field }) => lineaFilters.every(filter => 
+        return fields.filter(({ field }) => lineaFilters.every(filter =>
             Object.values(field).some(value => value && String(value).toLowerCase().includes(filter.toLowerCase()))
         ));
     }, [lineaFields, lineaFilters]);
 
     const totalPages = Math.ceil(filteredLineaFields.length / ITEMS_PER_PAGE);
-    const paginatedLineaFields = useMemo(() => 
+    const paginatedLineaFields = useMemo(() =>
         filteredLineaFields.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [filteredLineaFields, currentPage]);
-    
+        [filteredLineaFields, currentPage]);
+
     useEffect(() => setCurrentPage(1), [lineaFilters]);
 
     const renderEditableField = (fieldName: string, label: string, isCurrency = false, placeholder?: string) => (
@@ -158,7 +158,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
             </FormItem>
         )} />
     );
-    
+
     const getStatusBadge = () => {
         if (doc.incidencia) return <Badge variant="destructive" className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"><AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 animate-pulse" /> <span className="hidden xs:inline">Pendiente de Revisión</span><span className="xs:hidden">Pendiente</span></Badge>;
         if (doc.verificado) return <Badge variant="secondary" className="flex items-center gap-1.5 sm:gap-2 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs sm:text-sm"><ShieldCheck className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" /> Validado</Badge>;
@@ -166,7 +166,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
     };
 
     // CONTINÚA EN PARTE 2...// CONTINUACIÓN DE PARTE 1
-    
+
     return (
         <>
             <div className="mb-3 sm:mb-4 animate-fade-in">
@@ -225,7 +225,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                             {getStatusBadge()}
                         </FormItem>
                     </div>
-                    {doc.incidencia && doc.incidencia_razon && (
+                    {/* SECCIÓN DE INCIDENCIAS MÚLTIPLES */}
+                    {doc.incidencias && doc.incidencias.length > 0 ? (
+                        <div className="mt-4 sm:mt-6 space-y-2">
+                            {doc.incidencias.filter(i => !i.validado).map((incidencia) => (
+                                <Alert key={incidencia.id} variant="destructive" className="text-xs sm:text-sm animate-in slide-in-from-top-2 fade-in duration-300">
+                                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                    <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia #{incidencia.id}</AlertTitle>
+                                    <AlertDescription className="text-xs sm:text-sm">{incidencia.descripcion}</AlertDescription>
+                                </Alert>
+                            ))}
+                        </div>
+                    ) : doc.incidencia && doc.incidencia_razon && (
+                        /* FALLBACK PARA LEGACY SI NO HAY ARRAY DE INCIDENCIAS */
                         <Alert variant="destructive" className="mt-4 sm:mt-6 text-xs sm:text-sm">
                             <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                             <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia Detectada</AlertTitle>
@@ -307,17 +319,17 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                                 <div key={field.id} className={cn("p-3 sm:p-4 rounded-lg transition-all", isEditing ? "bg-muted/30 border hover:shadow-md" : "border-b last:border-b-0 hover:bg-accent/5")}>
                                     {isEditing ? (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.descripcion`} render={({field}) => (
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.descripcion`} render={({ field }) => (
                                                 <FormItem className="sm:col-span-2"><FormLabel className="text-xs sm:text-sm">Descripción</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Descripción" className="text-xs sm:text-sm min-h-[60px] sm:min-h-[80px]" /></FormControl></FormItem>
                                             )} />
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.codigo`} render={({field}) => (<FormItem><FormLabel className="text-xs sm:text-sm">Código</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="SKU-123" className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.cantidad`} render={({field}) => (<FormItem><FormLabel className="text-xs sm:text-sm">Cantidad</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.precio_unitario`} render={({field}) => (<FormItem><FormLabel className="text-xs sm:text-sm">P. Unitario</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.descuento_porcentaje`} render={({field}) => (<FormItem><FormLabel className="text-xs sm:text-sm">Dto. %</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
-                                            <FormField control={form.control} name={`lineas.${originalIndex}.importe_linea`} render={({field}) => (<FormItem><FormLabel className="text-xs sm:text-sm">Importe</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm font-bold" /></FormControl></FormItem>)} />
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.codigo`} render={({ field }) => (<FormItem><FormLabel className="text-xs sm:text-sm">Código</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="SKU-123" className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.cantidad`} render={({ field }) => (<FormItem><FormLabel className="text-xs sm:text-sm">Cantidad</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.precio_unitario`} render={({ field }) => (<FormItem><FormLabel className="text-xs sm:text-sm">P. Unitario</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.descuento_porcentaje`} render={({ field }) => (<FormItem><FormLabel className="text-xs sm:text-sm">Dto. %</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm" /></FormControl></FormItem>)} />
+                                            <FormField control={form.control} name={`lineas.${originalIndex}.importe_linea`} render={({ field }) => (<FormItem><FormLabel className="text-xs sm:text-sm">Importe</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className="h-8 sm:h-9 text-xs sm:text-sm font-bold" /></FormControl></FormItem>)} />
                                             <div className="flex justify-end sm:col-span-2">
                                                 <Button type="button" variant="ghost" size="icon" onClick={() => removeLinea(originalIndex)} className="h-8 w-8 sm:h-9 sm:w-9 hover:bg-red-50 dark:hover:bg-red-950/20">
-                                                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive"/>
+                                                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
                                                 </Button>
                                             </div>
                                         </div>

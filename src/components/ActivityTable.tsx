@@ -7,7 +7,7 @@ import {
   HelpCircle,
   Monitor,
   Mail,
-  Info, 
+  Info,
   CheckCircle2,
   XCircle,
   Clock,
@@ -87,8 +87,8 @@ interface ActivityTableProps {
   limit?: number;
 }
 
-export default function ActivityTable({ 
-  empresaId, 
+export default function ActivityTable({
+  empresaId,
   limit = 50,
 }: ActivityTableProps) {
   const router = useRouter();
@@ -284,8 +284,8 @@ export default function ActivityTable({
       await fetchActivities();
       setDeleteDialogOpen(false);
       setActivityToDelete(null);
-      toast({ 
-        title: '✅ Éxito', 
+      toast({
+        title: '✅ Éxito',
         description: 'Actividad eliminada correctamente',
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
@@ -310,8 +310,8 @@ export default function ActivityTable({
       await fetchActivities();
       setPagination(prev => ({ ...prev, offset: 0 }));
       setDeleteAllDialogOpen(false);
-      toast({ 
-        title: '✅ Éxito', 
+      toast({
+        title: '✅ Éxito',
         description: `${result.deleted.activities} actividades y ${result.deleted.documents} documentos eliminados`,
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
@@ -344,8 +344,8 @@ export default function ActivityTable({
           result.uploadId,
           activity.documento_nombre
         );
-        toast({ 
-          title: '🔄 Reintento iniciado', 
+        toast({
+          title: '🔄 Reintento iniciado',
           description: `Procesando "${activity.documento_nombre}"`,
           className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white",
         });
@@ -403,8 +403,8 @@ export default function ActivityTable({
           result.uploadId,
           activity.documento_nombre
         );
-        toast({ 
-          title: '🔄 Reintento iniciado', 
+        toast({
+          title: '🔄 Reintento iniciado',
           description: `Procesando "${activity.documento_nombre}"`,
           className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white",
         });
@@ -417,10 +417,10 @@ export default function ActivityTable({
 
     } catch (error) {
       console.error('❌ Error al reintentar:', error);
-      toast({ 
-        title: '❌ Error', 
-        description: error instanceof Error ? error.message : 'Error desconocido al reintentar', 
-        variant: 'destructive' 
+      toast({
+        title: '❌ Error',
+        description: error instanceof Error ? error.message : 'Error desconocido al reintentar',
+        variant: 'destructive'
       });
     } finally {
       setRetrying(prev => {
@@ -445,7 +445,7 @@ export default function ActivityTable({
 
   const getSortIcon = (key: string) => {
     if (sortConfig.key !== key) return <ChevronUp className="w-4 h-4 opacity-0 group-hover:opacity-30 transition-opacity" />;
-    return sortConfig.direction === 'asc' 
+    return sortConfig.direction === 'asc'
       ? <ChevronUp className="w-4 h-4 text-primary" />
       : <ChevronDown className="w-4 h-4 text-primary" />;
   };
@@ -502,12 +502,12 @@ export default function ActivityTable({
 
   const organizeActivities = () => {
     const sortedActivities = sortActivities(activities);
-    
+
     const childFiles = sortedActivities.filter(a => a.parent_upload_id);
     const zipUploadIds = new Set(childFiles.map(a => a.parent_upload_id).filter(Boolean));
-    
+
     const subDocuments = sortedActivities.filter(a => !a.parent_upload_id && isSubDocument(a.documento_nombre));
-    
+
     const subDocParentMap = new Map<string, Activity[]>();
     subDocuments.forEach(sub => {
       const parentName = extractParentNameFromSub(sub.documento_nombre);
@@ -520,13 +520,13 @@ export default function ActivityTable({
     });
 
     const parentPdfNames = new Set(subDocParentMap.keys());
-    
-    const parentFiles = sortedActivities.filter(a => 
+
+    const parentFiles = sortedActivities.filter(a =>
       !a.parent_upload_id && !isSubDocument(a.documento_nombre)
     );
 
     const childrenMap = new Map<string, Activity[]>();
-    
+
     childFiles.forEach(child => {
       if (!child.parent_upload_id) return;
       if (!childrenMap.has(child.parent_upload_id)) {
@@ -570,14 +570,14 @@ export default function ActivityTable({
   const getStatusBadge = (status: string) => {
     const s = status.toLowerCase();
     let classes = 'bg-primary/20 text-primary border-primary/30';
-    
+
     if (s === 'completado') classes = 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
     if (s === 'fallido' || s === 'error') classes = 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
     if (s === 'interrumpido') classes = 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30';
     if (s.includes('subiendo') || s.includes('guardando') || s.includes('clasificado')) {
       classes = 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
     }
-    
+
     return (
       <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-sm transition-all duration-200 hover:scale-105 ${classes}`}>
         {status}
@@ -594,28 +594,28 @@ export default function ActivityTable({
 
   const getSourceIcon = (source?: string) => {
     const sourceMap: Record<string, { icon: JSX.Element; label: string; color: string }> = {
-      'dashboard': { 
-        icon: <Monitor className="w-4 h-4 shrink-0" />, 
-        label: 'Dashboard', 
-        color: 'text-blue-500' 
+      'dashboard': {
+        icon: <Monitor className="w-4 h-4 shrink-0" />,
+        label: 'Dashboard',
+        color: 'text-blue-500'
       },
-      'correo': { 
-        icon: <Mail className="w-4 h-4 shrink-0" />, 
-        label: 'Correo', 
-        color: 'text-green-500' 
+      'correo': {
+        icon: <Mail className="w-4 h-4 shrink-0" />,
+        label: 'Correo',
+        color: 'text-green-500'
       },
     };
 
-    const config = source && sourceMap[source.toLowerCase()] 
+    const config = source && sourceMap[source.toLowerCase()]
       ? sourceMap[source.toLowerCase()]
-      : { 
-          icon: <HelpCircle className="w-4 h-4 shrink-0" />, 
-          label: 'Origen desconocido', 
-          color: 'text-muted-foreground' 
-        };
+      : {
+        icon: <HelpCircle className="w-4 h-4 shrink-0" />,
+        label: 'Origen desconocido',
+        color: 'text-muted-foreground'
+      };
 
     return (
-      <div 
+      <div
         className="flex items-center gap-1.5 transition-colors duration-200"
         title={`Origen: ${config.label}`}
       >
@@ -679,7 +679,7 @@ export default function ActivityTable({
     const canNavigate = status === 'completado' && activity.documento_id;
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(status);
     const isError = canRetry;
-    
+
     const isFirstRow = !isChild && activities.indexOf(activity) === 0;
 
     const handleRowClick = () => {
@@ -693,13 +693,12 @@ export default function ActivityTable({
     return (
       <TableRow
         key={activity.id}
-        className={`transition-all duration-200 hover:bg-accent/50 ${
-          isChild ? 'bg-muted/30' : ''
-        } ${canNavigate || isError ? 'cursor-pointer' : ''} animate-fade-in group`}
+        className={`transition-all duration-200 hover:bg-accent/50 ${isChild ? 'bg-muted/30' : ''
+          } ${canNavigate || isError ? 'cursor-pointer' : ''} animate-fade-in group`}
         style={{ animationDelay: `${activities.indexOf(activity) * 50}ms` }}
         onClick={handleRowClick}
       >
-        <TableCell 
+        <TableCell
           className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap"
           data-tutorial={isFirstRow ? "actividad-badges" : undefined}
         >
@@ -758,13 +757,12 @@ export default function ActivityTable({
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  activity.status.toLowerCase() === 'completado'
+                className={`h-full rounded-full transition-all duration-300 ${activity.status.toLowerCase() === 'completado'
                     ? 'bg-green-500'
                     : activity.status.toLowerCase() === 'fallido'
-                    ? 'bg-red-500'
-                    : 'bg-primary'
-                }`}
+                      ? 'bg-red-500'
+                      : 'bg-primary'
+                  }`}
                 style={{ width: `${activity.progress}%` }}
               />
             </div>
@@ -773,8 +771,8 @@ export default function ActivityTable({
             </span>
           </div>
         </TableCell>
-        <TableCell 
-          className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap" 
+        <TableCell
+          className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap"
           onClick={(e) => e.stopPropagation()}
           data-tutorial={isFirstRow ? "actividad-actions" : undefined}
         >
@@ -782,7 +780,7 @@ export default function ActivityTable({
             <div className="hidden sm:flex">
               {getSourceIcon(activity['dashboard-correo'])}
             </div>
-            
+
             {activity.is_new === 1 && (
               <button
                 onClick={(e) => {
@@ -795,7 +793,7 @@ export default function ActivityTable({
                 <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
               </button>
             )}
-            
+
             {canRetry && (
               <button
                 onClick={(e) => handleRetry(activity, e)}
@@ -806,7 +804,7 @@ export default function ActivityTable({
                 <RotateCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ${retrying.has(activity.id) ? 'animate-spin' : ''}`} />
               </button>
             )}
-            
+
             <button
               onClick={() => handleDeleteClick(activity)}
               className="p-1.5 sm:p-2 hover:bg-destructive/10 rounded-lg transition-all duration-200 hover:scale-110 group/delete"
@@ -823,15 +821,14 @@ export default function ActivityTable({
   const renderZipRow = (zipActivity: Activity, children: Activity[]) => {
     const isExpanded = expandedZips.has(zipActivity.upload_id);
     const canRetry = ['fallido', 'interrumpido', 'error'].includes(zipActivity.status.toLowerCase());
-    
+
     const isFirstZip = activities.indexOf(zipActivity) === 0;
 
     return (
       <React.Fragment key={zipActivity.upload_id}>
         <TableRow
-          className={`transition-all duration-200 cursor-pointer hover:bg-accent/50 animate-fade-in group ${
-            isExpanded ? 'bg-muted/50' : ''
-          }`}
+          className={`transition-all duration-200 cursor-pointer hover:bg-accent/50 animate-fade-in group ${isExpanded ? 'bg-muted/50' : ''
+            }`}
           style={{ animationDelay: `${activities.indexOf(zipActivity) * 50}ms` }}
           onClick={() => toggleZip(zipActivity.upload_id)}
           data-tutorial={isFirstZip ? "actividad-zip" : undefined}
@@ -893,13 +890,12 @@ export default function ActivityTable({
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    zipActivity.status.toLowerCase() === 'completado'
+                  className={`h-full rounded-full transition-all duration-300 ${zipActivity.status.toLowerCase() === 'completado'
                       ? 'bg-green-500'
                       : zipActivity.status.toLowerCase() === 'fallido'
-                      ? 'bg-red-500'
-                      : 'bg-primary'
-                  }`}
+                        ? 'bg-red-500'
+                        : 'bg-primary'
+                    }`}
                   style={{ width: `${zipActivity.progress}%` }}
                 />
               </div>
@@ -913,7 +909,7 @@ export default function ActivityTable({
               <div className="hidden sm:flex">
                 {getSourceIcon(zipActivity['dashboard-correo'])}
               </div>
-              
+
               {canRetry && (
                 <button
                   onClick={(e) => handleRetry(zipActivity, e)}
@@ -1004,7 +1000,7 @@ export default function ActivityTable({
               <span className="font-semibold text-foreground">{pagination.total}</span>
             </p>
           </div>
-          
+
           <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
             {unreadCount > 0 && (
               <button
@@ -1023,7 +1019,7 @@ export default function ActivityTable({
                 )}
               </button>
             )}
-            
+
             {pagination.total > 0 && (
               <button
                 onClick={handleDeleteAllClick}
@@ -1035,16 +1031,15 @@ export default function ActivityTable({
                 <span className="hidden sm:inline">Eliminar</span>
               </button>
             )}
-            
+
             <button
               onClick={() => setShowFilters(!showFilters)}
               data-tutorial="actividad-filters"
               title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
-              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
-                showFilters || activeFiltersCount > 0
+              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${showFilters || activeFiltersCount > 0
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-secondary hover:bg-secondary/80 border-border'
-              }`}
+                }`}
             >
               <Filter className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">Filtros</span>
@@ -1054,24 +1049,22 @@ export default function ActivityTable({
                 </span>
               )}
             </button>
-            
+
             <div className="relative" data-tutorial="actividad-autorefresh">
               <button
                 onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
                 title={autoRefreshEnabled ? "Desactivar actualización automática" : "Activar actualización automática"}
-                className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${
-                  autoRefreshEnabled 
-                    ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30' 
+                className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${autoRefreshEnabled
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30'
                     : 'bg-secondary hover:bg-secondary/80 border-border'
-                }`}
+                  }`}
               >
                 <RefreshCw className={`w-4 h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Auto</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  autoRefreshEnabled 
-                    ? 'bg-green-500/30 text-green-600 dark:text-green-400' 
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${autoRefreshEnabled
+                    ? 'bg-green-500/30 text-green-600 dark:text-green-400'
                     : 'bg-muted text-muted-foreground'
-                }`}>
+                  }`}>
                   {autoRefreshEnabled ? 'ON' : 'OFF'}
                 </span>
               </button>
@@ -1145,7 +1138,7 @@ export default function ActivityTable({
           <Table data-tutorial="actividad-table">
             <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
               <TableRow>
-                <TableHead 
+                <TableHead
                   onClick={() => handleSort('status')}
                   className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
                 >
@@ -1154,7 +1147,7 @@ export default function ActivityTable({
                     {getSortIcon('status')}
                   </div>
                 </TableHead>
-                <TableHead 
+                <TableHead
                   onClick={() => handleSort('documento')}
                   className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
                 >
@@ -1163,7 +1156,7 @@ export default function ActivityTable({
                     {getSortIcon('documento')}
                   </div>
                 </TableHead>
-                <TableHead 
+                <TableHead
                   onClick={() => handleSort('empresa')}
                   className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden md:table-cell group"
                 >
@@ -1172,7 +1165,7 @@ export default function ActivityTable({
                     {getSortIcon('empresa')}
                   </div>
                 </TableHead>
-                <TableHead 
+                <TableHead
                   onClick={() => handleSort('fecha')}
                   className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden lg:table-cell group"
                 >
@@ -1181,7 +1174,7 @@ export default function ActivityTable({
                     {getSortIcon('fecha')}
                   </div>
                 </TableHead>
-                <TableHead 
+                <TableHead
                   onClick={() => handleSort('progreso')}
                   className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden sm:table-cell group"
                 >

@@ -18,7 +18,9 @@ import {
   type Header as TableHeaderType,
   type Column,
   getFacetedMinMaxValues,
-  Table as TanstackTable
+  Table as TanstackTable,
+  type RowSelectionState, // Import RowSelectionState
+  type OnChangeFn, // Import OnChangeFn type
 } from '@tanstack/react-table';
 import {
   DndContext,
@@ -74,6 +76,9 @@ interface DataTableProps<TData, TValue> {
   // 🆕 NUEVAS PROPS PARA PERSISTENCIA
   viewId?: string; // Identificador único de la vista (ej: "documentos-sin-confirmar")
   enableColumnPersistence?: boolean; // Activar/desactivar persistencia
+  // 🆕 PROPS PARA SELECCIÓN EXTERNA
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
 }
 
 
@@ -144,7 +149,7 @@ const DraggableTableHeader = <TData, TValue>({
     width: header.getSize(),
     opacity: isDragging ? 0.5 : 1,
   };
-  
+
   const isSortable = header.column.getCanSort();
 
   return (
@@ -154,43 +159,43 @@ const DraggableTableHeader = <TData, TValue>({
       colSpan={header.colSpan}
       className={cn("p-0 whitespace-nowrap group relative bg-muted/50")}
     >
-       {header.isPlaceholder ? null : (
-            <div className="flex flex-col h-full">
-                 <div className="flex items-center h-full">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        {...attributes}
-                        {...listeners}
-                        className="cursor-grab p-2 h-full touch-none"
-                        >
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <div
-                        className={cn(
-                            "flex items-center text-left w-full h-full px-2 py-3",
-                            isSortable ? 'cursor-pointer select-none' : ''
-                        )}
-                        onClick={header.column.getToggleSortingHandler()}
-                    >
-                        <span className="font-bold text-xs">
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                        </span>
-                        {isSortable && (
-                            <ArrowUpDown className={cn(
-                                "ml-2 h-3 w-3 transition-opacity duration-300",
-                                header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            )} />
-                        )}
-                    </div>
-                </div>
-                 {header.column.getCanFilter() ? (
-                    <div className="p-2 pt-0">
-                        <Filter column={header.column} table={header.getContext().table} />
-                    </div>
-                ) : null}
+      {header.isPlaceholder ? null : (
+        <div className="flex flex-col h-full">
+          <div className="flex items-center h-full">
+            <Button
+              variant="ghost"
+              size="sm"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab p-2 h-full touch-none"
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <div
+              className={cn(
+                "flex items-center text-left w-full h-full px-2 py-3",
+                isSortable ? 'cursor-pointer select-none' : ''
+              )}
+              onClick={header.column.getToggleSortingHandler()}
+            >
+              <span className="font-bold text-xs">
+                {flexRender(header.column.columnDef.header, header.getContext())}
+              </span>
+              {isSortable && (
+                <ArrowUpDown className={cn(
+                  "ml-2 h-3 w-3 transition-opacity duration-300",
+                  header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                )} />
+              )}
             </div>
-       )}
+          </div>
+          {header.column.getCanFilter() ? (
+            <div className="p-2 pt-0">
+              <Filter column={header.column} table={header.getContext().table} />
+            </div>
+          ) : null}
+        </div>
+      )}
     </TableHead>
   );
 };
@@ -198,121 +203,121 @@ const DraggableTableHeader = <TData, TValue>({
 
 // 🔥 Draggable Table Row for Documents - CON CLICK
 const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: number | null; numero_documento: string }>({
-    row,
-    onRowClick,
+  row,
+  onRowClick,
 }: {
-    row: Row<TData>,
-    onRowClick?: (row: TData) => void,
+  row: Row<TData>,
+  onRowClick?: (row: TData) => void,
 }) => {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({
-        id: `row-${row.original.id_documento}`,
-    });
-    
-    const style: React.CSSProperties = {
-        transform: CSS.Translate.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        position: 'relative',
-        zIndex: isDragging ? 1 : 0,
-    };
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `row-${row.original.id_documento}`,
+  });
 
-    const handleDragStart = (e: React.DragEvent) => {
-        const doc = row.original;
-        e.dataTransfer.setData('application/json', JSON.stringify({
-            id_documento: doc.id_documento,
-            empresa_id: doc.empresa_id,
-            numero_documento: doc.numero_documento,
-        }));
-        e.dataTransfer.effectAllowed = 'move';
-        console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
-    };
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 1 : undefined, // Dejar que CSS controle el z-index cuando no se arrastra
+  };
 
-    const handleDragEnd = (e: React.DragEvent) => {
-        console.log('🏁 [Drag End]');
-    };
+  const handleDragStart = (e: React.DragEvent) => {
+    const doc = row.original;
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      id_documento: doc.id_documento,
+      empresa_id: doc.empresa_id,
+      numero_documento: doc.numero_documento,
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+    console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
+  };
 
-    const handleRowClick = (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
-        
-        const isInteractive = target.closest(
-            'button, a, input, textarea, select, ' +
-            '[role="button"], [role="checkbox"], ' +
-            '[contenteditable="true"], ' +
-            '.editable-cell, ' +
-            '[data-editable="true"]'
-        );
-        
-        const isEditableElement = 
-            target.isContentEditable || 
-            target.hasAttribute('contenteditable') ||
-            target.classList.contains('editable-cell') ||
-            target.hasAttribute('data-editable');
-        
-        if (!isInteractive && !isEditableElement && onRowClick) {
-            onRowClick(row.original);
-        }
-    };
+  const handleDragEnd = (e: React.DragEvent) => {
+    console.log('🏁 [Drag End]');
+  };
 
-    return (
-        <TableRow
-            ref={setNodeRef}
-            style={style}
-            data-state={row.getIsSelected() && 'selected'}
-            className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer"
-            draggable={true}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onClick={handleRowClick}
-        >
-             {row.getVisibleCells().map(cell => (
-                <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
-                    <div className="flex items-center">
-                        {cell.column.id === 'select' && (
-                             <Button
-                                variant="ghost"
-                                size="icon"
-                                {...attributes}
-                                {...listeners}
-                                className="cursor-grab p-2 h-8 w-8 touch-none flex-shrink-0"
-                            >
-                                <GripVertical className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                        )}
-                        <div className="flex-grow">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </div>
-                    </div>
-                </TableCell>
-            ))}
-        </TableRow>
+  const handleRowClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+
+    const isInteractive = target.closest(
+      'button, a, input, textarea, select, ' +
+      '[role="button"], [role="checkbox"], ' +
+      '[contenteditable="true"], ' +
+      '.editable-cell, ' +
+      '[data-editable="true"]'
     );
+
+    const isEditableElement =
+      target.isContentEditable ||
+      target.hasAttribute('contenteditable') ||
+      target.classList.contains('editable-cell') ||
+      target.hasAttribute('data-editable');
+
+    if (!isInteractive && !isEditableElement && onRowClick) {
+      onRowClick(row.original);
+    }
+  };
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      data-state={row.getIsSelected() && 'selected'}
+      className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer relative hover:z-50 transition-all duration-200"
+      draggable={true}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onClick={handleRowClick}
+    >
+      {row.getVisibleCells().map(cell => (
+        <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-2">
+          <div className="flex items-center">
+            {cell.column.id === 'select' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                {...attributes}
+                {...listeners}
+                className="cursor-grab p-2 h-8 w-8 touch-none flex-shrink-0"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
+            <div className="flex-grow">
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </div>
+          </div>
+        </TableCell>
+      ))}
+    </TableRow>
+  );
 };
 
 // Standard Table Row for other data types
 const StandardTableRow = <TData,>({
-    row,
+  row,
 }: {
-    row: Row<TData>,
+  row: Row<TData>,
 }) => {
-     return (
-        <TableRow
-            data-state={row.getIsSelected() && 'selected'}
-            className="bg-background even:bg-muted/50 hover:bg-muted/75"
-        >
-             {row.getVisibleCells().map(cell => (
-                <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-4">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-            ))}
-        </TableRow>
-    );
+  return (
+    <TableRow
+      data-state={row.getIsSelected() && 'selected'}
+      className="bg-background even:bg-muted/50 hover:bg-muted/75"
+    >
+      {row.getVisibleCells().map(cell => (
+        <TableCell key={cell.id} style={{ width: cell.column.getSize() }} className="whitespace-nowrap p-4">
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
 };
 
 
@@ -324,6 +329,8 @@ export function DataTable<TData, TValue>({
   onRowClick,
   viewId, // 🆕 NUEVO
   enableColumnPersistence = false, // 🆕 NUEVO
+  rowSelection: externalRowSelection, // 🆕 SELECCIÓN EXTERNA
+  onRowSelectionChange: setExternalRowSelection, // 🆕 CALLBACK EXTERNO
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
@@ -332,6 +339,12 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+
+  // Estado local para selección si no se provee externo
+  const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
+
+  const rowSelection = externalRowSelection ?? internalRowSelection;
+  const setRowSelection = setExternalRowSelection ?? setInternalRowSelection;
 
   // 🆕 NUEVO: Orden por defecto de las columnas
   const defaultColumnOrder = React.useMemo(
@@ -360,7 +373,7 @@ export function DataTable<TData, TValue>({
       setColumnOrder(savedColumnOrder);
     }
   }, [savedColumnOrder, enableColumnPersistence, isLoadingColumnOrder]);
-  
+
   React.useEffect(() => {
     setData(initialData);
   }, [initialData]);
@@ -384,19 +397,22 @@ export function DataTable<TData, TValue>({
       columnVisibility,
       columnOrder, // 🆕 AGREGADO
       globalFilter,
+      rowSelection, // 🆕 ESTADO DE SELECCIÓN
     },
+    enableRowSelection: true, // Habilitar selección
+    onRowSelectionChange: setRowSelection, // 🆕 HANDLER DE SELECCIÓN
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: (updater) => {
       // 🆕 NUEVO: Callback mejorado para guardar en Redis
-      const newOrder = typeof updater === 'function' 
-        ? updater(columnOrder) 
+      const newOrder = typeof updater === 'function'
+        ? updater(columnOrder)
         : updater;
-      
+
       console.log('📝 [DataTable] Orden actualizado:', newOrder);
       setColumnOrder(newOrder);
-      
+
       // Guardar en Redis si está habilitado
       if (enableColumnPersistence) {
         saveColumnOrder(newOrder);
@@ -432,39 +448,39 @@ export function DataTable<TData, TValue>({
   const getHeaderName = (col: Column<TData, unknown>): string => {
     const headerDef = col.columnDef.header;
     if (typeof headerDef === 'string') {
-        return headerDef;
+      return headerDef;
     }
     return col.id;
   };
-  
+
   // 🆕 MODIFICADO: Guardar en Redis cuando se arrastra
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-        if(active.id.toString().startsWith('column-')) {
-            const oldId = active.id.toString().replace('column-', '');
-            const newId = over.id.toString().replace('column-', '');
-            
-            const newColumnOrder = arrayMove(
-              columnOrder, 
-              columnOrder.indexOf(oldId), 
-              columnOrder.indexOf(newId)
-            );
-            
-            console.log('🎯 [DataTable] Columna arrastrada:', { oldId, newId, newOrder: newColumnOrder });
-            setColumnOrder(newColumnOrder);
-            
-            // Guardar en Redis si está habilitado
-            if (enableColumnPersistence) {
-              saveColumnOrder(newColumnOrder);
-            }
-        } else if(active.id.toString().startsWith('row-')) {
-            setData((items) => {
-                const oldIndex = items.findIndex(item => (item as any).id_documento === rowIds[active.data.current!.sortable.index]);
-                const newIndex = items.findIndex(item => (item as any).id_documento === rowIds[over.data.current!.sortable.index]);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+      if (active.id.toString().startsWith('column-')) {
+        const oldId = active.id.toString().replace('column-', '');
+        const newId = over.id.toString().replace('column-', '');
+
+        const newColumnOrder = arrayMove(
+          columnOrder,
+          columnOrder.indexOf(oldId),
+          columnOrder.indexOf(newId)
+        );
+
+        console.log('🎯 [DataTable] Columna arrastrada:', { oldId, newId, newOrder: newColumnOrder });
+        setColumnOrder(newColumnOrder);
+
+        // Guardar en Redis si está habilitado
+        if (enableColumnPersistence) {
+          saveColumnOrder(newColumnOrder);
         }
+      } else if (active.id.toString().startsWith('row-')) {
+        setData((items) => {
+          const oldIndex = items.findIndex(item => (item as any).id_documento === rowIds[active.data.current!.sortable.index]);
+          const newIndex = items.findIndex(item => (item as any).id_documento === rowIds[over.data.current!.sortable.index]);
+          return arrayMove(items, oldIndex, newIndex);
+        });
+      }
     }
   };
 
@@ -477,97 +493,97 @@ export function DataTable<TData, TValue>({
 
   const defaultRenderRow = (row: Row<TData>) => {
     const hasIdDocumento = 'id_documento' in row.original;
-    if(hasIdDocumento) {
-        return <DraggableTableRow 
-          key={(row.original as any).id_documento} 
-          row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>}
-          onRowClick={onRowClick}
-        />;
+    if (hasIdDocumento) {
+      return <DraggableTableRow
+        key={(row.original as any).id_documento}
+        row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>}
+        onRowClick={onRowClick}
+      />;
     }
     return <StandardTableRow key={row.id} row={row} />;
   }
-  
+
   const tableContent = (
-     <DndContext
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-        sensors={sensors}
+    <DndContext
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+      sensors={sensors}
     >
-        <div className="rounded-md border overflow-auto custom-scrollbar">
-            <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
-                    {table.getHeaderGroups().map((headerGroup) => (
-                        <TableRow key={headerGroup.id}>
-                            <SortableContext
-                                items={columnOrder.map(id => `column-${id}`)}
-                                strategy={horizontalListSortingStrategy}
-                            >
-                                {headerGroup.headers.map((header) => (
-                                    <DraggableTableHeader key={header.id} header={header} />
-                                ))}
-                            </SortableContext>
-                        </TableRow>
-                    ))}
-                    {table.getFooterGroups().map(footerGroup => (
-                        <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
-                            {footerGroup.headers.map(header => (
-                                <TableHead key={header.id} colSpan={header.colSpan}>
-                                    {header.isPlaceholder
-                                        ? null
-                                        : flexRender(
-                                            header.column.columnDef.footer,
-                                            header.getContext()
-                                          )}
-                                </TableHead>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableHeader>
-                <TableBody>
-                     <SortableContext
-                        items={rowIds.map(id => `row-${id}`)}
-                        strategy={verticalListSortingStrategy}
-                    >
-                    {table.getRowModel().rows?.length ? (
-                        table.getRowModel().rows.map((row) => (
-                             defaultRenderRow(row)
-                        ))
-                    ) : (
-                        <TableRow>
-                        <TableCell colSpan={columns.length + 1} className="h-24 text-center">
-                            No hay resultados.
-                        </TableCell>
-                        </TableRow>
-                    )}
-                    </SortableContext>
-                </TableBody>
-            </Table>
-        </div>
+      <div className="rounded-md border overflow-auto custom-scrollbar">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                <SortableContext
+                  items={columnOrder.map(id => `column-${id}`)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {headerGroup.headers.map((header) => (
+                    <DraggableTableHeader key={header.id} header={header} />
+                  ))}
+                </SortableContext>
+              </TableRow>
+            ))}
+            {table.getFooterGroups().map(footerGroup => (
+              <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
+                {footerGroup.headers.map(header => (
+                  <TableHead key={header.id} colSpan={header.colSpan}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                        header.column.columnDef.footer,
+                        header.getContext()
+                      )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            <SortableContext
+              items={rowIds.map(id => `row-${id}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  defaultRenderRow(row)
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length + 1} className="h-24 text-center">
+                    No hay resultados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </SortableContext>
+          </TableBody>
+        </Table>
+      </div>
     </DndContext>
   )
 
   const skeletonContent = (
     <div className="space-y-4">
-        <div className="rounded-md border">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        {Array.from({ length: 6 }).map((_, i) => (
-                            <TableHead key={i}><Skeleton className="h-5 w-24" /></TableHead>
-                        ))}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {Array.from({ length: 10 }).map((_, i) => (
-                        <TableRow key={i}>
-                            {Array.from({ length: 6 }).map((_, j) => (
-                                <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <TableHead key={i}><Skeleton className="h-5 w-24" /></TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <TableRow key={i}>
+                {Array.from({ length: 6 }).map((_, j) => (
+                  <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 
@@ -576,139 +592,139 @@ export function DataTable<TData, TValue>({
       {/* Controls: Filter input and column visibility */}
       <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
         <div className="flex-1 w-full sm:w-auto">
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder='Buscar en todas las columnas...'
-                    value={globalFilter ?? ''}
-                    onChange={(event) => setGlobalFilter(event.target.value)}
-                    className="h-10 pl-10 w-full max-w-sm"
-                />
-            </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder='Buscar en todas las columnas...'
+              value={globalFilter ?? ''}
+              onChange={(event) => setGlobalFilter(event.target.value)}
+              className="h-10 pl-10 w-full max-w-sm"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
-            {/* 🆕 NUEVO: Botón para resetear columnas */}
-            {enableColumnPersistence && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log('🔄 [DataTable] Reseteando columnas...');
-                  resetOrder();
-                }}
-                className="h-10"
-                title="Resetear orden de columnas"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Resetear
+          {/* 🆕 NUEVO: Botón para resetear columnas */}
+          {enableColumnPersistence && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                console.log('🔄 [DataTable] Reseteando columnas...');
+                resetOrder();
+              }}
+              className="h-10"
+              title="Resetear orden de columnas"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Resetear
+            </Button>
+          )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="ml-auto">
+                Columnas <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
-            )}
-            
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                    Columnas <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
-                    const headerName = getHeaderName(column);
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table.getAllColumns().filter((column) => column.getCanHide()).map((column) => {
+                const headerName = getHeaderName(column);
 
-                    return (
-                    <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                    >
-                        {headerName}
-                    </DropdownMenuCheckboxItem>
-                    );
-                })}
-                </DropdownMenuContent>
-            </DropdownMenu>
-            <ExportButton
-                columns={table.getVisibleFlatColumns()} 
-                data={table.getRowModel().rows} 
-                filename={filename} 
-            />
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                  >
+                    {headerName}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ExportButton
+            columns={table.getVisibleFlatColumns()}
+            data={table.getRowModel().rows}
+            filename={filename}
+          />
         </div>
-    </div>
+      </div>
 
-    {isMounted ? tableContent : skeletonContent}
+      {isMounted ? tableContent : skeletonContent}
 
-    {/* Pagination */}
-<div className="flex items-center justify-start gap-6 pt-4">
-    {/* Filas por página */}
-    <div className="flex items-center space-x-2">
-        <p className="text-sm font-medium">Filas por página</p>
-        <Select
+      {/* Pagination */}
+      <div className="flex items-center justify-start gap-6 pt-4">
+        {/* Filas por página */}
+        <div className="flex items-center space-x-2">
+          <p className="text-sm font-medium">Filas por página</p>
+          <Select
             value={`${table.getState().pagination.pageSize}`}
             onValueChange={(value) => {
-                table.setPageSize(Number(value))
+              table.setPageSize(Number(value))
             }}
-        >
+          >
             <SelectTrigger className="h-8 w-[70px]">
-                <SelectValue placeholder={table.getState().pagination.pageSize} />
+              <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-                {[10, 20, 30, 40, 50].map((pageSize) => (
-                    <SelectItem key={pageSize} value={`${pageSize}`}>
-                        {pageSize}
-                    </SelectItem>
-                ))}
+              {[10, 20, 30, 40, 50].map((pageSize) => (
+                <SelectItem key={pageSize} value={`${pageSize}`}>
+                  {pageSize}
+                </SelectItem>
+              ))}
             </SelectContent>
-        </Select>
-    </div>
+          </Select>
+        </div>
 
-    {/* Número de página */}
-    <div className="flex items-center justify-center text-sm font-medium">
-        Página {table.getState().pagination.pageIndex + 1} de{" "}
-        {table.getPageCount()}
-    </div>
+        {/* Número de página */}
+        <div className="flex items-center justify-center text-sm font-medium">
+          Página {table.getState().pagination.pageIndex + 1} de{" "}
+          {table.getPageCount()}
+        </div>
 
-    {/* Botones de navegación */}
-    <div className="flex items-center space-x-2">
-        <Button
+        {/* Botones de navegación */}
+        <div className="flex items-center space-x-2">
+          <Button
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
-        >
+          >
             <span className="sr-only">Ir a la primera página</span>
             <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button
+          </Button>
+          <Button
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-        >
+          >
             <span className="sr-only">Ir a la página anterior</span>
             <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button
+          </Button>
+          <Button
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-        >
+          >
             <span className="sr-only">Ir a la página siguiente</span>
             <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button
+          </Button>
+          <Button
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
-        >
+          >
             <span className="sr-only">Ir a la última página</span>
             <ChevronRight className="h-4 w-4" />
-        </Button>
+          </Button>
+        </div>
+      </div>
     </div>
-</div>
-</div>
-    
-   
+
+
   );
 }

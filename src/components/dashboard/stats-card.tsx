@@ -59,8 +59,8 @@ export function StatsCard({ title, value, icon: Icon, description, breakdown }: 
           </h4>
           <div className="space-y-2">
             {breakdown.map((item, index) => (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className="flex justify-between items-center text-sm py-1.5 px-2 rounded-md hover:bg-accent/50 transition-colors"
               >
                 <span className="text-muted-foreground font-medium">{item.label}</span>

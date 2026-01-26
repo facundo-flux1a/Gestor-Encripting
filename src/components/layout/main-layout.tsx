@@ -136,7 +136,7 @@ const UserProfile = React.memo(function UserProfile({ user }: { user: User | nul
   );
 });
 
-export function MainLayoutHeader({ children, className }: { children: React.ReactNode, className?: string }) {
+export function MainLayoutHeader({ children, className, hideSidebarTrigger = false }: { children: React.ReactNode, className?: string, hideSidebarTrigger?: boolean }) {
   const [user, setUser] = React.useState<User | null>(null);
 
   React.useEffect(() => {
@@ -157,13 +157,15 @@ export function MainLayoutHeader({ children, className }: { children: React.Reac
       "px-3 sm:px-4 lg:px-6",
       className
     )}>
-      {/* Mobile: Mostrar trigger del sidebar */}
-      <div className="md:hidden">
-        <SidebarTrigger />
-      </div>
-      
+      {/* Mobile: Mostrar trigger del sidebar solo si no está oculto */}
+      {!hideSidebarTrigger && (
+        <div className="md:hidden">
+          <SidebarTrigger />
+        </div>
+      )}
+
       <div className="flex-1 min-w-0">{children}</div>
-      
+
       <div className="flex items-center gap-2">
         <ThemeToggle />
       </div>
@@ -238,15 +240,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </SidebarHeader>
-        
+
         <SidebarContent>
           {/* 🎯 Selector de empresas CON data-tutorial */}
           <div className="px-2" data-tutorial="company-selector">
             <CompaniesSelector />
           </div>
-          
+
           <Separator className="mx-2 my-2" />
-          
+
           {/* Menú de navegación */}
           <SidebarMenu>
             {navItems.map(item => (
@@ -284,23 +286,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             ))}
           </SidebarMenu>
         </SidebarContent>
-        
+
         <SidebarFooter>
           <div className="p-2 border-t">
             <UserProfile user={user} />
           </div>
           <Separator />
           <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">
-            <a 
-              href="https://flux1a.com.ar" 
-              target="_blank" 
-              rel="noopener noreferrer" 
+            <a
+              href="https://flux1a.com.ar"
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              <img 
-                src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75" 
-                alt="Flux1a Logo" 
-                className="h-6 w-6 shrink-0" 
+              <img
+                src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75"
+                alt="Flux1a Logo"
+                className="h-6 w-6 shrink-0"
               />
               <span className="group-data-[collapsible=icon]:hidden">
                 Powered by AllBase
@@ -309,7 +311,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
         </SidebarFooter>
       </Sidebar>
-      
+
       {/* 🔥 FIX CRÍTICO: SidebarInset con overflow controlado */}
       <SidebarInset className="overflow-x-hidden">
         <div className="flex flex-col min-h-screen w-full">

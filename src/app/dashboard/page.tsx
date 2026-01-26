@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
-import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
+import { MainLayout } from '@/components/layout/main-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { DocumentStatusChart } from '@/components/dashboard/document-status-chart';
@@ -10,16 +11,17 @@ import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { DashboardTutorial } from '@/components/dashboard/dashboard-tutorial';
 import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
-import { 
-  FileText, 
-  Users, 
-  AlertTriangle, 
-  Package, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Scale, 
-  Banknote, 
-  Loader2, 
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  AlertTriangle,
+  Package,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Scale,
+  Banknote,
+  Loader2,
   RefreshCcw,
   X,
   Download
@@ -60,10 +62,10 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCleaningDB, setIsCleaningDB] = useState(false);
-  
+
   const [selectedAño, setSelectedAño] = useState<number | null>(null);
   const [selectedTrimestre, setSelectedTrimestre] = useState<number | null>(null);
-  
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<{
     exportId: number | null;
@@ -76,7 +78,7 @@ export default function DashboardPage() {
     urlArchivo: null,
     nombreArchivo: null
   });
-  
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -91,13 +93,13 @@ export default function DashboardPage() {
         setIsLoading(true);
         setError(null);
         const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
-        
+
         const data = await getDashboardAnalytics(
           companyIdsAsNumbers,
           selectedAño ?? undefined,
           selectedTrimestre ?? undefined
         );
-        
+
         setAnalytics(data);
       } catch (err) {
         console.error('Error loading analytics:', err);
@@ -124,24 +126,24 @@ export default function DashboardPage() {
 
       if (data.status === 'completed') {
         setIsExporting(false);
-        
+
         toast({
           title: "✅ PDF Generado",
           description: `Descargando: ${data.nombreArchivo}`,
           className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
         });
-        
+
         if (data.urlArchivo) {
           const filename = data.nombreArchivo || data.urlArchivo.split('/').pop() || 'reporte.pdf';
           const downloadUrl = `/api/files/${filename}`;
-          
+
           const link = document.createElement('a');
           link.href = downloadUrl;
           link.download = filename;
           link.style.display = 'none';
           document.body.appendChild(link);
           link.click();
-          
+
           setTimeout(() => {
             document.body.removeChild(link);
           }, 100);
@@ -156,7 +158,7 @@ export default function DashboardPage() {
         });
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('Error checking export status:', error);
@@ -192,7 +194,7 @@ export default function DashboardPage() {
       urlArchivo: null,
       nombreArchivo: null
     });
-    
+
     try {
       const response = await fetch('/api/export-dashboard', {
         method: 'POST',
@@ -221,7 +223,7 @@ export default function DashboardPage() {
 
       if (result.success && result.exportId) {
         startPolling(result.exportId);
-        
+
         toast({
           title: "📄 Generando PDF",
           description: "Tu reporte se está generando. Te notificaremos cuando esté listo.",
@@ -249,7 +251,7 @@ export default function DashboardPage() {
 
   const handleCleanDatabase = async () => {
     setIsCleaningDB(true);
-    
+
     try {
       const response = await fetch('/api/clean-database', {
         method: 'POST',
@@ -296,32 +298,32 @@ export default function DashboardPage() {
   const formatNumber = (num: number | string): string => {
     const value = typeof num === 'string' ? parseFloat(num) : num;
     if (isNaN(value)) return '0';
-    
+
     const parts = value.toString().split('.');
     const integerPart = parts[0];
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    
+
     return formattedInteger;
   };
 
   const formatCurrency = (amount: number | string): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
     if (isNaN(num)) return '0,00 €';
-    
+
     const fixed = num.toFixed(2);
     const parts = fixed.split('.');
     const integerPart = parts[0];
     const decimalPart = parts[1];
-    
+
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    
+
     return `${formattedInteger},${decimalPart} €`;
-  };const FilterSheet = () => (
+  }; const FilterSheet = () => (
     <Sheet>
       <SheetTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           className="md:hidden hover:bg-accent transition-colors duration-200"
         >
           Filtros
@@ -395,7 +397,7 @@ export default function DashboardPage() {
   const CleanButton = () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button 
+        <Button
           size="sm"
           variant="outline"
           className="gap-2 hidden sm:flex hover:bg-violet-50 hover:text-violet-600 hover:border-violet-300 dark:hover:bg-violet-950 dark:hover:text-violet-400 dark:hover:border-violet-700 transition-all duration-200 group"
@@ -456,19 +458,19 @@ export default function DashboardPage() {
       <MainLayout>
         <DashboardTutorial />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-          <MainLayoutHeader>
-            <div className="flex items-center justify-between w-full">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate">Dashboard</h2>
-              <div className="flex items-center gap-2">
-                <FilterSheet />
-                <Button size="sm" variant="outline" disabled className="hidden sm:flex">
-                  <FileText className="h-4 w-4 mr-2" />
-                  <span className="hidden lg:inline">Exportar</span>
-                </Button>
-                <CleanButton />
-              </div>
+          <PageHeader
+            title="Dashboard"
+            icon={LayoutDashboard}
+          >
+            <div className="flex items-center gap-2">
+              <FilterSheet />
+              <Button size="sm" variant="outline" disabled className="hidden sm:flex">
+                <FileText className="h-4 w-4 mr-2" />
+                <span className="hidden lg:inline">Exportar</span>
+              </Button>
+              <CleanButton />
             </div>
-          </MainLayoutHeader>
+          </PageHeader>
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-32 animate-pulse" />
@@ -484,11 +486,10 @@ export default function DashboardPage() {
       <MainLayout>
         <DashboardTutorial />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-          <MainLayoutHeader>
-            <div className="flex items-center justify-between w-full">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate">Dashboard</h2>
-            </div>
-          </MainLayoutHeader>
+          <PageHeader
+            title="Dashboard"
+            icon={LayoutDashboard}
+          />
           <div className="flex h-[400px] items-center justify-center text-muted-foreground text-center px-4">
             <div className="space-y-3 animate-fade-in">
               <FileText className="h-16 w-16 mx-auto text-muted-foreground/50" />
@@ -506,7 +507,7 @@ export default function DashboardPage() {
     { name: 'T3', sales: analytics.quarterlySummary.T3.ingresos, expenses: analytics.quarterlySummary.T3.gastos },
     { name: 'T4', sales: analytics.quarterlySummary.T4.ingresos, expenses: analytics.quarterlySummary.T4.gastos },
   ];
-  
+
   const ivaSummaryData = [
     { name: 'T1', ivaRepercutido: analytics.ivaSummary.T1.repercutido, ivaSoportado: analytics.ivaSummary.T1.soportado },
     { name: 'T2', ivaRepercutido: analytics.ivaSummary.T2.repercutido, ivaSoportado: analytics.ivaSummary.T2.soportado },
@@ -518,89 +519,90 @@ export default function DashboardPage() {
     <MainLayout>
       <DashboardTutorial />
       <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-        <MainLayoutHeader>
-          <div data-tutorial="welcome" className="flex items-center justify-between w-full gap-2">
-            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                Dashboard
-              </h2>
-              
-              <div data-tutorial="filters" className="hidden md:flex items-center gap-2">
-                <Select
-                  value={selectedAño?.toString() || 'all'}
-                  onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
-                >
-                  <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200">
-                    <SelectValue placeholder="Año" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
-                    <SelectItem value="2025" className="hover:bg-accent transition-colors duration-150">2025</SelectItem>
-                    <SelectItem value="2024" className="hover:bg-accent transition-colors duration-150">2024</SelectItem>
-                    <SelectItem value="2023" className="hover:bg-accent transition-colors duration-150">2023</SelectItem>
-                  </SelectContent>
-                </Select>
+        <PageHeader
+          title="Dashboard"
+          icon={LayoutDashboard}
+        >
+          <div data-tutorial="filters" className="hidden md:flex items-center gap-2">
+            <Select
+              value={selectedAño?.toString() || 'all'}
+              onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
+            >
+              <SelectTrigger className="w-[100px] lg:w-[130px] hover:bg-accent transition-colors duration-200">
+                <SelectValue placeholder={analytics?.yearUsed ? `Año ${analytics.yearUsed}` : "Año"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos (Auto)</SelectItem>
+                <SelectItem value="2030" className="hover:bg-accent transition-colors duration-150">2030</SelectItem>
+                <SelectItem value="2029" className="hover:bg-accent transition-colors duration-150">2029</SelectItem>
+                <SelectItem value="2028" className="hover:bg-accent transition-colors duration-150">2028</SelectItem>
+                <SelectItem value="2027" className="hover:bg-accent transition-colors duration-150">2027</SelectItem>
+                <SelectItem value="2026" className="hover:bg-accent transition-colors duration-150">2026</SelectItem>
+                <SelectItem value="2025" className="hover:bg-accent transition-colors duration-150">2025</SelectItem>
+                <SelectItem value="2024" className="hover:bg-accent transition-colors duration-150">2024</SelectItem>
+                <SelectItem value="2023" className="hover:bg-accent transition-colors duration-150">2023</SelectItem>
+                <SelectItem value="2022" className="hover:bg-accent transition-colors duration-150">2022</SelectItem>
+              </SelectContent>
+            </Select>
 
-                <Select
-                  value={selectedTrimestre?.toString() || 'all'}
-                  onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
-                  disabled={!selectedAño}
-                >
-                  <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">
-                    <SelectValue placeholder="Trimestre" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
-                    <SelectItem value="1" className="hover:bg-accent transition-colors duration-150">T1</SelectItem>
-                    <SelectItem value="2" className="hover:bg-accent transition-colors duration-150">T2</SelectItem>
-                    <SelectItem value="3" className="hover:bg-accent transition-colors duration-150">T3</SelectItem>
-                    <SelectItem value="4" className="hover:bg-accent transition-colors duration-150">T4</SelectItem>
-                  </SelectContent>
-                </Select>
+            <Select
+              value={selectedTrimestre?.toString() || 'all'}
+              onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
+              disabled={!selectedAño}
+            >
+              <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">
+                <SelectValue placeholder="Trimestre" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
+                <SelectItem value="1" className="hover:bg-accent transition-colors duration-150">T1</SelectItem>
+                <SelectItem value="2" className="hover:bg-accent transition-colors duration-150">T2</SelectItem>
+                <SelectItem value="3" className="hover:bg-accent transition-colors duration-150">T3</SelectItem>
+                <SelectItem value="4" className="hover:bg-accent transition-colors duration-150">T4</SelectItem>
+              </SelectContent>
+            </Select>
 
-                {(selectedAño || selectedTrimestre) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedAño(null);
-                      setSelectedTrimestre(null);
-                    }}
-                    className="hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group"
-                  >
-                    <X className="h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
-                  </Button>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2 shrink-0">
-              <FilterSheet />
+            {(selectedAño || selectedTrimestre) && (
               <Button
-                data-tutorial="export-button"
+                variant="ghost"
                 size="sm"
-                variant="outline"
-                onClick={handleExport}
-                disabled={isExporting || !selectedCompanyIds.length}
-                className="hidden sm:flex gap-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 disabled:cursor-not-allowed group"
+                onClick={() => {
+                  setSelectedAño(null);
+                  setSelectedTrimestre(null);
+                }}
+                className="hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group"
               >
-                {isExporting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden lg:inline">Generando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 group-hover:translate-y-0.5 transition-transform duration-200" />
-                    <span className="hidden lg:inline">Exportar PDF</span>
-                    <span className="lg:hidden">PDF</span>
-                  </>
-                )}
+                <X className="h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
               </Button>
-              <CleanButton />
-            </div>
+            )}
           </div>
-        </MainLayoutHeader><div className="space-y-4">
+
+          <div className="flex items-center gap-2 shrink-0">
+            <FilterSheet />
+            <Button
+              data-tutorial="export-button"
+              size="sm"
+              variant="outline"
+              onClick={handleExport}
+              disabled={isExporting || !selectedCompanyIds.length}
+              className="hidden sm:flex gap-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 disabled:cursor-not-allowed group"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="hidden lg:inline">Generando...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 group-hover:translate-y-0.5 transition-transform duration-200" />
+                  <span className="hidden lg:inline">Exportar PDF</span>
+                  <span className="lg:hidden">PDF</span>
+                </>
+              )}
+            </Button>
+            <CleanButton />
+          </div>
+        </PageHeader><div className="space-y-4">
           <div data-tutorial="kpis" className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {/* ✅ TARJETA 1: TOTAL INGRESOS - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '0ms' }}>
@@ -630,7 +632,7 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-            
+
             {/* ✅ TARJETA 2: TOTAL GASTOS - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '50ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
@@ -659,7 +661,7 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-            
+
             {/* ✅ TARJETA 3: BENEFICIO BRUTO - CON IVA + BREAKDOWN */}
             <div className="animate-fade-in group" style={{ animationDelay: '100ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
@@ -688,7 +690,7 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-            
+
             <div className="animate-fade-in group" style={{ animationDelay: '150ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
@@ -716,7 +718,7 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-            
+
             <div className="animate-fade-in group" style={{ animationDelay: '200ms' }}>
               <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
                 <StatsCard
@@ -757,7 +759,7 @@ export default function DashboardPage() {
               <IvaSummary data={ivaSummaryData} />
             </div>
             <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '400ms' }}>
-              <InsightsWidget 
+              <InsightsWidget
                 incidentRate={analytics.kpis.incidentRate}
                 topProviders={analytics.topProviders}
               />

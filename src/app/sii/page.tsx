@@ -5,6 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MainLayout } from '@/components/layout/main-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { Loader2, CheckCircle, XCircle, Upload, Send, FileText, ArrowLeft, MoveRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,29 +42,14 @@ interface DocumentoSII {
   tipo_documento: string;
 }
 
-const PageHeader = ({ onBack }: { onBack: () => void }) => (
-  <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-700">
-    <Button onClick={onBack} variant="outline" size="lg" className="group hover:bg-violet-50 dark:hover:bg-violet-950">
-      <ArrowLeft className="h-5 w-5 mr-2 group-hover:-translate-x-1 transition-transform" />
-      <span>Volver</span>
-    </Button>
-    <div className="text-center">
-      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-        Envío al SII
-      </h1>
-      <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
-        Sistema de Suministro Inmediato de Información
-      </p>
-    </div>
-  </div>
-);
 
-const CertificateUpload = ({ 
-  onFileChange, 
-  certificado, 
-  password, 
-  onPasswordChange 
-}: { 
+
+const CertificateUpload = ({
+  onFileChange,
+  certificado,
+  password,
+  onPasswordChange
+}: {
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   certificado: string;
   password: string;
@@ -236,8 +223,18 @@ export default function SIIPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950">
       <div className="container max-w-6xl mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
-        <PageHeader onBack={() => router.push('/trimestres')} />
-        
+        <PageHeader
+          title="Envío al SII"
+          icon={Send}
+          description="Sistema de Suministro Inmediato de Información"
+          hideSidebarTrigger
+        >
+          <Button onClick={() => router.push('/trimestres')} variant="outline" size="sm" className="group">
+            <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+            <span>Volver</span>
+          </Button>
+        </PageHeader>
+
         <Card className="animate-in fade-in">
           <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950 dark:to-indigo-950 border-b p-4 sm:p-6">
             <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
