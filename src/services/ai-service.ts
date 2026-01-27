@@ -6,7 +6,7 @@ import { encrypt, decrypt } from '@/lib/encryption';
 import { canMakeRequest, incrementDailyUsage } from './ai-limits-service'; // ✅ IMPORTAR
 
 // ============================================
-// PROMPT BASE (ADAPTADO DE N8N)
+// PROMPT BASE (ADAPTADO DE MICROSERVICE)
 // ============================================
 const BASE_SYSTEM_PROMPT = `Eres un auditor contable y fiscal especializado en validación de documentos comerciales españoles. Tu tarea es analizar los datos de un documento y detectar inconsistencias, errores o campos faltantes.
 
@@ -259,7 +259,7 @@ async function callOpenAI(
   documentData: string
 ): Promise<{ content: string; tokens: number }> {
   console.log(`🔍 [OPENAI] Llamando a modelo: ${model}`);
-  
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -285,7 +285,7 @@ async function callOpenAI(
 
   const data = await response.json();
   console.log(`✅ [OPENAI] Respuesta OK, tokens: ${data.usage?.total_tokens || 0}`);
-  
+
   return {
     content: data.choices[0].message.content,
     tokens: data.usage?.total_tokens || 0
@@ -299,12 +299,12 @@ async function callGemini(
   documentData: string
 ): Promise<{ content: string; tokens: number }> {
   const modelName = model.replace(/^models\//, '').replace(/-latest$/, '');
-  
+
   console.log(`🔍 [GEMINI] Llamando a modelo: ${modelName}`);
-  
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
   console.log(`🔗 [GEMINI] URL:`, url);
-  
+
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -327,13 +327,13 @@ async function callGemini(
     const responseText = await response.text();
     console.error('❌ [GEMINI] Error HTTP:', response.status, response.statusText);
     console.error('❌ [GEMINI] Response text:', responseText);
-    
+
     try {
       errorData = JSON.parse(responseText);
     } catch (e) {
       errorData = { error: { message: `HTTP ${response.status}: ${responseText || 'Sin contenido'}` } };
     }
-    
+
     console.error('❌ [GEMINI] Error response:', errorData);
     throw new Error(errorData.error?.message || JSON.stringify(errorData));
   }
@@ -341,7 +341,7 @@ async function callGemini(
   const data = await response.json();
   console.log(`✅ [GEMINI] Respuesta OK, tokens: ${data.usageMetadata?.totalTokenCount || 0}`);
   console.log('📄 [GEMINI] Contenido de respuesta:', JSON.stringify(data.candidates?.[0]?.content, null, 2));
-  
+
   return {
     content: data.candidates[0].content.parts[0].text,
     tokens: data.usageMetadata?.totalTokenCount || 0
@@ -385,17 +385,17 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
     } else {
       // ✅ USAR KEY COMPARTIDA - VALIDAR LÍMITES CON ai-limits-service
       provider = userConfig?.shared_provider || 'gemini';
-      
+
       // Verificar si puede hacer la request
       const limitCheck = await canMakeRequest(user.id, provider);
-      
+
       if (!limitCheck.allowed) {
         // Intentar con el otro proveedor
         console.log(`⚠️ ${provider} límite alcanzado, intentando fallback...`);
         provider = provider === 'gemini' ? 'openai' : 'gemini';
-        
+
         const fallbackCheck = await canMakeRequest(user.id, provider);
-        
+
         if (!fallbackCheck.allowed) {
           return {
             success: false,
@@ -407,9 +407,9 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
           };
         }
       }
-      
+
       // Obtener la API key del proveedor seleccionado
-      apiKey = provider === 'gemini' 
+      apiKey = provider === 'gemini'
         ? process.env.SHARED_GEMINI_KEY || null
         : process.env.SHARED_OPENAI_KEY || null;
 
@@ -463,7 +463,7 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
     const totalesPorImpuesto = datosExtra.TOTALES_POR_IMPUESTO || [];
 
     // Calcular IVA total
-    const ivaTotal = totalesPorImpuesto.reduce((sum: number, item: any) => 
+    const ivaTotal = totalesPorImpuesto.reduce((sum: number, item: any) =>
       sum + (parseFloat(item.CUOTA_IVA || 0)), 0
     );
 
@@ -492,9 +492,9 @@ IMPORTES:
 - Moneda: ${doc.moneda || 'EUR'}
 
 DESGLOSE POR IVA:
-${totalesPorImpuesto.map((item: any) => 
-  `- Base: ${item.BASE_IMPONIBLE}€ | IVA ${item.PORCENTAJE}%: ${item.CUOTA_IVA}€ | Total: ${item.TOTAL_CON_IVA}€`
-).join('\n') || '- Sin desglose disponible'}
+${totalesPorImpuesto.map((item: any) =>
+      `- Base: ${item.BASE_IMPONIBLE}€ | IVA ${item.PORCENTAJE}%: ${item.CUOTA_IVA}€ | Total: ${item.TOTAL_CON_IVA}€`
+    ).join('\n') || '- Sin desglose disponible'}
 
 OBSERVACIONES: ${doc.observaciones || 'N/A'}
 
@@ -508,14 +508,14 @@ FECHA ACTUAL: ${new Date().toISOString().split('T')[0]}
 
     // Construir prompt completo
     let fullPrompt = BASE_SYSTEM_PROMPT;
-    
+
     if (userConfig?.custom_prompt?.trim()) {
       fullPrompt += `\n\n--- INSTRUCCIONES ADICIONALES DEL USUARIO ---\n${userConfig.custom_prompt.trim()}\n`;
     }
 
     // Llamar a la IA
     let result: { content: string; tokens: number };
-    
+
     if (provider === 'openai') {
       result = await callOpenAI(apiKey, model, fullPrompt, documentData);
     } else {
@@ -532,22 +532,22 @@ FECHA ACTUAL: ${new Date().toISOString().split('T')[0]}
     let parsed;
     try {
       console.log('📄 [ANALYZE] Raw response (primeros 500 chars):', result.content.substring(0, 500));
-      
+
       // Limpiar markdown code fences
       let cleanContent = result.content.trim();
       cleanContent = cleanContent.replace(/^```json\s*/i, '');
       cleanContent = cleanContent.replace(/\s*```\s*$/, '');
       cleanContent = cleanContent.trim();
-      
+
       console.log('🧹 [ANALYZE] Contenido limpio (primeros 500 chars):', cleanContent.substring(0, 500));
-      
+
       parsed = JSON.parse(cleanContent);
     } catch (parseError: any) {
       console.error('❌ [ANALYZE] Error parseando JSON:', parseError.message);
       console.error('📄 [ANALYZE] Contenido completo de respuesta:', result.content);
       throw new Error(`Error parseando respuesta de IA: ${parseError.message}`);
     }
-    
+
     const incidents = parsed.incidents || [];
 
     // Guardar log de uso

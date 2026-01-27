@@ -1,5 +1,5 @@
 // app/api/hash-file/route.ts
-// Endpoint para calcular hashes SHA-256 desde n8n
+// Endpoint para calcular hashes SHA-256 desde Microservice
 
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';

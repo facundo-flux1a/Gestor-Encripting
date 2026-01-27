@@ -322,6 +322,7 @@ const Sidebar = React.forwardRef<
           )}
         />
         <div
+          data-sidebar="container"
           className={cn(
             "duration-200 fixed inset-y-0 z-40 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
             side === "left"

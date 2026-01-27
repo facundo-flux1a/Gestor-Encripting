@@ -7,7 +7,7 @@ import type { RowDataPacket } from 'mysql2';
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { error: 'No autenticado' },
@@ -42,14 +42,14 @@ export async function POST(request: NextRequest) {
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE LOWER(d.tipo_documento) LIKE '%factura%'
     `;
-    
+
     const params: any[] = [];
-    
+
     if (empresaIds && empresaIds.length > 0) {
       query += ` AND d.id_de_empresa IN (?)`;
       params.push(empresaIds);
     }
-    
+
     if (año !== null && año !== undefined && trimestre !== null && trimestre !== undefined) {
       query += ` AND d.año_trimestre = ? AND d.num_trimestre = ?`;
       params.push(año, trimestre);
@@ -99,24 +99,24 @@ export async function POST(request: NextRequest) {
     const empresaNombreLimpio = empresaNombre
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
-    
+
     const fechaActual = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    
+
     let nombreArchivo = `Reporte_Dashboard_${empresaNombreLimpio}_${fechaActual}`;
-    
+
     if (año && trimestre) {
       nombreArchivo = `Reporte_${año}_T${trimestre}_${empresaNombreLimpio}_${fechaActual}`;
     } else if (año) {
       nombreArchivo = `Reporte_${año}_${empresaNombreLimpio}_${fechaActual}`;
     }
-    
+
     nombreArchivo += '.pdf';
-    
+
     console.log('📄 [export-dashboard] Nombre del archivo:', nombreArchivo);
 
-    // ✅ Enviar a n8n
-    const n8nWebhookUrl = 'https://agent.flux1a.com.ar/webhook/19aedb0e-661d-429a-b84b-1db75a18cfae';
-    
+    // ✅ Enviar a Microservice
+    const microserviceWebhookUrl = 'https://agent.flux1a.com.ar/webhook/19aedb0e-661d-429a-b84b-1db75a18cfae';
+
     const webhookPayload = {
       exportId: exportResult.exportId,
       userId: user.id,
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/export-callback`
     };
 
-    console.log('🚀 [export-dashboard] Enviando a n8n:', {
+    console.log('🚀 [export-dashboard] Enviando a Microservice:', {
       documentos: documentos.length,
       totalIngresos,
       totalGastos,
@@ -162,15 +162,15 @@ export async function POST(request: NextRequest) {
       beneficio: totalIngresos - totalGastos
     });
 
-    // Enviar a n8n
-    fetch(n8nWebhookUrl, {
+    // Enviar a Microservice
+    fetch(microserviceWebhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(webhookPayload)
     }).catch(err => {
-      console.error('❌ Error enviando a n8n:', err);
+      console.error('❌ Error enviando a Microservice:', err);
     });
 
     console.log('✅ [export-dashboard] Exportación iniciada con ID:', exportResult.exportId);

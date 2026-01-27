@@ -56,6 +56,17 @@ function DocumentsPageContent() {
     setKey(prevKey => prevKey + 1);
   };
 
+  // 🔥 Escuchar evento global 'documentUploaded' (para el tutorial y dialogs)
+  React.useEffect(() => {
+    const handleGlobalUpload = () => {
+      console.log('🔄 [DocumentsPage] Evento global detectado, recargando...');
+      setKey(prev => prev + 1);
+    };
+
+    window.addEventListener('documentUploaded', handleGlobalUpload);
+    return () => window.removeEventListener('documentUploaded', handleGlobalUpload);
+  }, []);
+
   React.useEffect(() => {
     async function loadDocuments() {
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
@@ -288,7 +299,9 @@ function DocumentsPageContent() {
     } finally {
       setIsExportingPdf(false);
     }
-  };// Empty state cuando no hay empresas seleccionadas
+  };
+
+  // Empty state cuando no hay empresas seleccionadas
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>

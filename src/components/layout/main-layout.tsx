@@ -313,7 +313,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       </Sidebar>
 
       {/* 🔥 FIX CRÍTICO: SidebarInset con overflow controlado */}
-      <SidebarInset className="overflow-x-hidden">
+      <SidebarInset id="main-sidebar-inset" className="overflow-x-hidden">
         <div className="flex flex-col min-h-screen w-full">
           {children}
         </div>

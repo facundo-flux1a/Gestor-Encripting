@@ -4,7 +4,7 @@ import { createExport } from '@/services/document-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
-const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/6d62acdb-a2d3-4e2d-a4f7-41a49be815d4';
+const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/6d62acdb-a2d3-4e2d-a4f7-41a49be815d4';
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,20 +73,20 @@ export async function POST(request: NextRequest) {
 
     const pdfUrl = exportRows[0]?.url || '';
 
-    // 3. Preparar datos para el webhook de n8n
+    // 3. Preparar datos para el webhook de Microservice
     const webhookPayload = {
       // Información del destinatario
       emailTo,
-      
+
       // Información de la empresa
       empresaId: empresa.id,
       empresaNombre: empresa.nombre,
       empresaCuit: empresa.cuit || '',
-      
+
       // URL del PDF generado
       pdfUrl,
       exportId: exportResult.exportId,
-      
+
       // Estadísticas del dashboard
       stats: {
         totalCuentas: stats?.totalCuentas || 0,
@@ -94,18 +94,18 @@ export async function POST(request: NextRequest) {
         documentosPendientes: stats?.documentosPendientes || 0,
         proximosVencimientos: stats?.proximosVencimientos || 0,
       },
-      
+
       // Metadata
       fechaGeneracion: new Date().toISOString(),
       generadoPor: user.email || user.nombre,
-      
+
       // Información adicional para personalizar el email
       asunto: `Dashboard de ${empresa.nombre} - ${new Date().toLocaleDateString('es-AR')}`,
       nombreArchivo: `dashboard-${empresa.nombre.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
     };
 
-    // 4. Enviar al webhook de n8n
-    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
+    // 4. Enviar al webhook de Microservice
+    const microserviceResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,13 +113,13 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(webhookPayload),
     });
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
-      console.error('Error en n8n webhook:', errorText);
-      throw new Error(`Error al enviar email: ${n8nResponse.status}`);
+    if (!microserviceResponse.ok) {
+      const errorText = await microserviceResponse.text();
+      console.error('Error en Microservice webhook:', errorText);
+      throw new Error(`Error al enviar email: ${microserviceResponse.status}`);
     }
 
-    const n8nResult = await n8nResponse.json();
+    const microserviceResult = await microserviceResponse.json();
 
     // 5. Actualizar el registro de exportación con info del email
     await db.query(
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       exportId: exportResult.exportId,
       pdfUrl,
       emailTo,
-      n8nResponse: n8nResult,
+      microserviceResponse: microserviceResult,
     });
 
   } catch (error) {

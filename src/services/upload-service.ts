@@ -89,15 +89,15 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
     if (!zipEntry.dir) {
       // 🔥 NORMALIZAR NOMBRE (quitar espacios)
       const normalizedFileName = normalizeFileName(originalFileName);
-      
+
       const fileData = await zipEntry.async('arraybuffer');
       const hash = crypto.createHash('sha256');
       hash.update(Buffer.from(fileData));
       const fileHash = hash.digest('hex');
-      
+
       // 🔥 GUARDAR CON NOMBRE NORMALIZADO
       fileHashes[normalizedFileName] = fileHash;
-      
+
       if (normalizedFileName !== originalFileName) {
         console.log(`  [ZIP] "${originalFileName}" → "${normalizedFileName}" (Hash: ${fileHash})`);
       } else {
@@ -114,14 +114,14 @@ async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileN
  * 🔥 NORMALIZA los nombres que vienen del microservicio
  */
 async function extractAndHashRarFiles(
-  fileBuffer: ArrayBuffer, 
+  fileBuffer: ArrayBuffer,
   parentUploadId: string
-): Promise<{ 
-  fileHashes: { [fileName: string]: string }, 
-  uploadIds: { [fileName: string]: string } 
+): Promise<{
+  fileHashes: { [fileName: string]: string },
+  uploadIds: { [fileName: string]: string }
 }> {
   const RAILWAY_RAR_SERVICE = 'https://rar-extractor.onrender.com/api/extract-rar';
-  
+
   console.log(`  [RAR] 🔄 Llamando al microservicio de Railway...`);
 
   const formData = new FormData();
@@ -150,16 +150,16 @@ async function extractAndHashRarFiles(
     // 🔥 NORMALIZAR LOS NOMBRES DE ARCHIVO QUE VIENEN DEL MICROSERVICIO
     const normalizedFileHashes: { [fileName: string]: string } = {};
     const normalizedUploadIds: { [fileName: string]: string } = {};
-    
+
     for (const [originalFileName, hash] of Object.entries(result.fileHashes)) {
       const normalizedFileName = normalizeFileName(originalFileName);
       normalizedFileHashes[normalizedFileName] = hash as string;
-      
+
       if (normalizedFileName !== originalFileName) {
         console.log(`  [RAR] "${originalFileName}" → "${normalizedFileName}"`);
       }
     }
-    
+
     for (const [originalFileName, uploadId] of Object.entries(result.uploadIds)) {
       const normalizedFileName = normalizeFileName(originalFileName);
       normalizedUploadIds[normalizedFileName] = uploadId as string;
@@ -220,7 +220,7 @@ async function markUploadAsFailed(
     console.log(`❌ [Upload] Marcando como fallido: ${uploadId}`);
     console.log(`❌ [Upload] Mensaje para usuario: ${errorMessage}`);
     console.log(`❌ [Upload] Nodo: ${errorNode || 'Error general'}`);
-    
+
     await connection.query(
       `UPDATE erp49.actividad 
        SET status = 'Fallido', 
@@ -231,17 +231,17 @@ async function markUploadAsFailed(
        WHERE upload_id = ?`,
       [errorNode || 'Error', errorMessage, uploadId]
     );
-    
+
     console.log(`✅ [Upload] Registro padre actualizado: ${uploadId}`);
-    
+
     const [childRows] = await connection.query(
       `SELECT upload_id FROM erp49.actividad WHERE parent_upload_id = ?`,
       [uploadId]
     ) as any;
-    
+
     if (childRows.length > 0) {
       console.log(`❌ [Upload] Marcando ${childRows.length} archivos hijos como fallidos...`);
-      
+
       await connection.query(
         `UPDATE erp49.actividad 
          SET status = 'Fallido', 
@@ -252,10 +252,10 @@ async function markUploadAsFailed(
          WHERE parent_upload_id = ?`,
         [uploadId]
       );
-      
+
       console.log(`✅ [Upload] ${childRows.length} archivos hijos actualizados`);
     }
-    
+
   } catch (error) {
     console.error(`❌ [Upload] Error al marcar como fallido:`, error);
   }
@@ -271,9 +271,9 @@ async function notifyFrontendError(
 ): Promise<void> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:9002';
-    
+
     console.log(`📡 [Upload] Notificando error al frontend: ${uploadId}`);
-    
+
     const response = await fetch(`${baseUrl}/api/upload-progress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -285,7 +285,7 @@ async function notifyFrontendError(
         message: errorMessage,
       }),
     });
-    
+
     if (response.ok) {
       console.log(`✅ [Upload] Frontend notificado exitosamente`);
     } else {
@@ -324,15 +324,15 @@ export async function uploadDocument(
   }
 
   const originalFileName = file.name;
-  
+
   // 🔥 NORMALIZAR NOMBRE DE ARCHIVO (quitar espacios)
   const normalizedFileName = normalizeFileName(originalFileName);
-  
+
   // Loguear solo si hubo cambios
   if (normalizedFileName !== originalFileName) {
     console.log(`📤 [UploadService] Nombre normalizado: "${originalFileName}" → "${normalizedFileName}"`);
   }
-  
+
   const fileSize = file.size;
   const fileMimeType = file.type;
   const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
@@ -342,10 +342,10 @@ export async function uploadDocument(
   console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
   console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
-  const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
+  const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
-  if (!N8N_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
+  if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
     console.error('Missing environment variables for upload service.');
     throw new Error('Configuración del servidor incompleta. Contacte al administrador.');
   }
@@ -361,7 +361,7 @@ export async function uploadDocument(
     console.log(`[${normalizedFileName}] Consultando CIF para empresaId: ${empresaId}`);
     const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
     const empresaData = rows as { CIF: string }[];
-    
+
     if (!empresaData || empresaData.length === 0) {
       throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
     }
@@ -372,21 +372,21 @@ export async function uploadDocument(
     let individualFileHashes: { [fileName: string]: string } = {};
     let individualUploadIds: { [fileName: string]: string } = {};
     let isCompressedFile = false;
-    
+
     // 🔥 PROCESAR ARCHIVOS COMPRIMIDOS (ZIP O RAR)
     if (normalizedFileType === 'zip') {
       isCompressedFile = true;
       console.log(`[${normalizedFileName}] 📦 Detectado archivo ZIP`);
-      
+
       try {
         // 🔥 extractAndHashZipFiles ya normaliza los nombres internamente
         individualFileHashes = await extractAndHashZipFiles(fileBuffer);
         console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes`);
-        
+
         for (const fileName of Object.keys(individualFileHashes)) {
           const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
           individualUploadIds[fileName] = childUploadId;
-          
+
           await createActivityRecord(
             childUploadId,
             empresaId,
@@ -394,34 +394,34 @@ export async function uploadDocument(
             fileName.split('.').pop() || 'unknown',
             uploadId
           );
-          
+
           console.log(`  [ZIP] ${fileName} → UploadId: ${childUploadId}`);
         }
-        
+
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-        
+
       } catch (zipError: any) {
         console.error(`[${normalizedFileName}] ❌ Error al extraer ZIP:`, zipError.message);
-        
+
         const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
         await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
         await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-        
+
         throw new Error(userFriendlyMessage);
       }
-      
+
     } else if (normalizedFileType === 'rar') {
       isCompressedFile = true;
       console.log(`[${normalizedFileName}] 📦 Detectado archivo RAR`);
-      
+
       try {
         // 🔥 extractAndHashRarFiles ya normaliza los nombres internamente
         const { fileHashes, uploadIds } = await extractAndHashRarFiles(fileBuffer, uploadId);
         individualFileHashes = fileHashes;
         individualUploadIds = uploadIds;
-        
+
         console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes (RAR)`);
-        
+
         for (const fileName of Object.keys(individualFileHashes)) {
           const childUploadId = individualUploadIds[fileName];
           await createActivityRecord(
@@ -431,22 +431,22 @@ export async function uploadDocument(
             fileName.split('.').pop() || 'unknown',
             uploadId
           );
-          
+
           console.log(`  [RAR] ${fileName} → UploadId: ${childUploadId}`);
         }
-        
+
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-        
+
       } catch (rarError: any) {
         console.error(`[${normalizedFileName}] ❌ Error al extraer RAR:`, rarError.message);
-        
+
         const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
         await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
         await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-        
+
         throw new Error(userFriendlyMessage);
       }
-      
+
     } else {
       // ARCHIVOS NORMALES (NO COMPRIMIDOS)
       console.log(`[${normalizedFileName}] Verificando duplicados...`);
@@ -454,21 +454,21 @@ export async function uploadDocument(
 
       if (duplicateRecord) {
         console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
-        
+
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-        
+
         await markUploadAsFailed(
-          uploadId, 
-          `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`, 
+          uploadId,
+          `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`,
           'Verificación de duplicados'
         );
-        
+
         await notifyFrontendError(
-          uploadId, 
+          uploadId,
           `❌ Archivo duplicado (subido el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')})`,
           'Duplicado detectado'
         );
-        
+
         return {
           success: false,
           isDuplicate: true,
@@ -489,15 +489,15 @@ export async function uploadDocument(
     // 🔥 SUBIR A MINIO CON NOMBRE NORMALIZADO
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
-    
+
     // 🔥 USAR normalizedFileName en lugar de originalFileName
-    const fileNameWithoutExt = normalizedFileName.includes('.') 
-      ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) 
+    const fileNameWithoutExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.'))
       : normalizedFileName;
-    const fileExt = normalizedFileName.includes('.') 
-      ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) 
+    const fileExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.'))
       : '';
-    
+
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
     const filePath = `archivos/${uniqueFileName}`;
 
@@ -519,12 +519,12 @@ export async function uploadDocument(
       ContentType: fileMimeType,
       ACL: 'public-read',
     }));
-    
+
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${normalizedFileName}] ✅ Subida a MinIO completada`);
     console.log(`[${normalizedFileName}] 🔗 URL: ${publicUrl}`);
 
-    // 🔥 PREPARAR PAYLOAD PARA N8N (con nombre normalizado)
+    // 🔥 PREPARAR PAYLOAD PARA MICROSERVICE (con nombre normalizado)
     const webhookPayload: any = {
       text: filePath,
       empresaId: empresaId,
@@ -548,22 +548,22 @@ export async function uploadDocument(
       console.log(`[${normalizedFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales`);
     }
 
-    // 🔥 LLAMAR A N8N Y CAPTURAR ERRORES CON MENSAJE GENÉRICO
-    console.log(`[${normalizedFileName}] 📡 Llamando a n8n webhook...`);
+    // 🔥 LLAMAR A MICROSERVICE Y CAPTURAR ERRORES CON MENSAJE GENÉRICO
+    console.log(`[${normalizedFileName}] 📡 Llamando a Microservice webhook...`);
     console.log(`[${normalizedFileName}] 🆔 UploadId que enviamos: ${uploadId}`);
-    
-    const webhookResponse = await fetch(N8N_WEBHOOK_URL, {
+
+    const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
     });
 
-    // 🔥 VERIFICAR SI N8N RETORNÓ ERROR (status code != 200)
+    // 🔥 VERIFICAR SI MICROSERVICE RETORNÓ ERROR (status code != 200)
     if (!webhookResponse.ok) {
-      console.error(`❌ [${normalizedFileName}] n8n retornó error HTTP: ${webhookResponse.status}`);
-      
+      console.error(`❌ [${normalizedFileName}] Microservice retornó error HTTP: ${webhookResponse.status}`);
+
       let internalErrorDetails = ''; // Para logs internos
-      
+
       try {
         const errorData = await webhookResponse.json();
         internalErrorDetails = errorData.message || errorData.error || 'Error desconocido';
@@ -574,12 +574,12 @@ export async function uploadDocument(
         console.error(`❌ [${normalizedFileName}] Error TEXT:`, textError);
       }
 
-      // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin mencionar n8n o detalles técnicos)
+      // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin mencionar Microservice o detalles técnicos)
       const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
 
       console.log(`❌ [${normalizedFileName}] Marcando como fallido usando uploadId del scope: ${uploadId}`);
       console.log(`❌ [${normalizedFileName}] Detalles internos: ${internalErrorDetails}`);
-      
+
       await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
       await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
 
@@ -589,22 +589,22 @@ export async function uploadDocument(
       };
     }
 
-    console.log(`✅ [${normalizedFileName}] n8n respondió OK (${webhookResponse.status})`);
-    
+    console.log(`✅ [${normalizedFileName}] Microservice respondió OK (${webhookResponse.status})`);
+
     let webhookResult: any = null;
     const responseText = await webhookResponse.text();
 
     try {
       webhookResult = JSON.parse(responseText);
-      console.log(`[${normalizedFileName}] Respuesta n8n (JSON):`, webhookResult);
+      console.log(`[${normalizedFileName}] Respuesta Microservice (JSON):`, webhookResult);
     } catch (jsonError) {
-      console.warn(`[${normalizedFileName}] Respuesta n8n (TEXT):`, responseText);
+      console.warn(`[${normalizedFileName}] Respuesta Microservice (TEXT):`, responseText);
       webhookResult = { mensaje: responseText };
     }
 
     if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
-      console.warn(`❌ DUPLICADO DETECTADO POR N8N: ${normalizedFileName}`);
-      
+      console.warn(`❌ DUPLICADO DETECTADO POR MICROSERVICE: ${normalizedFileName}`);
+
       return {
         success: false,
         isDuplicate: true,
@@ -631,18 +631,18 @@ export async function uploadDocument(
   } catch (error: any) {
     console.error(`❌ [${normalizedFileName}] Error general en uploadDocument:`, error.message);
     console.error(`❌ [${normalizedFileName}] Stack trace:`, error.stack);
-    
+
     // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin detalles técnicos)
     const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-    
+
     if (uploadId) {
       console.log(`❌ Marcando como fallido usando uploadId del scope: ${uploadId}`);
       console.log(`❌ Error interno: ${error.message}`);
-      
+
       await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
       await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
     }
-    
+
     // 🔥 LANZAR ERROR GENÉRICO AL CLIENTE
     throw new Error(userFriendlyMessage);
   }

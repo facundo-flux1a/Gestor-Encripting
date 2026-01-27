@@ -3,19 +3,19 @@ import connection from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { RowDataPacket } from 'mysql2';
 
-const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333';
+const WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL || 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333';
 
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   const conn = await connection.getConnection();
-  
+
   try {
     await conn.beginTransaction();
-    
+
     const session = await getSession();
-    
+
     if (!session) {
       await conn.rollback();
       conn.release();
@@ -112,7 +112,7 @@ export async function POST(
 
     console.log('✅ [RETRY] Registro actualizado en BD');
 
-    // 5️⃣ 🔥 FIRE AND FORGET - NO ESPERAR RESPUESTA DE N8N
+    // 5️⃣ 🔥 FIRE AND FORGET - NO ESPERAR RESPUESTA DE MICROSERVICE
     // Disparamos el webhook pero NO esperamos que termine
     fetch(WEBHOOK_URL, {
       method: 'POST',
@@ -124,7 +124,7 @@ export async function POST(
       if (!response.ok) {
         console.error('❌ [RETRY] Webhook error (async):', response.status);
         // Opcionalmente actualizar estado a fallido en background
-        // Pero n8n debería manejar esto con su propio callback
+        // Pero Microservice debería manejar esto con su propio callback
       } else {
         console.log('✅ [RETRY] Webhook enviado correctamente');
       }
@@ -133,7 +133,7 @@ export async function POST(
     });
 
     // 6️⃣ RESPONDER INMEDIATAMENTE al cliente
-    console.log('✅ [RETRY] Respondiendo inmediatamente al cliente:', { 
+    console.log('✅ [RETRY] Respondiendo inmediatamente al cliente:', {
       uploadId: activity.upload_id,
       activityId
     });
@@ -150,7 +150,7 @@ export async function POST(
     conn.release();
     console.error('❌ [RETRY] Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Error al reintentar',
         details: error instanceof Error ? error.message : 'Error desconocido'
       },

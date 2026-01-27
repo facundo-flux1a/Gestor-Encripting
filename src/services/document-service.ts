@@ -3174,7 +3174,7 @@ export async function createExport(payload: {
 }
 
 /**
- * Actualiza un export cuando el webhook de n8n responde
+ * Actualiza un export cuando el webhook de Microservice responde
  */
 export async function updateExportStatus(
   exportId: number,

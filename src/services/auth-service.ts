@@ -9,7 +9,7 @@ import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
 import crypto from 'crypto';
- 
+
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
@@ -29,35 +29,35 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
     const { payload } = await jwtVerify(session, key, {
       algorithms: ['HS256'],
     });
-    
+
     const parsedPayload = z.object({
-        userId: z.number(),
-        email: z.string().email(),
-        nombre: z.string(),
-        tutorial: z.number().optional(),
-        tutorialDocumentos: z.number().optional(),
-        tutorialTrimestres: z.number().optional(),
-        tutorialActividad: z.number().optional(),
-        tutorialIndividual: z.number().optional(),
-        tutorialIncidencias: z.number().optional(),
-        tutorialProveedores: z.number().optional(),
-        exp: z.number(),
+      userId: z.number(),
+      email: z.string().email(),
+      nombre: z.string(),
+      tutorial: z.number().optional(),
+      tutorialDocumentos: z.number().optional(),
+      tutorialTrimestres: z.number().optional(),
+      tutorialActividad: z.number().optional(),
+      tutorialIndividual: z.number().optional(),
+      tutorialIncidencias: z.number().optional(),
+      tutorialProveedores: z.number().optional(),
+      exp: z.number(),
     }).safeParse(payload);
-    
-    if(!parsedPayload.success) return null;
+
+    if (!parsedPayload.success) return null;
 
     return {
-        userId: parsedPayload.data.userId,
-        email: parsedPayload.data.email,
-        nombre: parsedPayload.data.nombre,
-        tutorial: parsedPayload.data.tutorial,
-        tutorialDocumentos: parsedPayload.data.tutorialDocumentos,
-        tutorialTrimestres: parsedPayload.data.tutorialTrimestres,
-        tutorialActividad: parsedPayload.data.tutorialActividad,
-        tutorialIndividual: parsedPayload.data.tutorialIndividual,
-        tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
-        tutorialProveedores: parsedPayload.data.tutorialProveedores,
-        expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
+      userId: parsedPayload.data.userId,
+      email: parsedPayload.data.email,
+      nombre: parsedPayload.data.nombre,
+      tutorial: parsedPayload.data.tutorial,
+      tutorialDocumentos: parsedPayload.data.tutorialDocumentos,
+      tutorialTrimestres: parsedPayload.data.tutorialTrimestres,
+      tutorialActividad: parsedPayload.data.tutorialActividad,
+      tutorialIndividual: parsedPayload.data.tutorialIndividual,
+      tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
+      tutorialProveedores: parsedPayload.data.tutorialProveedores,
+      expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
   } catch (error) {
@@ -67,50 +67,50 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
 }
 
 export async function getSession(cookie?: string): Promise<SessionPayload | null> {
-    let sessionCookie = cookie;
-    
-    if (!sessionCookie) {
-      const cookieStore = await cookies();
-      sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-      console.log('🍪 [getSession] Intentando obtener cookie:', { 
-        existe: !!sessionCookie,
-        todas: cookieStore.getAll().map(c => c.name)
-      });
-    }
-    
-    if (!sessionCookie) return null;
-    
-    const session = await decrypt(sessionCookie);
-    if (!session) {
+  let sessionCookie = cookie;
+
+  if (!sessionCookie) {
+    const cookieStore = await cookies();
+    sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    console.log('🍪 [getSession] Intentando obtener cookie:', {
+      existe: !!sessionCookie,
+      todas: cookieStore.getAll().map(c => c.name)
+    });
+  }
+
+  if (!sessionCookie) return null;
+
+  const session = await decrypt(sessionCookie);
+  if (!session) {
+    const cookieStore = await cookies();
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  // ✅ AGREGADO: Verificar si el usuario sigue activo en la BD
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT activo FROM usuarios WHERE id = ?',
+      [session.userId]
+    );
+
+    if (!rows[0] || rows[0].activo === 0) {
+      console.warn('⚠️ [getSession] Usuario inactivo, eliminando sesión:', session.userId);
       const cookieStore = await cookies();
       cookieStore.delete(SESSION_COOKIE_NAME);
       return null;
     }
-    
-    // ✅ AGREGADO: Verificar si el usuario sigue activo en la BD
-    try {
-      const [rows] = await db.query<RowDataPacket[]>(
-        'SELECT activo FROM usuarios WHERE id = ?',
-        [session.userId]
-      );
-      
-      if (!rows[0] || rows[0].activo === 0) {
-        console.warn('⚠️ [getSession] Usuario inactivo, eliminando sesión:', session.userId);
-        const cookieStore = await cookies();
-        cookieStore.delete(SESSION_COOKIE_NAME);
-        return null;
-      }
-    } catch (error) {
-      console.error('❌ [getSession] Error verificando estado activo:', error);
-      // En caso de error de BD, permitir continuar para no romper la app
-    }
-    
-    return session;
+  } catch (error) {
+    console.error('❌ [getSession] Error verificando estado activo:', error);
+    // En caso de error de BD, permitir continuar para no romper la app
+  }
+
+  return session;
 }
 export async function createSession(
-  userId: number, 
-  email: string, 
-  nombre: string, 
+  userId: number,
+  email: string,
+  nombre: string,
   tutorial: number = 0,
   tutorialDocumentos: number = 0,
   tutorialTrimestres: number = 0,
@@ -119,39 +119,39 @@ export async function createSession(
   tutorialIncidencias: number = 0,
   tutorialProveedores: number = 0
 ) {
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const session = await encrypt({ 
-      userId, 
-      email, 
-      nombre, 
-      tutorial, 
-      tutorialDocumentos,
-      tutorialTrimestres,
-      tutorialActividad,
-      tutorialIndividual,
-      tutorialIncidencias,
-      tutorialProveedores,
-      expires 
-    });
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const session = await encrypt({
+    userId,
+    email,
+    nombre,
+    tutorial,
+    tutorialDocumentos,
+    tutorialTrimestres,
+    tutorialActividad,
+    tutorialIndividual,
+    tutorialIncidencias,
+    tutorialProveedores,
+    expires
+  });
 
-    const cookieStore = await cookies();
-    cookieStore.set(SESSION_COOKIE_NAME, session, {
-        expires,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        path: '/',
-    });
-    console.log('🍪 [createSession] Cookie guardada:', { 
-      name: SESSION_COOKIE_NAME, 
-      path: '/', 
-      tutorial,
-      tutorialDocumentos,
-      tutorialTrimestres,
-      tutorialActividad,
-      tutorialIndividual,
-      tutorialIncidencias,
-      tutorialProveedores
-    });
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE_NAME, session, {
+    expires,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  });
+  console.log('🍪 [createSession] Cookie guardada:', {
+    name: SESSION_COOKIE_NAME,
+    path: '/',
+    tutorial,
+    tutorialDocumentos,
+    tutorialTrimestres,
+    tutorialActividad,
+    tutorialIndividual,
+    tutorialIncidencias,
+    tutorialProveedores
+  });
 }
 
 async function createDefaultAIConfig(userId: number) {
@@ -199,36 +199,36 @@ export async function login(formData: FormData) {
       'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?',
       [email.trim()]
     );
-    
+
     console.log('📊 [login] Usuarios encontrados con ese email:', rows.length);
-    
+
     if (rows.length === 0) {
       console.warn('⚠️ [login] No existe usuario con email:', email.trim());
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    const user = rows[0] as User & { 
+    const user = rows[0] as User & {
       activo: number; // ✅ AGREGADO
-      tutorial_documentos?: number; 
+      tutorial_documentos?: number;
       tutorial_trimestres?: number;
       tutorial_actividad?: number;
       tutorial_individual?: number;
       tutorial_incidencias?: number;
       tutorial_proveedores?: number;
     };
-    
+
     // ✅ AGREGADO: Verificar si el usuario está activo
     if (!user.activo || user.activo === 0) {
       console.warn('⚠️ [login] Usuario inactivo:', email.trim());
       return redirect('/auth/login?error=user_inactive');
     }
-    
+
     // 🔥 DETECTAR SI ES CUENTA DE GOOGLE
     if (user.password && user.password.startsWith(GOOGLE_PASSWORD_MARKER)) {
       console.warn('⚠️ [login] Cuenta creada con Google - debe usar Google Sign In');
       return redirect('/auth/login?error=google_account');
     }
-    
+
     let passwordValid = false;
     let isPlainText = false;
 
@@ -238,7 +238,7 @@ export async function login(formData: FormData) {
       isPlainText = true;
     } else {
       try {
-        passwordValid = await bcrypt.compare(password.trim(), user.password);
+        passwordValid = await bcrypt.compare(password.trim(), user.password || '');
         console.log('🔐 [login] Validación bcrypt:', passwordValid);
       } catch (bcryptError) {
         console.log('⚠️ [login] bcrypt falló:', bcryptError);
@@ -265,11 +265,11 @@ export async function login(formData: FormData) {
       tutorialIncidencias: user.tutorial_incidencias || 0,
       tutorialProveedores: user.tutorial_proveedores || 0
     });
-    
+
     await createSession(
-      user.id, 
-      user.email, 
-      user.nombre, 
+      user.id,
+      user.email,
+      user.nombre,
       user.tutorial || 0,
       user.tutorial_documentos || 0,
       user.tutorial_trimestres || 0,
@@ -278,7 +278,7 @@ export async function login(formData: FormData) {
       user.tutorial_incidencias || 0,
       user.tutorial_proveedores || 0
     );
-    
+
   } catch (error) {
     console.error('❌ [login] Error:', error);
     return redirect('/auth/login?error=server_error');
@@ -288,45 +288,45 @@ export async function login(formData: FormData) {
 }
 
 export async function register(formData: FormData) {
-    const nombre = formData.get('name') as string;
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
+  const nombre = formData.get('name') as string;
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
 
-    if (!nombre || !email || !password) {
-        return redirect('/auth/register?error=missing_fields');
+  if (!nombre || !email || !password) {
+    return redirect('/auth/register?error=missing_fields');
+  }
+
+  try {
+    const [existingUser] = await db.query<RowDataPacket[]>('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (existingUser.length > 0) {
+      return redirect('/auth/register?error=user_exists');
     }
 
-    try {
-        const [existingUser] = await db.query<RowDataPacket[]>('SELECT id FROM usuarios WHERE email = ?', [email]);
-        if (existingUser.length > 0) {
-            return redirect('/auth/register?error=user_exists');
-        }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
+    // ✅ AGREGADO: activo = 1 por defecto al registrarse
+    const [result] = await db.query<OkPacket>(
+      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
+      [nombre, email, hashedPassword]
+    );
 
-        // ✅ AGREGADO: activo = 1 por defecto al registrarse
-        const [result] = await db.query<OkPacket>(
-            'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)',
-            [nombre, email, hashedPassword]
-        );
+    const newUserId = result.insertId;
 
-        const newUserId = result.insertId;
-        
-        await createDefaultAIConfig(newUserId);
-        
-        await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
+    await createDefaultAIConfig(newUserId);
 
-    } catch (error) {
-        console.error('Registration error:', error);
-        return redirect('/auth/register?error=server_error');
-    }
+    await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
 
-    redirect('/dashboard');
+  } catch (error) {
+    console.error('Registration error:', error);
+    return redirect('/auth/register?error=server_error');
+  }
+
+  redirect('/dashboard');
 }
 
 export async function handleGoogleSignInOnServer(
-    firebaseUser: {uid: string, email: string | null, displayName: string | null}
+  firebaseUser: { uid: string, email: string | null, displayName: string | null }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { email, displayName } = firebaseUser;
@@ -340,9 +340,9 @@ export async function handleGoogleSignInOnServer(
       [email]
     );
 
-    let user: User & { 
+    let user: User & {
       activo?: number; // ✅ AGREGADO
-      tutorial_documentos?: number; 
+      tutorial_documentos?: number;
       tutorial_trimestres?: number;
       tutorial_actividad?: number;
       tutorial_individual?: number;
@@ -358,22 +358,22 @@ export async function handleGoogleSignInOnServer(
     let tutorialProveedoresValue = 0;
 
     if (existingUsers.length > 0) {
-      user = existingUsers[0] as User & { 
+      user = existingUsers[0] as User & {
         activo?: number;
-        tutorial_documentos?: number; 
+        tutorial_documentos?: number;
         tutorial_trimestres?: number;
         tutorial_actividad?: number;
         tutorial_individual?: number;
         tutorial_incidencias?: number;
         tutorial_proveedores?: number;
       };
-      
+
       // ✅ AGREGADO: Verificar si el usuario está activo
       if (!user.activo || user.activo === 0) {
         console.warn('⚠️ [handleGoogleSignIn] Usuario inactivo:', email);
         return { success: false, error: 'Usuario inactivo. Contacte al administrador.' };
       }
-      
+
       tutorialValue = user.tutorial || 0;
       tutorialDocumentosValue = user.tutorial_documentos || 0;
       tutorialTrimestresValue = user.tutorial_trimestres || 0;
@@ -384,21 +384,21 @@ export async function handleGoogleSignInOnServer(
       console.log('✅ [handleGoogleSignIn] Usuario existente encontrado:', user.id);
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
-      
+
       const googlePassword = GOOGLE_PASSWORD_MARKER + crypto.randomBytes(32).toString('hex');
-      
+
       console.log('🆕 [handleGoogleSignIn] Creando nuevo usuario de Google');
-      
+
       // ✅ AGREGADO: activo = 1 por defecto al crear con Google
       const [result] = await db.query<OkPacket>(
-          'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1)',
-          [nombre, email, googlePassword]
+        'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
+        [nombre, email, googlePassword]
       );
-      
-      user = { 
-        id: result.insertId, 
-        email, 
-        nombre, 
+
+      user = {
+        id: result.insertId,
+        email,
+        nombre,
         activo: 1,
         tutorial: 1,
         tutorial_documentos: 1,
@@ -415,24 +415,24 @@ export async function handleGoogleSignInOnServer(
       tutorialIndividualValue = 1;
       tutorialIncidenciasValue = 1;
       tutorialProveedoresValue = 1;
-      
+
       await createDefaultAIConfig(user.id);
       console.log('✅ [handleGoogleSignIn] Usuario creado con ID:', user.id);
     }
 
     await createSession(
-      user.id, 
-      user.email, 
-      user.nombre, 
-      tutorialValue, 
-      tutorialDocumentosValue, 
+      user.id,
+      user.email,
+      user.nombre,
+      tutorialValue,
+      tutorialDocumentosValue,
       tutorialTrimestresValue,
       tutorialActividadValue,
       tutorialIndividualValue,
       tutorialIncidenciasValue,
       tutorialProveedoresValue
     );
-    
+
     return { success: true };
 
   } catch (error) {
@@ -446,7 +446,7 @@ export async function handleGoogleSignInOnServer(
 export async function completeTutorial() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -461,9 +461,9 @@ export async function completeTutorial() {
     console.log('✅ [completeTutorial] Tutorial marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       0,
       session.tutorialDocumentos || 0,
       session.tutorialTrimestres || 0,
@@ -482,7 +482,7 @@ export async function completeTutorial() {
 export async function completeTutorialDocumentos() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -497,9 +497,9 @@ export async function completeTutorialDocumentos() {
     console.log('✅ [completeTutorialDocumentos] Tutorial documentos marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       0,
       session.tutorialTrimestres || 0,
@@ -518,7 +518,7 @@ export async function completeTutorialDocumentos() {
 export async function completeTutorialTrimestres() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -533,9 +533,9 @@ export async function completeTutorialTrimestres() {
     console.log('✅ [completeTutorialTrimestres] Tutorial trimestres marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       session.tutorialDocumentos || 0,
       0,
@@ -554,7 +554,7 @@ export async function completeTutorialTrimestres() {
 export async function completeTutorialActividad() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -569,9 +569,9 @@ export async function completeTutorialActividad() {
     console.log('✅ [completeTutorialActividad] Tutorial actividad marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       session.tutorialDocumentos || 0,
       session.tutorialTrimestres || 0,
@@ -590,7 +590,7 @@ export async function completeTutorialActividad() {
 export async function completeTutorialIndividual() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -605,9 +605,9 @@ export async function completeTutorialIndividual() {
     console.log('✅ [completeTutorialIndividual] Tutorial individual marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       session.tutorialDocumentos || 0,
       session.tutorialTrimestres || 0,
@@ -626,7 +626,7 @@ export async function completeTutorialIndividual() {
 export async function completeTutorialIncidencias() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -641,9 +641,9 @@ export async function completeTutorialIncidencias() {
     console.log('✅ [completeTutorialIncidencias] Tutorial incidencias marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       session.tutorialDocumentos || 0,
       session.tutorialTrimestres || 0,
@@ -662,7 +662,7 @@ export async function completeTutorialIncidencias() {
 export async function completeTutorialProveedores() {
   try {
     const session = await getSession();
-    
+
     if (!session?.userId) {
       throw new Error('No hay sesión activa');
     }
@@ -677,9 +677,9 @@ export async function completeTutorialProveedores() {
     console.log('✅ [completeTutorialProveedores] Tutorial proveedores marcado como completado');
 
     await createSession(
-      session.userId, 
-      session.email, 
-      session.nombre, 
+      session.userId,
+      session.email,
+      session.nombre,
       session.tutorial || 0,
       session.tutorialDocumentos || 0,
       session.tutorialTrimestres || 0,
@@ -699,6 +699,6 @@ export async function logout() {
   console.log('🚪 [logout] Cerrando sesión del servidor');
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
-  
+
   redirect('/auth/login?logout=true');
 }

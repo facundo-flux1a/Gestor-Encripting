@@ -7,7 +7,7 @@ import type { RowDataPacket } from 'mysql2';
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { error: 'No autenticado' },
@@ -55,15 +55,15 @@ export async function POST(request: NextRequest) {
       LEFT JOIN entidades ent ON de.id_entidad = ent.id_entidad
       WHERE 1=1
     `;
-    
+
     const params: any[] = [];
-    
+
     // Filtrar por empresa
     if (empresaIds && empresaIds.length > 0) {
       query += ` AND d.id_de_empresa IN (?)`;
       params.push(empresaIds);
     }
-    
+
     // Filtrar por año y trimestre
     if (año !== null && año !== undefined && trimestre !== null && trimestre !== undefined) {
       query += ` AND d.año_trimestre = ? AND d.num_trimestre = ?`;
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Filtrar por status (tab)
     if (status) {
-      switch(status) {
+      switch (status) {
         case 'pending':
           query += ` AND LOWER(d.tipo_documento) LIKE '%sin confirmar%'`;
           break;
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     // ✅ Obtener detalles de IVA para cada documento
     const documentoIds = documentos.map(d => d.id_documento);
-    
+
     let ivaQuery = `
       SELECT 
         id_documento,
@@ -126,9 +126,9 @@ export async function POST(request: NextRequest) {
       FROM iva_details
       WHERE id_documento IN (?)
     `;
-    
+
     const [ivaDetails] = await db.query<RowDataPacket[]>(ivaQuery, [documentoIds]);
-    
+
     // Agrupar detalles de IVA por documento
     const ivaByDocument: { [key: number]: any[] } = {};
     ivaDetails.forEach((iva: any) => {
@@ -200,25 +200,25 @@ export async function POST(request: NextRequest) {
     const empresaNombreLimpio = empresaNombre
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
-    
+
     const fechaActual = new Date().toISOString().split('T')[0];
-    const statusLabel = status === 'pending' ? 'Pendientes' : 
-                       status === 'incidents' ? 'Incidencias' : 
-                       status === 'confirmed' ? 'Confirmados' : 'Todos';
-    
+    const statusLabel = status === 'pending' ? 'Pendientes' :
+      status === 'incidents' ? 'Incidencias' :
+        status === 'confirmed' ? 'Confirmados' : 'Todos';
+
     let nombreArchivo = `Documentos_${statusLabel}_${empresaNombreLimpio}_${fechaActual}`;
-    
+
     if (año && trimestre) {
       nombreArchivo = `Documentos_${statusLabel}_${año}_T${trimestre}_${empresaNombreLimpio}_${fechaActual}`;
     }
-    
+
     nombreArchivo += '.pdf';
-    
+
     console.log('📄 [export-documents] Nombre del archivo:', nombreArchivo);
 
-    // ✅ Enviar a n8n
-    const n8nWebhookUrl = 'https://agent.flux1a.com.ar/webhook/19aedb0e-661d-429a-b84b-1db75a18cfae';
-    
+    // ✅ Enviar a Microservice
+    const microserviceWebhookUrl = 'https://agent.flux1a.com.ar/webhook/19aedb0e-661d-429a-b84b-1db75a18cfae';
+
     const webhookPayload = {
       exportId: exportResult.exportId,
       userId: user.id,
@@ -273,20 +273,20 @@ export async function POST(request: NextRequest) {
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/export-callback`
     };
 
-    console.log('🚀 [export-documents] Enviando a n8n:', {
+    console.log('🚀 [export-documents] Enviando a Microservice:', {
       documentos: documentos.length,
       totales
     });
 
-    // Enviar a n8n (fire and forget)
-    fetch(n8nWebhookUrl, {
+    // Enviar a Microservice (fire and forget)
+    fetch(microserviceWebhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(webhookPayload)
     }).catch(err => {
-      console.error('❌ Error enviando a n8n:', err);
+      console.error('❌ Error enviando a Microservice:', err);
     });
 
     console.log('✅ [export-documents] Exportación iniciada con ID:', exportResult.exportId);

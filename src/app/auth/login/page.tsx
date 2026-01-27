@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/dialog';
 
 // 🔥 WEBHOOK HARDCODEADO
-const N8N_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/reset-password';
+const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/reset-password';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -43,33 +43,33 @@ function GoogleLoginButton() {
 
   const handleGoogleSignIn = async () => {
     try {
-        const result = await signInWithPopup(auth, googleProvider);
-        const firebaseUser = result.user;
-        
-        const serverResponse = await handleGoogleSignInOnServer({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-        });
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = result.user;
 
-        if (serverResponse.success) {
-            router.push('/dashboard');
-        } else {
-            throw new Error(serverResponse.error || 'El inicio de sesión con Google falló en el servidor.');
-        }
+      const serverResponse = await handleGoogleSignInOnServer({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+      });
+
+      if (serverResponse.success) {
+        router.push('/dashboard');
+      } else {
+        throw new Error(serverResponse.error || 'El inicio de sesión con Google falló en el servidor.');
+      }
     } catch (error: any) {
-        let errorMessage = 'No se pudo iniciar sesión con Google.';
-        if (error.code === 'auth/popup-closed-by-user') {
-            errorMessage = 'El proceso de inicio de sesión fue cancelado.';
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
-        toast({
-            title: 'Error de Autenticación',
-            description: errorMessage,
-            variant: 'destructive',
-        });
+      let errorMessage = 'No se pudo iniciar sesión con Google.';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'El proceso de inicio de sesión fue cancelado.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: 'Error de Autenticación',
+        description: errorMessage,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -82,34 +82,34 @@ function GoogleLoginButton() {
 }
 
 function LoginError() {
-    const searchParams = useSearchParams();
-    const error = searchParams.get('error');
+  const searchParams = useSearchParams();
+  const error = searchParams.get('error');
 
-    const getErrorMessage = (errorCode: string | null) => {
-        switch (errorCode) {
-            case 'invalid_credentials':
-                return 'El correo electrónico o la contraseña son incorrectos.';
-            case 'user_inactive':
-                return 'Tu cuenta está inactiva. Por favor, contacta al administrador para reactivarla.';
-            case 'google_account':
-                return 'Esta cuenta fue creada con Google. Por favor, usa el botón "Continuar con Google" para iniciar sesión.';
-            case 'server_error':
-                return 'Ha ocurrido un error en el servidor. Por favor, inténtalo de nuevo más tarde.';
-            default:
-                return null;
-        }
-    };
-    const errorMessage = getErrorMessage(error);
+  const getErrorMessage = (errorCode: string | null) => {
+    switch (errorCode) {
+      case 'invalid_credentials':
+        return 'El correo electrónico o la contraseña son incorrectos.';
+      case 'user_inactive':
+        return 'Tu cuenta está inactiva. Por favor, contacta al administrador para reactivarla.';
+      case 'google_account':
+        return 'Esta cuenta fue creada con Google. Por favor, usa el botón "Continuar con Google" para iniciar sesión.';
+      case 'server_error':
+        return 'Ha ocurrido un error en el servidor. Por favor, inténtalo de nuevo más tarde.';
+      default:
+        return null;
+    }
+  };
+  const errorMessage = getErrorMessage(error);
 
-    if (!errorMessage) return null;
+  if (!errorMessage) return null;
 
-    return (
-        <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error de Autenticación</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
-        </Alert>
-    )
+  return (
+    <Alert variant="destructive" className="mb-4">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>Error de Autenticación</AlertTitle>
+      <AlertDescription>{errorMessage}</AlertDescription>
+    </Alert>
+  )
 }
 
 // 🆕 POPUP DE RESET PASSWORD
@@ -130,7 +130,7 @@ function ForgotPasswordDialog() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !email.includes('@')) {
       toast({
         title: 'Email inválido',
@@ -146,12 +146,12 @@ function ForgotPasswordDialog() {
       // Generar token y URL
       const token = generateToken();
       const resetUrl = `${window.location.origin}/auth/reset-password?token=${token}`;
-      
+
       // Calcular expiración (30 minutos)
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-      // 🔥 ENVIAR TODO A N8N (token incluido)
-      const response = await fetch(N8N_WEBHOOK_URL, {
+      // 🔥 ENVIAR TODO A MICROSERVICE (token incluido)
+      const response = await fetch(MICROSERVICE_WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ function ForgotPasswordDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button 
+        <button
           type="button"
           className="text-sm font-medium text-primary hover:underline"
         >
@@ -234,22 +234,22 @@ function ForgotPasswordDialog() {
 }
 
 function LoginForm() {
-    return (
-        <form action={login} className="space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
-                <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
-            </div>
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Contraseña</Label>
-                    <ForgotPasswordDialog />
-                </div>
-                <Input id="password" name="password" type="password" required />
-            </div>
-            <LoginButton />
-        </form>
-    )
+  return (
+    <form action={login} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">Correo Electrónico</Label>
+        <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Contraseña</Label>
+          <ForgotPasswordDialog />
+        </div>
+        <Input id="password" name="password" type="password" required />
+      </div>
+      <LoginButton />
+    </form>
+  )
 }
 
 export default function LoginPage() {

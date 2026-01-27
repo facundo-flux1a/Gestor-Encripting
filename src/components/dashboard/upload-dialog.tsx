@@ -17,11 +17,11 @@ interface UploadDialogProps {
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
-export function UploadDialog({ 
-  isOpen, 
-  onClose, 
+export function UploadDialog({
+  isOpen,
+  onClose,
   companies,
-  onUploadComplete 
+  onUploadComplete
 }: UploadDialogProps) {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [files, setFiles] = useState<File[]>([]);
@@ -46,7 +46,7 @@ export function UploadDialog({
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
       const validFiles = selectedFiles.filter(file => validateFileSize(file));
-      
+
       if (validFiles.length > 0) {
         setFiles(prevFiles => [...prevFiles, ...validFiles]);
       }
@@ -76,7 +76,7 @@ export function UploadDialog({
     setIsDragging(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files);
-    
+
     const acceptedTypes = [
       'application/pdf',
       'application/msword',
@@ -90,15 +90,15 @@ export function UploadDialog({
       'application/x-rar-compressed',
       'application/vnd.rar',
     ];
-    
+
     const validFiles = droppedFiles.filter(file => {
       const isValidType = acceptedTypes.includes(file.type);
       const isValidSize = validateFileSize(file);
-      
+
       if (!isValidType) {
         return false;
       }
-      
+
       return isValidSize;
     });
 
@@ -136,13 +136,25 @@ export function UploadDialog({
       return;
     }
 
-    setIsUploading(true);
-    
-    // Iniciar uploads en segundo plano (sin await)
+    // 🚀 CERRAR INMEDIATAMENTE (UX PETICIÓN USUARIO)
+    onClose();
+
+    // Iniciar uploads en segundo plano
     const filesToUpload = [...files];
     const companyId = selectedCompanyId;
-    
-    // Proceso en segundo plano
+
+    // Limpiar estado por si acaso (aunque se desmonte)
+    setFiles([]);
+    setSelectedCompanyId('');
+    setIsUploading(false);
+
+    // Notificar inicio
+    toast({
+      title: "⏳ Iniciando carga...",
+      description: `Los archivos se están procesando en segundo plano.`,
+    });
+
+    // Proceso en segundo plano (Fire and Forget)
     (async () => {
       let successCount = 0;
       let errorCount = 0;
@@ -151,128 +163,67 @@ export function UploadDialog({
       for (const file of filesToUpload) {
         try {
           const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
           console.log('📤 [UploadDialog] Subiendo:', file.name, 'uploadId:', uploadId);
-          
+
           if ((window as any).__uploadProgressManager) {
             (window as any).__uploadProgressManager.addUpload(uploadId, file.name);
           }
-          
+
           const formData = new FormData();
           formData.append('file', file);
           formData.append('empresaId', companyId);
           formData.append('uploadId', uploadId);
 
           const result = await uploadDocument(formData);
-          
-          // 🔥 VERIFICAR SI ES DUPLICADO
+
           if (result.isDuplicate) {
             duplicateCount++;
-            console.log(`⚠️ [UploadDialog] Archivo duplicado: ${file.name}`);
           } else {
             successCount++;
           }
-          
+
         } catch (error: any) {
           console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
           errorCount++;
-          
-          // 🔥 NORMALIZAR MENSAJE DE ERROR (sin exponer detalles técnicos)
-          let userMessage = '';
-          
-          // Casos específicos que SÍ queremos mostrar al usuario
-          if (error.message?.includes('413') || error.message?.includes('Body exceeded')) {
-            userMessage = `El archivo "${file.name}" es demasiado grande. Límite: 10MB`;
-          } else if (error.message?.includes('duplicado') || error.message?.includes('Archivo duplicado')) {
-            userMessage = error.message; // Los mensajes de duplicado son user-friendly
-            duplicateCount++;
-            errorCount--; // No contar duplicados como errores
-          } else {
-            // 🔥 CUALQUIER OTRO ERROR → MENSAJE GENÉRICO
-            userMessage = `Ocurrió un error al procesar "${file.name}". Por favor, inténtalo nuevamente.`;
-          }
 
-          // Solo mostrar toast de error para errores reales (no duplicados)
-          if (!error.message?.includes('duplicado')) {
-            toast({
-              title: "❌ Error al procesar archivo",
-              description: userMessage,
-              variant: "destructive",
-            });
+          if (error.message?.includes('duplicado') || error.message?.includes('Archivo duplicado')) {
+            duplicateCount++;
+            errorCount--;
           }
         }
       }
 
-      // 🔥 MOSTRAR TOAST SEGÚN EL RESULTADO FINAL
+      // 🏁 FIN DE PROCESO (Background)
       const totalProcessed = successCount + duplicateCount + errorCount;
-      
+      const hasSuccess = successCount > 0 || duplicateCount > 0;
+
       if (errorCount === totalProcessed && errorCount > 0) {
-        // 🔴 TODOS FALLARON
         toast({
-          title: "❌ No se pudo procesar ningún archivo",
-          description: "Ocurrió un error al procesar todos los archivos. Por favor, inténtalo nuevamente.",
+          title: "❌ Error",
+          description: "No se pudo procesar ningún archivo.",
           variant: "destructive",
         });
-      } else if (successCount === totalProcessed && successCount > 0) {
-        // 🟢 TODOS EXITOSOS
+      } else if (hasSuccess) {
         toast({
-          title: "✅ Archivos procesados exitosamente",
-          description: `${successCount} archivo(s) completados`,
+          title: "✅ Completado",
+          description: `Se han subido ${successCount} archivos (Detectados ${duplicateCount} duplicados).`,
         });
-      } else if (duplicateCount === totalProcessed && duplicateCount > 0) {
-        // 🟡 TODOS DUPLICADOS
-        toast({
-          title: "⚠️ Archivos duplicados",
-          description: `${duplicateCount} archivo(s) ya existían en el sistema`,
-          variant: "destructive",
-        });
-      } else if (successCount > 0) {
-        // 🟠 MIXTO CON ALGUNOS EXITOSOS
-        const parts = [`${successCount} archivo(s) completados`];
-        if (duplicateCount > 0) parts.push(`${duplicateCount} duplicados`);
-        if (errorCount > 0) parts.push(`${errorCount} fallaron`);
-        
-        toast({
-          title: "✅ Procesamiento completado",
-          description: parts.join(', '),
-        });
+
+        // Evento global para Tutorial y Refetch
+        console.log('🎯 [UploadDialog] Evento documentUploaded (Background)');
+        window.dispatchEvent(new Event('documentUploaded'));
+
+        // Notificar al padre para refetch
+        onUploadComplete?.();
+
       } else {
-        // 🟠 SOLO DUPLICADOS Y ERRORES (SIN ÉXITOS)
-        const parts = [];
-        if (duplicateCount > 0) parts.push(`${duplicateCount} duplicados`);
-        if (errorCount > 0) parts.push(`${errorCount} fallaron`);
-        
         toast({
-          title: "⚠️ No se procesaron archivos nuevos",
-          description: parts.join(', '),
+          title: "⚠️ Finalizado con observaciones",
+          description: "Revisa las notificaciones de error para más detalles.",
           variant: "destructive",
         });
       }
     })();
-
-    // Mostrar toast inmediato
-    toast({
-      title: "✅ Archivos enviados",
-      description: `${filesToUpload.length} archivo(s) en procesamiento`,
-    });
-
-    // 🔥 DISPARAR EVENTO PARA EL TUTORIAL
-    console.log('🎯 [UploadDialog] Disparando evento documentUploaded');
-    window.dispatchEvent(new Event('documentUploaded'));
-
-    // ⏱️ CERRAR DESPUÉS DE 2 SEGUNDOS
-    console.log('⏱️ [UploadDialog] Iniciando timeout de 2 segundos...');
-    setTimeout(() => {
-      console.log('🔒 [UploadDialog] ¡CERRANDO MODAL AHORA!');
-      setFiles([]);
-      setSelectedCompanyId('');
-      setIsUploading(false);
-      onClose();
-      
-      setTimeout(() => {
-        onUploadComplete?.();
-      }, 100);
-    }, 2000);
   };
 
   const handleClose = () => {
@@ -317,8 +268,8 @@ export function UploadDialog({
               </SelectTrigger>
               <SelectContent>
                 {companies.map((company) => (
-                  <SelectItem 
-                    key={company.id} 
+                  <SelectItem
+                    key={company.id}
                     value={company.id.toString()}
                     className="text-xs sm:text-sm"
                   >
@@ -335,15 +286,13 @@ export function UploadDialog({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors ${
-              isDragging
-                ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
-                : 'border-gray-300 dark:border-gray-700'
-            }`}
+            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors ${isDragging
+              ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
+              : 'border-gray-300 dark:border-gray-700'
+              }`}
           >
-            <Upload className={`mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors ${
-              isDragging ? 'text-violet-500' : 'text-gray-400'
-            }`} />
+            <Upload className={`mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors ${isDragging ? 'text-violet-500' : 'text-gray-400'
+              }`} />
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2 px-2">
               {isDragging
                 ? 'Suelta los archivos aquí'
@@ -358,9 +307,9 @@ export function UploadDialog({
               id="file-upload"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar"
             />
-            <Button 
-              variant="outline" 
-              className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm" 
+            <Button
+              variant="outline"
+              className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm"
               onClick={handleSelectFilesClick}
               type="button"
             >
@@ -398,27 +347,24 @@ export function UploadDialog({
                   return (
                     <div
                       key={index}
-                      className={`flex items-center justify-between p-1.5 sm:p-2 rounded ${
-                        isOversized 
-                          ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800' 
-                          : 'bg-gray-50 dark:bg-gray-800'
-                      }`}
+                      className={`flex items-center justify-between p-1.5 sm:p-2 rounded ${isOversized
+                        ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                        : 'bg-gray-50 dark:bg-gray-800'
+                        }`}
                     >
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
                         {isOversized && (
                           <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs sm:text-sm truncate block ${
-                            isOversized ? 'text-red-800 dark:text-red-200 font-medium' : ''
-                          }`} title={file.name}>
+                          <span className={`text-xs sm:text-sm truncate block ${isOversized ? 'text-red-800 dark:text-red-200 font-medium' : ''
+                            }`} title={file.name}>
                             {file.name}
                           </span>
-                          <span className={`text-[10px] sm:text-xs ${
-                            isOversized 
-                              ? 'text-red-600 dark:text-red-400 font-medium' 
-                              : 'text-gray-500'
-                          }`}>
+                          <span className={`text-[10px] sm:text-xs ${isOversized
+                            ? 'text-red-600 dark:text-red-400 font-medium'
+                            : 'text-gray-500'
+                            }`}>
                             {(file.size / 1024 / 1024).toFixed(2)} MB
                             {isOversized && ' - Excede 10 MB'}
                           </span>
@@ -442,9 +388,9 @@ export function UploadDialog({
 
           {/* Botones */}
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
-            <Button 
-              variant="outline" 
-              onClick={handleClose} 
+            <Button
+              variant="outline"
+              onClick={handleClose}
               disabled={isUploading}
               className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
