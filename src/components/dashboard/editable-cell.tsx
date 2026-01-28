@@ -42,10 +42,10 @@ const formatDate = (dateString: string | null | undefined) => {
     const d = new Date(dateString);
     const utcDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     return new Intl.DateTimeFormat('es-ES', {
-      year: 'numeric', 
-      month: '2-digit', 
-      day: '2-digit', 
-      timeZone: 'UTC'
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'Europe/Madrid'
     }).format(utcDate);
   } catch {
     return dateString;
@@ -99,11 +99,11 @@ export function EditableCell({
   }, [isEditing, docId, fieldName]);
 
   const handleBlur = async (e?: React.FocusEvent) => {
-    console.log('👋 [EditableCell] handleBlur llamado:', { 
-      docId, 
-      fieldName, 
+    console.log('👋 [EditableCell] handleBlur llamado:', {
+      docId,
+      fieldName,
       relatedTarget: e?.relatedTarget,
-      isBlurring: isBlurring.current 
+      isBlurring: isBlurring.current
     });
 
     // Prevenir múltiples llamadas simultáneas
@@ -120,13 +120,13 @@ export function EditableCell({
 
     isBlurring.current = true;
     setIsEditing(false);
-    
+
     const processedValue = inputType === 'number' ? parseFloat(value) : value;
 
-    console.log('💾 [EditableCell] Comparando valores:', { 
-      processedValue, 
-      initialValue, 
-      areEqual: processedValue === initialValue 
+    console.log('💾 [EditableCell] Comparando valores:', {
+      processedValue,
+      initialValue,
+      areEqual: processedValue === initialValue
     });
 
     if (processedValue === initialValue) {
@@ -142,14 +142,14 @@ export function EditableCell({
       const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
         console.log('✅ [EditableCell] Campo actualizado exitosamente');
-        
+
         // ✅ PRIMERO: Actualizar la tabla local
         table.options.meta?.updateData(rowIndex, fieldName, processedValue);
-        
+
         // ✅ SEGUNDO: Llamar al onUpdate para que refresque la data global
         console.log('🔄 [EditableCell] Llamando onUpdate para refrescar data...');
         onUpdate(docId, fieldName, processedValue, table, rowIndex);
-        
+
         toast({
           title: 'Campo Actualizado',
           description: `El campo se ha guardado correctamente.`,
@@ -178,7 +178,7 @@ export function EditableCell({
     if (isCurrency) return formatCurrency(value);
     return value.toString();
   };
-  
+
   const formattedValueForInput = () => {
     if (value === null || value === undefined) return '';
     if (inputType === 'date' && typeof value === 'string') {
@@ -194,15 +194,15 @@ export function EditableCell({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    
-    console.log('🖱️ [EditableCell] Click detectado:', { 
-      docId, 
-      fieldName, 
-      isEditing, 
-      isLoading, 
-      isTrimesterClosed 
+
+    console.log('🖱️ [EditableCell] Click detectado:', {
+      docId,
+      fieldName,
+      isEditing,
+      isLoading,
+      isTrimesterClosed
     });
-    
+
     if (isTrimesterClosed) {
       console.log('🔒 [EditableCell] Trimestre cerrado, bloqueando edición');
       toast({
@@ -212,7 +212,7 @@ export function EditableCell({
       });
       return;
     }
-    
+
     if (!isEditing && !isLoading) {
       console.log('✅ [EditableCell] Activando modo edición');
       setIsEditing(true);
@@ -223,7 +223,7 @@ export function EditableCell({
 
   return (
     <TooltipProvider>
-      <div 
+      <div
         className={cn(
           "editable-cell-wrapper relative min-h-[20px] sm:min-h-[24px] px-1 sm:px-2",
           isTrimesterClosed && "cursor-not-allowed opacity-60",
@@ -235,20 +235,20 @@ export function EditableCell({
         {isLoading && (
           <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
         )}
-        
+
         {/* Lock icon responsive */}
         {isTrimesterClosed && !isLoading && (
           <Lock className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
         )}
-        
+
         {/* Alerta de duplicado */}
         {isDuplicate && !isLoading && !isTrimesterClosed && (
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
               <AlertTriangle className="absolute top-1/2 right-1 sm:right-2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400 shrink-0 animate-pulse cursor-help" />
             </TooltipTrigger>
-            <TooltipContent 
-              side="bottom" 
+            <TooltipContent
+              side="bottom"
               className="z-[99999] bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700"
               avoidCollisions={true}
               collisionPadding={10}
@@ -262,10 +262,10 @@ export function EditableCell({
             </TooltipContent>
           </Tooltip>
         )}
-        
+
         {/* Display value con text size responsive */}
         {!isEditing && !isLoading && (
-          <span 
+          <span
             className={cn(
               "truncate block text-xs sm:text-sm",
               !isTrimesterClosed && "cursor-pointer",
@@ -285,10 +285,10 @@ export function EditableCell({
             type={inputType}
             value={formattedValueForInput()}
             onChange={(e) => {
-              console.log('⌨️ [EditableCell] onChange:', { 
-                docId, 
-                fieldName, 
-                newValue: e.target.value 
+              console.log('⌨️ [EditableCell] onChange:', {
+                docId,
+                fieldName,
+                newValue: e.target.value
               });
               setValue(e.target.value);
             }}
