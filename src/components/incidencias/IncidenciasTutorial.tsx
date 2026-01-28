@@ -20,7 +20,7 @@ export function IncidenciasTutorial() {
     // Esperar a que la página esté cargada
     const checkForPage = setInterval(() => {
       const headerElement = document.querySelector('[data-tutorial="incidencias-header"]');
-      
+
       if (headerElement) {
         console.log('✅ [IncidenciasTutorial] Página encontrada, iniciando tutorial');
         clearInterval(checkForPage);
@@ -65,16 +65,16 @@ export function IncidenciasTutorial() {
           align: 'start' as const,
         },
       },
-     // Paso 2: Análisis Masivo
-{
-  element: '[data-tutorial="incidencias-analizar"]',
-  popover: {
-    title: '🔍 Análisis Automático',
-    description: 'Usa esta herramienta para revisar todos tus documentos de una vez. El sistema comparará datos automáticamente para detectar duplicados, errores de cálculo y documentos incompletos.',
-    side: 'left' as const,
-    align: 'start' as const,
-  },
-},
+      // Paso 2: Análisis Masivo
+      {
+        element: '[data-tutorial="incidencias-analizar"]',
+        popover: {
+          title: '🔍 Análisis Automático',
+          description: 'Usa esta herramienta para revisar todos tus documentos de una vez. El sistema comparará datos automáticamente para detectar duplicados, errores de cálculo y documentos incompletos.',
+          side: 'left' as const,
+          align: 'start' as const,
+        },
+      },
       // Paso 3: Tabla de Incidencias de IA (análisis individual manual)
       {
         element: '[data-tutorial="incidencias-ai-table"]',
@@ -113,20 +113,19 @@ export function IncidenciasTutorial() {
       animate: true,
       allowClose: false,
       overlayOpacity: 0.75,
-      overlayClickNext: false,
       disableActiveInteraction: true,
       steps,
-      
+
       nextBtnText: 'Siguiente →',
       prevBtnText: '← Anterior',
       doneBtnText: '¡Entendido!',
-      
+
       onHighlightStarted: (element, step, options) => {
         const currentStepIndex = options.state.activeIndex ?? 0;
         lastStepRef.current = currentStepIndex;
         console.log('🎯 [IncidenciasTutorial] Paso:', currentStepIndex, element);
       },
-      
+
       onNextClick: (element, step, options) => {
         const currentIndex = options.state.activeIndex;
         console.log('➡️ [IncidenciasTutorial] Avanzando desde paso:', currentIndex);
@@ -137,13 +136,13 @@ export function IncidenciasTutorial() {
         console.log('⬅️ [IncidenciasTutorial] Retrocediendo');
         driverInstance.movePrevious();
       },
-      
+
       onDestroyStarted: async () => {
         const finalStep = lastStepRef.current;
         const totalSteps = steps.length - 1;
-        
+
         console.log('🏁 [IncidenciasTutorial] Cerrando en paso:', finalStep, '/ Total:', totalSteps);
-        
+
         // Solo marcar como completado si llegó al final
         if (finalStep >= totalSteps) {
           console.log('✅ [IncidenciasTutorial] Tutorial completado');
@@ -151,7 +150,7 @@ export function IncidenciasTutorial() {
         } else {
           console.log('⚠️ [IncidenciasTutorial] Tutorial cerrado prematuramente');
         }
-        
+
         if (driverInstance) {
           driverInstance.destroy();
         }
@@ -159,7 +158,7 @@ export function IncidenciasTutorial() {
     });
 
     driverInstanceRef.current = driverInstance;
-    
+
     // Pequeño delay para asegurar renderizado
     setTimeout(() => {
       driverInstance.drive();
@@ -208,12 +207,12 @@ export function IncidenciasTutorial() {
       
       /* Visual feedback de elementos highlighted */
       .driver-active-element {
-        outline: 4px solid hsl(var(--primary)) !important;
         box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
       }
       
       .driver-popover {
-        border: 2px solid hsl(var(--primary)) !important;
+        border: none !important;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
@@ -260,7 +259,7 @@ export function IncidenciasTutorial() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);

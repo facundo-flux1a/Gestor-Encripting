@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
-import { TrimestresProvider } from '@/context/TrimestresProvider';
+import { TrimestresProvider, useTrimestres } from '@/context/TrimestresProvider';
 import { MainLayout } from '@/components/layout/main-layout';
 import { TrimestreSelector } from '@/components/trimestres/trimestre-selector';
 import { PageHeader } from '@/components/layout/page-header';
@@ -34,6 +34,7 @@ import type { Document, Trimestre } from '@/lib/types';
 
 function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
+  const { isTutorialActive, currentStep } = useTrimestres();
   const { toast } = useToast();
 
   const formatNumber = (num: number | string): string => {
@@ -404,11 +405,16 @@ function TrimestresPageContent() {
                       className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
                       data-tutorial="trimestres-close-button"
                       onClick={() => {
+                        if (isTutorialActive && currentStep === 6) {
+                          console.log('🛡️ Click bloqueado por el tutorial');
+                          return;
+                        }
                         console.log('🔴 Abriendo diálogo de cierre');
                         console.log('Trimestre:', trimestreAgregado);
                         setTrimestreToClose(trimestreAgregado);
                         setDialogOpen(true);
                       }}
+                      disabled={isTutorialActive && currentStep === 6}
                     >
                       <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                       <span className="hidden xs:inline">Cerrar Trimestre</span>

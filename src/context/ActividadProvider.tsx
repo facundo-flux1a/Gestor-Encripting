@@ -19,32 +19,27 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
-        
+
         console.log('📊 [ActividadProvider] Iniciando verificación de tutorial');
-        
-        // 1. Verificar localStorage primero (más rápido)
+
+        // 1. Logear valor de localStorage
         if (typeof window !== 'undefined') {
           const localCompleted = localStorage.getItem(STORAGE_KEY);
-          if (localCompleted === 'true') {
-            console.log('📊 [ActividadProvider] Tutorial ya completado (localStorage)');
-            setShouldShowTutorial(false);
-            setIsLoading(false);
-            return;
-          }
+          console.log('🔍 [ActividadProvider] Valor en localStorage:', localCompleted);
         }
-        
+
         // 2. Verificar con el servidor
         const response = await fetch('/api/user/tutorial-actividad');
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('📊 [ActividadProvider] Respuesta servidor:', data);
-          
+
           const showTutorial = data.tutorial === true;
           console.log('📊 [ActividadProvider] shouldShowTutorial:', showTutorial);
-          
+
           setShouldShowTutorial(showTutorial);
-          
+
           // Si ya está completado en servidor, guardar en localStorage
           if (!showTutorial && typeof window !== 'undefined') {
             localStorage.setItem(STORAGE_KEY, 'true');
@@ -62,29 +57,29 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
         console.log('📊 [ActividadProvider] Verificación completada');
       }
     }
-    
+
     checkTutorialStatus();
   }, []);
 
   const markAsCompleted = async () => {
     try {
       console.log('✅ [ActividadProvider] Marcando tutorial como completado');
-      
+
       // 1. Marcar en localStorage inmediatamente
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, 'true');
         console.log('💾 [ActividadProvider] Guardado en localStorage');
       }
-      
+
       // 2. Actualizar estado local
       setShouldShowTutorial(false);
-      
+
       // 3. Enviar al servidor
       const response = await fetch('/api/user/tutorial-actividad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       if (response.ok) {
         console.log('✅ [ActividadProvider] Tutorial completado en servidor');
       } else {
@@ -96,9 +91,9 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <ActividadContext.Provider 
-      value={{ 
-        shouldShowTutorial, 
+    <ActividadContext.Provider
+      value={{
+        shouldShowTutorial,
         isLoading,
         markAsCompleted
       }}

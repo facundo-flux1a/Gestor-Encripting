@@ -20,7 +20,7 @@ export function ActividadTutorial() {
     // Esperar a que la tabla esté renderizada
     const checkForTable = setInterval(() => {
       const tableElement = document.querySelector('[data-tutorial="actividad-table"]');
-      
+
       if (tableElement) {
         console.log('✅ [ActividadTutorial] Tabla encontrada, iniciando tutorial');
         clearInterval(checkForTable);
@@ -56,7 +56,7 @@ export function ActividadTutorial() {
       overlayOpacity: 0.75,
       overlayClickNext: false,
       disableActiveInteraction: true, // ⬅️ CRÍTICO: Deshabilitar interacción con elementos highlighted
-      
+
       steps: [
         // Paso 0: Bienvenida
         {
@@ -91,16 +91,16 @@ export function ActividadTutorial() {
         // Paso 3: Documentos ZIP (condicional)
         ...(hasZipRows
           ? [
-              {
-                element: '[data-tutorial="actividad-zip"]',
-                popover: {
-                  title: '📁 Archivos ZIP/RAR',
-                  description: 'Los archivos ZIP/RAR se muestran como carpetas. Hacé click en cualquier fila ZIP para expandir y ver los documentos contenidos.',
-                  side: 'right',
-                  align: 'start',
-                },
+            {
+              element: '[data-tutorial="actividad-zip"]',
+              popover: {
+                title: '📁 Archivos ZIP/RAR',
+                description: 'Los archivos ZIP/RAR se muestran como carpetas. Hacé click en cualquier fila ZIP para expandir y ver los documentos contenidos.',
+                side: 'right',
+                align: 'start',
               },
-            ]
+            },
+          ]
           : []),
         // Paso 4/5: Marcar todos como leídos
         {
@@ -137,7 +137,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-actions"]',
           popover: {
             title: '⚡ Acciones Disponibles',
-            description: 'Cada fila tiene acciones: ✅ Marcar leído, 🔄 Reintentar (si falló), 🗑️ Eliminar. También podés ver el origen (Dashboard/Correo) del documento.',
+            description: 'Cada fila tiene acciones: ✅ Marcar leído, 🔄 Reintentar (si falló), 🗑️ Eliminar (Ésta acción solo eliminará el registro de actividad, no el documento asociado). También podés ver el origen (Dashboard/Correo) del documento.',
             side: 'left',
             align: 'center',
           },
@@ -153,17 +153,17 @@ export function ActividadTutorial() {
           },
         },
       ],
-      
+
       nextBtnText: 'Siguiente →',
       prevBtnText: '← Anterior',
       doneBtnText: '¡Entendido!',
-      
+
       onHighlightStarted: (element, step, options) => {
         const currentStepIndex = options.state.activeIndex ?? 0;
         lastStepRef.current = currentStepIndex;
         console.log('🎯 [ActividadTutorial] Paso:', currentStepIndex, element);
       },
-      
+
       onNextClick: (element, step, options) => {
         const currentIndex = options.state.activeIndex;
         console.log('➡️ [ActividadTutorial] Avanzando desde paso:', currentIndex);
@@ -174,13 +174,13 @@ export function ActividadTutorial() {
         console.log('⬅️ [ActividadTutorial] Retrocediendo');
         driverInstance.movePrevious();
       },
-      
+
       onDestroyStarted: async () => {
         const finalStep = lastStepRef.current;
         const totalSteps = hasZipRows ? 8 : 7; // Ajustar según si hay ZIP
-        
+
         console.log('🏁 [ActividadTutorial] Cerrando en paso:', finalStep, '/ Total:', totalSteps);
-        
+
         // Solo marcar como completado si llegó al final
         if (finalStep >= totalSteps) {
           console.log('✅ [ActividadTutorial] Tutorial completado');
@@ -188,7 +188,7 @@ export function ActividadTutorial() {
         } else {
           console.log('⚠️ [ActividadTutorial] Tutorial cerrado prematuramente');
         }
-        
+
         if (driverInstance) {
           driverInstance.destroy();
         }
@@ -196,7 +196,7 @@ export function ActividadTutorial() {
     });
 
     driverInstanceRef.current = driverInstance;
-    
+
     // Pequeño delay para asegurar renderizado
     setTimeout(() => {
       driverInstance.drive();
@@ -297,7 +297,7 @@ export function ActividadTutorial() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);

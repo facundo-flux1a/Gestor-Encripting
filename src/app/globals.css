@@ -325,25 +325,6 @@ body {
   background: hsl(var(--accent));
 }
 
-.driver-active-element {
-  z-index: 9998 !important;
-}
-
-.driver-popover {
-  z-index: 9999 !important;
-}
-
-.driver-overlay {
-  background: hsl(var(--background) / 0.8);
-  backdrop-filter: blur(2px);
-}
-
-.driver-popover-progress-text {
-  font-size: 0.75rem;
-  color: hsl(var(--muted-foreground));
-  margin-bottom: 0.5rem;
-}
-
 /* ===================================
    Custom Table Scrollbar
    =================================== */

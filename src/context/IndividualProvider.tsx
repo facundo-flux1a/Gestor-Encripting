@@ -20,38 +20,31 @@ export function IndividualProvider({ children }: { children: ReactNode }) {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
-        
+
         console.log('📊 [IndividualProvider] Iniciando verificación de tutorial');
-        
-        // Fast path: Check localStorage first
+
+        // Check localStorage for logging only
         if (typeof window !== 'undefined') {
           const localCompleted = localStorage.getItem(STORAGE_KEY);
-          console.log('🔍 [IndividualProvider] localStorage value:', localCompleted);
-          
-          if (localCompleted === 'true') {
-            console.log('📊 [IndividualProvider] Tutorial ya completado (localStorage)');
-            setShouldShowTutorial(false);
-            setIsLoading(false);
-            return;
-          }
+          console.log('🔍 [IndividualProvider] Valor en localStorage:', localCompleted);
         }
-        
+
         // Fallback: Check server
         console.log('🌐 [IndividualProvider] Consultando servidor...');
         const response = await fetch('/api/user/tutorial-individual');
-        
+
         console.log('📡 [IndividualProvider] Response status:', response.status);
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('📊 [IndividualProvider] Respuesta servidor:', data);
           console.log('📊 [IndividualProvider] data.tutorial:', data.tutorial);
-          
+
           const showTutorial = data.tutorial === true;
           console.log('📊 [IndividualProvider] shouldShowTutorial:', showTutorial);
-          
+
           setShouldShowTutorial(showTutorial);
-          
+
           // Cache in localStorage if already completed
           if (!showTutorial && typeof window !== 'undefined') {
             localStorage.setItem(STORAGE_KEY, 'true');
@@ -69,24 +62,24 @@ export function IndividualProvider({ children }: { children: ReactNode }) {
         console.log('📊 [IndividualProvider] Verificación completada');
       }
     }
-    
+
     checkTutorialStatus();
   }, []);
 
   const markAsCompleted = async () => {
     try {
       console.log('✅ [IndividualProvider] Marcando tutorial como completado');
-      
+
       // Update localStorage immediately
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, 'true');
       }
-      
+
       // Update server
       await fetch('/api/user/tutorial-individual', {
         method: 'POST',
       });
-      
+
       setShouldShowTutorial(false);
       console.log('✅ [IndividualProvider] Tutorial marcado como completado');
     } catch (error) {

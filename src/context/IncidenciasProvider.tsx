@@ -20,38 +20,31 @@ export function IncidenciasProvider({ children }: { children: ReactNode }) {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
-        
+
         console.log('📊 [IncidenciasProvider] Iniciando verificación de tutorial');
-        
-        // Fast path: Check localStorage first
+
+        // Logear valor de localStorage
         if (typeof window !== 'undefined') {
           const localCompleted = localStorage.getItem(STORAGE_KEY);
-          console.log('🔍 [IncidenciasProvider] localStorage value:', localCompleted);
-          
-          if (localCompleted === 'true') {
-            console.log('📊 [IncidenciasProvider] Tutorial ya completado (localStorage)');
-            setShouldShowTutorial(false);
-            setIsLoading(false);
-            return;
-          }
+          console.log('🔍 [IncidenciasProvider] Valor en localStorage:', localCompleted);
         }
-        
+
         // Fallback: Check server
         console.log('🌐 [IncidenciasProvider] Consultando servidor...');
         const response = await fetch('/api/user/tutorial-incidencias');
-        
+
         console.log('📡 [IncidenciasProvider] Response status:', response.status);
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('📊 [IncidenciasProvider] Respuesta servidor:', data);
           console.log('📊 [IncidenciasProvider] data.tutorial:', data.tutorial);
-          
+
           const showTutorial = data.tutorial === true;
           console.log('📊 [IncidenciasProvider] shouldShowTutorial:', showTutorial);
-          
+
           setShouldShowTutorial(showTutorial);
-          
+
           // Cache in localStorage if already completed
           if (!showTutorial && typeof window !== 'undefined') {
             localStorage.setItem(STORAGE_KEY, 'true');
@@ -69,24 +62,24 @@ export function IncidenciasProvider({ children }: { children: ReactNode }) {
         console.log('📊 [IncidenciasProvider] Verificación completada');
       }
     }
-    
+
     checkTutorialStatus();
   }, []);
 
   const markAsCompleted = async () => {
     try {
       console.log('✅ [IncidenciasProvider] Marcando tutorial como completado');
-      
+
       // Update localStorage immediately
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, 'true');
       }
-      
+
       // Update server
       await fetch('/api/user/tutorial-incidencias', {
         method: 'POST',
       });
-      
+
       setShouldShowTutorial(false);
       console.log('✅ [IncidenciasProvider] Tutorial marcado como completado');
     } catch (error) {

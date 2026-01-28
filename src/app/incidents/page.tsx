@@ -92,11 +92,13 @@ function IncidentsPageContent() {
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                <PageHeader
-                    title="Gestión de Incidencias"
-                    icon={AlertTriangle}
-                    description="Analiza, revisa y valida las incidencias de tus documentos"
-                />
+                <div data-tutorial="incidencias-header">
+                    <PageHeader
+                        title="Gestión de Incidencias"
+                        icon={AlertTriangle}
+                        description="Analiza, revisa y valida las incidencias de tus documentos"
+                    />
+                </div>
 
                 <div className="space-y-4 sm:space-y-6">
                     {/* Analytics y Card de Análisis - Grid Responsive con animaciones */}

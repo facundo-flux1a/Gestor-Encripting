@@ -90,11 +90,18 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
   // ✅ AGREGADO: Verificar si el usuario sigue activo en la BD
   try {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT activo FROM usuarios WHERE id = ?',
+      'SELECT activo, email FROM usuarios WHERE id = ?',
       [session.userId]
     );
 
-    if (!rows[0] || rows[0].activo === 0) {
+    // Robust check for BIT or TINYINT fields
+    const isActive = rows[0] && (
+      Buffer.isBuffer(rows[0].activo)
+        ? rows[0].activo[0] === 1
+        : Number(rows[0].activo) === 1
+    );
+
+    if (!isActive) {
       console.warn('⚠️ [getSession] Usuario inactivo, eliminando sesión:', session.userId);
       const cookieStore = await cookies();
       cookieStore.delete(SESSION_COOKIE_NAME);
@@ -279,7 +286,10 @@ export async function login(formData: FormData) {
       user.tutorial_proveedores || 0
     );
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
     console.error('❌ [login] Error:', error);
     return redirect('/auth/login?error=server_error');
   }
@@ -317,7 +327,10 @@ export async function register(formData: FormData) {
 
     await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
     console.error('Registration error:', error);
     return redirect('/auth/register?error=server_error');
   }

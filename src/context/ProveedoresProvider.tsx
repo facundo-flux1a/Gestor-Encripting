@@ -21,20 +21,14 @@ export function ProveedoresProvider({ children }: { children: React.ReactNode })
 
     const checkTutorial = async () => {
       try {
-        // 🚀 Fast path: chequear localStorage primero
+        // Logear valor de localStorage
         const localCompleted = localStorage.getItem('proveedores_tutorial_completed');
-        
-        if (localCompleted === 'true') {
-          console.log('✅ [ProveedoresProvider] Tutorial ya completado (localStorage)');
-          setShouldShowTutorial(false);
-          setIsLoading(false);
-          return;
-        }
+        console.log('🔍 [ProveedoresProvider] Valor en localStorage:', localCompleted);
 
         // 📡 Si no está en localStorage, consultar servidor
         console.log('🔍 [ProveedoresProvider] Consultando estado del tutorial...');
         const response = await fetch('/api/user/tutorial-proveedores');
-        
+
         if (!response.ok) {
           throw new Error('Error al obtener estado del tutorial');
         }
@@ -43,7 +37,7 @@ export function ProveedoresProvider({ children }: { children: React.ReactNode })
         console.log('📊 [ProveedoresProvider] Estado recibido:', data);
 
         setShouldShowTutorial(data.shouldShow);
-        
+
         // Si ya está completado en servidor, guardarlo en localStorage
         if (!data.shouldShow) {
           localStorage.setItem('proveedores_tutorial_completed', 'true');
@@ -63,7 +57,7 @@ export function ProveedoresProvider({ children }: { children: React.ReactNode })
   const markAsCompleted = async () => {
     try {
       console.log('✅ [ProveedoresProvider] Marcando tutorial como completado...');
-      
+
       // Guardar en localStorage primero (optimistic update)
       localStorage.setItem('proveedores_tutorial_completed', 'true');
       setShouldShowTutorial(false);

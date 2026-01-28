@@ -4,17 +4,25 @@ import { useEffect, useState, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { useTutorial } from '@/context/tutorial-context';
 
 export function DocumentosTutorial() {
-  const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
+  const {
+    setIsTutorialActive,
+    setCurrentStep
+  } = useTutorial();
+
+  const [localShouldShow, setLocalShouldShow] = useState(false);
   const [driverInstance, setDriverInstance] = useState<any>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [documentUploaded, setDocumentUploaded] = useState(() => {
-    // 🔥 Inicializar desde localStorage para persistir entre re-renders
     if (typeof window !== 'undefined') {
       return localStorage.getItem('tutorial_document_uploaded') === 'true';
     }
     return false;
   });
+
   const hasInitialized = useRef(false);
   const lastStepRef = useRef(0);
   const { selectedCompanyIds } = useCompanyContext();
@@ -30,11 +38,9 @@ export function DocumentosTutorial() {
         const response = await fetch('/api/user/tutorial-documentos');
         if (response.ok) {
           const data = await response.json();
-          setShouldShowTutorial(data.tutorial);
-
-          // 🔥 Si el tutorial debe mostrarse, limpiar el flag de documento subido
           if (data.tutorial) {
-            console.log('🧹 Limpiando flag de documento subido (tutorial nuevo)');
+            setLocalShouldShow(true);
+            setIsTutorialActive(true);
             localStorage.removeItem('tutorial_document_uploaded');
             setDocumentUploaded(false);
           }
@@ -43,49 +49,77 @@ export function DocumentosTutorial() {
         console.error('Error checking tutorial:', error);
       }
     };
-
     checkTutorial();
-  }, []);
+  }, [setIsTutorialActive]);
 
-  // Listener para detectar cuando se sube un documento
   useEffect(() => {
     const handleDocumentUpload = () => {
-      console.log('✅ Documento subido detectado');
+      console.log('🎯 [Tutorial Debug] Documento subido detectado');
       setDocumentUploaded(true);
-      // 🔥 Persistir en localStorage
       localStorage.setItem('tutorial_document_uploaded', 'true');
-      console.log('💾 Flag guardado en localStorage');
     };
-
     window.addEventListener('documentUploaded', handleDocumentUpload);
-
-    return () => {
-      window.removeEventListener('documentUploaded', handleDocumentUpload);
-    };
+    return () => window.removeEventListener('documentUploaded', handleDocumentUpload);
   }, []);
 
-  // 🔍 Debug: Log del estado
+  // 🔥 DETECCIÓN NULCEAR DE MODALES 🔥
   useEffect(() => {
-    console.log('🔍 [Tutorial] documentUploaded:', documentUploaded);
-  }, [documentUploaded]);
+    const checkModal = () => {
+      // 1. Buscar TODOS los diálogos
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      // 2. Buscar TODOS los portales de Radix
+      const portals = document.querySelectorAll('[data-radix-portal]');
+
+      // Filtrar para encontrar "diálogos reales" que NO sean el tutorial
+      const realModals = Array.from(dialogs).filter(el =>
+        !el.classList.contains('driver-popover') &&
+        !el.closest('.driver-popover')
+      );
+
+      const hasRealModal = realModals.length > 0 || portals.length > 0;
+
+      if (hasRealModal !== isModalOpen) {
+        console.log(hasRealModal ? '🚀 [Tutorial Debug] MODAL ENCONTRADO' : '✅ [Tutorial Debug] MODAL CERRADO');
+        setIsModalOpen(hasRealModal);
+
+        if (hasRealModal) {
+          document.body.classList.add('tutorial-modal-open');
+          if (driverInstance) {
+            console.log('🧹 [Tutorial Debug] Destruyendo instancia');
+            driverInstance.destroy();
+            setDriverInstance(null);
+          }
+
+          // Limpieza manual de emergencia
+          const overlays = document.querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element, .driver-stage, .driver-highlight-overlay');
+          overlays.forEach(el => (el as HTMLElement).style.display = 'none');
+          document.body.style.pointerEvents = 'auto';
+          document.body.style.overflow = 'auto'; // Asegurar scroll si Radix lo bloquea mal
+        } else {
+          document.body.classList.remove('tutorial-modal-open');
+        }
+      }
+    };
+
+    const interval = setInterval(checkModal, 150);
+    return () => clearInterval(interval);
+  }, [isModalOpen, driverInstance]);
 
   const showErrorMessage = (message: string) => {
-    const popoverDescription = document.querySelector('.driver-popover-description');
-    if (popoverDescription) {
-      const existingError = popoverDescription.querySelector('.tutorial-error-msg');
-      if (existingError) existingError.remove();
-
+    const popper = document.querySelector('.driver-popover-description');
+    if (popper) {
+      const existing = popper.querySelector('.tutorial-error-msg');
+      if (existing) existing.remove();
       const errorMsg = document.createElement('p');
       errorMsg.className = 'tutorial-error-msg text-red-500 text-sm mt-3 font-semibold';
       errorMsg.textContent = message;
-      popoverDescription.appendChild(errorMsg);
-
+      popper.appendChild(errorMsg);
       setTimeout(() => errorMsg.remove(), 4000);
     }
   };
 
   useEffect(() => {
-    if (!shouldShowTutorial || hasInitialized.current) return;
+    if (!localShouldShow || isModalOpen) return;
 
     const timer = setTimeout(() => {
       const driverObj = driver({
@@ -93,7 +127,8 @@ export function DocumentosTutorial() {
         showButtons: ['next', 'previous'],
         allowClose: false,
         animate: true,
-        overlayOpacity: 0.75,
+        overlayOpacity: 0.8,
+        overlayColor: '#000000',
         disableActiveInteraction: false,
 
         steps: [
@@ -101,56 +136,48 @@ export function DocumentosTutorial() {
             element: 'body',
             popover: {
               title: '📄 ¡Bienvenido a Documentos!',
-              description: 'Te guiaremos por las funciones principales de esta sección donde podrás gestionar todas tus facturas, abonos y documentos fiscales.',
-              side: 'bottom',
-              align: 'center'
+              description: 'Te guiaremos por las funciones principales de esta sección.',
+              side: 'bottom', align: 'center'
             }
           },
-          // ✅ PASO 1: Selector de empresas
           {
             element: '[data-tutorial="company-selector"]',
             popover: {
               title: '🏢 Paso 1: Selecciona una empresa',
-              description: 'Primero debes seleccionar al menos una empresa. Hacé clic en los checkboxes para elegir tus empresas. ¡Selecciona una y dale a "siguiente" !',
-              side: 'right',
-              align: 'start'
+              description: 'Selecciona al menos una empresa para continuar. Si ya tienes facturas registradas verás un resumen organizado por tipos.',
+              side: 'right', align: 'start'
             }
           },
-          // ✅ PASO 2: Subir documento
           {
             element: '[data-tutorial="upload-button"]',
             popover: {
               title: '📤 Paso 2: Sube un documento',
-              description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. Soportamos PDF, ZIP Y RAR. Si ya tienes un documento subido, solo dale a "siguiente".',
-              side: 'bottom',
-              align: 'center'
+              description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. Soportamos PDF, ZIP Y RAR. Si ya tienes un documento subido solo dale a "siguiente".',
+              side: 'bottom', align: 'center'
             }
           },
           {
             element: '[data-tutorial="tabs-filters"]',
             popover: {
-              title: '🔍 Filtros de documentos',
-              description: 'Usa estas pestañas para organizar tus documentos: "Sin Confirmar" muestra documentos que el agente no ha podido validar, pendientes de verificación. "Facturas" las facturas validadas, "Abonos" los abonos confirmados, y "Otros" el resto de documentos.',
-              side: 'bottom',
-              align: 'center'
+              title: '🔍 Filtros y Categorías',
+              description: 'Organiza tus documentos. Puedes filtrar por facturas emitidas, recibidas o abonos para una gestión más sencilla.',
+              side: 'bottom', align: 'center'
             }
           },
           {
             element: '[data-tutorial="export-pdf"]',
             popover: {
-              title: '📑 Exportar a PDF',
-              description: 'Exporta tu listado de documentos a PDF para generar reportes o compartir información con tu contable.',
-              side: 'bottom',
-              align: 'center'
+              title: '📑 Exportar información',
+              description: '¿Necesitas un reporte? Puedes exportar la información de tus documentos filtrados directamente a PDF.',
+              side: 'bottom', align: 'center'
             }
           },
           {
             element: '[data-tutorial="documents-table"]',
             popover: {
               title: '📋 Tabla de documentos',
-              description: 'Aquí verás todos tus documentos organizados. Puedes ordenarlos, buscar y hacer clic en cualquier documento para ver sus detalles completos. ¡También puedes exportar la tabla en Excel, CSV y texto plano,  y elegir que columnas mostrar!',
-              side: 'top',
-              align: 'center'
+              description: 'Aquí verás todos tus documentos organizados. Puedes ordenarlos, buscar y hacer clic en cualquier documento para ver sus detalles completos. ¡También puedes exportar la tabla en Excel, CSV y texto plano, y elegir que columnas mostrar!',
+              side: 'top', align: 'center'
             }
           },
           {
@@ -158,8 +185,7 @@ export function DocumentosTutorial() {
             popover: {
               title: '✨ ¡Listo para empezar!',
               description: 'Ya conoces cómo gestionar tus documentos, facturas y abonos.',
-              side: 'bottom',
-              align: 'center'
+              side: 'bottom', align: 'center'
             }
           }
         ],
@@ -169,238 +195,153 @@ export function DocumentosTutorial() {
         doneBtnText: '¡Entendido!',
 
         onHighlightStarted: (element, step, options) => {
-          const currentStepIndex = options.state.activeIndex ?? 0;
-          lastStepRef.current = currentStepIndex;
+          const idx = options.state.activeIndex ?? 0;
+          lastStepRef.current = idx;
+          setCurrentStep(idx);
 
-          // ✅ Gestionar clases de paso en el body para control CSS preciso
           document.body.classList.forEach(cls => {
-            if (cls.startsWith('tutorial-step-')) {
-              document.body.classList.remove(cls);
-            }
+            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
           });
-          document.body.classList.add(`tutorial-step-${currentStepIndex}`);
-
-
-          // ✅ PASO 2 (índice 2): Subir documento
-          if (currentStepIndex === 2) {
-            console.log('📤 PASO 2: Verificando documentos existentes...');
-
-            // 🔥 VERIFICAR SI YA HAY DOCUMENTOS EN LA TABLA
-            const tableBody = document.querySelector('[data-tutorial-step="documents-table"] tbody');
-            // Ajustar selector para coincidir con CSS si es necesario, pero por ahora mantenemos lógica simple de check
-          }
+          document.body.classList.add(`tutorial-step-${idx}`);
         },
 
         onNextClick: (element, step, options) => {
-          const currentIndex = options.state.activeIndex;
+          const idx = options.state.activeIndex;
+          if (idx === 1) {
+            if (selectedIdsRef.current.length > 0) setTimeout(() => driverObj.moveNext(), 100);
+            else showErrorMessage('⚠️ Por favor, selecciona al menos una empresa antes de continuar.');
+          } else if (idx === 2) {
+            // 🔍 VALIDACIÓN ROBUSTA DE DOCUMENTOS (Sin falsos positivos)
+            const documentContainer = document.querySelector('[data-tutorial="documents-table"]');
 
-          console.log('🎯 [onNextClick] currentIndex:', currentIndex);
+            // 1. ¿Hay filas reales en la tabla?
+            const hasTableRows = !!documentContainer?.querySelector('tbody tr:not(.no-docs)');
 
-          // PASO 1: Verificar empresa seleccionada
-          if (currentIndex === 1) {
-            const hasSelectedCompanies = selectedIdsRef.current.length > 0;
+            // 2. ¿Hay carpetas de la vista agrupada ('Otros')?
+            const hasFolders = !!documentContainer?.querySelector('.space-y-3.sm\\:space-y-4 button span.font-semibold');
 
-            console.log('🏢 [PASO 1] Verificando empresa:', { hasSelectedCompanies, selectedIds: selectedIdsRef.current });
+            // 3. Búsqueda de texto específica dentro del contenedor (evitando tabs/headers)
+            const containerText = documentContainer?.textContent || '';
+            const hasSpecificDoc = containerText.includes('DECLARACIÓN IRPF') ||
+              containerText.includes('Nómina') ||
+              (containerText.includes('Factura') && !containerText.includes('No hay facturas'));
 
-            if (hasSelectedCompanies) {
-              console.log('✅ Empresa seleccionada, avanzando al paso 2');
-              setTimeout(() => {
-                driverObj.moveNext();
-              }, 100);
-            } else {
-              console.log('❌ NO hay empresa seleccionada');
-              showErrorMessage('⚠️ Por favor, selecciona al menos una empresa antes de continuar.');
-            }
-          }
-          // PASO 2: Verificar documento subido
-          else if (currentIndex === 2) {
-            // 🔥 VALIDACIÓN ESTRICTA: Verificar si hay documentos REALES en la tabla
-            const tableBody = document.querySelector('[data-tutorial="documents-table"] tbody');
-            const documentRows = tableBody ? Array.from(tableBody.querySelectorAll('tr')).filter(row => {
-              // Filtrar filas que NO sean "No hay documentos" o loading
-              const hasEmptyMessage = row.textContent?.includes('No hay') || row.textContent?.includes('Cargando');
-              return !hasEmptyMessage;
-            }) : [];
-            const hasVisibleDocuments = documentRows.length > 0;
-
-            console.log('📤 [PASO 2] Verificando documento:', {
-              documentUploaded,
-              tableBody: !!tableBody,
-              totalRows: tableBody?.querySelectorAll('tr').length || 0,
-              documentRowsCount: documentRows.length,
-              hasVisibleDocuments,
-              localStorageValue: localStorage.getItem('tutorial_document_uploaded')
-            });
-
-            // Permitir avanzar si hay documentos en la tabla O si se detectó una subida reciente
-            if (hasVisibleDocuments || documentUploaded || localStorage.getItem('tutorial_document_uploaded') === 'true') {
-              console.log('✅ Documento subido (detectado en tabla o flag)');
-              // Guardar en localStorage para futuras sesiones
+            if (hasTableRows || hasFolders || hasSpecificDoc || documentUploaded || localStorage.getItem('tutorial_document_uploaded') === 'true') {
+              console.log('✅ [TUTORIAL] Paso 2 superado:', { hasTableRows, hasFolders, hasSpecificDoc, documentUploaded, ls: localStorage.getItem('tutorial_document_uploaded') });
               localStorage.setItem('tutorial_document_uploaded', 'true');
               driverObj.moveNext();
             } else {
-              console.log('❌ NO se ha subido documento');
+              console.warn('❌ [TUTORIAL] Paso 2 bloqueado: No se detectan documentos.', {
+                hasTableRows, hasFolders, hasSpecificDoc, documentUploaded,
+                containerTextSample: containerText.substring(0, 50)
+              });
               showErrorMessage('⚠️ Por favor, sube al menos un documento antes de continuar.');
             }
-          }
-          // Resto de pasos: avanzar normalmente
-          else if (currentIndex >= 3) {
-            const hasSelectedCompanies = selectedIdsRef.current.length > 0;
-
-            console.log('➡️ [PASO', currentIndex, '] Verificando empresa:', { hasSelectedCompanies });
-
-            if (hasSelectedCompanies) {
-              driverObj.moveNext();
-            } else {
-              showErrorMessage('⚠️ Necesitas tener una empresa seleccionada.');
-            }
           } else {
-            console.log('➡️ [PASO', currentIndex, '] Avanzando sin validación');
             driverObj.moveNext();
           }
         },
 
-        onPrevClick: () => {
-          driverObj.movePrevious();
-        },
-
         onDestroyStarted: async () => {
-          const finalStep = lastStepRef.current;
-          document.body.removeAttribute('data-tutorial-step');
-
-          if (finalStep >= 6) {
+          document.body.classList.forEach(cls => {
+            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+          });
+          if (lastStepRef.current >= 6) {
             try {
-              const response = await fetch('/api/user/tutorial-documentos', {
-                method: 'POST',
-              });
-
-              if (response.ok) {
-                setShouldShowTutorial(false);
-                // 🔥 Limpiar el flag de documento subido
+              const res = await fetch('/api/user/tutorial-documentos', { method: 'POST' });
+              if (res.ok) {
+                setLocalShouldShow(false);
+                setIsTutorialActive(false);
                 localStorage.removeItem('tutorial_document_uploaded');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 500);
+                setTimeout(() => window.location.reload(), 500);
               }
-            } catch (error) {
-              console.error('Error al marcar tutorial:', error);
+            } catch (e) {
+              console.error(e);
             }
-          }
-
-          if (driverInstance) {
-            driverInstance.destroy();
           }
         },
       });
 
       setDriverInstance(driverObj);
-      hasInitialized.current = true;
+      driverObj.drive(lastStepRef.current);
 
-      driverObj.drive();
+      return () => {
+        clearTimeout(timer);
+        if (driverInstance) driverInstance.destroy();
+      };
+    }, 400);
+  }, [localShouldShow, isModalOpen, setIsTutorialActive]);
 
-    }, 500);
-
-    return () => {
-      clearTimeout(timer);
-      if (driverInstance) {
-        driverInstance.destroy();
-      }
-    };
-  }, [shouldShowTutorial, selectedCompanyIds, documentUploaded]);
-
-  // Estilos personalizados
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
-      .driver-popover,
-      .driver-popover * {
-        pointer-events: auto !important;
-        z-index: 2147483647 !important;
-      }
-      
-      .driver-overlay {
-        background-color: rgba(0, 0, 0, 0.75) !important;
-        opacity: 0.75 !important;
-        pointer-events: none !important;
-      }
+       .driver-popover { z-index: 10000 !important; }
+        .driver-overlay { 
+           z-index: 9997 !important; 
+           pointer-events: none !important; 
+        }
 
-      /* 🔥 PASO 1: SELECTOR DE EMPRESAS */
-      body.tutorial-step-1 [data-tutorial="company-selector"],
-      body.tutorial-step-1 [data-tutorial="company-selector"] * {
-         z-index: 100002 !important;
-         position: relative !important;
+        .driver-active-element { 
+          z-index: 9999 !important; 
+          position: relative !important;
+          border: none !important;
+          border-radius: 8px !important;
+          box-shadow: none !important;
+          /* Fondo restaurado a natural (removido transparent !important) */
+          opacity: 1 !important;
+          transition: all 0.3s ease !important;
+          outline: none !important;
+        }
+
+       body.tutorial-modal-open .driver-overlay,
+       body.tutorial-modal-open .driver-popover,
+       body.tutorial-modal-open .driver-active-element,
+       body.tutorial-modal-open .driver-stage,
+       body.tutorial-modal-open .driver-highlight-overlay {
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          visibility: hidden !important;
+       }
+ 
+       /* Limpieza del stage de recorte */
+       .driver-stage {
+          background-color: transparent !important;
+          border-radius: 8px !important;
+          box-shadow: none !important;
+          z-index: 9998 !important; /* Justo debajo del elemento activo */
+       }
+
+      /* 🔥 NIVEL DIVINO PARA EL MODAL 🔥 */
+      [role="dialog"], [data-radix-portal], [data-radix-portal] > *, .fixed.inset-0.z-[100] {
+         z-index: 2147483647 !important;
          pointer-events: auto !important;
          opacity: 1 !important;
       }
-      
-      [data-radix-popper-content-wrapper],
-      [role="dialog"] {
-        z-index: 2147483646 !important;
+
+      body[class*="tutorial-step-"] * {
+         backdrop-filter: none !important;
+         -webkit-backdrop-filter: none !important;
       }
 
-      /* 🔥 PASO 2: SUBIR DOCUMENTO (Botón y Modal) */
-      body.tutorial-step-2 [data-tutorial="upload-button"],
-      body.tutorial-step-2 [data-tutorial="upload-button"] * {
-         z-index: 100002 !important;
-         position: relative !important;
+      body.tutorial-step-1 [data-sidebar="container"] { pointer-events: none !important; }
+      body.tutorial-step-1 [data-tutorial="company-selector"] [role="checkbox"],
+      body.tutorial-step-1 [data-tutorial="company-selector"] label {
          pointer-events: auto !important;
       }
-      
-      body.tutorial-step-2 [role="dialog"],
-      body.tutorial-step-2 [role="dialog"] *,
-      body.tutorial-step-2 [data-state="open"],
-      body.tutorial-step-2 [data-state="open"] * {
-         z-index: 2147483646 !important;
+
+      body.tutorial-step-2 [data-sidebar="container"] { pointer-events: none !important; }
+      body.tutorial-step-2 [data-tutorial="upload-button"] {
          pointer-events: auto !important;
-         opacity: 1 !important;
-         visibility: visible !important;
-      }
-      
-      body.tutorial-step-2 [data-radix-dialog-overlay] {
-         z-index: 2147483645 !important;
+         z-index: 100 !important;
       }
 
-      /* 🔥 PASO 3: TABS FILTERS */
-      body.tutorial-step-3 [data-tutorial="tabs-filters"],
-      body.tutorial-step-3 [data-tutorial="tabs-filters"] * {
-         z-index: 100002 !important;
-         position: relative !important;
-         background: transparent !important;
-      }
-
-      /* 🔥 PASO 4: EXPORT PDF */
-      body.tutorial-step-4 [data-tutorial="export-pdf"],
-      body.tutorial-step-4 [data-tutorial="export-pdf"] * {
-         z-index: 100002 !important;
-         position: relative !important;
-      }
-
-      /* 🔥 PASO 5: TABLE */
-      body.tutorial-step-5 [data-tutorial="documents-table"] {
-         z-index: 100002 !important;
-         position: relative !important;
-         background: inherit !important; 
-      }
-      body.tutorial-step-5 [data-tutorial="documents-table"] * {
-         z-index: 100002 !important;
-         position: relative !important;
-      }
-
-      .driver-active-element {
-        outline: 2px solid #7c3aed !important;
-        outline-offset: 4px;
-      }
-      
       .driver-popover-title { color: hsl(var(--primary)) !important; font-weight: 600; }
       .driver-popover-next-btn { background-color: hsl(var(--primary)) !important; color: white !important; }
-      .driver-popover-prev-btn { color: hsl(var(--primary)) !important; border: 1px solid hsl(var(--primary)) !important; }
     `;
     document.head.appendChild(style);
-
     return () => {
-      if (document.head.contains(style)) {
-        document.head.removeChild(style);
-      }
+      if (document.head.contains(style)) document.head.removeChild(style);
     };
   }, []);
 

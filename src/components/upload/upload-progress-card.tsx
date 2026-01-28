@@ -51,13 +51,14 @@ const AUTO_CLOSE_DELAY = 5000; // 5 segundos
 
 function saveToStorage(uploads: Map<string, UploadItem>, userId: number | null) {
   if (!userId) return;
-  
+
   try {
     const serialized = Array.from(uploads.entries());
     const data: StorageData = {
       userId,
       uploads: serialized
     };
+    if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     console.log('💾 [Storage] Guardados', serialized.length, 'uploads para userId:', userId);
   } catch (error) {
@@ -67,13 +68,14 @@ function saveToStorage(uploads: Map<string, UploadItem>, userId: number | null) 
 
 function loadFromStorage(userId: number | null): Map<string, UploadItem> {
   if (!userId) return new Map();
-  
+
   try {
+    if (typeof window === 'undefined') return new Map();
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return new Map();
 
     const data: StorageData = JSON.parse(stored);
-    
+
     if (data.userId !== userId) {
       console.log('🧹 [Storage] userId diferente, limpiando storage anterior');
       localStorage.removeItem(STORAGE_KEY);
@@ -95,10 +97,10 @@ function cleanOldUploads(uploads: Map<string, UploadItem>): Map<string, UploadIt
 
   for (const [uploadId, upload] of uploads.entries()) {
     const normalizedStatus = upload.progressData.status?.toLowerCase() || '';
-    const isFinished = 
-      normalizedStatus === 'completado' || 
+    const isFinished =
+      normalizedStatus === 'completado' ||
       upload.progressData.status === 'completed' ||
-      normalizedStatus === 'fallido' || 
+      normalizedStatus === 'fallido' ||
       upload.progressData.status === 'failed';
 
     const age = now - upload.timestamp;
@@ -116,6 +118,7 @@ function cleanOldUploads(uploads: Map<string, UploadItem>): Map<string, UploadIt
 
 export function clearUploadStorage() {
   try {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEY);
     console.log('🧹 [Storage] Storage limpiado al cerrar sesión');
   } catch (error) {
@@ -147,14 +150,14 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
 
     if (prevUserId !== null && prevUserId !== userId) {
       console.log('🧹 [Manager] Usuario cambió o cerró sesión, limpiando estado:', { prevUserId, newUserId: userId });
-      
+
       pollIntervalsRef.current.forEach(interval => clearInterval(interval));
       pollIntervalsRef.current.clear();
-      
+
       // 🔥 Limpiar timers de auto-close
       autoCloseTimersRef.current.forEach(timer => clearTimeout(timer));
       autoCloseTimersRef.current.clear();
-      
+
       setUploads(new Map());
       hasLoadedRef.current = false;
     }
@@ -166,7 +169,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
     if (userId && !hasLoadedRef.current) {
       console.log('🚀 [Manager] Cargando uploads para userId:', userId);
       hasLoadedRef.current = true;
-      
+
       const storedUploads = loadFromStorage(userId);
       const cleanedUploads = cleanOldUploads(storedUploads);
 
@@ -180,7 +183,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
   useEffect(() => {
     if (uploads.size > 0 && userId) {
       saveToStorage(uploads, userId);
-    } else if (uploads.size === 0 && userId) {
+    } else if (uploads.size === 0 && userId && typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY);
     }
   }, [uploads, userId]);
@@ -304,10 +307,10 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                   current.progressData = data;
 
                   const normalizedStatus = data.status.toLowerCase();
-                  const isFinished = normalizedStatus === 'completado' || 
-                                    data.status === 'completed' || 
-                                    normalizedStatus === 'fallido' || 
-                                    data.status === 'failed';
+                  const isFinished = normalizedStatus === 'completado' ||
+                    data.status === 'completed' ||
+                    normalizedStatus === 'fallido' ||
+                    data.status === 'failed';
 
                   if (isFinished) {
                     console.log('🛑 [Manager] Deteniendo polling por estado final:', upload.uploadId);
@@ -321,7 +324,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
 
                     // 🔥 INICIAR TIMER DE AUTO-CLOSE (5 segundos)
                     if (!autoCloseTimersRef.current.has(upload.uploadId)) {
-                      console.log(`⏲️ [Manager] Auto-close programado en ${AUTO_CLOSE_DELAY/1000}s para:`, upload.uploadId);
+                      console.log(`⏲️ [Manager] Auto-close programado en ${AUTO_CLOSE_DELAY / 1000}s para:`, upload.uploadId);
                       const timer = setTimeout(() => {
                         console.log('🔄 [Manager] Auto-close ejecutado para:', upload.uploadId);
                         removeUpload(upload.uploadId);
@@ -343,7 +346,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
 
             if (consecutiveErrors >= maxErrors) {
               console.error('❌ [Manager] Demasiados errores consecutivos, deteniendo polling');
-              
+
               setUploads(prev => {
                 const newUploads = new Map(prev);
                 const current = newUploads.get(upload.uploadId);
@@ -370,7 +373,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
 
               // 🔥 AUTO-CLOSE también para errores de conexión
               if (!autoCloseTimersRef.current.has(upload.uploadId)) {
-                console.log(`⏲️ [Manager] Auto-close programado (error) en ${AUTO_CLOSE_DELAY/1000}s para:`, upload.uploadId);
+                console.log(`⏲️ [Manager] Auto-close programado (error) en ${AUTO_CLOSE_DELAY / 1000}s para:`, upload.uploadId);
                 const timer = setTimeout(() => {
                   console.log('🔄 [Manager] Auto-close ejecutado (error) para:', upload.uploadId);
                   removeUpload(upload.uploadId);
@@ -405,13 +408,13 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
   );
 }
 
-function UploadCard({ 
-  upload, 
-  onClose, 
+function UploadCard({
+  upload,
+  onClose,
   onToggleMinimize,
   onToggleExpand
-}: { 
-  upload: UploadItem; 
+}: {
+  upload: UploadItem;
   onClose: () => void;
   onToggleMinimize: () => void;
   onToggleExpand: () => void;
@@ -496,8 +499,8 @@ function UploadCard({
       {!upload.isMinimized && (
         <CardContent className="space-y-3">
           <div className="space-y-1">
-            <Progress 
-              value={upload.progressData.progress} 
+            <Progress
+              value={upload.progressData.progress}
               className="h-2"
               indicatorClassName={getStatusColor(upload.progressData.status)}
             />
@@ -543,8 +546,8 @@ function UploadCard({
                               {child.fileName}
                             </p>
                             <div className="flex items-center gap-2">
-                              <Progress 
-                                value={child.progress} 
+                              <Progress
+                                value={child.progress}
                                 className="h-1 flex-1"
                                 indicatorClassName={getStatusColor(child.status)}
                               />

@@ -1,9 +1,12 @@
 'use client';
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
 type TrimestresContextType = {
   shouldShowTutorial: boolean;
+  isTutorialActive: boolean;
+  currentStep: number;
   isLoading: boolean;
+  setTutorialState: (active: boolean, step: number) => void;
   markAsCompleted: () => Promise<void>;
 };
 
@@ -19,32 +22,28 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
-        
+
         console.log('📚 [TrimestresProvider] Iniciando verificación de tutorial');
-        
-        // 1. Verificar localStorage primero (más rápido)
+
+        // 1. Logear valor de localStorage
         if (typeof window !== 'undefined') {
           const localCompleted = localStorage.getItem(STORAGE_KEY);
-          if (localCompleted === 'true') {
-            console.log('📚 [TrimestresProvider] Tutorial ya completado (localStorage)');
-            setShouldShowTutorial(false);
-            setIsLoading(false);
-            return;
-          }
+          console.log('🔍 [TrimestresProvider] Valor en localStorage:', localCompleted);
         }
-        
+
+
         // 2. Verificar con el servidor
         const response = await fetch('/api/user/tutorial-trimestres');
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('📚 [TrimestresProvider] Respuesta servidor:', data);
-          
+
           const showTutorial = data.tutorial === true;
           console.log('📚 [TrimestresProvider] shouldShowTutorial:', showTutorial);
-          
+
           setShouldShowTutorial(showTutorial);
-          
+
           // Si ya está completado en servidor, guardar en localStorage
           if (!showTutorial && typeof window !== 'undefined') {
             localStorage.setItem(STORAGE_KEY, 'true');
@@ -62,29 +61,29 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
         console.log('📚 [TrimestresProvider] Verificación completada');
       }
     }
-    
+
     checkTutorialStatus();
   }, []);
 
-  const markAsCompleted = async () => {
+  const markAsCompleted = useCallback(async () => {
     try {
       console.log('✅ [TrimestresProvider] Marcando tutorial como completado');
-      
+
       // 1. Marcar en localStorage inmediatamente
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, 'true');
         console.log('💾 [TrimestresProvider] Guardado en localStorage');
       }
-      
+
       // 2. Actualizar estado local
       setShouldShowTutorial(false);
-      
+
       // 3. Enviar al servidor
       const response = await fetch('/api/user/tutorial-trimestres', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       if (response.ok) {
         console.log('✅ [TrimestresProvider] Tutorial completado en servidor');
       } else {
@@ -93,13 +92,24 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('❌ [TrimestresProvider] Error:', error);
     }
-  };
+  }, []);
+
+  const [isTutorialActive, setIsTutorialActive] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const setTutorialState = useCallback((active: boolean, step: number) => {
+    setIsTutorialActive(active);
+    setCurrentStep(step);
+  }, []);
 
   return (
-    <TrimestresContext.Provider 
-      value={{ 
-        shouldShowTutorial, 
+    <TrimestresContext.Provider
+      value={{
+        shouldShowTutorial,
+        isTutorialActive,
+        currentStep,
         isLoading,
+        setTutorialState,
         markAsCompleted
       }}
     >

@@ -15,12 +15,14 @@ import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown } from
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { DocumentosTutorial } from '@/components/tutorials/DocumentosTutorial'
+import { useTutorial } from '@/context/tutorial-context'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Suspense } from 'react'
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
+  const { isTutorialActive, currentStep } = useTutorial();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -207,7 +209,7 @@ function DocumentsPageContent() {
   const companiesForUpload = React.useMemo(() => {
     return companies.map(company => ({
       id: company.id,
-      nombre: company.name || company.nombre || `Empresa ${company.id}`
+      nombre: company.name || (`Empresa ${company.id}` as string)
     }));
   }, [companies]);
 
@@ -241,6 +243,27 @@ function DocumentsPageContent() {
       }, 300);
     }
   };
+
+  // 🧭 TUTORIAL AUTO-TAB SWITCH (Paso 4: Filtros y Categorías)
+  React.useEffect(() => {
+    // currentStep 3 es "Filtros y Categorías" en DocumentosTutorial.tsx
+    if (isTutorialActive && currentStep === 3) {
+      // Prioridad a la que tenga documentos
+      if (activeTab === 'sin-confirmar' && sinConfirmar.length === 0) {
+        if (otrosDocumentos.length > 0) handleTabChange('otros');
+        else if (facturasEmitidas.length > 0) handleTabChange('emitidas');
+        else if (facturasRecibidas.length > 0) handleTabChange('recibidas');
+      }
+      // Caso inverso: si estamos en una vacía pero hay alguna con docs
+      else if (currentDocuments.length === 0) {
+        const target = sinConfirmar.length > 0 ? 'sin-confirmar' :
+          facturasEmitidas.length > 0 ? 'emitidas' :
+            facturasRecibidas.length > 0 ? 'recibidas' :
+              otrosDocumentos.length > 0 ? 'otros' : null;
+        if (target && target !== activeTab) handleTabChange(target);
+      }
+    }
+  }, [isTutorialActive, currentStep, activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos, currentDocuments]);
 
   const handleExportPdf = async () => {
     if (currentDocuments.length === 0) {
@@ -395,6 +418,7 @@ function DocumentsPageContent() {
                 <TabsList className="inline-flex w-full sm:w-auto">
                   <TabsTrigger
                     value="sin-confirmar"
+                    disabled={isTutorialActive && currentStep === 3}
                     className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400 data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/20"
                   >
                     <AlertCircle className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
@@ -410,6 +434,7 @@ function DocumentsPageContent() {
                   {/* Facturas Emitidas */}
                   <TabsTrigger
                     value="emitidas"
+                    disabled={isTutorialActive && currentStep === 3}
                     className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-green-500/10 data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400 data-[state=active]:shadow-lg data-[state=active]:shadow-green-500/20"
                   >
                     <TrendingUp className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
@@ -425,6 +450,7 @@ function DocumentsPageContent() {
                   {/* Facturas Recibidas */}
                   <TabsTrigger
                     value="recibidas"
+                    disabled={isTutorialActive && currentStep === 3}
                     className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20"
                   >
                     <TrendingDown className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
@@ -439,6 +465,7 @@ function DocumentsPageContent() {
 
                   <TabsTrigger
                     value="otros"
+                    disabled={isTutorialActive && currentStep === 3}
                     className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/20"
                   >
                     <FileText className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
@@ -487,7 +514,7 @@ function DocumentsPageContent() {
                   <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-green-500/10 hover:shadow-lg hover:shadow-green-500/20 hover:scale-110">
                     <AlertCircle className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-green-500 hover:scale-110" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-green-600">
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-amber-500">
                     No hay documentos sin confirmar
                   </h3>
                   <p className="text-sm text-muted-foreground">

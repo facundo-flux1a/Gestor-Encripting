@@ -7,7 +7,7 @@ import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
 
 export function TrimestresTutorial() {
-  const { shouldShowTutorial, isLoading, markAsCompleted } = useTrimestres();
+  const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialState } = useTrimestres();
   const driverInstanceRef = useRef<ReturnType<typeof driver> | null>(null);
   const hasRunRef = useRef(false);
   const lastStepRef = useRef(0);
@@ -23,35 +23,36 @@ export function TrimestresTutorial() {
     if (popoverDescription) {
       const existingError = popoverDescription.querySelector('.tutorial-error-msg');
       if (existingError) existingError.remove();
-      
+
       const errorMsg = document.createElement('p');
       errorMsg.className = 'tutorial-error-msg text-red-500 text-sm mt-3 font-semibold';
       errorMsg.textContent = message;
       popoverDescription.appendChild(errorMsg);
-      
+
       setTimeout(() => errorMsg.remove(), 4000);
     }
   };
 
   useEffect(() => {
     if (isLoading || !shouldShowTutorial || hasRunRef.current) {
-      console.log('📊 [TrimestresTutorial] Esperando...', { isLoading, shouldShowTutorial, hasRun: hasRunRef.current });
+      if (isLoading || !shouldShowTutorial) {
+        console.log('📊 [TrimestresTutorial] Esperando...', { isLoading, shouldShowTutorial });
+      }
       return;
     }
 
+    console.log('🎯 [TrimestresTutorial] Iniciando tutorial');
+    hasRunRef.current = true;
+
     const timeoutId = setTimeout(() => {
-      console.log('🎯 [TrimestresTutorial] Iniciando tutorial');
-      hasRunRef.current = true;
-      
       const driverInstance = driver({
         showProgress: true,
         showButtons: ['next', 'previous'],
         animate: true,
         allowClose: false,
         overlayOpacity: 0.75,
-        overlayClickNext: false,
         disableActiveInteraction: false,
-        
+
         steps: [
           {
             element: '[data-tutorial="trimestres-welcome"]',
@@ -75,7 +76,7 @@ export function TrimestresTutorial() {
             element: '[data-tutorial="trimestres-selector"]',
             popover: {
               title: 'Selector de Trimestre',
-              description: 'Aquí podés cambiar entre trimestres. El sistema muestra automáticamente el trimestre más reciente disponible.',
+              description: 'Aquí puedes cambiar entre trimestres. El sistema muestra automáticamente el trimestre más reciente disponible.',
               side: 'bottom',
               align: 'start',
             },
@@ -84,7 +85,7 @@ export function TrimestresTutorial() {
             element: '[data-tutorial="trimestres-toggle"]',
             popover: {
               title: 'Mostrar Trimestres Vacíos',
-              description: 'Activá esta opción para ver trimestres sin documentos. Por defecto, solo se muestran trimestres con documentos.',
+              description: 'Activa esta opción para ver trimestres sin documentos. Por defecto, solo se muestran trimestres con documentos.',
               side: 'left',
               align: 'start',
             },
@@ -129,57 +130,60 @@ export function TrimestresTutorial() {
             element: 'body',
             popover: {
               title: '¡Todo listo! 🎉',
-              description: 'Ya conocés todas las herramientas para gestionar tus trimestres. ¡Empezá a organizar tus documentos!',
-              side: 'center',
+              description: 'Ya conoces todas las herramientas para gestionar tus trimestres. ¡Empieza a organizar tus documentos!',
+              side: 'over',
               align: 'center',
             },
           },
         ],
-        
+
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
         doneBtnText: '¡Entendido!',
-        
+
         onHighlightStarted: (element, step, options) => {
           const currentStepIndex = options.state.activeIndex ?? 0;
           lastStepRef.current = currentStepIndex;
-          
+
+          // 🔄 Sincronizar estado con el proveedor
+          setTutorialState(true, currentStepIndex);
+
           // ✅ PASO 1 (índice 1): Selector de empresas
           if (currentStepIndex === 1) {
             console.log('🏢 PASO 1: Abriendo selector de empresas');
             document.body.setAttribute('data-tutorial-step', '1');
-            
+
             setTimeout(() => {
               // 🔥 Hacer overlay no-clickeable
               const overlay = document.querySelector('.driver-overlay');
               if (overlay) {
                 (overlay as HTMLElement).style.pointerEvents = 'none';
               }
-              
+
               const trigger = document.querySelector('[data-tutorial="trimestres-company-selector"] button[role="combobox"]');
-              
+
               if (trigger) {
                 console.log('✅ Trigger encontrado, abriendo popover...');
                 (trigger as HTMLElement).click();
-                
+
                 setTimeout(() => {
                   const popoverContent = document.querySelector('[data-radix-popper-content-wrapper]');
                   if (popoverContent) {
                     console.log('✅ Popover content encontrado, haciendo interactivo...');
                     (popoverContent as HTMLElement).style.pointerEvents = 'auto';
                     (popoverContent as HTMLElement).style.zIndex = '10000003';
-                    
+
                     const allElements = popoverContent.querySelectorAll('*');
                     allElements.forEach(el => {
                       (el as HTMLElement).style.pointerEvents = 'auto';
                     });
-                    
+
                     // 🔥 PREVENIR que clicks dentro del popover lo cierren
                     popoverContent.addEventListener('click', (e) => {
                       e.stopPropagation();
                       console.log('🛡️ Click en popover interceptado');
                     }, true);
-                    
+
                     console.log(`✅ ${allElements.length} elementos hechos interactivos`);
                   }
                 }, 200);
@@ -189,18 +193,18 @@ export function TrimestresTutorial() {
             document.body.removeAttribute('data-tutorial-step');
           }
         },
-        
+
         onNextClick: (element, step, options) => {
           const currentIndex = options.state.activeIndex;
-          
+
           console.log('🎯 [onNextClick] currentIndex:', currentIndex);
-          
+
           // PASO 1: Verificar empresa seleccionada
           if (currentIndex === 1) {
             const hasSelectedCompanies = selectedIdsRef.current.length > 0;
-            
+
             console.log('🏢 [PASO 1] Verificando empresa:', { hasSelectedCompanies, selectedIds: selectedIdsRef.current });
-            
+
             if (hasSelectedCompanies) {
               console.log('✅ Empresa seleccionada, avanzando');
               setTimeout(() => {
@@ -221,11 +225,14 @@ export function TrimestresTutorial() {
         onPrevClick: () => {
           driverInstance.movePrevious();
         },
-        
+
         onDestroyStarted: async () => {
           const finalStep = lastStepRef.current;
           document.body.removeAttribute('data-tutorial-step');
-          
+
+          // 🔄 Limpiar estado en el proveedor
+          setTutorialState(false, 0);
+
           // Solo marcar como completado si llegó al final (paso 8 = índice 8)
           if (finalStep >= 8) {
             console.log('🏁 [TrimestresTutorial] Tutorial completado en paso:', finalStep);
@@ -233,7 +240,7 @@ export function TrimestresTutorial() {
           } else {
             console.log('⚠️ [TrimestresTutorial] Tutorial cerrado prematuramente en paso:', finalStep);
           }
-          
+
           if (driverInstance) {
             driverInstance.destroy();
           }
@@ -242,7 +249,7 @@ export function TrimestresTutorial() {
 
       driverInstanceRef.current = driverInstance;
       driverInstance.drive();
-    }, 800);
+    }, 400);
 
     return () => {
       clearTimeout(timeoutId);
@@ -252,7 +259,7 @@ export function TrimestresTutorial() {
         driverInstanceRef.current = null;
       }
     };
-  }, [isLoading, shouldShowTutorial, markAsCompleted]);
+  }, [isLoading, shouldShowTutorial, markAsCompleted, setTutorialState]);
 
   // 🔥 ESTILOS CRÍTICOS
   useEffect(() => {
@@ -304,12 +311,12 @@ export function TrimestresTutorial() {
       }
       
       .driver-active-element {
-        outline: 4px solid hsl(var(--primary)) !important;
         box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
       }
       
       .driver-popover {
-        border: 2px solid hsl(var(--primary)) !important;
+        border: none !important;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
@@ -346,7 +353,7 @@ export function TrimestresTutorial() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);
