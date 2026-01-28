@@ -11,7 +11,7 @@ import type { RowDataPacket } from 'mysql2';
  */
 export async function getCurrentUser(): Promise<User | null> {
   const session = await getSession();
-  
+
   if (!session?.userId) {
     return null;
   }
@@ -24,7 +24,7 @@ export async function getCurrentUser(): Promise<User | null> {
       'SELECT id, nombre, email, tutorial FROM usuarios WHERE id = ?',
       [session.userId]
     );
-    
+
     if (rows.length > 0) {
       return {
         id: rows[0].id,
@@ -42,4 +42,50 @@ export async function getCurrentUser(): Promise<User | null> {
     email: session.email,
     tutorial: session.tutorial,
   };
+}
+
+/**
+ * Obtiene la configuración de tipos para la sección "Otros"
+ */
+export async function getUserConfigOtros(): Promise<string[] | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const [rows] = await db.query<RowDataPacket[]>(
+    'SELECT config_otros_tipos FROM usuarios WHERE id = ?',
+    [user.id]
+  );
+
+  if (rows.length > 0 && rows[0].config_otros_tipos) {
+    try {
+      const config = typeof rows[0].config_otros_tipos === 'string'
+        ? JSON.parse(rows[0].config_otros_tipos)
+        : rows[0].config_otros_tipos;
+      return config.tipos || null;
+    } catch (e) {
+      console.error('Error parsing config_otros_tipos:', e);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Actualiza la configuración de tipos para la sección "Otros"
+ */
+export async function updateUserConfigOtros(tipos: string[]): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  try {
+    await db.query(
+      'UPDATE usuarios SET config_otros_tipos = ? WHERE id = ?',
+      [JSON.stringify({ tipos }), user.id]
+    );
+    return true;
+  } catch (e) {
+    console.error('Error updating config_otros_tipos:', e);
+    return false;
+  }
 }

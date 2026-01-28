@@ -16,6 +16,7 @@ export const UserSchema = z.object({
   tutorial_individual: z.number().optional(),
   tutorial_incidencias: z.number().optional(),
   tutorial_proveedores: z.number().optional(),
+  config_otros_tipos: z.string().nullable().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 

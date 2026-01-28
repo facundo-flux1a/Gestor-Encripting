@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2, CheckCircle, Eye } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document } from '@/lib/types';
@@ -9,7 +9,17 @@ import { SummarizeDialog } from './summarize-dialog';
 import { DocumentPreviewDialog } from './document-preview-dialog';
 import { CleanDuplicatesButton } from './clean-duplicates-button';
 import { ClienteFilter, ProveedorFilter } from './column-filters';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -57,6 +67,8 @@ const formatCurrency = (amount: number | string): string => {
   return `${formattedInteger},${decimalPart} €`;
 };
 
+const UNCLASSIFIED = 'No clasificado';
+
 const getColumns = (
   onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
   onSummarize: (doc: Document) => void,
@@ -67,7 +79,9 @@ const getColumns = (
   onValidateSingleIncident: (incidentId: number) => void,
   showConfirmButton: boolean = false,
   isIncidentsPage: boolean = false,
-  duplicates: Set<number> = new Set()
+  duplicates: Set<number> = new Set(),
+  customTypes: string[] = [],
+  onMove?: (docIds: number[], targetTipo: string) => void
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     {
@@ -200,6 +214,38 @@ const getColumns = (
                 >
                   Resumir con IA
                 </DropdownMenuItem>
+
+                {customTypes.length > 0 && onMove && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="cursor-pointer">
+                        Mover a...
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent className="z-[100000]">
+                          {customTypes.map((tipo) => (
+                            <DropdownMenuItem
+                              key={tipo}
+                              onClick={() => onMove([doc.id_documento], tipo)}
+                              className="cursor-pointer"
+                            >
+                              <Folder className="mr-2 h-4 w-4" />
+                              {tipo}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuItem
+                            onClick={() => onMove([doc.id_documento], 'No clasificado')}
+                            className="cursor-pointer"
+                          >
+                            <Folder className="mr-2 h-4 w-4" />
+                            No clasificado
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -782,6 +828,8 @@ export function DocumentsTable({
   viewId,
   enableColumnPersistence = true,
   onDocumentChanged,
+  customTypes = [],
+  onMove,
 }: {
   documents: Document[],
   hiddenColumns?: string[],
@@ -791,6 +839,8 @@ export function DocumentsTable({
   viewId?: string,
   enableColumnPersistence?: boolean,
   onDocumentChanged?: () => void,
+  customTypes?: string[],
+  onMove?: (docIds: number[], targetTipo: string) => void,
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -1139,7 +1189,9 @@ export function DocumentsTable({
       handleValidateSingleIncident,
       showConfirmButton,
       isIncidentsPage,
-      duplicates
+      duplicates,
+      customTypes,
+      onMove
     );
     // 🔧 FIX Z-INDEX: Ajustar columna de acciones
     if (cols.length > 0 && cols[0].id === 'actions') {
@@ -1251,6 +1303,50 @@ export function DocumentsTable({
                 )}
                 Eliminar {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
               </Button>
+
+              {customTypes.length > 0 && onMove && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full h-9 px-4 shadow-sm hover:shadow-md transition-all border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                    >
+                      <MoreHorizontal className="h-4 w-4 mr-2" />
+                      Mover
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="z-[100000] rounded-xl p-2 shadow-2xl border-primary/20">
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Mover {selectedIds.length} documentos a...
+                    </div>
+                    {customTypes.map((tipo) => (
+                      <DropdownMenuItem
+                        key={tipo}
+                        onClick={() => {
+                          onMove(selectedIds, tipo);
+                          setRowSelection({});
+                        }}
+                        className="cursor-pointer rounded-lg mb-1 last:mb-0"
+                      >
+                        <Folder className="mr-2 h-4 w-4 text-primary" />
+                        {tipo}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onMove(selectedIds, UNCLASSIFIED || 'No clasificado');
+                        setRowSelection({});
+                      }}
+                      className="cursor-pointer rounded-lg"
+                    >
+                      <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
+                      No clasificado
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
