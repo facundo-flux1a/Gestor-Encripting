@@ -7,27 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import { ProductPriceChart } from "./product-price-chart";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
-    
+
     let numericAmount: number;
     if (typeof amount === 'string') {
         numericAmount = parseFloat(amount);
     } else {
         numericAmount = amount;
     }
-    
+
     if (isNaN(numericAmount)) return 'N/A';
-    
+
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
         currency,
@@ -49,16 +49,23 @@ const formatDate = (date: string | null | undefined) => {
     }
 };
 
-export default async function ProductDetailPage({ 
-    params 
-}: { 
-    params: { name: string; productCode: string } 
+export default async function ProductDetailPage({
+    params
+}: {
+    params: Promise<{ name: string; productCode: string }>
 }) {
-    const providerFiscalId = decodeURIComponent(params.name);
-    const productCode = decodeURIComponent(params.productCode);
+    const resolvedParams = await params;
+    const providerFiscalId = decodeURIComponent(resolvedParams.name);
+    let identifier = decodeURIComponent(resolvedParams.productCode);
+    let searchBy: 'code' | 'description' = 'code';
+
+    if (identifier.startsWith('DESC_')) {
+        searchBy = 'description';
+        identifier = identifier.replace(/^DESC_/, '');
+    }
 
     const [productData, provider] = await Promise.all([
-        getProductHistory(providerFiscalId, productCode),
+        getProductHistory(providerFiscalId, identifier, searchBy),
         getProviderByFiscalId(providerFiscalId)
     ]);
 
@@ -74,7 +81,7 @@ export default async function ProductDetailPage({
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
     const currentPrice = Number(productInfo.precio_unitario) || 0;
-    
+
     const priceTrend = currentPrice > avgPrice ? 'up' : currentPrice < avgPrice ? 'down' : 'stable';
     const trendPercentage = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice) * 100 : 0;
 
@@ -214,11 +221,11 @@ export default async function ProductDetailPage({
                             </TableHeader>
                             <TableBody>
                                 {history.map((item, index) => {
-                                    const prevPrice = index < history.length - 1 
-                                        ? Number(history[index + 1].precio_unitario) 
+                                    const prevPrice = index < history.length - 1
+                                        ? Number(history[index + 1].precio_unitario)
                                         : null;
-                                    const priceChange = prevPrice 
-                                        ? ((Number(item.precio_unitario) - prevPrice) / prevPrice) * 100 
+                                    const priceChange = prevPrice
+                                        ? ((Number(item.precio_unitario) - prevPrice) / prevPrice) * 100
                                         : null;
 
                                     return (
@@ -238,7 +245,7 @@ export default async function ProductDetailPage({
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {priceChange !== null ? (
-                                                    <Badge 
+                                                    <Badge
                                                         variant={priceChange > 0 ? "destructive" : priceChange < 0 ? "default" : "secondary"}
                                                         className="text-xs"
                                                     >

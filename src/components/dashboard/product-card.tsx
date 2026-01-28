@@ -12,16 +12,16 @@ interface ProductCardProps {
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
     if (amount === null || amount === undefined) return 'N/A';
-    
+
     let numericAmount: number;
     if (typeof amount === 'string') {
         numericAmount = parseFloat(amount);
     } else {
         numericAmount = amount;
     }
-    
+
     if (isNaN(numericAmount)) return 'N/A';
-    
+
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
         currency,
@@ -46,8 +46,12 @@ const formatDate = (date: string | null | undefined) => {
 export function ProductCard({ product, providerFiscalId }: ProductCardProps) {
     if (!product.descripcion) return null;
 
-    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${encodeURIComponent(product.codigo || 'null')}`;
-    
+    const identifier = product.codigo
+        ? encodeURIComponent(product.codigo)
+        : `DESC_${encodeURIComponent(product.descripcion || '')}`;
+
+    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}`;
+
     return (
         <Link href={productUrl} className="group">
             <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">

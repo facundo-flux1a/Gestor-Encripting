@@ -1576,14 +1576,23 @@ export async function getProductsByProviderName(
             SELECT 
                 ld.*, 
                 d.fecha_emision,
-                ROW_NUMBER() OVER(PARTITION BY ld.codigo ORDER BY d.fecha_emision DESC) as rn
+                ROW_NUMBER() OVER(
+                    PARTITION BY (CASE 
+                        WHEN ld.codigo IS NOT NULL AND ld.codigo != '' THEN ld.codigo 
+                        ELSE ld.descripcion 
+                    END) 
+                    ORDER BY d.fecha_emision DESC
+                ) as rn
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
             JOIN entidades_documento ed ON d.id = ed.documento_id
             WHERE ed.identificador_fiscal = ? 
               AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-              AND ld.codigo IS NOT NULL 
-              AND ld.codigo != ''
+              AND (
+                (ld.codigo IS NOT NULL AND ld.codigo != '') 
+                OR 
+                (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+              )
     `;
 
   const params: any[] = [fiscalId];
@@ -1627,8 +1636,13 @@ export async function getProductsByProviderName(
   return JSON.parse(JSON.stringify(products));
 }
 
-export async function getProductHistory(providerFiscalId: string, productCode: string): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
-  const [lineaRows] = await db.query<LineaPacket[]>(`
+export async function getProductHistory(
+  providerFiscalId: string,
+  identifier: string,
+  searchBy: 'code' | 'description' = 'code'
+): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
+
+  let query = `
         SELECT 
             ld.*, 
             d.fecha_emision,
@@ -1637,10 +1651,18 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
         JOIN documentos d ON ld.documento_id = d.id
         JOIN entidades_documento ed ON d.id = ed.documento_id
         WHERE ed.identificador_fiscal = ? 
-          AND ld.codigo = ?
           AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-        ORDER BY d.fecha_emision DESC;
-    `, [providerFiscalId, productCode]);
+    `;
+
+  if (searchBy === 'code') {
+    query += ` AND ld.codigo = ?`;
+  } else {
+    query += ` AND ld.descripcion = ?`;
+  }
+
+  query += ` ORDER BY d.fecha_emision DESC;`;
+
+  const [lineaRows] = await db.query<LineaPacket[]>(query, [providerFiscalId, identifier]);
 
   if (lineaRows.length === 0) {
     return { productInfo: null, history: [] };
@@ -1660,10 +1682,10 @@ export async function getProductHistory(providerFiscalId: string, productCode: s
     datos_extra: safeJsonParse(l.datos_extra),
     fecha_emision: l.fecha_emision,
     numero_documento: l.numero_documento,
-    fecha_creacion: null, // this field is not in the query
+    fecha_creacion: null,
   }));
 
-  const productInfo = history[0]; // The first one is the most recent
+  const productInfo = history[0];
 
   return JSON.parse(JSON.stringify({ productInfo, history }));
 }
