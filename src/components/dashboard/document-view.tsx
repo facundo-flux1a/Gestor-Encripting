@@ -1,6 +1,55 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DocumentTypeSelector } from '@/components/dashboard/document-type-selector';
+
+// Helper: Convierte signos cuando cambia el tipo de documento
+const convertSignsOnTypeChange = (form: any, oldType: string, newType: string) => {
+    const wasAbono = oldType.toLowerCase().includes('abono');
+    const isAbono = newType.toLowerCase().includes('abono');
+
+    // Solo convertir si hay cambio entre Abono y Factura/Albarán
+    if (wasAbono !== isAbono) {
+        console.log(`🔄 [Frontend] Conversión detectada: ${oldType} → ${newType}`);
+
+        // 1. Convertir totales principales
+        const currentTotal = form.getValues('total');
+        const currentBase = form.getValues('base_imponible');
+
+        if (currentTotal != null) {
+            form.setValue('total', isAbono ? -Math.abs(currentTotal) : Math.abs(currentTotal));
+        }
+        if (currentBase != null) {
+            form.setValue('base_imponible', isAbono ? -Math.abs(currentBase) : Math.abs(currentBase));
+        }
+
+        // 2. Convertir impuestos (iva_details)
+        const currentIvaDetails = form.getValues('iva_details') || [];
+        if (currentIvaDetails.length > 0) {
+            const convertedIvas = currentIvaDetails.map((iva: any) => ({
+                ...iva,
+                base: iva.base != null ? (isAbono ? -Math.abs(iva.base) : Math.abs(iva.base)) : iva.base,
+                cuota: iva.cuota != null ? (isAbono ? -Math.abs(iva.cuota) : Math.abs(iva.cuota)) : iva.cuota,
+            }));
+            form.setValue('iva_details', convertedIvas);
+            console.log(`   💰 Convertidos ${convertedIvas.length} impuestos`);
+        }
+
+        // 3. Convertir líneas
+        const currentLineas = form.getValues('lineas') || [];
+        if (currentLineas.length > 0) {
+            const convertedLineas = currentLineas.map((linea: any) => ({
+                ...linea,
+                precio_unitario: linea.precio_unitario != null ? (isAbono ? -Math.abs(linea.precio_unitario) : Math.abs(linea.precio_unitario)) : linea.precio_unitario,
+                importe_linea: linea.importe_linea != null ? (isAbono ? -Math.abs(linea.importe_linea) : Math.abs(linea.importe_linea)) : linea.importe_linea,
+            }));
+            form.setValue('lineas', convertedLineas);
+            console.log(`   📦 Convertidas ${convertedLineas.length} líneas`);
+        }
+
+        console.log(`✅ [Frontend] Total: ${currentTotal} → ${isAbono ? -Math.abs(currentTotal) : Math.abs(currentTotal)}`);
+    }
+};
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2, ShieldCheck, FileText, Info, Trash2, PlusCircle, Box, Search, ChevronLeft, ChevronRight, History, ArrowLeft, X, Calendar } from "lucide-react";
 import { format } from 'date-fns';
@@ -183,7 +232,19 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                     {isEditing ? (
                         <div className="text-xs sm:text-sm text-muted-foreground mt-2">
                             <FormField control={form.control} name="tipo_documento" render={({ field }) => (
-                                <FormItem><FormControl><Input {...field} placeholder="Tipo de Documento" className="text-xs sm:text-sm h-8 sm:h-9" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                <FormItem>
+                                    <FormLabel className="text-xs">Tipo de Documento</FormLabel>
+                                    <FormControl>
+                                        <DocumentTypeSelector
+                                            value={field.value ?? ''}
+                                            onChange={(newType) => {
+                                                convertSignsOnTypeChange(form, field.value ?? '', newType);
+                                                field.onChange(newType);
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
                             )} />
                         </div>
                     ) : <CardDescription className="text-xs sm:text-sm mt-1">{doc.tipo_documento}</CardDescription>}
@@ -245,7 +306,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         </Alert>
                     )}
                 </CardContent>
-            </Card>
+            </Card >
 
             <AlertDialog open={showTrimestreConfirm} onOpenChange={setShowTrimestreConfirm}>
                 <AlertDialogContent>

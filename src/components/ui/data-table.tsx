@@ -321,7 +321,7 @@ const StandardTableRow = <TData,>({
 };
 
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends object, TValue>({
   columns,
   data: initialData,
   hiddenColumns = [],
@@ -331,6 +331,7 @@ export function DataTable<TData, TValue>({
   enableColumnPersistence = false, // 🆕 NUEVO
   rowSelection: externalRowSelection, // 🆕 SELECCIÓN EXTERNA
   onRowSelectionChange: setExternalRowSelection, // 🆕 CALLBACK EXTERNO
+  onDragStart, // 🎯 NUEVO - Drag callback
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
@@ -339,6 +340,19 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  // 🆕 PAGINACIÓN CONTROLADA para forzar 100 por defecto
+  const [pagination, setPagination] = React.useState({
+    pageIndex: 0,
+    pageSize: 100,
+  });
+
+  // 🚨 FORCE RESET: Asegurar que siempre inicie en 100, ignorando caché
+  React.useEffect(() => {
+    console.log('🔄 [DataTable] Forzando inicio en 100 filas');
+    setPagination(prev => ({ ...prev, pageSize: 100 }));
+  }, []);
+
+  console.log('📊 [DataTable] Pagination state:', pagination);
 
   // Estado local para selección si no se provee externo
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
@@ -398,9 +412,11 @@ export function DataTable<TData, TValue>({
       columnOrder, // 🆕 AGREGADO
       globalFilter,
       rowSelection, // 🆕 ESTADO DE SELECCIÓN
+      pagination, // 🆕 PAGINACIÓN CONTROLADA
     },
     enableRowSelection: true, // Habilitar selección
     onRowSelectionChange: setRowSelection, // 🆕 HANDLER DE SELECCIÓN
+    onPaginationChange: setPagination, // 🆕 HANDLER DE PAGINACIÓN
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
@@ -668,7 +684,7 @@ export function DataTable<TData, TValue>({
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-              {[10, 20, 30, 40, 50].map((pageSize) => (
+              {[10, 20, 30, 40, 50, 100].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>

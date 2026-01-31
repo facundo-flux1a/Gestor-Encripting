@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
 // ✅ AGREGAR las rutas de reset password
 const publicRoutes = [
-  '/auth/login', 
+  '/auth/login',
   '/auth/register',
   '/auth/forgot-password',      // 👈 NUEVA
   '/auth/reset-password',        // 👈 NUEVA
@@ -16,29 +17,45 @@ const rootRoute = '/';
  * It does not validate the JWT, only checks for its existence. The actual validation
  * happens in Server Components or API routes running in the Node.js environment.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get('session');
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  // If the user has a session cookie
-  if (sessionCookie) {
-    // If they are on a public route (login/register) or the root page, redirect to the dashboard page.
-    if (isPublicRoute || pathname === rootRoute) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-  } 
-  // If the user does not have a session cookie
-  else {
-    // If they are trying to access any page that isn't public, redirect to login.
+  // 1. Si NO hay cookie
+  if (!sessionCookie) {
+    // Si intenta acceder a ruta protegida -> Redirect a login
     if (!isPublicRoute) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
+    // Si es ruta pública, dejar pasar
+    return NextResponse.next();
   }
 
-  // Allow the request to proceed if no redirection is needed.
-  return NextResponse.next();
+  // 2. Si HAY cookie, VERIFICAR FIRMA
+  try {
+    const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
+    await jwtVerify(sessionCookie.value, secretKey, {
+      algorithms: ['HS256'],
+    });
+    // ✅ Firma válida
+
+    // Si intenta acceder a login/register o root con sesión válida -> Redirect a dashboard
+    if (isPublicRoute || pathname === rootRoute) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    return NextResponse.next();
+
+  } catch (error) {
+    // ❌ Firma inválida (cookie manipulada, expirada o clave secreta cambiada)
+    console.warn('⚠️ [middleware] Cookie de sesión inválida, eliminando y redirigiendo a login.');
+
+    const response = NextResponse.redirect(new URL('/auth/login', request.url));
+    response.cookies.delete('session');
+    return response;
+  }
 }
 
 // Configuration for which paths the middleware should apply to.

@@ -84,12 +84,19 @@ export const evaluateIncidentFixFlow = ai.defineFlow(
     outputSchema: EvaluateIncidentFixOutputSchema,
   },
   async (input) => {
+    console.log('🧠 [Genkit] Iniciando evaluación de incidencia con Gemini...');
+    console.log('🧠 [Genkit] Input:', JSON.stringify(input, null, 2).substring(0, 500) + '...');
+
     const { output } = await evaluateIncidentFixPrompt(input);
-    
+
+    console.log('🧠 [Genkit] Respuesta de Gemini recibida:', output);
+
     if (!output) {
+      console.error('❌ [Genkit] ERROR: La IA no devolvió un veredicto');
       throw new Error("AI did not return a verdict.");
     }
 
+    console.log('✅ [Genkit] Evaluación completada exitosamente');
     return output;
   }
 );

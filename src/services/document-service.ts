@@ -1,7 +1,7 @@
 'use server';
 
 import db from '@/lib/db';
-import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident, Company, CreateDocumentPayload } from '@/lib/types';
+import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident, Company, CreateDocumentPayload, DashboardAnalytics } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
 import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
@@ -136,31 +136,7 @@ interface EmpresaPacket extends RowDataPacket {
   nombre: string;
 }
 
-export type DashboardAnalytics = {
-  kpis: {
-    totalIngresos: number;
-    totalGastos: number;
-    totalFacturasIngreso: number;
-    totalFacturasGasto: number;
-    beneficio: number;
-    ivaRepercutido: number;
-    ivaSoportado: number;
-    resultadoIva: number;
-    incidenciasAbiertas: number;
-    totalProveedores: number;
-    totalProductos: number;
-    incidentRate: number;
-    totalDocs: number;
-  };
-  quarterlySummary: {
-    [key: string]: { ingresos: number; gastos: number };
-  };
-  documentDistribution: { name: string; value: number }[];
-  ivaSummary: {
-    [key: string]: { repercutido: number; soportado: number };
-  };
-  topProviders: { name: string; total: number; fiscalId: string }[];
-}
+
 
 // Helper function to safely parse JSON. Ensures the output is an object or null.
 const safeJsonParse = (data: any): object | null => {
@@ -627,7 +603,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     // PASO 1: Verificar documento y trimestre cerrado
     // ═══════════════════════════════════════════════════════════
     const [docRows] = await connection.query<RowDataPacket[]>(
-      'SELECT trimestre_cerrado, año_trimestre, num_trimestre, id_de_empresa FROM documentos WHERE id = ?',
+      'SELECT tipo_documento, trimestre_cerrado, año_trimestre, num_trimestre, id_de_empresa FROM documentos WHERE id = ?',
       [id]
     );
 
@@ -697,6 +673,179 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     }
 
     // ═══════════════════════════════════════════════════════════
+    // PASO 2.5: Conversión de signos por cambio de tipo
+    //══════════════════════════════════════════════════════════
+    if (data.tipo_documento) {
+      const oldTipo = docRows[0].tipo_documento?.toLowerCase() || '';
+      const newTipo = data.tipo_documento.toLowerCase();
+
+      const wasAbono = oldTipo.includes('abono');
+      const isAbono = newTipo.includes('abono');
+
+      // Solo convertir si hay cambio entre Abono y Factura/Albarán
+      if (wasAbono !== isAbono) {
+        console.log('🔄 [updateDocument] Conversión de tipo detectada:');
+        console.log(`   Tipo anterior: "${docRows[0].tipo_documento}"`);
+        console.log(`   Tipo nuevo: "${data.tipo_documento}"`);
+
+        // Obtener valores actuales del documento
+        const [currentDoc] = await connection.query<RowDataPacket[]>(
+          `SELECT importe_total, importe_sin_impuestos
+           FROM documentos WHERE id = ?`,
+          [id]
+        );
+
+        if (currentDoc.length > 0) {
+          const current = currentDoc[0];
+
+          if (isAbono) {
+            // ✅ Convertir a ABONO (todos los valores a negativo)
+            console.log('   🔽 Convirtiendo a ABONO (valores → negativos)');
+            data.total = current.importe_total != null ? -Math.abs(current.importe_total) : current.importe_total;
+            data.base_imponible = current.importe_sin_impuestos != null ? -Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
+
+            console.log(`   💰 Total: ${current.importe_total} → ${data.total}`);
+
+            // Convertir líneas de documento DIRECTAMENTE EN LA BD
+            const [existingLines] = await connection.query<RowDataPacket[]>(
+              'SELECT id, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?',
+              [id]
+            );
+
+            if (existingLines.length > 0) {
+              console.log(`   📦 Convirtiendo ${existingLines.length} líneas en BD a negativo`);
+              for (const line of existingLines) {
+                await connection.query(
+                  `UPDATE lineas_documento 
+                   SET precio_unitario = ?, importe_linea = ?
+                   WHERE id = ?`,
+                  [
+                    line.precio_unitario != null ? -Math.abs(line.precio_unitario) : line.precio_unitario,
+                    line.importe_linea != null ? -Math.abs(line.importe_linea) : line.importe_linea,
+                    line.id
+                  ]
+                );
+              }
+            }
+
+            // También convertir líneas en payload si vienen
+            if (data.lineas && data.lineas.length > 0) {
+              console.log(`   📦 Convirtiendo ${data.lineas.length} líneas en payload a negativo`);
+              data.lineas.forEach((linea: any) => {
+                if (linea.precio_unitario != null) linea.precio_unitario = -Math.abs(linea.precio_unitario);
+                if (linea.importe_sin_iva != null) linea.importe_sin_iva = -Math.abs(linea.importe_sin_iva);
+                if (linea.iva_importe != null) linea.iva_importe = -Math.abs(linea.iva_importe);
+                if (linea.importe_total != null) linea.importe_total = -Math.abs(linea.importe_total);
+              });
+            }
+          } else {
+            // ✅ Convertir a FACTURA/ALBARÁN (todos los valores a positivo)
+            console.log('   🔼 Convirtiendo a FACTURA/ALBARÁN (valores → positivos)');
+            data.total = current.importe_total != null ? Math.abs(current.importe_total) : current.importe_total;
+            data.base_imponible = current.importe_sin_impuestos != null ? Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
+
+            console.log(`   💰 Total: ${current.importe_total} → ${data.total}`);
+
+            // Convertir líneas de documento DIRECTAMENTE EN LA BD
+            const [existingLinesPos] = await connection.query<RowDataPacket[]>(
+              'SELECT id, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?',
+              [id]
+            );
+
+            if (existingLinesPos.length > 0) {
+              console.log(`   📦 Convirtiendo ${existingLinesPos.length} líneas en BD a positivo`);
+              for (const line of existingLinesPos) {
+                await connection.query(
+                  `UPDATE lineas_documento 
+                   SET precio_unitario = ?, importe_linea = ?
+                   WHERE id = ?`,
+                  [
+                    line.precio_unitario != null ? Math.abs(line.precio_unitario) : line.precio_unitario,
+                    line.importe_linea != null ? Math.abs(line.importe_linea) : line.importe_linea,
+                    line.id
+                  ]
+                );
+              }
+            }
+
+            // También convertir líneas en payload si vienen
+            if (data.lineas && data.lineas.length > 0) {
+              console.log(`   📦 Convirtiendo ${data.lineas.length} líneas en payload a positivo`);
+              data.lineas.forEach((linea: any) => {
+                if (linea.precio_unitario != null) linea.precio_unitario = Math.abs(linea.precio_unitario);
+                if (linea.importe_sin_iva != null) linea.importe_sin_iva = Math.abs(linea.importe_sin_iva);
+                if (linea.iva_importe != null) linea.iva_importe = Math.abs(linea.iva_importe);
+                if (linea.importe_total != null) linea.importe_total = Math.abs(linea.importe_total);
+              });
+            }
+          }
+
+          // Convertir impuestos en tabla impuestos_documento
+          const [existingTaxes] = await connection.query<RowDataPacket[]>(
+            'SELECT id, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
+            [id]
+          );
+
+          if (existingTaxes.length > 0) {
+            console.log(`   💰 Convirtiendo ${existingTaxes.length} impuestos en BD a ${isAbono ? 'negativo' : 'positivo'}`);
+            for (const tax of existingTaxes) {
+              await connection.query(
+                `UPDATE impuestos_documento 
+                 SET base_imponible = ?, cuota = ?
+                 WHERE id = ?`,
+                [
+                  isAbono
+                    ? (tax.base_imponible != null ? -Math.abs(tax.base_imponible) : tax.base_imponible)
+                    : (tax.base_imponible != null ? Math.abs(tax.base_imponible) : tax.base_imponible),
+                  isAbono
+                    ? (tax.cuota != null ? -Math.abs(tax.cuota) : tax.cuota)
+                    : (tax.cuota != null ? Math.abs(tax.cuota) : tax.cuota),
+                  tax.id
+                ]
+              );
+            }
+          }
+
+          // CRÍTICO: Convertir payload iva_details para que persista
+          if (data.iva_details && data.iva_details.length > 0) {
+            console.log(`   💰 Convirtiendo ${data.iva_details.length} impuestos en payload a ${isAbono ? 'negativo' : 'positivo'}`);
+            data.iva_details = data.iva_details.map((iva: any) => ({
+              ...iva,
+              base_imponible: iva.base_imponible != null
+                ? (isAbono ? -Math.abs(iva.base_imponible) : Math.abs(iva.base_imponible))
+                : iva.base_imponible,
+              cuota: iva.cuota != null
+                ? (isAbono ? -Math.abs(iva.cuota) : Math.abs(iva.cuota))
+                : iva.cuota,
+            }));
+          }
+
+          // Limpiar observaciones: eliminar mensajes obsoletos sobre abonos/conversiones
+          if (data.observaciones) {
+            let cleanedObs = data.observaciones;
+            // Eliminar mensajes de conversión y tipo
+            cleanedObs = cleanedObs.replace(/⚠️ DOCUMENTO ES ABONO \| /g, '');
+            cleanedObs = cleanedObs.replace(/💰 Valores convertidos a negativos \(Abono\) \| /g, '');
+            cleanedObs = cleanedObs.replace(/💰 Valores convertidos a positivos \(Factura\/Albarán\) \| /g, '');
+
+            // Agregar nuevo mensaje según el nuevo tipo
+            const newTypePrefix = isAbono
+              ? '💰 Convertido a Abono | '
+              : '💰 Convertido a Factura/Albarán | ';
+
+            if (!cleanedObs.startsWith('💰 Convertido')) {
+              cleanedObs = newTypePrefix + cleanedObs;
+            }
+
+            data.observaciones = cleanedObs;
+          }
+
+          console.log('✅ [updateDocument] Conversión de signos completada');
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // PASO 3: Actualizar documento principal
     // ═══════════════════════════════════════════════════════════
     console.log('📝 [updateDocument] Actualizando documento principal...');
@@ -705,25 +854,25 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     const updateValues = [];
 
     updateFields.push('tipo_documento = ?');
-    updateValues.push(data.tipo_documento || data.tipo);
+    updateValues.push(data.tipo_documento);
 
     updateFields.push('numero_documento = ?');
     updateValues.push(data.numero_documento);
 
     updateFields.push('fecha_emision = ?');
-    updateValues.push(data.fecha_emision || data.fecha_documento);
+    updateValues.push(data.fecha_emision);
 
     updateFields.push('fecha_vencimiento = ?');
-    updateValues.push(data.fecha_vencimiento || data.fecha_recepcion);
+    updateValues.push(data.fecha_vencimiento);
 
     updateFields.push('observaciones = ?');
-    updateValues.push(data.observaciones || data.descripcion || data.notas);
+    updateValues.push(data.observaciones);
 
     updateFields.push('importe_sin_impuestos = ?');
-    updateValues.push(data.importe_sin_impuestos || data.total_sin_impuesto);
+    updateValues.push(data.base_imponible);
 
     updateFields.push('importe_total = ?');
-    updateValues.push(data.importe_total || data.total_con_impuesto);
+    updateValues.push(data.total);
 
     updateFields.push('moneda = ?');
     updateValues.push(data.moneda || 'EUR');
@@ -759,14 +908,14 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         'INSERT INTO entidades_documento (documento_id, nombre, identificador_fiscal, direccion, telefono, email, rol, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           id,
-          entidad.nombre || entidad.razon_social,
-          entidad.identificador_fiscal || entidad.cif,
-          entidad.direccion || entidad.domicilio,
+          entidad.nombre,
+          entidad.identificador_fiscal,
+          entidad.direccion,
           entidad.telefono || '',
           entidad.email || '',
-          entidad.rol || entidad.tipo_entidad,
+          entidad.rol,
           JSON.stringify(entidad.datos_extra || {}),
-          data.id_de_empresa || null
+          empresaId || null
         ]
       );
     }
@@ -816,7 +965,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             lineaNueva.precio_neto,
             lineaNueva.importe_linea,
             JSON.stringify(lineaNueva.datos_extra || {}),
-            data.id_de_empresa || null,
+            JSON.stringify(lineaNueva.datos_extra || {}),
+            empresaId || null,
             lineaExistente.id
           ]
         );
@@ -835,7 +985,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             lineaNueva.precio_neto,
             lineaNueva.importe_linea,
             JSON.stringify(lineaNueva.datos_extra || {}),
-            data.id_de_empresa || null
+            JSON.stringify(lineaNueva.datos_extra || {}),
+            empresaId || null
           ]
         );
       } else if (lineaExistente && !lineaNueva) {
@@ -863,7 +1014,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
 
     for (const iva of data.iva_details || []) {
-      const totalConImpuesto = iva.total_con_impuesto || (iva.base_imponible + iva.cuota);
+      const totalConImpuesto = (iva.base_imponible + iva.cuota);
       await connection.query(
         'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)',
         [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
@@ -3260,6 +3411,7 @@ export async function getDashboardExportData(
   analytics: DashboardAnalytics;
   documentIds: number[];
   metadata: any;
+  yearUsed?: number;
 }> {
   try {
     console.log('📊 [getDashboardExportData] Iniciando con:', { empresaIds, año, trimestre });

@@ -4,7 +4,7 @@ import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { revalidatePath } from 'next/cache';
 import { getDocumentById } from './document-service';
-import { checkIncidentResolutionWithAI } from '@/ai/flows/evaluate-incident-fix.ts';
+import { checkIncidentResolutionWithAI } from '@/ai/flows/evaluate-incident-fix';
 
 /**
  * Re-validates a document's incidents.
@@ -68,6 +68,8 @@ export async function validateIncidentsAsync(documentId: number) {
             // --- VALIDACIÓN IA (SEMÁNTICA) ---
             // Si no se resolvió por matemáticas, preguntamos a la IA
             if (!isResolved) {
+                console.log(`🤖 [Incidents] Iniciando validación IA para incidencia #${incident.id}`);
+                console.log(`📋 [Incidents] Descripción: "${incident.descripcion}"`);
                 try {
                     // Preparamos el payload limpio para la IA
                     const docPayload = {
@@ -82,6 +84,8 @@ export async function validateIncidentsAsync(documentId: number) {
                         lineas: document.lineas,
                         observaciones: document.observaciones
                     };
+                    console.log(`📤 [Incidents] Enviando a Gemini...`);
+                    console.log(`📊 [Incidents] Datos del documento:`, JSON.stringify(docPayload, null, 2).substring(0, 300) + '...');
 
                     const aiResult = await checkIncidentResolutionWithAI({
                         incidentDescription: incident.descripcion,
@@ -89,21 +93,28 @@ export async function validateIncidentsAsync(documentId: number) {
                         companyData: companyData
                     });
 
+                    console.log(`📥 [Incidents] Respuesta de IA recibida:`, aiResult);
+
                     if (aiResult.resolved) {
                         isResolved = true;
                         resolveReason = aiResult.reason;
-                        console.log(`🤖 [Incidents] Incidencia #${incident.id} resuelta por IA: ${aiResult.reason}`);
+                        console.log(`✅ [Incidents] IA confirmó: Incidencia #${incident.id} RESUELTA`);
+                        console.log(`💡 [Incidents] Razón: ${aiResult.reason}`);
                     } else {
-                        console.log(`🤖 [Incidents] IA determinó que #${incident.id} NO está resuelta: ${aiResult.reason}`);
+                        console.log(`❌ [Incidents] IA determinó: Incidencia #${incident.id} AÚN NO RESUELTA`);
+                        console.log(`💡 [Incidents] Razón: ${aiResult.reason}`);
                     }
 
                 } catch (aiError) {
-                    console.error(`❌ [Incidents] Error en flujo IA para #${incident.id}:`, aiError);
+                    console.error(`❌ [Incidents] ERROR CRÍTICO en flujo IA para incidencia #${incident.id}:`);
+                    console.error(`❌ [Incidents] Tipo de error:`, aiError instanceof Error ? aiError.message : aiError);
+                    console.error(`❌ [Incidents] Stack trace:`, aiError);
                 }
             }
 
             // 5. Actualizar en BD si se resolvió
             if (isResolved) {
+                console.log(`💾 [Incidents] Marcando incidencia #${incident.id} como resuelta en BD...`);
                 await db.query(
                     `UPDATE incidencias_documento 
                  SET validado = 1, 
@@ -113,6 +124,9 @@ export async function validateIncidentsAsync(documentId: number) {
                  WHERE id = ?`,
                     ['AI_AUTO', resolveReason.substring(0, 255), incident.id]
                 );
+                console.log(`✅ [Incidents] Incidencia #${incident.id} marcada como validada en BD`);
+            } else {
+                console.log(`⏭️  [Incidents] Incidencia #${incident.id} permanece ABIERTA`);
             }
         }
 

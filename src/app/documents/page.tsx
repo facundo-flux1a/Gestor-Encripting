@@ -40,6 +40,10 @@ function DocumentsPageContent() {
   const [isTabChanging, setIsTabChanging] = React.useState(false);
   const { toast } = useToast();
 
+  // 🎯 DRAG & DROP STATE
+  const [draggedDocs, setDraggedDocs] = React.useState<number[]>([]);
+  const [dragOverTab, setDragOverTab] = React.useState<string | null>(null);
+
   // Sincronizar estado local con URL si cambia externamente (back/forward)
   React.useEffect(() => {
     const tabFromUrl = searchParams.get('tab') || 'sin-confirmar';
@@ -133,8 +137,11 @@ function DocumentsPageContent() {
         return;
       }
 
-      // PASO 2: Verificar si es factura o abono
-      const esFacturaOAbono = tipoLower.includes('factura') || tipoLower.includes('abono');
+      // PASO 2: Verificar si es factura, abono O ALBARÁN (para agruparlos igual)
+      const esFacturaOAbono = tipoLower.includes('factura')
+        || tipoLower.includes('abono')
+        || tipoLower.includes('albaran')
+        || tipoLower.includes('albarán');
 
       if (!esFacturaOAbono) {
         otrosDocumentos.push(doc);
@@ -145,15 +152,22 @@ function DocumentsPageContent() {
       // ✅ LÓGICA CORREGIDA DE CLASIFICACIÓN
       let esEmitida = false;
 
-      // REGLA 1: Si el tipo dice explícitamente "EMITIDA" o "EMITIDO"
+      // REGLA 1: Prioridad absoluta a texto explícito ("Emitida/o" o "Recibida/o")
+      // Esto arregla "Albaran Recibido" cayendo en emitida por tener cliente
       if (/emitid[oa]/i.test(tipoLower)) {
         esEmitida = true;
-        console.log(`   ✅ Tipo incluye "emitida" -> EMITIDA`);
+        console.log(`   ✅ Tipo explícito "emitida" -> EMITIDA`);
       }
-      // REGLA 2: Si el tipo dice explícitamente "RECIBIDA" o "RECIBIDO"
       else if (/recibid[oa]/i.test(tipoLower)) {
         esEmitida = false;
-        console.log(`   ✅ Tipo incluye "recibida" -> RECIBIDA`);
+        console.log(`   ✅ Tipo explícito "recibida" -> RECIBIDA`);
+      }
+      // REGLA 2: Si no dice nada, PERO es Albarán -> Mirar entidades
+      else if (tipoLower.includes('albaran') || tipoLower.includes('albarán')) {
+        // Si tiene un cliente/receptor, asumimos que se lo emitimos nosotros -> Emitida
+        const hasCliente = doc.entidades?.some(e => e.rol === 'cliente' || e.rol === 'receptor');
+        esEmitida = hasCliente;
+        console.log(`   🚚 Albarán genérico -> ${esEmitida ? 'EMITIDA' : 'RECIBIDA'} (Cliente: ${hasCliente})`);
       }
       // ✅ REGLA 3 CORREGIDA: Es un ABONO sin especificar emitida/recibida
       else if (tipoLower.includes('abono')) {
@@ -324,6 +338,115 @@ function DocumentsPageContent() {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // DRAG & DROP HANDLERS
+  // ═══════════════════════════════════════════════════════════
+
+  const handleDragStart = React.useCallback((selectedIds: number[]) => {
+    console.log('🎯 [Drag] Iniciando drag con documentos:', selectedIds);
+    setDraggedDocs(selectedIds);
+  }, []);
+
+  const handleDropOnTab = React.useCallback(async (targetTab: string) => {
+    if (draggedDocs.length === 0) {
+      console.log('⚠️ [Drag] No hay documentos arrastrados');
+      return;
+    }
+
+    console.log(`📥 [Drag] Drop en tab "${targetTab}" con ${draggedDocs.length} documento(s)`);
+
+    // Determinar nueva dirección basada en tab
+    let nuevaDireccion: 'Emitida' | 'Recibida' | null = null;
+
+    if (targetTab === 'emitidas') {
+      nuevaDireccion = 'Emitida';
+    } else if (targetTab === 'recibidas') {
+      nuevaDireccion = 'Recibida';
+    } else {
+      // No se puede drag a "Sin Confirmar" u "Otros"
+      toast({
+        title: 'Acción no permitida',
+        description: 'Solo puedes arrastrar documentos a Emitidas o Recibidas',
+        variant: 'destructive'
+      });
+      setDraggedDocs([]);
+      setDragOverTab(null);
+      return;
+    }
+
+    try {
+      let updated = 0;
+      let skipped = 0;
+
+      // Actualizar cada documento
+      for (const docId of draggedDocs) {
+        const doc = documents.find(d => d.id === docId);
+        if (!doc) {
+          console.warn(`⚠️ [Drag] Documento #${docId} no encontrado`);
+          skipped++;
+          continue;
+        }
+
+        // Extraer tipo base (Factura, Abono, Albarán)
+        const tipoActual = doc.tipo_documento || '';
+        const tipoBase = tipoActual.replace(/(Emitida|Emitido|Recibida|Recibido)/gi, '').trim();
+
+        // Verificar que tenga un tipo base válido
+        if (!tipoBase || tipoBase.toLowerCase() === tipoActual.toLowerCase()) {
+          console.warn(`⚠️ [Drag] Documento #${docId} no tiene tipo clasificable: "${tipoActual}"`);
+          skipped++;
+          continue;
+        }
+
+        // Construir nuevo tipo normalizado
+        const nuevoTipo = `${tipoBase} ${nuevaDireccion}`;
+
+        console.log(`🔄 [Drag] Doc #${docId}: "${tipoActual}" → "${nuevoTipo}"`);
+
+        // Llamar API para actualizar
+        const response = await fetch(`/api/documents/${docId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo_documento: nuevoTipo })
+        });
+
+        if (response.ok) {
+          updated++;
+        } else {
+          console.error(`❌ [Drag] Error actualizando doc #${docId}`);
+          skipped++;
+        }
+      }
+
+      // Recargar documentos
+      setKey(prev => prev + 1);
+
+      // Mostrar resultado
+      if (updated > 0) {
+        toast({
+          title: 'Documentos actualizados',
+          description: `${updated} documento(s) movido(s) a ${nuevaDireccion}${skipped > 0 ? `. ${skipped} omitido(s)` : ''}`
+        });
+      } else {
+        toast({
+          title: 'No se actualizó ningún documento',
+          description: 'Los documentos seleccionados no pudieron clasificarse',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('❌ [Drag] Error en drop:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron actualizar los documentos',
+        variant: 'destructive'
+      });
+    } finally {
+      setDraggedDocs([]);
+      setDragOverTab(null);
+    }
+  }, [draggedDocs, documents, toast]);
+
   // Empty state cuando no hay empresas seleccionadas
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
@@ -435,7 +558,17 @@ function DocumentsPageContent() {
                   <TabsTrigger
                     value="emitidas"
                     disabled={isTutorialActive && currentStep === 3}
-                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-green-500/10 data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400 data-[state=active]:shadow-lg data-[state=active]:shadow-green-500/20"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverTab('emitidas');
+                    }}
+                    onDragLeave={() => setDragOverTab(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropOnTab('emitidas');
+                    }}
+                    className={`flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-green-500/10 data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400 data-[state=active]:shadow-lg data-[state=active]:shadow-green-500/20 ${dragOverTab === 'emitidas' ? 'ring-2 ring-green-500 bg-green-500/20 scale-105' : ''
+                      }`}
                   >
                     <TrendingUp className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
                     <span className="whitespace-nowrap">Facturas Emitidas</span>
@@ -451,7 +584,17 @@ function DocumentsPageContent() {
                   <TabsTrigger
                     value="recibidas"
                     disabled={isTutorialActive && currentStep === 3}
-                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverTab('recibidas');
+                    }}
+                    onDragLeave={() => setDragOverTab(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropOnTab('recibidas');
+                    }}
+                    className={`flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 ${dragOverTab === 'recibidas' ? 'ring-2 ring-blue-500 bg-blue-500/20 scale-105' : ''
+                      }`}
                   >
                     <TrendingDown className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
                     <span className="whitespace-nowrap">Facturas Recibidas</span>
@@ -530,6 +673,7 @@ function DocumentsPageContent() {
                     viewId="documentos-sin-confirmar"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
+                    onDragStart={handleDragStart}
                   />
                 </div>
               )}

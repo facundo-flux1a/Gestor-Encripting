@@ -832,6 +832,7 @@ export function DocumentsTable({
   onDocumentChanged,
   customTypes = [],
   onMove,
+  onDragStart,
 }: {
   documents: Document[],
   hiddenColumns?: string[],
@@ -843,6 +844,7 @@ export function DocumentsTable({
   onDocumentChanged?: () => void,
   customTypes?: string[],
   onMove?: (docIds: number[], targetTipo: string) => void,
+  onDragStart?: (selectedIds: number[]) => void,
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);

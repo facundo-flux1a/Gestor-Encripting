@@ -164,8 +164,37 @@ export function GroupedDocumentsView({
     allUniqueTypes.forEach(t => grouped.set(t, []));
     grouped.set(UNCLASSIFIED, []);
     documents.forEach(doc => {
-      const tipo = doc.tipo_documento || 'Sin categoría';
-      const matchedType = allUniqueTypes.find(ct => ct.toLowerCase() === tipo.toLowerCase());
+      let tipo = doc.tipo_documento || 'Sin categoría';
+
+      // 🔄 LOGIC: Reclassify Albaranes
+      // If it's an Albarán (or unclassified but looks like one), map it to Facturas
+      const isAlbaran = tipo.toLowerCase().includes('albarán') || tipo.toLowerCase().includes('albaran');
+
+      if (isAlbaran) {
+        console.log('🔍 [GroupedView] Detectado Albarán:', doc.id_documento, doc.tipo_documento, doc.entidades);
+        // Determine if Emitida or Recibida based on entities
+        // If it has a 'cliente' entity, it's likely Emitida (Sales)
+        const hasCliente = doc.entidades?.some(e => e.rol === 'cliente' || e.rol === 'receptor');
+
+        // Check if destination buckets exist or default to standard names
+        // Ideally we map to existing buckets if they are close.
+        if (hasCliente) {
+          tipo = 'Factura Emitida';
+        } else {
+          tipo = 'Factura Recibida';
+        }
+      }
+
+      let matchedType = allUniqueTypes.find(ct => ct.toLowerCase() === tipo.toLowerCase());
+
+      if (!matchedType && isAlbaran) {
+        matchedType = tipo;
+        if (!grouped.has(matchedType)) {
+          grouped.set(matchedType, []);
+          allUniqueTypes.push(matchedType);
+        }
+      }
+
       if (matchedType) grouped.get(matchedType)!.push(doc);
       else grouped.get(UNCLASSIFIED)!.push(doc);
     });

@@ -82,8 +82,6 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
 
   const session = await decrypt(sessionCookie);
   if (!session) {
-    const cookieStore = await cookies();
-    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
 
@@ -102,9 +100,7 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     );
 
     if (!isActive) {
-      console.warn('⚠️ [getSession] Usuario inactivo, eliminando sesión:', session.userId);
-      const cookieStore = await cookies();
-      cookieStore.delete(SESSION_COOKIE_NAME);
+      console.warn('⚠️ [getSession] Usuario inactivo:', session.userId);
       return null;
     }
   } catch (error) {
