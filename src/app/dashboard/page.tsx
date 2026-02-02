@@ -10,7 +10,8 @@ import { DocumentStatusChart } from '@/components/dashboard/document-status-char
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { DashboardTutorial } from '@/components/dashboard/dashboard-tutorial';
-import { getDashboardAnalytics, type DashboardAnalytics } from '@/services/document-service';
+import { getDashboardAnalytics } from '@/services/document-service';
+import { type DashboardAnalytics } from '@/lib/types';
 import {
   LayoutDashboard,
   FileText,
@@ -18,9 +19,12 @@ import {
   AlertTriangle,
   Package,
   ArrowUpRight,
-  ArrowDownLeft,
-  Scale,
-  Banknote,
+  ArrowDownRight,
+  TrendingDown,
+  TrendingUp,
+  Euro,
+  CalendarRange,
+  PieChart,
   Loader2,
   RefreshCcw,
   X,
@@ -55,6 +59,24 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { TopProviders } from '@/components/dashboard/top-providers';
 
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
@@ -501,19 +523,45 @@ export default function DashboardPage() {
     );
   }
 
-  const financialSummaryData = [
-    { name: 'T1', sales: analytics.quarterlySummary.T1.ingresos, expenses: analytics.quarterlySummary.T1.gastos },
-    { name: 'T2', sales: analytics.quarterlySummary.T2.ingresos, expenses: analytics.quarterlySummary.T2.gastos },
-    { name: 'T3', sales: analytics.quarterlySummary.T3.ingresos, expenses: analytics.quarterlySummary.T3.gastos },
-    { name: 'T4', sales: analytics.quarterlySummary.T4.ingresos, expenses: analytics.quarterlySummary.T4.gastos },
-  ];
+  // ✅ Prepare data for FinancialSummary component
+  const financialAnnualData = Object.keys(analytics.yearlySummary || {}).map(year => ({
+    name: year,
+    sales: analytics.yearlySummary[year].ingresos,
+    expenses: analytics.yearlySummary[year].gastos
+  }));
 
-  const ivaSummaryData = [
-    { name: 'T1', ivaRepercutido: analytics.ivaSummary.T1.repercutido, ivaSoportado: analytics.ivaSummary.T1.soportado },
-    { name: 'T2', ivaRepercutido: analytics.ivaSummary.T2.repercutido, ivaSoportado: analytics.ivaSummary.T2.soportado },
-    { name: 'T3', ivaRepercutido: analytics.ivaSummary.T3.repercutido, ivaSoportado: analytics.ivaSummary.T3.soportado },
-    { name: 'T4', ivaRepercutido: analytics.ivaSummary.T4.repercutido, ivaSoportado: analytics.ivaSummary.T4.soportado },
-  ];
+  const financialQuarterlyData: Record<string, any[]> = {};
+  if (analytics.multiYearQuarterlySummary) {
+    Object.keys(analytics.multiYearQuarterlySummary).forEach(year => {
+      const yearData = analytics.multiYearQuarterlySummary[year];
+      financialQuarterlyData[year] = [
+        { name: 'T1', sales: yearData.T1?.ingresos || 0, expenses: yearData.T1?.gastos || 0 },
+        { name: 'T2', sales: yearData.T2?.ingresos || 0, expenses: yearData.T2?.gastos || 0 },
+        { name: 'T3', sales: yearData.T3?.ingresos || 0, expenses: yearData.T3?.gastos || 0 },
+        { name: 'T4', sales: yearData.T4?.ingresos || 0, expenses: yearData.T4?.gastos || 0 },
+      ];
+    });
+  }
+
+  // ✅ Prepare data for IvaSummary component
+  const ivaAnnualData = Object.keys(analytics.ivaYearlySummary || {}).map(year => ({
+    name: year,
+    ivaRepercutido: analytics.ivaYearlySummary[year].repercutido,
+    ivaSoportado: analytics.ivaYearlySummary[year].soportado
+  }));
+
+  const ivaQuarterlyData: Record<string, any[]> = {};
+  if (analytics.multiYearIvaSummary) {
+    Object.keys(analytics.multiYearIvaSummary).forEach(year => {
+      const yearData = analytics.multiYearIvaSummary[year];
+      ivaQuarterlyData[year] = [
+        { name: 'T1', ivaRepercutido: yearData.T1?.repercutido || 0, ivaSoportado: yearData.T1?.soportado || 0 },
+        { name: 'T2', ivaRepercutido: yearData.T2?.repercutido || 0, ivaSoportado: yearData.T2?.soportado || 0 },
+        { name: 'T3', ivaRepercutido: yearData.T3?.repercutido || 0, ivaSoportado: yearData.T3?.soportado || 0 },
+        { name: 'T4', ivaRepercutido: yearData.T4?.repercutido || 0, ivaSoportado: yearData.T4?.soportado || 0 },
+      ];
+    });
+  }
 
   return (
     <MainLayout>
@@ -528,276 +576,234 @@ export default function DashboardPage() {
               value={selectedAño?.toString() || 'all'}
               onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
             >
-              <SelectTrigger className="w-[100px] lg:w-[130px] hover:bg-accent transition-colors duration-200">
-                <SelectValue placeholder={analytics?.yearUsed ? `Año ${analytics.yearUsed}` : "Año"} />
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Año fiscal" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos (Auto)</SelectItem>
-                <SelectItem value="2030" className="hover:bg-accent transition-colors duration-150">2030</SelectItem>
-                <SelectItem value="2029" className="hover:bg-accent transition-colors duration-150">2029</SelectItem>
-                <SelectItem value="2028" className="hover:bg-accent transition-colors duration-150">2028</SelectItem>
-                <SelectItem value="2027" className="hover:bg-accent transition-colors duration-150">2027</SelectItem>
-                <SelectItem value="2026" className="hover:bg-accent transition-colors duration-150">2026</SelectItem>
-                <SelectItem value="2025" className="hover:bg-accent transition-colors duration-150">2025</SelectItem>
-                <SelectItem value="2024" className="hover:bg-accent transition-colors duration-150">2024</SelectItem>
-                <SelectItem value="2023" className="hover:bg-accent transition-colors duration-150">2023</SelectItem>
-                <SelectItem value="2022" className="hover:bg-accent transition-colors duration-150">2022</SelectItem>
+                <SelectItem value="all">Todos (Auto)</SelectItem>
+                <SelectItem value="2026">2026</SelectItem>
+                <SelectItem value="2025">2025</SelectItem>
+                <SelectItem value="2024">2024</SelectItem>
               </SelectContent>
             </Select>
-
             <Select
               value={selectedTrimestre?.toString() || 'all'}
               onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
               disabled={!selectedAño}
             >
-              <SelectTrigger className="w-[100px] lg:w-[120px] hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">
+              <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Trimestre" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="hover:bg-accent transition-colors duration-150">Todos</SelectItem>
-                <SelectItem value="1" className="hover:bg-accent transition-colors duration-150">T1</SelectItem>
-                <SelectItem value="2" className="hover:bg-accent transition-colors duration-150">T2</SelectItem>
-                <SelectItem value="3" className="hover:bg-accent transition-colors duration-150">T3</SelectItem>
-                <SelectItem value="4" className="hover:bg-accent transition-colors duration-150">T4</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="1">T1</SelectItem>
+                <SelectItem value="2">T2</SelectItem>
+                <SelectItem value="3">T3</SelectItem>
+                <SelectItem value="4">T4</SelectItem>
               </SelectContent>
             </Select>
-
-            {(selectedAño || selectedTrimestre) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedAño(null);
-                  setSelectedTrimestre(null);
-                }}
-                className="hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group"
-              >
-                <X className="h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
-              </Button>
-            )}
           </div>
+        </PageHeader>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <FilterSheet />
-            <Button
-              data-tutorial="export-button"
-              size="sm"
-              variant="outline"
-              onClick={handleExport}
-              disabled={isExporting || !selectedCompanyIds.length}
-              className="hidden sm:flex gap-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 disabled:cursor-not-allowed group"
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="hidden lg:inline">Generando...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 group-hover:translate-y-0.5 transition-transform duration-200" />
-                  <span className="hidden lg:inline">Exportar PDF</span>
-                  <span className="lg:hidden">PDF</span>
-                </>
-              )}
-            </Button>
-            <CleanButton />
-          </div>
-        </PageHeader><div className="space-y-4">
-          <div data-tutorial="kpis" className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {/* ✅ TARJETA 1: TOTAL INGRESOS - CON IVA + BREAKDOWN */}
-            <div className="animate-fade-in group" style={{ animationDelay: '0ms' }}>
-              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                <StatsCard
-                  title="Total Ingresos (con IVA)"
-                  value={formatCurrency(analytics.kpis.totalIngresos)}
-                  icon={ArrowUpRight}
-                  description={`${formatNumber(analytics.kpis.totalFacturasIngreso)} facturas`}
-                  breakdown={[
-                    {
-                      label: "Base Imponible",
-                      value: formatCurrency(analytics.kpis.totalIngresosSinIva),
-                      className: "text-muted-foreground"
-                    },
-                    {
-                      label: "IVA Repercutido",
-                      value: formatCurrency(analytics.kpis.ivaRepercutido),
-                      className: "text-muted-foreground"
-                    },
-                    {
-                      label: "Total con IVA",
-                      value: formatCurrency(analytics.kpis.totalIngresos),
-                      className: "text-green-600 dark:text-green-500 font-semibold"
-                    }
-                  ]}
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Resumen</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Total Ingresos (con IVA)
+                      </CardTitle>
+                      <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.totalIngresos)}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {analytics.kpis.totalFacturasIngreso} facturas
+                      </p>
+                    </CardContent>
+                  </Card>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Desglose de Ingresos</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Base Imponible:</span>
+                      <span className="font-medium">{formatCurrency(analytics.kpis.totalIngresosSinIva)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">IVA Repercutido:</span>
+                      <span className="font-medium">{formatCurrency(analytics.kpis.ivaRepercutido)}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                      <span>Total:</span>
+                      <span className="text-green-600">{formatCurrency(analytics.kpis.totalIngresos)}</span>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Total Gastos (con IVA)
+                      </CardTitle>
+                      <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.totalGastos)}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {analytics.kpis.totalFacturasGasto} facturas
+                      </p>
+                    </CardContent>
+                  </Card>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Desglose de Gastos</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Base Imponible:</span>
+                      <span className="font-medium">{formatCurrency(analytics.kpis.totalGastosSinIva)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">IVA Soportado:</span>
+                      <span className="font-medium">{formatCurrency(analytics.kpis.ivaSoportado)}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                      <span>Total:</span>
+                      <span className="text-red-600">{formatCurrency(analytics.kpis.totalGastos)}</span>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Beneficio Bruto (con IVA)
+                      </CardTitle>
+                      <Euro className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.beneficio || 0)}</div>
+                      <p className="text-xs text-muted-foreground">
+                        Ingresos - Gastos
+                      </p>
+                    </CardContent>
+                  </Card>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Desglose de Beneficio</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Ingresos Totales:</span>
+                      <span className="text-green-600 font-medium">+{formatCurrency(analytics.kpis.totalIngresos)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Gastos Totales:</span>
+                      <span className="text-red-600 font-medium">-{formatCurrency(analytics.kpis.totalGastos)}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                      <span>Total:</span>
+                      <span className={analytics.kpis.beneficio >= 0 ? "text-green-600" : "text-red-600"}>
+                        {formatCurrency(analytics.kpis.beneficio)}
+                      </span>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Resultado IVA
+                      </CardTitle>
+                      <Euro className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.resultadoIva || 0)}</div>
+                      <p className="text-xs text-muted-foreground">
+                        Repercutido - Soportado
+                      </p>
+                    </CardContent>
+                  </Card>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Desglose de IVA</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Repercutido (Ventas):</span>
+                      <span className="text-green-600 font-medium">+{formatCurrency(analytics.kpis.ivaRepercutido)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Soportado (Compras):</span>
+                      <span className="text-red-600 font-medium">-{formatCurrency(analytics.kpis.ivaSoportado)}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                      <span>A liquidar:</span>
+                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-green-600"}>
+                        {formatCurrency(analytics.kpis.resultadoIva)}
+                      </span>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+              <Card className="hover:shadow-lg transition-all duration-200">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Documentos
+                  </CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{analytics.kpis.totalDocs}</div>
+                  <p className="text-xs text-muted-foreground">
+                    En el sistema
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+              <div className="col-span-4" data-tutorial="financial-summary">
+                <FinancialSummary
+                  annualData={financialAnnualData}
+                  quarterlyData={financialQuarterlyData}
+                  defaultYear={selectedAño?.toString() || null}
                 />
               </div>
+              <div className="col-span-3">
+                <DocumentStatusChart data={analytics.documentDistribution} />
+              </div>
             </div>
 
-            {/* ✅ TARJETA 2: TOTAL GASTOS - CON IVA + BREAKDOWN */}
-            <div className="animate-fade-in group" style={{ animationDelay: '50ms' }}>
-              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                <StatsCard
-                  title="Total Gastos (con IVA)"
-                  value={formatCurrency(analytics.kpis.totalGastos)}
-                  icon={ArrowDownLeft}
-                  description={`${formatNumber(analytics.kpis.totalFacturasGasto)} facturas`}
-                  breakdown={[
-                    {
-                      label: "Base Imponible",
-                      value: formatCurrency(analytics.kpis.totalGastosSinIva),
-                      className: "text-muted-foreground"
-                    },
-                    {
-                      label: "IVA Soportado",
-                      value: formatCurrency(analytics.kpis.ivaSoportado),
-                      className: "text-muted-foreground"
-                    },
-                    {
-                      label: "Total con IVA",
-                      value: formatCurrency(analytics.kpis.totalGastos),
-                      className: "text-red-600 dark:text-red-500 font-semibold"
-                    }
-                  ]}
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+              <div className="col-span-4">
+                <IvaSummary
+                  annualData={ivaAnnualData}
+                  quarterlyData={ivaQuarterlyData}
+                  defaultYear={selectedAño?.toString() || null}
                 />
               </div>
+              <div className="col-span-3">
+                <TopProviders data={analytics.topProviders} />
+              </div>
             </div>
+          </TabsContent>
 
-            {/* ✅ TARJETA 3: BENEFICIO BRUTO - CON IVA + BREAKDOWN */}
-            <div className="animate-fade-in group" style={{ animationDelay: '100ms' }}>
-              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                <StatsCard
-                  title="Beneficio Bruto (con IVA)"
-                  value={formatCurrency(analytics.kpis.beneficio)}
-                  icon={Scale}
-                  description="Ingresos - Gastos"
-                  breakdown={[
-                    {
-                      label: "Beneficio sin IVA",
-                      value: formatCurrency(analytics.kpis.beneficioSinIva),
-                      className: "text-muted-foreground"
-                    },
-                    {
-                      label: "Resultado IVA",
-                      value: formatCurrency(analytics.kpis.resultadoIva),
-                      className: analytics.kpis.resultadoIva >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
-                    },
-                    {
-                      label: "Beneficio con IVA",
-                      value: formatCurrency(analytics.kpis.beneficio),
-                      className: analytics.kpis.beneficio >= 0 ? 'text-green-600 dark:text-green-500 font-semibold' : 'text-red-600 dark:text-red-500 font-semibold'
-                    }
-                  ]}
-                />
-              </div>
-            </div>
 
-            <div className="animate-fade-in group" style={{ animationDelay: '150ms' }}>
-              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                <StatsCard
-                  title="Resultado IVA"
-                  value={formatCurrency(analytics.kpis.resultadoIva)}
-                  icon={Banknote}
-                  description="Repercutido - Soportado"
-                  breakdown={[
-                    {
-                      label: "IVA Repercutido",
-                      value: formatCurrency(analytics.kpis.ivaRepercutido),
-                      className: "text-green-600 dark:text-green-500"
-                    },
-                    {
-                      label: "IVA Soportado",
-                      value: formatCurrency(analytics.kpis.ivaSoportado),
-                      className: "text-red-600 dark:text-red-500"
-                    },
-                    {
-                      label: "Resultado",
-                      value: formatCurrency(analytics.kpis.resultadoIva),
-                      className: analytics.kpis.resultadoIva >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'
-                    }
-                  ]}
-                />
-              </div>
-            </div>
-
-            <div className="animate-fade-in group" style={{ animationDelay: '200ms' }}>
-              <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                <StatsCard
-                  title="Total Documentos"
-                  value={formatNumber(analytics.kpis.totalDocs)}
-                  icon={FileText}
-                  description="En el sistema"
-                  breakdown={[
-                    {
-                      label: "Facturas Emitidas",
-                      value: formatNumber(analytics.kpis.totalFacturasIngreso),
-                      className: "text-green-600 dark:text-green-500"
-                    },
-                    {
-                      label: "Facturas Recibidas",
-                      value: formatNumber(analytics.kpis.totalFacturasGasto),
-                      className: "text-red-600 dark:text-red-500"
-                    },
-                    {
-                      label: "Total Sistema",
-                      value: formatNumber(analytics.kpis.totalDocs),
-                      className: "text-foreground"
-                    }
-                  ]}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
-            <div data-tutorial="financial-chart" className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '250ms' }}>
-              <FinancialSummary data={financialSummaryData} />
-            </div>
-            <div data-tutorial="distribution-chart" className="lg:col-span-3 animate-fade-in" style={{ animationDelay: '300ms' }}>
-              <DocumentStatusChart data={analytics.documentDistribution} />
-            </div>
-            <div data-tutorial="iva-chart" className="lg:col-span-full animate-fade-in" style={{ animationDelay: '350ms' }}>
-              <IvaSummary data={ivaSummaryData} />
-            </div>
-            <div className="lg:col-span-4 animate-fade-in" style={{ animationDelay: '400ms' }}>
-              <InsightsWidget
-                incidentRate={analytics.kpis.incidentRate}
-                topProviders={analytics.topProviders}
-              />
-            </div>
-            <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 auto-rows-min">
-              <div className="animate-fade-in group" style={{ animationDelay: '450ms' }}>
-                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                  <StatsCard
-                    title="Incidencias Abiertas"
-                    value={formatNumber(analytics.kpis.incidenciasAbiertas)}
-                    icon={AlertTriangle}
-                    description={`${analytics.kpis.incidentRate.toFixed(1)}% de docs`}
-                  />
-                </div>
-              </div>
-              <div className="animate-fade-in group" style={{ animationDelay: '500ms' }}>
-                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                  <StatsCard
-                    title="Proveedores"
-                    value={formatNumber(analytics.kpis.totalProveedores)}
-                    icon={Users}
-                    description="Únicos registrados"
-                  />
-                </div>
-              </div>
-              <div className="animate-fade-in group" style={{ animationDelay: '550ms' }}>
-                <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-                  <StatsCard
-                    title="Productos"
-                    value={formatNumber(analytics.kpis.totalProductos)}
-                    icon={Package}
-                    description="Únicos registrados"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        </Tabs>
       </div>
 
       <style jsx global>{`
@@ -824,6 +830,6 @@ export default function DashboardPage() {
           }
         }
       `}</style>
-    </MainLayout>
+    </MainLayout >
   );
 }

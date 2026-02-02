@@ -1254,6 +1254,8 @@ export function DocumentsTable({
               // 🆕 Pasar props de selección
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
+              // 🎯 Pasar callback para drag entre tabs
+              onDragStart={onDragStart}
             />
           </div>
 

@@ -79,6 +79,8 @@ interface DataTableProps<TData, TValue> {
   // 🆕 PROPS PARA SELECCIÓN EXTERNA
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
+  // 🆕 CALLBACK PARA DRAG ENTRE TABS
+  onDragStart?: (selectedIds: number[]) => void;
 }
 
 
@@ -205,9 +207,15 @@ const DraggableTableHeader = <TData, TValue>({
 const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: number | null; numero_documento: string }>({
   row,
   onRowClick,
+  rowSelection,
+  data,
+  onDragStartCallback,
 }: {
   row: Row<TData>,
   onRowClick?: (row: TData) => void,
+  rowSelection?: RowSelectionState,
+  data?: TData[],
+  onDragStartCallback?: (selectedIds: number[]) => void,
 }) => {
   const {
     attributes,
@@ -237,6 +245,28 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
     }));
     e.dataTransfer.effectAllowed = 'move';
     console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
+
+    // 🆕 CALLBACK PARA DRAG ENTRE TABS
+    if (onDragStartCallback) {
+      let selectedIds = [];
+      
+      // Si hay selección múltiple, usar esos IDs
+      if (rowSelection && data && Object.keys(rowSelection).length > 0) {
+        selectedIds = Object.keys(rowSelection)
+          .map(key => data[parseInt(key)]?.id_documento)
+          .filter(id => id !== undefined);
+        console.log('📤 [DraggableTableRow] Arrastrando selección múltiple:', selectedIds);
+      } 
+      // Si no hay selección, usar solo el documento actual
+      else {
+        selectedIds = [doc.id_documento];
+        console.log('📤 [DraggableTableRow] Arrastrando documento individual:', doc.id_documento);
+      }
+      
+      if (selectedIds.length > 0) {
+        onDragStartCallback(selectedIds);
+      }
+    }
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
@@ -514,6 +544,9 @@ export function DataTable<TData extends object, TValue>({
         key={(row.original as any).id_documento}
         row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>}
         onRowClick={onRowClick}
+        rowSelection={rowSelection}
+        data={data}
+        onDragStartCallback={onDragStart}
       />;
     }
     return <StandardTableRow key={row.id} row={row} />;

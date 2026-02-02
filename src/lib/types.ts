@@ -259,9 +259,25 @@ export type DashboardAnalytics = {
   quarterlySummary: {
     [key: string]: { ingresos: number; gastos: number };
   };
+  yearlySummary: {
+    [key: string]: { ingresos: number; gastos: number };
+  };
+  multiYearQuarterlySummary: {
+    [year: string]: {
+      [quarter: string]: { ingresos: number; gastos: number };
+    };
+  };
   documentDistribution: { name: string; value: number }[];
   ivaSummary: {
     [key: string]: { repercutido: number; soportado: number };
+  };
+  ivaYearlySummary: {
+    [key: string]: { repercutido: number; soportado: number };
+  };
+  multiYearIvaSummary: {
+    [year: string]: {
+      [quarter: string]: { repercutido: number; soportado: number };
+    };
   };
   topProviders: { name: string; total: number; fiscalId: string }[];
   yearUsed?: number;

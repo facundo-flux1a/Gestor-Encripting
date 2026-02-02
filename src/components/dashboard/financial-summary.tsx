@@ -1,269 +1,232 @@
 'use client';
 
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine
+} from 'recharts';
+import { Button } from "@/components/ui/button";
+import { Filter } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-type ChartData = {
-  name: string;
-  sales: number;
-  expenses: number;
-};
-
-const formatCurrency = (amount: number | string): string => {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0,00 €';
-  
-  const fixed = num.toFixed(2);
-  const parts = fixed.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
-  
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
-  return `${formattedInteger},${decimalPart} €`;
-};
+interface FinancialSummaryProps {
+  annualData: Array<{
+    name: string;
+    sales: number;
+    expenses: number;
+  }>;
+  quarterlyData: Record<string, Array<{
+    name: string;
+    sales: number;
+    expenses: number;
+  }>>;
+  defaultYear?: string | null;
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border bg-background p-2 sm:p-3 shadow-lg shadow-primary/20 animate-in fade-in zoom-in duration-200">
-        <div className="flex flex-col space-y-1">
-          <span className="text-xs sm:text-sm font-medium bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-transparent">
-            {label}
-          </span>
-          <span 
-            className="font-bold text-xs sm:text-sm tabular-nums" 
-            style={{ color: 'hsl(var(--chart-1))' }}
-          >
-            Ingresos: {formatCurrency(payload[0].value)}
-          </span>
-          <span 
-            className="font-bold text-xs sm:text-sm tabular-nums" 
-            style={{ color: 'hsl(var(--chart-2))' }}
-          >
-            Gastos: {formatCurrency(payload[1].value)}
-          </span>
+      <div className="bg-background border border-border p-3 rounded-lg shadow-xl">
+        <p className="font-semibold mb-2 text-sm">{label}</p>
+        <div className="space-y-1.5">
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center gap-2 text-xs">
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-muted-foreground w-16">
+                {entry.name}:
+              </span>
+              <span className="font-medium font-mono">
+                {new Intl.NumberFormat('es-ES', {
+                  style: 'currency',
+                  currency: 'EUR'
+                }).format(entry.value)}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     );
   }
-
   return null;
 };
 
-export function FinancialSummary({ data }: { data: ChartData[] }) {
+export function FinancialSummary({ annualData, quarterlyData, defaultYear }: FinancialSummaryProps) {
+  const [selectedYear, setSelectedYear] = useState<string | 'all'>('all');
   const [activeBar, setActiveBar] = useState<string | null>(null);
 
+  // Sync internal state with defaultYear prop
+  useEffect(() => {
+    if (defaultYear) {
+      setSelectedYear(defaultYear.toString());
+    } else {
+      setSelectedYear('all');
+    }
+  }, [defaultYear]);
+
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M€`;
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}k€`;
+    return `${value}€`;
+  };
+
+  const currentData = useMemo(() => {
+    if (selectedYear === 'all') return annualData;
+    return quarterlyData[selectedYear] || [];
+  }, [selectedYear, annualData, quarterlyData]);
+
+  const availableYears = useMemo(() =>
+    Object.keys(quarterlyData).sort((a, b) => Number(b) - Number(a)),
+    [quarterlyData]);
+
   return (
-    <Card className="overflow-hidden hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] transition-all duration-300 group">
-      <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
-        <CardTitle className="text-base sm:text-lg lg:text-xl group-hover:text-primary transition-colors duration-300">
-          Resumen Financiero Trimestral
-        </CardTitle>
-        <CardDescription className="text-xs sm:text-sm group-hover:text-foreground/70 transition-colors duration-300">
-          Ingresos y gastos registrados en cada trimestre fiscal.
-        </CardDescription>
+    <Card className="col-span-4 h-full shadow-md hover:shadow-lg transition-all duration-300 border-border/50 bg-card/50 backdrop-blur-sm">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+        <div className="space-y-1.5">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            Resumen Financiero
+            <span className="flex h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+          </CardTitle>
+          <CardDescription>
+            {selectedYear === 'all'
+              ? 'Evolución anual de ingresos y gastos'
+              : `Desglose trimestral del año ${selectedYear}`}
+          </CardDescription>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 gap-2 bg-background/50 hover:bg-accent hover:text-accent-foreground border-dashed">
+              <Filter className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">
+                {selectedYear === 'all' ? 'Ver Anual' : selectedYear}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[140px]">
+            <DropdownMenuItem
+              onClick={() => setSelectedYear('all')}
+              className={selectedYear === 'all' ? "bg-accent text-accent-foreground font-medium" : ""}
+            >
+              Vista Anual
+            </DropdownMenuItem>
+            {availableYears.length > 0 && <div className="h-px bg-border my-1" />}
+            {availableYears.map(year => (
+              <DropdownMenuItem
+                key={year}
+                onClick={() => setSelectedYear(year)}
+                className={selectedYear === year ? "bg-accent text-accent-foreground font-medium" : ""}
+              >
+                Año {year}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardHeader>
-      <CardContent className="pl-0 sm:pl-2 pr-3 sm:pr-6 pb-3 sm:pb-6">
-        {data.length > 0 ? (
-          <ResponsiveContainer 
-            width="100%" 
-            height={250}
-            className="sm:hidden"
-          >
-            <BarChart 
-              data={data}
-              onMouseMove={(state) => {
-                if (state.isTooltipActive) {
-                  setActiveBar(state.activeLabel || null);
-                }
-              }}
-              onMouseLeave={() => setActiveBar(null)}
-            >
-              <XAxis
-                dataKey="name"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={10}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={10}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => new Intl.NumberFormat('es-ES', { notation: 'compact', compactDisplay: 'short' }).format(value)}
-                width={40}
-              />
-              <Tooltip 
-                cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} 
-                content={<CustomTooltip />} 
-              />
-              <Bar 
-                dataKey="sales" 
-                name="Ingresos" 
-                fill="hsl(var(--chart-1))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={0}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-              <Bar 
-                dataKey="expenses" 
-                name="Gastos" 
-                fill="hsl(var(--chart-2))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={100}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : null}
 
-        {data.length > 0 ? (
-          <ResponsiveContainer 
-            width="100%" 
-            height={280}
-            className="hidden sm:block lg:hidden"
-          >
-            <BarChart 
-              data={data}
-              onMouseMove={(state) => {
-                if (state.isTooltipActive) {
-                  setActiveBar(state.activeLabel || null);
-                }
-              }}
-              onMouseLeave={() => setActiveBar(null)}
-            >
-              <XAxis
-                dataKey="name"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => formatCurrency(value as number)}
-                width={60}
-              />
-              <Tooltip 
-                cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} 
-                content={<CustomTooltip />} 
-              />
-              <Legend 
-                iconType="circle" 
-                wrapperStyle={{ fontSize: '11px' }}
-              />
-              <Bar 
-                dataKey="sales" 
-                name="Ventas / Ingresos" 
-                fill="hsl(var(--chart-1))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={0}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-              <Bar 
-                dataKey="expenses" 
-                name="Gastos" 
-                fill="hsl(var(--chart-2))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={100}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : null}
-
-        {data.length > 0 ? (
-          <ResponsiveContainer 
-            width="100%" 
-            height={300}
-            className="hidden lg:block"
-          >
-            <BarChart 
-              data={data}
-              onMouseMove={(state) => {
-                if (state.isTooltipActive) {
-                  setActiveBar(state.activeLabel || null);
-                }
-              }}
-              onMouseLeave={() => setActiveBar(null)}
-            >
-              <XAxis
-                dataKey="name"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => formatCurrency(value as number)}
-              />
-              <Tooltip 
-                cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} 
-                content={<CustomTooltip />} 
-              />
-              <Legend iconType="circle" />
-              <Bar 
-                dataKey="sales" 
-                name="Ventas / Ingresos" 
-                fill="hsl(var(--chart-1))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={0}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-              <Bar 
-                dataKey="expenses" 
-                name="Gastos" 
-                fill="hsl(var(--chart-2))" 
-                radius={[4, 4, 0, 0]}
-                className="hover:opacity-80 transition-opacity duration-200"
-                animationBegin={100}
-                animationDuration={800}
-                animationEasing="ease-out"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex h-[250px] sm:h-[280px] lg:h-[300px] w-full items-center justify-center text-muted-foreground text-xs sm:text-sm">
-            <div className="text-center animate-pulse">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-lg bg-muted flex items-center justify-center animate-bounce" style={{ animationDuration: '2s' }}>
-                <div className="w-4/5 h-4/5 border-4 border-dashed border-muted-foreground/20 rounded" />
+      <CardContent className="pl-0">
+        <div className="h-[350px] w-full mt-4">
+          {currentData && currentData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={currentData}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                barGap={4}
+                onMouseMove={(state) => {
+                  if (state.isTooltipActive) {
+                    setActiveBar(state.activeLabel || null);
+                  }
+                }}
+                onMouseLeave={() => setActiveBar(null)}
+              >
+                <defs>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.6} />
+                  </linearGradient>
+                  <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.6} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="hsl(var(--border))"
+                  opacity={0.4}
+                />
+                <XAxis
+                  dataKey="name"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={formatCurrency}
+                  dx={-10}
+                />
+                <Tooltip
+                  cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+                  content={<CustomTooltip />}
+                  animationDuration={200}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+                <Bar
+                  dataKey="sales"
+                  name="Ingresos"
+                  fill="url(#colorSales)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={50}
+                  animationDuration={1000}
+                  className="transition-all duration-300 hover:opacity-80"
+                />
+                <Bar
+                  dataKey="expenses"
+                  name="Gastos"
+                  fill="url(#colorExpenses)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={50}
+                  animationDuration={1000}
+                  animationBegin={200}
+                  className="transition-all duration-300 hover:opacity-80"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+              <div className="p-3 rounded-full bg-muted/50">
+                <Filter className="h-6 w-6 opacity-50" />
               </div>
-              <p className="text-sm sm:text-base font-medium">No hay datos financieros</p>
-              <p className="text-xs sm:text-sm mt-1">Los datos aparecerán aquí cuando estén disponibles</p>
+              <p className="text-sm font-medium">No hay datos disponibles para este periodo</p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
-
-      <style jsx global>{`
-        .recharts-bar-rectangle {
-          transition: all 0.3s ease;
-        }
-        
-        .recharts-bar-rectangle:hover {
-          filter: brightness(1.2) drop-shadow(0 4px 8px rgba(0,0,0,0.2));
-        }
-      `}</style>
     </Card>
   );
 }

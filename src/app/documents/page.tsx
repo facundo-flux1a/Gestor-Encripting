@@ -380,9 +380,33 @@ function DocumentsPageContent() {
 
       // Actualizar cada documento
       for (const docId of draggedDocs) {
-        const doc = documents.find(d => d.id === docId);
+        const doc = documents.find(d => d.id_documento === docId);
         if (!doc) {
           console.warn(`⚠️ [Drag] Documento #${docId} no encontrado`);
+          skipped++;
+          continue;
+        }
+
+
+        // 🆕 Determinar de qué tab viene el documento
+        const enEmitidas = facturasEmitidas.some(d => d.id_documento === docId);
+        const enRecibidas = facturasRecibidas.some(d => d.id_documento === docId);
+
+        let direccionActual: string | null = null;
+        if (enEmitidas) {
+          direccionActual = 'Emitida';
+        } else if (enRecibidas) {
+          direccionActual = 'Recibida';
+        } else {
+          console.warn(`⚠️ [Drag] Documento #${docId} no está en ninguna tab conocida`);
+          skipped++;
+          continue;
+        }
+
+        // Si el documento ya está en el tab de destino, skip
+        if ((targetTab === 'emitidas' && direccionActual === 'Emitida') ||
+          (targetTab === 'recibidas' && direccionActual === 'Recibida')) {
+          console.log(`⏭️ [Drag] Doc #${docId} ya está en tab "${targetTab}", skip`);
           skipped++;
           continue;
         }
@@ -392,8 +416,8 @@ function DocumentsPageContent() {
         const tipoBase = tipoActual.replace(/(Emitida|Emitido|Recibida|Recibido)/gi, '').trim();
 
         // Verificar que tenga un tipo base válido
-        if (!tipoBase || tipoBase.toLowerCase() === tipoActual.toLowerCase()) {
-          console.warn(`⚠️ [Drag] Documento #${docId} no tiene tipo clasificable: "${tipoActual}"`);
+        if (!tipoBase || tipoBase.length < 3) {
+          console.warn(`⚠️ [Drag] Documento #${docId} no tiene tipo válido: "${tipoActual}"`);
           skipped++;
           continue;
         }
@@ -404,10 +428,10 @@ function DocumentsPageContent() {
         console.log(`🔄 [Drag] Doc #${docId}: "${tipoActual}" → "${nuevoTipo}"`);
 
         // Llamar API para actualizar
-        const response = await fetch(`/api/documents/${docId}`, {
+        const response = await fetch(`/api/documents/${docId}/field`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo_documento: nuevoTipo })
+          body: JSON.stringify({ fieldName: 'tipo_documento', value: nuevoTipo })
         });
 
         if (response.ok) {
@@ -710,6 +734,7 @@ function DocumentsPageContent() {
                     viewId="documentos-facturas-emitidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
+                    onDragStart={handleDragStart}
                   />
                 </div>
               )}
@@ -746,6 +771,7 @@ function DocumentsPageContent() {
                     viewId="documentos-facturas-recibidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
+                    onDragStart={handleDragStart}
                   />
                 </div>
               )}
