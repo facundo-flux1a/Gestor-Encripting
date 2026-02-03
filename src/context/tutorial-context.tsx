@@ -67,37 +67,37 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
-        
+
         // ✅ CRÍTICO: Verificar cookie PRIMERO, antes de la API
         if (typeof document !== 'undefined') {
           const cookies = document.cookie.split(';');
           const newUserCookie = cookies.find(c => c.trim().startsWith('new_user='));
           const isNewUser = newUserCookie?.includes('true');
-          
-          console.log('🔍 [TutorialProvider] Verificando nuevo usuario (cookie):', { 
-            isNewUser, 
-            allCookies: document.cookie 
+
+          console.log('🔍 [TutorialProvider] Verificando nuevo usuario (cookie):', {
+            isNewUser,
+            allCookies: document.cookie
           });
-          
+
           if (isNewUser) {
             console.log('👶 [TutorialProvider] Usuario nuevo detectado via cookie - mostrando tutorial');
             setShouldShowTutorial(true);
             setIsLoading(false);
-            
+
             // Borrar la cookie
             document.cookie = 'new_user=; path=/; max-age=0';
             return;
           }
         }
-        
+
         const response = await fetch('/api/user/tutorial');
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('📚 [TutorialProvider] RESPUESTA COMPLETA:', data);
           console.log('📚 [TutorialProvider] data.tutorial:', data.tutorial);
           console.log('📚 [TutorialProvider] Tipo:', typeof data.tutorial);
-          
+
           const showTutorial = Boolean(data.tutorial);
           setShouldShowTutorial(showTutorial);
           console.log('📚 [TutorialProvider] shouldShowTutorial final:', showTutorial);
@@ -109,14 +109,14 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
       }
     }
-    
+
     checkTutorialStatus();
   }, []);
 
   const setIsTutorialActive = (active: boolean) => {
     console.log('🎯 [TutorialProvider] setIsTutorialActive:', active);
     setIsTutorialActiveState(active);
-    
+
     // Si se desactiva, limpiar localStorage
     if (!active && typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY);
@@ -132,12 +132,12 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
   // ⬇️ NUEVO: Bajar z-index del tutorial
   const lowerTutorialZIndex = () => {
     if (typeof window === 'undefined') return;
-    
+
     console.log('🔽 [TutorialProvider] Bajando z-index del tutorial');
-    
+
     const driverPopover = document.querySelector('.driver-popover');
     const driverPopoverWrapper = document.querySelector('.driver-popover-wrapper');
-    
+
     if (driverPopover) {
       (driverPopover as HTMLElement).style.zIndex = '50';
     }
@@ -149,12 +149,12 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
   // ⬆️ NUEVO: Subir z-index del tutorial
   const raiseTutorialZIndex = () => {
     if (typeof window === 'undefined') return;
-    
+
     console.log('🔼 [TutorialProvider] Subiendo z-index del tutorial');
-    
+
     const driverPopover = document.querySelector('.driver-popover');
     const driverPopoverWrapper = document.querySelector('.driver-popover-wrapper');
-    
+
     if (driverPopover) {
       (driverPopover as HTMLElement).style.zIndex = '10002';
     }
@@ -168,16 +168,16 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
       const response = await fetch('/api/user/tutorial', {
         method: 'POST',
       });
-      
+
       if (response.ok) {
         setShouldShowTutorial(false);
         setIsTutorialActive(false);
         setCurrentStep(0);
-        
+
         if (typeof window !== 'undefined') {
           localStorage.removeItem(STORAGE_KEY);
         }
-        
+
         console.log('✅ [TutorialProvider] Tutorial completado');
       }
     } catch (error) {
@@ -190,10 +190,10 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <TutorialContext.Provider 
-      value={{ 
-        shouldShowTutorial, 
-        isLoading, 
+    <TutorialContext.Provider
+      value={{
+        shouldShowTutorial,
+        isLoading,
         isTutorialActive,
         currentStep,
         setIsTutorialActive,

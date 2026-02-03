@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { getSession } from '@/services/auth-service';
 import { MainLayout } from '@/components/layout/main-layout';
 import { PageHeader } from '@/components/layout/page-header';
 import { StatsCard } from '@/components/dashboard/stats-card';
@@ -84,6 +85,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCleaningDB, setIsCleaningDB] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
 
   const [selectedAño, setSelectedAño] = useState<number | null>(null);
   const [selectedTrimestre, setSelectedTrimestre] = useState<number | null>(null);
@@ -416,64 +418,96 @@ export default function DashboardPage() {
     </Sheet>
   );
 
-  const CleanButton = () => (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+  // ✅ Load User ID for permissions
+  useEffect(() => {
+    async function loadUser() {
+      const session = await getSession();
+      if (session?.userId) {
+        setUserId(session.userId);
+      }
+    }
+    loadUser();
+  }, []);
+
+  const CleanButton = () => {
+    const allowedIds = [4, 5, 6, 42];
+    const canReset = userId && allowedIds.includes(userId);
+
+    // If user not allowed, show disabled/forbidden state
+    if (!canReset) {
+      return (
         <Button
           size="sm"
           variant="outline"
-          className="gap-2 hidden sm:flex hover:bg-violet-50 hover:text-violet-600 hover:border-violet-300 dark:hover:bg-violet-950 dark:hover:text-violet-400 dark:hover:border-violet-700 transition-all duration-200 group"
+          className="gap-2 hidden sm:flex cursor-not-allowed opacity-50 hover:bg-transparent"
+          title="No tienes permisos para reiniciar el sistema"
+          disabled
         >
-          <RefreshCcw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-          <span className="hidden lg:inline">Reiniciar</span>
+          <RefreshCcw className="h-4 w-4 text-muted-foreground" />
+          <span className="hidden lg:inline text-muted-foreground">Reiniciar</span>
         </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-3 text-xl">
-            <div className="p-2 bg-violet-500/20 rounded-xl">
-              <AlertTriangle className="h-6 w-6 text-violet-400" />
-            </div>
-            ¿Reiniciar el sistema?
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3 pt-2">
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <span className="font-semibold text-red-400 text-sm block">
-                  ⚠️ Esta acción es irreversible
+      );
+    }
+
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 hidden sm:flex hover:bg-violet-50 hover:text-violet-600 hover:border-violet-300 dark:hover:bg-violet-950 dark:hover:text-violet-400 dark:hover:border-violet-700 transition-all duration-200 group"
+          >
+            <RefreshCcw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+            <span className="hidden lg:inline">Reiniciar</span>
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-3 text-xl">
+              <div className="p-2 bg-violet-500/20 rounded-xl">
+                <AlertTriangle className="h-6 w-6 text-violet-400" />
+              </div>
+              ¿Reiniciar el sistema?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <span className="font-semibold text-red-400 text-sm block">
+                    ⚠️ Esta acción es irreversible
+                  </span>
+                </div>
+                <span className="text-sm block">
+                  Se eliminarán todos los datos del sistema.
                 </span>
               </div>
-              <span className="text-sm block">
-                Se eliminarán todos los datos del sistema.
-              </span>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-          <AlertDialogCancel className="w-full sm:w-auto hover:bg-accent transition-colors duration-200">
-            Cancelar
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleCleanDatabase}
-            disabled={isCleaningDB}
-            className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 transition-colors duration-200"
-          >
-            {isCleaningDB ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Reiniciando...
-              </>
-            ) : (
-              <>
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                Reiniciar
-              </>
-            )}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto hover:bg-accent transition-colors duration-200">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCleanDatabase}
+              disabled={isCleaningDB}
+              className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 transition-colors duration-200"
+            >
+              {isCleaningDB ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Reiniciando...
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  Reiniciar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -602,6 +636,7 @@ export default function DashboardPage() {
                 <SelectItem value="4">T4</SelectItem>
               </SelectContent>
             </Select>
+            <CleanButton />
           </div>
         </PageHeader>
 

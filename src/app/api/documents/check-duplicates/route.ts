@@ -14,24 +14,53 @@ export async function POST(req: NextRequest) {
 
     console.log('🔍 [check-duplicates] Verificando duplicados para empresa:', empresaId);
 
-    // Obtener todos los documentos de la empresa
+    // Obtener todos los documentos de la empresa con información del proveedor
+    // SOLO traemos info de proveedor si es una factura recibida o similar, pero por simplicidad traemos de todos
     const [docs] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.numero_documento, d.id_de_empresa, e.id_de_usuario
+      `SELECT 
+          d.id, 
+          d.numero_documento, 
+          d.id_de_empresa, 
+          d.tipo_documento,
+          e.identificador_fiscal as proveedor_cif,
+          e.nombre as proveedor_nombre
        FROM documentos d
-       JOIN empresas e ON d.id_de_empresa = e.id
-       WHERE e.id_de_usuario = ? ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
+       JOIN empresas emp ON d.id_de_empresa = emp.id
+       LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
+       WHERE emp.id_de_usuario = ? ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
        AND d.numero_documento IS NOT NULL 
        AND d.numero_documento != ''`,
       empresaId ? [session.userId, empresaId] : [session.userId]
     );
 
-    // Detectar duplicados (agrupar por numero_documento + empresa)
-    const gruposDuplicados = new Map<string, {numero: string, empresa_id: number, ids: number[]}>();
-    
+    // Detectar duplicados (agrupar según lógica de negocio)
+    const gruposDuplicados = new Map<string, { numero: string, empresa_id: number, ids: number[] }>();
+
     docs.forEach(doc => {
       const numero = doc.numero_documento.trim().toLowerCase();
-      const key = `${numero}|${doc.id_de_empresa}`;
-      
+      const tipo = (doc.tipo_documento || '').toLowerCase();
+      let key = '';
+
+      // LÓGICA DIFERENCIADA
+      if (tipo.includes('recibida') || tipo.includes('recibido')) {
+        // 🔥 FACTURAS RECIBIDAS: Chequear Número + Proveedor
+        const proveedor = (doc.proveedor_cif || doc.proveedor_nombre || 'DESCONOCIDO').trim().toLowerCase();
+        console.log(`🔍 [Check-Dup] DOC #${doc.id} (Recibida) | Num: ${numero} | Prov: ${proveedor}`);
+
+        // Si no tenemos proveedor, fallback a lógica estricta (solo número) para evitar falsos negativos groseros,
+        // o podríamos decidir ignorarlo (evitar falsos positivos).
+        // Decisión: Si es "DESCONOCIDO", lo tratamos como un grupo aparte. 
+        // Así si hay 2 facturas con el mismo número y proveedor desconocido, se marcan.
+        // Pero si una tiene proveedor A y otra Desconocido, NO se marcan.
+        key = `${numero}|${doc.id_de_empresa}|RECIBIDA|${proveedor}`;
+      } else {
+        // 🔥 FACTURAS EMITIDAS (y otras): Solo chequear Número
+        console.log(`🔍 [Check-Dup] DOC #${doc.id} (Emitida/Otra) | Num: ${numero} | Strict Check`);
+
+        // Mantenemos la lógica histórica estricta
+        key = `${numero}|${doc.id_de_empresa}|EMITIDA`;
+      }
+
       if (!gruposDuplicados.has(key)) {
         gruposDuplicados.set(key, {
           numero: doc.numero_documento,
@@ -39,32 +68,33 @@ export async function POST(req: NextRequest) {
           ids: []
         });
       }
-      gruposDuplicados.get(key)!.ids.push(doc.id); // ✅ Cambiado de doc.id_documento a doc.id
+      gruposDuplicados.get(key)!.ids.push(doc.id);
     });
 
-    // Filtrar solo los grupos que tienen duplicados (2+ documentos)
+    // Filtrar solo los que tienen duplicados (2+ docs)
     const duplicadosReales = Array.from(gruposDuplicados.values())
       .filter(grupo => grupo.ids.length > 1);
 
-    // Obtener todos los IDs duplicados en un solo array
+    // Obtener todos los IDs duplicados
     const todosLosIdsDuplicados = duplicadosReales.flatMap(grupo => grupo.ids);
 
     console.log('📊 [check-duplicates] Duplicados encontrados:', todosLosIdsDuplicados.length);
     console.log('🔢 [check-duplicates] Grupos de duplicados:', duplicadosReales.length);
 
-    // Eliminar incidencias de duplicados que ya no lo son
+    // 1. Limpiar incidencias viejas de duplicados
     await db.query(
       `DELETE FROM incidencias_documento 
        WHERE descripcion LIKE 'Número de factura duplicado%' 
        AND validado = 0`
     );
 
-    // Crear nuevas incidencias para cada grupo de duplicados
+    // 2. Crear nuevas incidencias
     let creadas = 0;
     for (const grupo of duplicadosReales) {
       for (const docId of grupo.ids) {
         const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
-        
+
+        // Verificar existencia antes de insertar (idempotencia)
         const [existing] = await db.query<RowDataPacket[]>(
           'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
           [docId, 'Número de factura duplicado%']
@@ -88,7 +118,6 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ [check-duplicates] Incidencias creadas:', creadas);
 
-    // Devolver estructura que el hook espera
     return NextResponse.json({
       success: true,
       duplicates: duplicadosReales.map(grupo => ({
