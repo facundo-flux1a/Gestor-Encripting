@@ -1073,24 +1073,35 @@ export async function processUploadedDocument(
       // Chequeo final duplicados (respuesta del webhook)
       if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
         return {
-          success: false,
+          success: true,
           isDuplicate: true,
-          message: webhookResult.mensaje || 'Duplicado detectado por agente.',
-          fileHash: mainFileHash
+          data: {
+            success: false,
+            message: webhookResult.mensaje || 'Duplicado detectado por agente.',
+            fileHash: mainFileHash,
+            isDuplicate: true
+          } as any
         };
       }
 
       return {
         success: true,
-        message: webhookResult.mensaje || 'Procesado correctamente',
-        url: publicUrl,
-        fileHash: mainFileHash
+        data: {
+          success: true,
+          message: webhookResult.mensaje || 'Procesado correctamente',
+          url: publicUrl,
+          fileHash: mainFileHash
+        } as any
       };
 
     } catch (error: any) {
-      console.error(`❌ [Process] Error:`, error);
+      console.error(`❌ [Process] Inner Error:`, error);
       await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
-      await notifyFrontendError(uploadId, 'Error procesando archivo', 'Error');
-      throw new Error('Error procesando el archivo subido.');
+      // No throw, return error
+      return { success: false, error: `Error interno: ${error.message}` };
     }
+  } catch (outerError: any) {
+    console.error("❌ Critical Process Error:", outerError);
+    return { success: false, error: `Error crítico: ${outerError.message}` };
   }
+}
