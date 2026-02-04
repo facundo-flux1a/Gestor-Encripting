@@ -932,6 +932,7 @@ export async function processUploadedDocument(
     const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
     const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
 
+    let debugListMsg = "";
     try {
       const s3Client = new S3Client({
         region: MINIO_REGION || "us-east-1",
@@ -952,6 +953,7 @@ export async function processUploadedDocument(
       console.log(`   - Decoded Key: "${decodedKey}"`);
 
       // DEBUG: Listar objetos para ver qué hay en el bucket realmente
+
       try {
         console.log(`🔍 [Process-Debug] Listando objetos con prefix 'archivos/'...`);
         const listCmd = new ListObjectsCommand({
@@ -962,11 +964,15 @@ export async function processUploadedDocument(
         const listRes = await s3Client.send(listCmd);
         console.log(`🔍 [Process-Debug] Objetos encontrados:`, listRes.Contents?.map(c => c.Key));
 
+        const foundKeys = listRes.Contents?.map(c => c.Key) || [];
+        debugListMsg = `[Found: ${foundKeys.join(', ') || 'NONE'}]`;
+
         // Verificar si nuestra key existe exactamente
         const match = listRes.Contents?.find(c => c.Key === key || c.Key === decodedKey);
         console.log(`🔍 [Process-Debug] ¿Existe coincidencia exacta? ${match ? 'SÍ' : 'NO'}`);
-      } catch (listErr) {
+      } catch (listErr: any) {
         console.error("Error listing objects:", listErr);
+        debugListMsg = `[ListError: ${listErr.message}]`;
       }
 
       const getCommand = new GetObjectCommand({
@@ -1120,7 +1126,7 @@ export async function processUploadedDocument(
       console.error(`❌ [Process] Inner Error:`, error);
       await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
       // Return detailed error for debugging
-      const debugInfo = `(B: ${MINIO_BUCKET_NAME}, K: ${key}, E: ${MINIO_ENDPOINT})`;
+      const debugInfo = `(B: ${MINIO_BUCKET_NAME}, K: ${key}, E: ${MINIO_ENDPOINT}) ${debugListMsg}`;
       return { success: false, error: `Error interno: ${error.message} ${debugInfo}` };
     }
   } catch (outerError: any) {
