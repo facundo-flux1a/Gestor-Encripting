@@ -874,6 +874,43 @@ export async function uploadMultipartChunk(
 }
 
 /**
+ * ✅ Genera una URL pre-firmada para subir un chunk directamente desde el cliente
+ */
+export async function getMultipartPresignedUrl(
+  s3UploadId: string,
+  key: string,
+  partNumber: number
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY!,
+        secretAccessKey: MINIO_SECRET_KEY!,
+      },
+      forcePathStyle: true,
+    });
+
+    const command = new UploadPartCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+      UploadId: s3UploadId,
+      PartNumber: partNumber,
+    });
+
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+    return { success: true, url };
+  } catch (error: any) {
+    console.error(`❌ Error generando URL para chunk ${partNumber}:`, error);
+    return { success: false, error: `Error generando URL: ${error.message}` };
+  }
+}
+
+/**
  * ✅ Finaliza la Carga Multiparte
  */
 export async function completeMultipartUpload(
