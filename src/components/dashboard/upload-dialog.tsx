@@ -220,9 +220,8 @@ export function UploadDialog({
           console.log('✅ [UploadDialog] Archivo ensamblado en MinIO:', completeResult.data.location);
 
           // 4. PROCESAR ARCHIVO (Server Action standard)
-          // Usamos la URL pública generada o la key
           console.log('⚙️ [UploadDialog] Solicitando procesamiento post-carga...');
-          const result = await processUploadedDocument(
+          const processResult = await processUploadedDocument(
             key,
             uploadId,
             companyId,
@@ -232,7 +231,11 @@ export function UploadDialog({
             completeResult.data.location
           );
 
-          if (result.isDuplicate) {
+          if (!processResult.success) {
+            throw new Error(processResult.error || "Error en el procesamiento del documento");
+          }
+
+          if (processResult.isDuplicate) {
             duplicateCount++;
           } else {
             successCount++;

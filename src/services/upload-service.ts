@@ -924,172 +924,173 @@ export async function processUploadedDocument(
   fileType: string,
   fileSize: number, // Tamaño reportado por el cliente (informativo)
   publicUrl: string
-): Promise<z.infer<typeof UploadResponseSchema>> {
-  const normalizedFileName = normalizeFileName(originalFileName);
-  console.log(`⚙️ [Process] Iniciando procesamiento post-upload: ${normalizedFileName}`);
-
-  const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
-  const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
-
+): Promise<{ success: boolean; data?: z.infer<typeof UploadResponseSchema>; error?: string; isDuplicate?: boolean }> {
   try {
-    const s3Client = new S3Client({
-      region: MINIO_REGION || "us-east-1",
-      endpoint: MINIO_ENDPOINT,
-      credentials: {
-        accessKeyId: MINIO_ACCESS_KEY!,
-        secretAccessKey: MINIO_SECRET_KEY!,
-      },
-      forcePathStyle: true,
-    });
+    const normalizedFileName = normalizeFileName(originalFileName);
+    console.log(`⚙️ [Process] Iniciando procesamiento post-upload: ${normalizedFileName}`);
 
-    // 1. Descargar el archivo desde S3 para procesarlo (hash, extracción, etc.)
-    // Esto es rápido porque ocurre entre servidores (Vercel -> MinIO) y no consume ancho de banda de subida del cliente
-    console.log(`📥 [Process] Descargando desde S3 para verificación: ${key}`);
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+    const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
 
-    const getCommand = new GetObjectCommand({
-      Bucket: MINIO_BUCKET_NAME,
-      Key: key,
-    });
+    try {
+      const s3Client = new S3Client({
+        region: MINIO_REGION || "us-east-1",
+        endpoint: MINIO_ENDPOINT,
+        credentials: {
+          accessKeyId: MINIO_ACCESS_KEY!,
+          secretAccessKey: MINIO_SECRET_KEY!,
+        },
+        forcePathStyle: true,
+      });
 
-    const s3Response = await s3Client.send(getCommand);
-    const fileBuffer = await s3Response.Body?.transformToByteArray();
+      // 1. Descargar el archivo desde S3 para procesarlo (hash, extracción, etc.)
+      // Esto es rápido porque ocurre entre servidores (Vercel -> MinIO) y no consume ancho de banda de subida del cliente
+      console.log(`📥 [Process] Descargando desde S3 para verificación: ${key}`);
 
-    if (!fileBuffer) {
-      throw new Error('No se pudo leer el archivo desde S3');
-    }
+      const getCommand = new GetObjectCommand({
+        Bucket: MINIO_BUCKET_NAME,
+        Key: key,
+      });
 
-    const buffer = Buffer.from(fileBuffer); // Convertir a Buffer de Node
+      const s3Response = await s3Client.send(getCommand);
+      const fileBuffer = await s3Response.Body?.transformToByteArray();
 
-    // 2. Calcular HASH (igual que antes)
-    console.log(`#️⃣ [Process] Calculando hash...`);
-    const mainFileHash = await calculateFileHash(buffer);
-    console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
-
-    // 3. Obtener CIF
-    const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
-    const empresaData = rows as { CIF: string }[];
-    if (!empresaData || empresaData.length === 0) throw new Error('Empresa no encontrada');
-    const cif = empresaData[0].CIF;
-
-    // 4. Lógica de ZIP/RAR/Duplicados (Reutilizada)
-    const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
-    const normalizedFileType = getNormalizedFileType(fileType, fileExtension);
-    let individualFileHashes: { [fileName: string]: string } = {};
-    let individualUploadIds: { [fileName: string]: string } = {};
-    let isCompressedFile = false;
-
-    if (normalizedFileType === 'zip') {
-      isCompressedFile = true;
-      try {
-        individualFileHashes = await extractAndHashZipFiles(buffer);
-        // ... Logica de hijos (simplificada para este snippet, reutilizar la existente si es posible o copiar)
-        for (const fileName of Object.keys(individualFileHashes)) {
-          const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
-          individualUploadIds[fileName] = childUploadId;
-          await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
-        }
-      } catch (e: any) {
-        console.error('Error ZIP', e);
-        // Manejo de error
+      if (!fileBuffer) {
+        throw new Error('No se pudo leer el archivo desde S3');
       }
-    } else if (normalizedFileType === 'rar') {
-      isCompressedFile = true;
-      try {
-        const rarResult = await extractAndHashRarFiles(buffer, uploadId);
-        individualFileHashes = rarResult.fileHashes;
-        individualUploadIds = rarResult.uploadIds;
-        for (const fileName of Object.keys(individualFileHashes)) {
-          const childUploadId = individualUploadIds[fileName];
-          await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
+
+      const buffer = Buffer.from(fileBuffer); // Convertir a Buffer de Node
+
+      // 2. Calcular HASH (igual que antes)
+      console.log(`#️⃣ [Process] Calculando hash...`);
+      const mainFileHash = await calculateFileHash(buffer);
+      console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
+
+      // 3. Obtener CIF
+      const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
+      const empresaData = rows as { CIF: string }[];
+      if (!empresaData || empresaData.length === 0) throw new Error('Empresa no encontrada');
+      const cif = empresaData[0].CIF;
+
+      // 4. Lógica de ZIP/RAR/Duplicados (Reutilizada)
+      const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
+      const normalizedFileType = getNormalizedFileType(fileType, fileExtension);
+      let individualFileHashes: { [fileName: string]: string } = {};
+      let individualUploadIds: { [fileName: string]: string } = {};
+      let isCompressedFile = false;
+
+      if (normalizedFileType === 'zip') {
+        isCompressedFile = true;
+        try {
+          individualFileHashes = await extractAndHashZipFiles(buffer);
+          // ... Logica de hijos (simplificada para este snippet, reutilizar la existente si es posible o copiar)
+          for (const fileName of Object.keys(individualFileHashes)) {
+            const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+            individualUploadIds[fileName] = childUploadId;
+            await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
+          }
+        } catch (e: any) {
+          console.error('Error ZIP', e);
+          // Manejo de error
         }
-      } catch (e: any) {
-        console.error('Error RAR', e);
+      } else if (normalizedFileType === 'rar') {
+        isCompressedFile = true;
+        try {
+          const rarResult = await extractAndHashRarFiles(buffer, uploadId);
+          individualFileHashes = rarResult.fileHashes;
+          individualUploadIds = rarResult.uploadIds;
+          for (const fileName of Object.keys(individualFileHashes)) {
+            const childUploadId = individualUploadIds[fileName];
+            await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
+          }
+        } catch (e: any) {
+          console.error('Error RAR', e);
+        }
+      } else {
+        // Chequeo duplicados
+        const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
+        if (duplicateRecord) {
+          console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
+          await markUploadAsFailed(uploadId, `Duplicado del ${new Date(duplicateRecord.uploaded_at).toLocaleString()}`, 'Verificación');
+          await notifyFrontendError(uploadId, 'Archivo duplicado', 'Duplicado');
+          return {
+            success: false,
+            isDuplicate: true,
+            message: `❌ Archivo duplicado.`,
+            fileHash: mainFileHash,
+            duplicateInfo: {
+              fileName: duplicateRecord.file_name,
+              uploadedAt: new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR'),
+              empresaId: empresaId,
+            }
+          };
+        }
       }
-    } else {
-      // Chequeo duplicados
-      const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
-      if (duplicateRecord) {
-        console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
-        await markUploadAsFailed(uploadId, `Duplicado del ${new Date(duplicateRecord.uploaded_at).toLocaleString()}`, 'Verificación');
-        await notifyFrontendError(uploadId, 'Archivo duplicado', 'Duplicado');
+
+      // 5. Webhook n8n
+      const webhookPayload: any = {
+        text: key, // En el original mandaba filePath que es lo mismo que key
+        empresaId,
+        cif,
+        fileHash: mainFileHash,
+        uploadId,
+        fileName: normalizedFileName,
+        originalFileName,
+        fileSize,
+        publicUrl,
+        isCompressedFile,
+        mimeType: fileType,
+        normalizedFileType,
+        fileExtension,
+        fechaSubida: new Date().toISOString(),
+      };
+
+      if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
+        webhookPayload.individualFileHashes = individualFileHashes;
+        webhookPayload.individualUploadIds = individualUploadIds;
+      }
+
+      console.log(`📡 [Process] Llamando a n8n webhook...`);
+      const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload),
+      });
+
+      if (!webhookResponse.ok) {
+        throw new Error(`Microservice error: ${webhookResponse.status}`);
+      }
+
+      // Parsear respuesta webhook
+      const responseText = await webhookResponse.text();
+      let webhookResult;
+      try {
+        webhookResult = JSON.parse(responseText);
+      } catch {
+        webhookResult = { mensaje: responseText };
+      }
+
+      // Chequeo final duplicados (respuesta del webhook)
+      if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
         return {
           success: false,
           isDuplicate: true,
-          message: `❌ Archivo duplicado.`,
-          fileHash: mainFileHash,
-          duplicateInfo: {
-            fileName: duplicateRecord.file_name,
-            uploadedAt: new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR'),
-            empresaId: empresaId,
-          }
+          message: webhookResult.mensaje || 'Duplicado detectado por agente.',
+          fileHash: mainFileHash
         };
       }
-    }
 
-    // 5. Webhook n8n
-    const webhookPayload: any = {
-      text: key, // En el original mandaba filePath que es lo mismo que key
-      empresaId,
-      cif,
-      fileHash: mainFileHash,
-      uploadId,
-      fileName: normalizedFileName,
-      originalFileName,
-      fileSize,
-      publicUrl,
-      isCompressedFile,
-      mimeType: fileType,
-      normalizedFileType,
-      fileExtension,
-      fechaSubida: new Date().toISOString(),
-    };
-
-    if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
-      webhookPayload.individualFileHashes = individualFileHashes;
-      webhookPayload.individualUploadIds = individualUploadIds;
-    }
-
-    console.log(`📡 [Process] Llamando a n8n webhook...`);
-    const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload),
-    });
-
-    if (!webhookResponse.ok) {
-      throw new Error(`Microservice error: ${webhookResponse.status}`);
-    }
-
-    // Parsear respuesta webhook
-    const responseText = await webhookResponse.text();
-    let webhookResult;
-    try {
-      webhookResult = JSON.parse(responseText);
-    } catch {
-      webhookResult = { mensaje: responseText };
-    }
-
-    // Chequeo final duplicados (respuesta del webhook)
-    if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
       return {
-        success: false,
-        isDuplicate: true,
-        message: webhookResult.mensaje || 'Duplicado detectado por agente.',
+        success: true,
+        message: webhookResult.mensaje || 'Procesado correctamente',
+        url: publicUrl,
         fileHash: mainFileHash
       };
+
+    } catch (error: any) {
+      console.error(`❌ [Process] Error:`, error);
+      await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
+      await notifyFrontendError(uploadId, 'Error procesando archivo', 'Error');
+      throw new Error('Error procesando el archivo subido.');
     }
-
-    return {
-      success: true,
-      message: webhookResult.mensaje || 'Procesado correctamente',
-      url: publicUrl,
-      fileHash: mainFileHash
-    };
-
-  } catch (error: any) {
-    console.error(`❌ [Process] Error:`, error);
-    await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
-    await notifyFrontendError(uploadId, 'Error procesando archivo', 'Error');
-    throw new Error('Error procesando el archivo subido.');
   }
-}
