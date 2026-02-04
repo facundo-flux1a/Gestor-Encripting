@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
-import { initiateMultipartUpload, uploadMultipartChunk, completeMultipartUpload, processUploadedDocument } from '@/services/upload-service';
+import { initiateMultipartUpload, completeMultipartUpload, processUploadedDocument, getMultipartPresignedUrl } from '@/services/upload-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
@@ -180,32 +180,45 @@ export function UploadDialog({
             (window as any).__uploadProgressManager.addUpload(uploadId, file.name); // Usamos nombre original por ahora
           }
 
-          // 2. SUBIR POR CHUNKS (Frontend -> Server Action -> MinIO)
-          const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB (Reducido para seguridad Vercel)
+          // 2. SUBIR POR CHUNKS (Direct Upload via Proxy)
+          const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB (Cumple requerimiento MinIO > 5MB)
           const totalParts = Math.ceil(file.size / CHUNK_SIZE);
           const parts: { PartNumber: number; ETag: string }[] = [];
 
-          console.log(`🚀 [UploadDialog] Subiendo ${totalParts} partes...`);
+          console.log(`🚀 [UploadDialog] Subiendo ${totalParts} partes (Direct Proxy)...`);
 
           for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
             const start = (partNumber - 1) * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, file.size);
             const chunk = file.slice(start, end);
 
-            const formData = new FormData();
-            formData.append('chunk', chunk);
-
-            // Subimos el chunk al servidor
-            const chunkResult = await uploadMultipartChunk(s3UploadId, key, partNumber, formData);
-            if (!chunkResult.success || !chunkResult.data) {
-              throw new Error(chunkResult.error || `Error subiendo parte ${partNumber}`);
+            // Obtener URL firmada
+            const presignedResult = await getMultipartPresignedUrl(s3UploadId, key, partNumber);
+            if (!presignedResult.success || !presignedResult.url) {
+              throw new Error(presignedResult.error || `Error obteniendo URL para parte ${partNumber}`);
             }
 
-            parts.push({ PartNumber: partNumber, ETag: chunkResult.data.ETag });
+            // Transformar URL para usar el proxy (Evita Mixed Content)
+            // http://minio-host:9000/bucket/key... -> /s3-proxy/bucket/key...
+            const originalUrl = new URL(presignedResult.url);
+            const proxyUrl = `/s3-proxy${originalUrl.pathname}${originalUrl.search}`;
+
+            // Subir directo via proxy
+            const uploadRes = await fetch(proxyUrl, {
+              method: 'PUT',
+              body: chunk,
+            });
+
+            if (!uploadRes.ok) {
+              throw new Error(`Error subiendo parte ${partNumber}: ${uploadRes.statusText}`);
+            }
+
+            const eTag = uploadRes.headers.get('ETag')?.replaceAll('"', '');
+            if (!eTag) throw new Error(`No se recibió ETag para parte ${partNumber}`);
+
+            parts.push({ PartNumber: partNumber, ETag: eTag });
 
             console.log(`  ✅ Parte ${partNumber}/${totalParts} subida`);
-
-            // Opcional: Actualizar progreso UI si tuviéramos acceso al store aquí
           }
 
           // 3. COMPLETAR CARGA (Server Action)
