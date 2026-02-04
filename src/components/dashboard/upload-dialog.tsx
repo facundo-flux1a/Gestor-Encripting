@@ -192,11 +192,7 @@ export function UploadDialog({
             const end = Math.min(start + CHUNK_SIZE, file.size);
             const chunk = file.slice(start, end);
 
-            // Obtener URL firmada
-            const presignedResult = await getMultipartPresignedUrl(s3UploadId, key, partNumber);
-            if (!presignedResult.success || !presignedResult.url) {
-              throw new Error(presignedResult.error || `Error obteniendo URL para parte ${partNumber}`);
-            }
+
 
             // Obtener URL firmada
             const presignedResult = await getMultipartPresignedUrl(s3UploadId, key, partNumber);
