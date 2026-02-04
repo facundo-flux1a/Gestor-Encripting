@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
-import { initiateMultipartUpload, completeMultipartUpload, processUploadedDocument, getMultipartPresignedUrl } from '@/services/upload-service';
+import { uploadDocument } from '@/services/upload-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
@@ -15,7 +15,7 @@ interface UploadDialogProps {
   onUploadComplete?: () => void;
 }
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export function UploadDialog({
   isOpen,
@@ -34,7 +34,7 @@ export function UploadDialog({
     if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "❌ Archivo demasiado grande",
-        description: `"${file.name}" excede el límite de 25 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        description: `"${file.name}" excede el límite de 10 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
         variant: "destructive",
       });
       return false;
@@ -130,7 +130,7 @@ export function UploadDialog({
     if (oversizedFiles.length > 0) {
       toast({
         title: "❌ Archivos demasiado grandes",
-        description: `${oversizedFiles.length} archivo(s) exceden el límite de 25 MB. Por favor, elimínalos antes de continuar.`,
+        description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
         variant: "destructive",
       });
       return;
@@ -162,92 +162,21 @@ export function UploadDialog({
 
       for (const file of filesToUpload) {
         try {
-          // 1. INICIAR CARGA MULTIPARTE (Server Action)
-          console.log('📤 [UploadDialog] Iniciando Multipart Upload:', file.name);
-          const initResult = await initiateMultipartUpload(
-            file.name,
-            file.type,
-            companyId
-          );
-
-          if (!initResult.success || !initResult.data) {
-            throw new Error(initResult.error || "No se pudo iniciar la carga");
-          }
-
-          const { uploadId, key, s3UploadId } = initResult.data;
+          const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          console.log('📤 [UploadDialog] Subiendo:', file.name, 'uploadId:', uploadId);
 
           if ((window as any).__uploadProgressManager) {
-            (window as any).__uploadProgressManager.addUpload(uploadId, file.name); // Usamos nombre original por ahora
+            (window as any).__uploadProgressManager.addUpload(uploadId, file.name);
           }
 
-          // 2. SUBIR POR CHUNKS (Direct Upload via Proxy)
-          const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB (Cumple requerimiento MinIO > 5MB)
-          const totalParts = Math.ceil(file.size / CHUNK_SIZE);
-          const parts: { PartNumber: number; ETag: string }[] = [];
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('empresaId', companyId);
+          formData.append('uploadId', uploadId);
 
-          console.log(`🚀 [UploadDialog] Subiendo ${totalParts} partes (Direct Proxy)...`);
+          const result = await uploadDocument(formData);
 
-          for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-            const start = (partNumber - 1) * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, file.size);
-            const chunk = file.slice(start, end);
-
-
-
-            // Obtener URL firmada
-            const presignedResult = await getMultipartPresignedUrl(s3UploadId, key, partNumber);
-            if (!presignedResult.success || !presignedResult.url) {
-              throw new Error(presignedResult.error || `Error obteniendo URL para parte ${partNumber}`);
-            }
-
-            console.log(`🔗 [UploadDialog] Subiendo a: ${presignedResult.url}`);
-
-            // Subir directo a MinIO (Requiere SSL en MinIO si la app es HTTPS)
-            const uploadRes = await fetch(presignedResult.url, {
-              method: 'PUT',
-              body: chunk,
-            });
-
-            if (!uploadRes.ok) {
-              throw new Error(`Error subiendo parte ${partNumber}: ${uploadRes.statusText}`);
-            }
-
-            const eTag = uploadRes.headers.get('ETag')?.replaceAll('"', '');
-            if (!eTag) throw new Error(`No se recibió ETag para parte ${partNumber}`);
-
-            parts.push({ PartNumber: partNumber, ETag: eTag });
-
-            console.log(`  ✅ Parte ${partNumber}/${totalParts} subida`);
-          }
-
-          // 3. COMPLETAR CARGA (Server Action)
-          console.log('🏁 [UploadDialog] Finalizando Multipart Upload...');
-          const completeResult = await completeMultipartUpload(s3UploadId, key, parts);
-
-          if (!completeResult.success || !completeResult.data) {
-            console.error("❌ Error en completeMultipartUpload:", completeResult.error);
-            throw new Error(completeResult.error || "Error al ensamblar el archivo en el servidor");
-          }
-
-          console.log('✅ [UploadDialog] Archivo ensamblado en MinIO:', completeResult.data.location);
-
-          // 4. PROCESAR ARCHIVO (Server Action standard)
-          console.log('⚙️ [UploadDialog] Solicitando procesamiento post-carga...');
-          const processResult = await processUploadedDocument(
-            key,
-            uploadId,
-            companyId,
-            file.name,
-            file.type,
-            file.size,
-            completeResult.data.location
-          );
-
-          if (!processResult.success) {
-            throw new Error(processResult.error || "Error en el procesamiento del documento");
-          }
-
-          if (processResult.isDuplicate) {
+          if (result.isDuplicate) {
             duplicateCount++;
           } else {
             successCount++;
@@ -387,7 +316,7 @@ export function UploadDialog({
               Seleccionar archivos
             </Button>
             <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
-              PDF - ZIP (máx. 25 MB por archivo)
+              PDF - ZIP (máx. 10 MB por archivo)
             </p>
           </div>
 
@@ -400,7 +329,7 @@ export function UploadDialog({
                   Archivos demasiado grandes detectados
                 </p>
                 <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-300 mt-0.5 sm:mt-1">
-                  Algunos archivos exceden el límite de 25 MB. Por favor, elimínalos antes de continuar.
+                  Algunos archivos exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.
                 </p>
               </div>
             </div>
@@ -437,7 +366,7 @@ export function UploadDialog({
                             : 'text-gray-500'
                             }`}>
                             {(file.size / 1024 / 1024).toFixed(2)} MB
-                            {isOversized && ' - Excede 25 MB'}
+                            {isOversized && ' - Excede 10 MB'}
                           </span>
                         </div>
                       </div>

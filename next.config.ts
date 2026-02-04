@@ -15,19 +15,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'flux1a-minio-32adec-164-68-127-171.traefik.me',
-        port: '9000',
-        pathname: '/**',
-      },
     ],
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '25mb',
+      bodySizeLimit: '10mb',
     },
-    middlewareClientMaxBodySize: '25mb',
   },
 };
 
