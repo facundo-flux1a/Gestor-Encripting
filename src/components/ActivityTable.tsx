@@ -47,6 +47,25 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Activity {
   id: number;
@@ -75,7 +94,7 @@ interface Activity {
 }
 
 interface Filters {
-  status: string;
+  status: string[];
   tipoDocumento: string;
   dateFrom: string;
   dateTo: string;
@@ -116,9 +135,10 @@ export default function ActivityTable({
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [selectedErrorActivity, setSelectedErrorActivity] = useState<Activity | null>(null);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
+  const [showActiveFilterHint, setShowActiveFilterHint] = useState(false);
 
   const [filters, setFilters] = useState<Filters>({
-    status: '',
+    status: ['fallido', 'interrumpido', 'error'],
     tipoDocumento: '',
     dateFrom: '',
     dateTo: '',
@@ -150,11 +170,18 @@ export default function ActivityTable({
     { value: 'completado', label: 'Completado' },
     { value: 'fallido', label: 'Fallido' },
     { value: 'interrumpido', label: 'Interrumpido' },
+    { value: 'error', label: 'Error' },
     { value: 'subiendo', label: 'En proceso' },
   ];
 
   useEffect(() => {
     checkAuth();
+    // Mostrar hint si inicia con filtros por defecto
+    if (filters.status.length > 0) {
+      setShowActiveFilterHint(true);
+      const timer = setTimeout(() => setShowActiveFilterHint(false), 5000);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   useEffect(() => {
@@ -187,7 +214,9 @@ export default function ActivityTable({
       });
 
       if (empresaId) params.append('empresaId', empresaId);
-      if (filters.status) params.append('status', filters.status);
+      if (filters.status && filters.status.length > 0) {
+        params.append('status', filters.status.join(','));
+      }
       if (filters.tipoDocumento) params.append('tipoDocumento', filters.tipoDocumento);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
@@ -432,7 +461,13 @@ export default function ActivityTable({
   };
 
   const clearFilters = () => {
-    setFilters({ status: '', tipoDocumento: '', dateFrom: '', dateTo: '', searchText: '' });
+    setFilters({
+      status: ['fallido', 'interrumpido', 'error'],
+      tipoDocumento: '',
+      dateFrom: '',
+      dateTo: '',
+      searchText: ''
+    });
     setPagination(prev => ({ ...prev, offset: 0 }));
   };
 
@@ -758,10 +793,10 @@ export default function ActivityTable({
             <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${activity.status.toLowerCase() === 'completado'
-                    ? 'bg-green-500'
-                    : activity.status.toLowerCase() === 'fallido'
-                      ? 'bg-red-500'
-                      : 'bg-primary'
+                  ? 'bg-green-500'
+                  : activity.status.toLowerCase() === 'fallido'
+                    ? 'bg-red-500'
+                    : 'bg-primary'
                   }`}
                 style={{ width: `${activity.progress}%` }}
               />
@@ -891,10 +926,10 @@ export default function ActivityTable({
               <div className="w-16 sm:w-24 bg-secondary rounded-full h-2.5 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${zipActivity.status.toLowerCase() === 'completado'
-                      ? 'bg-green-500'
-                      : zipActivity.status.toLowerCase() === 'fallido'
-                        ? 'bg-red-500'
-                        : 'bg-primary'
+                    ? 'bg-green-500'
+                    : zipActivity.status.toLowerCase() === 'fallido'
+                      ? 'bg-red-500'
+                      : 'bg-primary'
                     }`}
                   style={{ width: `${zipActivity.progress}%` }}
                 />
@@ -986,7 +1021,7 @@ export default function ActivityTable({
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-4 animate-fade-in">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-4 animate-fade-in relative z-[60]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
             <button
               onClick={() => router.back()}
@@ -1001,7 +1036,7 @@ export default function ActivityTable({
             </p>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
+          <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto relative z-50">
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
@@ -1032,38 +1067,48 @@ export default function ActivityTable({
               </button>
             )}
 
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              data-tutorial="actividad-filters"
-              title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
-              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${showFilters || activeFiltersCount > 0
+            <div className="relative z-[100]">
+              <button
+                onClick={() => {
+                  setShowFilters(!showFilters);
+                  setShowActiveFilterHint(false);
+                }}
+                data-tutorial="actividad-filters"
+                title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+                className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${showFilters || activeFiltersCount > 0
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-secondary hover:bg-secondary/80 border-border'
-                }`}
-            >
-              <Filter className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Filtros</span>
-              {activeFiltersCount > 0 && (
-                <span className="bg-primary-foreground text-primary rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                  {activeFiltersCount}
-                </span>
+                  }`}
+              >
+                <Filter className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Filtros</span>
+                {activeFiltersCount > 0 && (
+                  <span className="bg-primary-foreground text-primary rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+              {showActiveFilterHint && (
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-32 bg-primary text-primary-foreground text-[10px] py-1 px-2 rounded-md shadow-lg animate-bounce z-[100] text-center pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-primary">
+                  Filtros aplicados
+                </div>
               )}
-            </button>
+            </div>
 
-            <div className="relative" data-tutorial="actividad-autorefresh">
+            <div className="relative z-[80]" data-tutorial="actividad-autorefresh">
               <button
                 onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
                 title={autoRefreshEnabled ? "Desactivar actualización automática" : "Activar actualización automática"}
                 className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${autoRefreshEnabled
-                    ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30'
-                    : 'bg-secondary hover:bg-secondary/80 border-border'
+                  ? 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30'
+                  : 'bg-secondary hover:bg-secondary/80 border-border'
                   }`}
               >
                 <RefreshCw className={`w-4 h-4 shrink-0 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Auto</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${autoRefreshEnabled
-                    ? 'bg-green-500/30 text-green-600 dark:text-green-400'
-                    : 'bg-muted text-muted-foreground'
+                  ? 'bg-green-500/30 text-green-600 dark:text-green-400'
+                  : 'bg-muted text-muted-foreground'
                   }`}>
                   {autoRefreshEnabled ? 'ON' : 'OFF'}
                 </span>
@@ -1077,15 +1122,93 @@ export default function ActivityTable({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div>
                 <label className="block text-xs sm:text-sm font-medium mb-2">Estado</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full px-2 sm:px-3 py-2 text-xs sm:text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
-                >
-                  {statusOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-start text-left font-normal border-dashed h-10">
+                      <Filter className="mr-2 h-4 w-4" />
+                      {filters.status && filters.status.length > 0 ? (
+                        <>
+                          <Badge variant="secondary" className="mr-1 rounded-sm px-1 font-normal lg:hidden">
+                            {filters.status.length}
+                          </Badge>
+                          <div className="hidden lg:flex space-x-1">
+                            {filters.status.length > 2 ? (
+                              <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                                {filters.status.length} seleccionados
+                              </Badge>
+                            ) : (
+                              statusOptions
+                                .filter(opt => opt.value !== '' && filters.status.includes(opt.value))
+                                .map(opt => (
+                                  <Badge variant="secondary" key={opt.value} className="rounded-sm px-1 font-normal">
+                                    {opt.label}
+                                  </Badge>
+                                ))
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <span>Todos los estados</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Estado..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+                        <CommandGroup>
+                          {statusOptions.filter(opt => opt.value !== '').map((option) => {
+                            const isSelected = filters.status.includes(option.value);
+                            return (
+                              <CommandItem
+                                key={option.value}
+                                onSelect={() => {
+                                  setFilters(prev => {
+                                    const current = prev.status || [];
+                                    const newStatus = isSelected
+                                      ? current.filter(value => value !== option.value)
+                                      : [...current, option.value];
+                                    return { ...prev, status: newStatus };
+                                  });
+                                  setPagination(prev => ({ ...prev, offset: 0 }));
+                                }}
+                              >
+                                <div
+                                  className={cn(
+                                    "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                    isSelected
+                                      ? "bg-primary text-primary-foreground"
+                                      : "opacity-50 [&_svg]:invisible"
+                                  )}
+                                >
+                                  <Check className={cn("h-4 w-4")} />
+                                </div>
+                                {option.label}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                        {filters.status.length > 0 && (
+                          <>
+                            <CommandSeparator />
+                            <CommandGroup>
+                              <CommandItem
+                                onSelect={() => {
+                                  setFilters(prev => ({ ...prev, status: [] }));
+                                  setPagination(prev => ({ ...prev, offset: 0 }));
+                                }}
+                                className="justify-center text-center"
+                              >
+                                Borrar filtros
+                              </CommandItem>
+                            </CommandGroup>
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium mb-2">Desde</label>

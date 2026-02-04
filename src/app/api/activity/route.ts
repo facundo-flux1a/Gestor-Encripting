@@ -5,7 +5,7 @@ import { getSession } from '@/services/auth-service';
 export async function GET(request: Request) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const empresaId = searchParams.get('empresaId');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-    
+
     // Nuevos filtros
     const status = searchParams.get('status');
     const tipoDocumento = searchParams.get('tipoDocumento');
@@ -64,8 +64,12 @@ export async function GET(request: Request) {
     }
 
     if (status) {
-      query += ` AND LOWER(a.status) LIKE ?`;
-      params.push(`%${status.toLowerCase()}%`);
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        const statusConditions = statuses.map(() => `LOWER(a.status) LIKE ?`).join(' OR ');
+        query += ` AND (${statusConditions})`;
+        statuses.forEach(s => params.push(`%${s.toLowerCase()}%`));
+      }
     }
 
     if (tipoDocumento) {
@@ -109,17 +113,21 @@ export async function GET(request: Request) {
       LEFT JOIN erp49.documentos d ON a.documento_id = d.id
       WHERE u.id = ?
     `;
-    
+
     const countParams: any[] = [session.userId];
-    
+
     if (empresaId) {
       countQuery += ` AND a.id_de_empresa = ?`;
       countParams.push(empresaId);
     }
 
     if (status) {
-      countQuery += ` AND LOWER(a.status) LIKE ?`;
-      countParams.push(`%${status.toLowerCase()}%`);
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        const statusConditions = statuses.map(() => `LOWER(a.status) LIKE ?`).join(' OR ');
+        countQuery += ` AND (${statusConditions})`;
+        statuses.forEach(s => countParams.push(`%${s.toLowerCase()}%`));
+      }
     }
 
     if (tipoDocumento) {
@@ -175,7 +183,7 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
