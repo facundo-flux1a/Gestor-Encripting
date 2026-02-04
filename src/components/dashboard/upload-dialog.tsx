@@ -198,13 +198,16 @@ export function UploadDialog({
               throw new Error(presignedResult.error || `Error obteniendo URL para parte ${partNumber}`);
             }
 
-            // Transformar URL para usar el proxy (Evita Mixed Content)
-            // http://minio-host:9000/bucket/key... -> /s3-proxy/bucket/key...
-            const originalUrl = new URL(presignedResult.url);
-            const proxyUrl = `/s3-proxy${originalUrl.pathname}${originalUrl.search}`;
+            // Obtener URL firmada
+            const presignedResult = await getMultipartPresignedUrl(s3UploadId, key, partNumber);
+            if (!presignedResult.success || !presignedResult.url) {
+              throw new Error(presignedResult.error || `Error obteniendo URL para parte ${partNumber}`);
+            }
 
-            // Subir directo via proxy
-            const uploadRes = await fetch(proxyUrl, {
+            console.log(`🔗 [UploadDialog] Subiendo a: ${presignedResult.url}`);
+
+            // Subir directo a MinIO (Requiere SSL en MinIO si la app es HTTPS)
+            const uploadRes = await fetch(presignedResult.url, {
               method: 'PUT',
               body: chunk,
             });
