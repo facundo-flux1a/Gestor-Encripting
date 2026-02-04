@@ -951,6 +951,24 @@ export async function processUploadedDocument(
       console.log(`   - Raw Key: "${key}"`);
       console.log(`   - Decoded Key: "${decodedKey}"`);
 
+      // DEBUG: Listar objetos para ver qué hay en el bucket realmente
+      try {
+        console.log(`🔍 [Process-Debug] Listando objetos con prefix 'archivos/'...`);
+        const listCmd = new ListObjectsCommand({
+          Bucket: MINIO_BUCKET_NAME,
+          Prefix: 'archivos/',
+          MaxKeys: 10
+        });
+        const listRes = await s3Client.send(listCmd);
+        console.log(`🔍 [Process-Debug] Objetos encontrados:`, listRes.Contents?.map(c => c.Key));
+
+        // Verificar si nuestra key existe exactamente
+        const match = listRes.Contents?.find(c => c.Key === key || c.Key === decodedKey);
+        console.log(`🔍 [Process-Debug] ¿Existe coincidencia exacta? ${match ? 'SÍ' : 'NO'}`);
+      } catch (listErr) {
+        console.error("Error listing objects:", listErr);
+      }
+
       const getCommand = new GetObjectCommand({
         Bucket: MINIO_BUCKET_NAME,
         Key: decodedKey, // Trying decoded key
