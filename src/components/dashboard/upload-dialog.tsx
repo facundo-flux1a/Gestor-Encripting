@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
-import { uploadDocument } from '@/services/upload-service';
+import { getPresignedUploadUrl, processUploadedDocument } from '@/services/upload-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
@@ -162,19 +162,47 @@ export function UploadDialog({
 
       for (const file of filesToUpload) {
         try {
-          const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          console.log('📤 [UploadDialog] Subiendo:', file.name, 'uploadId:', uploadId);
+          // 1. OBTENER URL FIRMADA (Server Action)
+          console.log('📤 [UploadDialog] Solicitando Presigned URL:', file.name);
+          const { url, key, uploadId, publicUrl, normalizedFileName } = await getPresignedUploadUrl(
+            file.name,
+            file.type,
+            companyId
+          );
+
+          console.log('🔗 [UploadDialog] URL recibida:', url);
 
           if ((window as any).__uploadProgressManager) {
-            (window as any).__uploadProgressManager.addUpload(uploadId, file.name);
+            (window as any).__uploadProgressManager.addUpload(uploadId, normalizedFileName);
           }
 
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('empresaId', companyId);
-          formData.append('uploadId', uploadId);
+          // 2. SUBIR DIRECTAMENTE A S3 (Client -> MinIO)
+          console.log('🚀 [UploadDialog] Subiendo a S3...');
+          const uploadResponse = await fetch(url, {
+            method: 'PUT',
+            body: file,
+            headers: {
+              'Content-Type': file.type,
+              'x-amz-acl': 'public-read'
+            }
+          });
 
-          const result = await uploadDocument(formData);
+          if (!uploadResponse.ok) {
+            throw new Error(`Error en subida directa: ${uploadResponse.statusText}`);
+          }
+          console.log('✅ [UploadDialog] Subida directa completada');
+
+          // 3. PROCESAR ARCHIVO (Server Action)
+          console.log('⚙️ [UploadDialog] Solicitando procesamiento...');
+          const result = await processUploadedDocument(
+            key,
+            uploadId,
+            companyId,
+            file.name,
+            file.type,
+            file.size,
+            publicUrl
+          );
 
           if (result.isDuplicate) {
             duplicateCount++;
