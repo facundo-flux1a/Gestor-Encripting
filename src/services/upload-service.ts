@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from 'crypto';
 import connection from '@/lib/db';
@@ -760,6 +760,158 @@ export async function getPresignedUploadUrl(
  * Descarga el archivo desde S3 para calcular hash y extraer contenido, 
  * manteniendo la compatibilidad con el flujo de n8n.
  */
+/**
+ * 🚀 Inicia una Carga Multiparte (Multipart Upload)
+ * Esto permite subir archivos grandes por pedazos (chunks)
+ */
+export async function initiateMultipartUpload(
+  fileName: string,
+  fileType: string,
+  empresaId: string
+): Promise<{ uploadId: string; key: string; s3UploadId: string }> {
+  try {
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+
+    const normalizedFileName = normalizeFileName(fileName);
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
+
+    const fileNameWithoutExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.'))
+      : normalizedFileName;
+    const fileExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.'))
+      : '';
+
+    const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
+    const key = `archivos/${uniqueFileName}`;
+    const myUploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY!,
+        secretAccessKey: MINIO_SECRET_KEY!,
+      },
+      forcePathStyle: true,
+    });
+
+    const command = new CreateMultipartUploadCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+      ContentType: fileType,
+      ACL: 'public-read',
+    });
+
+    const result = await s3Client.send(command);
+
+    await createActivityRecord(
+      myUploadId,
+      empresaId,
+      normalizedFileName,
+      getNormalizedFileType(fileType, fileExt.replace('.', '')),
+      undefined
+    );
+
+    return {
+      uploadId: myUploadId, // Nuestro ID interno
+      key: key,
+      s3UploadId: result.UploadId!, // ID de S3 para el multipart
+    };
+
+  } catch (error: any) {
+    console.error('❌ Error iniciando Multipart Upload:', error);
+    throw new Error('Error al iniciar la carga del archivo.');
+  }
+}
+
+/**
+ * 📦 Sube un fragmento (Chunk) del archivo a MinIO
+ */
+export async function uploadMultipartChunk(
+  s3UploadId: string,
+  key: string,
+  partNumber: number,
+  formData: FormData
+): Promise<{ ETag: string }> {
+  try {
+    const chunk = formData.get('chunk') as File;
+    if (!chunk) throw new Error('No chunk provided');
+
+    const buffer = Buffer.from(await chunk.arrayBuffer());
+
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY!,
+        secretAccessKey: MINIO_SECRET_KEY!,
+      },
+      forcePathStyle: true,
+    });
+
+    const command = new UploadPartCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+      UploadId: s3UploadId,
+      PartNumber: partNumber,
+      Body: buffer,
+    });
+
+    const result = await s3Client.send(command);
+
+    return { ETag: result.ETag! };
+
+  } catch (error: any) {
+    console.error(`❌ Error subiendo chunk ${partNumber}:`, error);
+    throw new Error(`Error al subir parte ${partNumber}`);
+  }
+}
+
+/**
+ * ✅ Finaliza la Carga Multiparte
+ */
+export async function completeMultipartUpload(
+  s3UploadId: string,
+  key: string,
+  parts: { PartNumber: number; ETag: string }[]
+): Promise<{ location: string }> {
+  try {
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY!,
+        secretAccessKey: MINIO_SECRET_KEY!,
+      },
+      forcePathStyle: true,
+    });
+
+    const command = new CompleteMultipartUploadCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+      UploadId: s3UploadId,
+      MultipartUpload: {
+        Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
+      },
+    });
+
+    const result = await s3Client.send(command);
+
+    const endpointUrl = MINIO_ENDPOINT!.replace(/\/$/, '');
+    const publicUrl = `${endpointUrl}/${MINIO_BUCKET_NAME}/${key}`;
+
+    return { location: publicUrl };
+
+  } catch (error: any) {
+    console.error('❌ Error completando Multipart Upload:', error);
+    throw new Error('Error al finalizar la carga.');
+  }
+}
+
 export async function processUploadedDocument(
   key: string,
   uploadId: string,

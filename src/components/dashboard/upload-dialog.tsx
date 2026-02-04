@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
-import { getPresignedUploadUrl, processUploadedDocument } from '@/services/upload-service';
+import { initiateMultipartUpload, uploadMultipartChunk, completeMultipartUpload, processUploadedDocument } from '@/services/upload-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
@@ -162,38 +162,50 @@ export function UploadDialog({
 
       for (const file of filesToUpload) {
         try {
-          // 1. OBTENER URL FIRMADA (Server Action)
-          console.log('📤 [UploadDialog] Solicitando Presigned URL:', file.name);
-          const { url, key, uploadId, publicUrl, normalizedFileName } = await getPresignedUploadUrl(
+          // 1. INICIAR CARGA MULTIPARTE (Server Action)
+          console.log('📤 [UploadDialog] Iniciando Multipart Upload:', file.name);
+          const { uploadId, key, s3UploadId } = await initiateMultipartUpload(
             file.name,
             file.type,
             companyId
           );
 
-          console.log('🔗 [UploadDialog] URL recibida:', url);
-
           if ((window as any).__uploadProgressManager) {
-            (window as any).__uploadProgressManager.addUpload(uploadId, normalizedFileName);
+            (window as any).__uploadProgressManager.addUpload(uploadId, file.name); // Usamos nombre original por ahora
           }
 
-          // 2. SUBIR DIRECTAMENTE A S3 (Client -> MinIO)
-          console.log('🚀 [UploadDialog] Subiendo a S3...');
-          const uploadResponse = await fetch(url, {
-            method: 'PUT',
-            body: file,
-            headers: {
-              'Content-Type': file.type,
-              'x-amz-acl': 'public-read'
-            }
-          });
+          // 2. SUBIR POR CHUNKS (Frontend -> Server Action -> MinIO)
+          const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB (Debajo del límite de 4.5MB de Vercel)
+          const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+          const parts: { PartNumber: number; ETag: string }[] = [];
 
-          if (!uploadResponse.ok) {
-            throw new Error(`Error en subida directa: ${uploadResponse.statusText}`);
+          console.log(`🚀 [UploadDialog] Subiendo ${totalParts} partes...`);
+
+          for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+            const start = (partNumber - 1) * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const chunk = file.slice(start, end);
+
+            const formData = new FormData();
+            formData.append('chunk', chunk);
+
+            // Subimos el chunk al servidor
+            const { ETag } = await uploadMultipartChunk(s3UploadId, key, partNumber, formData);
+            parts.push({ PartNumber: partNumber, ETag });
+
+            console.log(`  ✅ Parte ${partNumber}/${totalParts} subida`);
+
+            // Opcional: Actualizar progreso UI si tuviéramos acceso al store aquí
           }
-          console.log('✅ [UploadDialog] Subida directa completada');
 
-          // 3. PROCESAR ARCHIVO (Server Action)
-          console.log('⚙️ [UploadDialog] Solicitando procesamiento...');
+          // 3. COMPLETAR CARGA (Server Action)
+          console.log('🏁 [UploadDialog] Finalizando Multipart Upload...');
+          const { location } = await completeMultipartUpload(s3UploadId, key, parts);
+          console.log('✅ [UploadDialog] Archivo ensamblado en MinIO:', location);
+
+          // 4. PROCESAR ARCHIVO (Server Action standard)
+          // Usamos la URL pública generada o la key
+          console.log('⚙️ [UploadDialog] Solicitando procesamiento post-carga...');
           const result = await processUploadedDocument(
             key,
             uploadId,
@@ -201,7 +213,7 @@ export function UploadDialog({
             file.name,
             file.type,
             file.size,
-            publicUrl
+            location
           );
 
           if (result.isDuplicate) {

@@ -23,14 +23,6 @@ const nextConfig: NextConfig = {
     },
     middlewareClientMaxBodySize: '25mb',
   },
-  async rewrites() {
-    return [
-      {
-        source: '/minio-proxy/:path*',
-        destination: `${process.env.MINIO_ENDPOINT}/${process.env.MINIO_BUCKET_NAME}/:path*`,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
