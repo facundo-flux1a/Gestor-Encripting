@@ -903,6 +903,24 @@ export async function getMultipartPresignedUrl(
 
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
+    // 🔄 REEMPLAZO INTELIGENTE DE ENDPOINT (Internal -> Public)
+    // Si tenemos definida una URL pública explícita (para HTTPS), la usamos.
+    const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+
+    if (publicEndpoint) {
+      // url es algo como: http://internal-minio:9000/bucket/key?...
+      // Queremos: https://public-minio.com/bucket/key?...
+      const urlObj = new URL(url);
+      const publicUrlObj = new URL(publicEndpoint);
+
+      // Reemplazamos Protocolo, Host y Puerto
+      urlObj.protocol = publicUrlObj.protocol;
+      urlObj.host = publicUrlObj.host;
+      urlObj.port = publicUrlObj.port;
+
+      return { success: true, url: urlObj.toString() };
+    }
+
     return { success: true, url };
   } catch (error: any) {
     console.error(`❌ Error generando URL para chunk ${partNumber}:`, error);
