@@ -902,7 +902,8 @@ export async function completeMultipartUpload(
       },
     });
 
-    console.log('✅ [Server] S3 CompleteMultipartUpload exitoso');
+    const response = await s3Client.send(command);
+    console.log('✅ [Server] S3 CompleteMultipartUpload exitoso', response);
 
     const endpointUrl = MINIO_ENDPOINT!.replace(/\/$/, '');
     const publicUrl = `${endpointUrl}/${MINIO_BUCKET_NAME}/${key}`;
