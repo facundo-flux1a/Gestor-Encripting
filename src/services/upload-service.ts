@@ -1101,8 +1101,9 @@ export async function processUploadedDocument(
     } catch (error: any) {
       console.error(`❌ [Process] Inner Error:`, error);
       await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
-      // No throw, return error
-      return { success: false, error: `Error interno: ${error.message}` };
+      // Return detailed error for debugging
+      const debugInfo = `(B: ${MINIO_BUCKET_NAME}, K: ${key}, E: ${MINIO_ENDPOINT})`;
+      return { success: false, error: `Error interno: ${error.message} ${debugInfo}` };
     }
   } catch (outerError: any) {
     console.error("❌ Critical Process Error:", outerError);
