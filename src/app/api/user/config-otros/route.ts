@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserConfigOtros, updateUserConfigOtros } from '@/services/user-service';
 import { getCurrentUser } from '@/services/user-service';
+import { upstash } from '@/lib/upstash';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-        const tipos = await getUserConfigOtros();
+        const user = await getCurrentUser();
+        if (!user) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        const key = `otros-folders:${user.id}`;
+        const stored = await upstash.get(key);
+
+        const tipos = stored ? (stored as string[]) : [];
+        console.log('✅ [Redis] Carpetas recuperadas:', tipos);
+
         return NextResponse.json({ tipos });
     } catch (error) {
+        console.error('❌ [Redis] Error al obtener configuración:', error);
         return NextResponse.json({ error: 'Error al obtener configuración' }, { status: 500 });
     }
 }
@@ -32,14 +43,14 @@ export async function POST(request: NextRequest) {
         // Limitar a 5 tipos como se solicitó
         const limitedTipos = tipos.slice(0, 5);
 
-        const success = await updateUserConfigOtros(limitedTipos);
+        const key = `otros-folders:${user.id}`;
+        await upstash.set(key, JSON.stringify(limitedTipos));
 
-        if (success) {
-            return NextResponse.json({ success: true, tipos: limitedTipos });
-        } else {
-            return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
-        }
+        console.log('✅ [Redis] Carpetas guardadas:', limitedTipos);
+
+        return NextResponse.json({ success: true, tipos: limitedTipos });
     } catch (error) {
+        console.error('❌ [Redis] Error al procesar solicitud:', error);
         return NextResponse.json({ error: 'Error al procesar solicitud' }, { status: 500 });
     }
 }

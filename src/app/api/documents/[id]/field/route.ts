@@ -7,20 +7,21 @@ export const dynamic = 'force-dynamic';
 // PATCH - Actualizar campo individual de documento
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     console.log('📝 [API-UPDATE-FIELD] Iniciando...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-UPDATE-FIELD] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
     const documentId = parseInt(params.id, 10);
-    
+
     if (isNaN(documentId)) {
       return NextResponse.json({ error: 'ID de documento inválido' }, { status: 400 });
     }

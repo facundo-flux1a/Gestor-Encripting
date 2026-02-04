@@ -9,20 +9,21 @@ export const dynamic = 'force-dynamic';
 // DELETE - Eliminar documento individual
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     console.log('🗑️ [API-DELETE-DOCUMENT] Iniciando eliminación...');
-    
+
     const user = await getCurrentUser();
-    
+
     if (!user) {
       console.warn('⚠️ [API-DELETE-DOCUMENT] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
     const documentId = parseInt(params.id);
-    
+
     if (isNaN(documentId)) {
       return NextResponse.json({ error: 'ID de documento inválido' }, { status: 400 });
     }
@@ -42,7 +43,7 @@ export async function DELETE(
     revalidatePath('/documents');
     revalidatePath('/dashboard');
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: 'Documento eliminado correctamente'
     });

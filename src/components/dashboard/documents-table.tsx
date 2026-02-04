@@ -1078,6 +1078,10 @@ export function DocumentsTable({
       setRowSelection({}); // Limpiar selección
       if (onDocumentChanged) onDocumentChanged();
 
+      // ✅ NUEVO: Disparar evento para refetch en "Otros"
+      window.dispatchEvent(new CustomEvent('documentUploaded'));
+      console.log('📡 [BulkDelete] Evento documentUploaded disparado');
+
     } catch (error) {
       console.error('Error bulk delete', error);
       toast({
@@ -1392,6 +1396,14 @@ export function DocumentsTable({
                 Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>.
                 Estás a punto de eliminar permanentemente <span className="font-bold text-foreground">{selectedIds.length} documentos</span> seleccionados.
               </p>
+
+              {/* Warning si se eliminan todos los documentos (vacía carpeta) */}
+              {documents.length === selectedIds.length && (
+                <div className="bg-amber-500/10 p-3 rounded-md border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm font-medium mt-2">
+                  ⚠️ Advertencia: Al eliminar todos los documentos, <span className="font-bold">esta carpeta también se eliminará</span> automáticamente.
+                </div>
+              )}
+
               <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1">
                 <p className="text-xs font-medium text-destructive flex items-center gap-2">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>

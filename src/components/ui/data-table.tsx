@@ -60,7 +60,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import { Skeleton } from './skeleton';
@@ -244,25 +244,66 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
       numero_documento: doc.numero_documento,
     }));
     e.dataTransfer.effectAllowed = 'move';
-    console.log('🎯 [Drag Start] Documento:', doc.id_documento, 'Empresa:', doc.empresa_id);
+    console.log('🚀 [Drag Start] Documento:', doc.id_documento);
 
-    // 🆕 CALLBACK PARA DRAG ENTRE TABS
+    // ✅ Crear un elemento custom para el drag preview
+    const dragPreview = document.createElement('div');
+    dragPreview.className = 'flex items-center gap-2 bg-violet-500/90 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-2xl border-2 border-violet-400';
+    dragPreview.style.position = 'absolute';
+    dragPreview.style.top = '-9999px';
+    dragPreview.style.zIndex = '9999';
+
+    // Determinar cuántos documentos se están arrastrando y el texto a mostrar
+    let count = 1;
+    let displayText = '';
+
+    if (rowSelection && data && Object.keys(rowSelection).length > 0) {
+      count = Object.keys(rowSelection).length;
+      displayText = `${count} elementos`;
+    } else {
+      // Para un solo documento, mostrar su tipo
+      const tipoDoc = (doc as any).tipo_documento || 'Documento';
+      displayText = tipoDoc;
+    }
+
+    // Crear el contenido del preview
+    dragPreview.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+      <span class="font-semibold">${displayText}</span>
+    `;
+
+    document.body.appendChild(dragPreview);
+
+    // Establecer el preview en el centro del icono
+    e.dataTransfer.setDragImage(dragPreview, 60, 20);
+
+    // Limpiar el elemento después de un momento
+    setTimeout(() => {
+      document.body.removeChild(dragPreview);
+    }, 0);
+
     if (onDragStartCallback) {
       let selectedIds = [];
-      
+
       // Si hay selección múltiple, usar esos IDs
       if (rowSelection && data && Object.keys(rowSelection).length > 0) {
         selectedIds = Object.keys(rowSelection)
           .map(key => data[parseInt(key)]?.id_documento)
           .filter(id => id !== undefined);
         console.log('📤 [DraggableTableRow] Arrastrando selección múltiple:', selectedIds);
-      } 
+      }
       // Si no hay selección, usar solo el documento actual
       else {
         selectedIds = [doc.id_documento];
         console.log('📤 [DraggableTableRow] Arrastrando documento individual:', doc.id_documento);
       }
-      
+
       if (selectedIds.length > 0) {
         onDragStartCallback(selectedIds);
       }

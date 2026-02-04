@@ -1102,7 +1102,11 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       throw new Error('Documento no encontrado.');
     }
 
-    if (docRows[0].trimestre_cerrado === 1) {
+    // ⚠️ EXCEPCIÓN: Permitir cambiar tipo_documento aunque el trimestre esté cerrado
+    // Esto es para la sección "Otros" donde mover docs entre carpetas NO afecta contabilidad
+    const isChangingTipoDocumento = fieldName === 'tipo_documento';
+
+    if (docRows[0].trimestre_cerrado === 1 && !isChangingTipoDocumento) {
       throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
     }
 
@@ -1428,10 +1432,21 @@ export async function deleteCompany(
   }
 }
 export async function validateDocumentIncidents(documentId: number): Promise<{ success: boolean }> {
+  // ✅ Validar incidencias del documento
   await db.query<OkPacket>(
     'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
     ['system', documentId]
   );
+
+  // ✅ Marcar documento como confirmado (is_new = 0)
+  await db.query<OkPacket>(
+    `UPDATE documentos 
+     SET is_new = 0, 
+         tipo_documento = TRIM(REPLACE(tipo_documento, '(SIN CONFIRMAR)', ''))
+     WHERE id = ?`,
+    [documentId]
+  );
+
   return { success: true };
 }
 

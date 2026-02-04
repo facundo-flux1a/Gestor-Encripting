@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -20,7 +21,7 @@ export async function POST(
     }
 
     const result = await validateDocumentIncidents(documentId);
-    
+
     if (!result.success) {
       return NextResponse.json({ error: 'Error al validar' }, { status: 500 });
     }
@@ -28,8 +29,8 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ Error validando incidencias:', error);
-    return NextResponse.json({ 
-      error: 'Error al validar incidencias' 
+    return NextResponse.json({
+      error: 'Error al validar incidencias'
     }, { status: 500 });
   }
 }

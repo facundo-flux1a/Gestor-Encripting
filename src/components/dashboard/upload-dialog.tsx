@@ -15,7 +15,7 @@ interface UploadDialogProps {
   onUploadComplete?: () => void;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 
 export function UploadDialog({
   isOpen,
@@ -34,7 +34,7 @@ export function UploadDialog({
     if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "❌ Archivo demasiado grande",
-        description: `"${file.name}" excede el límite de 10 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        description: `"${file.name}" excede el límite de 25 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
         variant: "destructive",
       });
       return false;
@@ -130,7 +130,7 @@ export function UploadDialog({
     if (oversizedFiles.length > 0) {
       toast({
         title: "❌ Archivos demasiado grandes",
-        description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
+        description: `${oversizedFiles.length} archivo(s) exceden el límite de 25 MB. Por favor, elimínalos antes de continuar.`,
         variant: "destructive",
       });
       return;
@@ -316,7 +316,7 @@ export function UploadDialog({
               Seleccionar archivos
             </Button>
             <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
-              PDF - ZIP (máx. 10 MB por archivo)
+              PDF - ZIP (máx. 25 MB por archivo)
             </p>
           </div>
 
@@ -329,7 +329,7 @@ export function UploadDialog({
                   Archivos demasiado grandes detectados
                 </p>
                 <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-300 mt-0.5 sm:mt-1">
-                  Algunos archivos exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.
+                  Algunos archivos exceden el límite de 25 MB. Por favor, elimínalos antes de continuar.
                 </p>
               </div>
             </div>
@@ -366,7 +366,7 @@ export function UploadDialog({
                             : 'text-gray-500'
                             }`}>
                             {(file.size / 1024 / 1024).toFixed(2)} MB
-                            {isOversized && ' - Excede 10 MB'}
+                            {isOversized && ' - Excede 25 MB'}
                           </span>
                         </div>
                       </div>

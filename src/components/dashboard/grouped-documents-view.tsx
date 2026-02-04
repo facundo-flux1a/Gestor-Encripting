@@ -7,6 +7,16 @@ import { DocumentsTable } from './documents-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface GroupedDocumentsViewProps {
   documents: Document[];
@@ -64,6 +74,17 @@ export function GroupedDocumentsView({
       finally { setIsLoadingConfig(false); }
     }
     fetchConfig();
+  }, []);
+
+  // ✅ NUEVO: Listener para refetch cuando se eliminan documentos
+  useEffect(() => {
+    const handleRefetch = () => {
+      console.log('🔄 [GroupedView] Refetching after document change');
+      window.location.reload(); // Forzar recarga para actualizar la vista
+    };
+
+    window.addEventListener('documentUploaded', handleRefetch);
+    return () => window.removeEventListener('documentUploaded', handleRefetch);
   }, []);
 
   // Scroll durante drag
@@ -139,9 +160,35 @@ export function GroupedDocumentsView({
     setIsAdding(false);
   };
 
-  const handleDeleteFolder = (tipo: string) => {
+  const [folderToDelete, setFolderToDelete] = useState<{ tipo: string, count: number } | null>(null);
+
+  const confirmDeleteFolder = (tipo: string) => {
+    const docsInFolder = Array.from(documentsByType).find(([t]) => t === tipo)?.[1] || [];
+    setFolderToDelete({ tipo, count: docsInFolder.length });
+  };
+
+  const handleExecuteDeleteFolder = async () => {
+    if (!folderToDelete) return;
+    const { tipo, count } = folderToDelete;
+
+    const docsInFolder = Array.from(documentsByType).find(([t]) => t === tipo)?.[1] || [];
+    const ids = docsInFolder.map(d => d.id_documento);
+
+    // Mover documentos a "Indefinido"
+    if (ids.length > 0) {
+      await fetch('/api/documents/bulk-update-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, fieldName: 'tipo_documento', value: 'Indefinido' })
+      });
+    }
+
     const newTypes = customTypes.filter(t => t !== tipo);
-    saveCustomTypes(newTypes);
+    await saveCustomTypes(newTypes);
+
+    toast({ title: 'Carpeta eliminada', description: `${ids.length} documentos movidos a "Indefinido"` });
+    window.dispatchEvent(new CustomEvent('documentUploaded'));
+    setFolderToDelete(null);
   };
 
   const startEditing = (current: string) => {
@@ -149,58 +196,106 @@ export function GroupedDocumentsView({
     setEditValue(current);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!isEditing) return;
-    const newTypes = customTypes.map(t => t === isEditing ? editValue.trim() : t);
-    saveCustomTypes(newTypes);
+    const oldName = isEditing;
+    const newName = editValue.trim();
+
+    if (oldName === newName) {
+      setIsEditing(null);
+      return;
+    }
+
+    // ✅ Actualizar todos los documentos con este tipo
+    try {
+      const docsToUpdate = Array.from(documentsByType).find(([tipo]) => tipo === oldName)?.[1] || [];
+      const ids = docsToUpdate.map(d => d.id_documento);
+
+      if (ids.length > 0) {
+        await fetch('/api/documents/bulk-update-field', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids, fieldName: 'tipo_documento', value: newName })
+        });
+      }
+
+      // Actualizar la lista de tipos custom
+      const allTypes = Array.from(new Set([...customTypes.filter(t => t !== oldName), newName]));
+      await saveCustomTypes(allTypes);
+
+      toast({ title: 'Carpeta renombrada', description: `"${oldName}" → "${newName}"` });
+      window.dispatchEvent(new CustomEvent('documentUploaded'));
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Error', description: 'No se pudo renombrar la carpeta', variant: 'destructive' });
+    }
+
     setIsEditing(null);
   };
 
   const documentsByType = useMemo(() => {
-    const grouped = new Map<string, Document[]>();
+    const MAX_FOLDERS = 5;
+    const INDEFINIDO = 'Indefinido';
+
+    // ✅ Obtener tipos únicos de los documentos
     const documentedTypes = new Set<string>();
-    documents.forEach(doc => { if (doc.tipo_documento) documentedTypes.add(doc.tipo_documento); });
-    const allUniqueTypes = Array.from(new Set([...customTypes, ...Array.from(documentedTypes)]));
-    allUniqueTypes.forEach(t => grouped.set(t, []));
+    documents.forEach(doc => {
+      if (doc.tipo_documento && doc.tipo_documento !== INDEFINIDO) {
+        documentedTypes.add(doc.tipo_documento);
+      }
+    });
+
+    // ✅ Priorizar customTypes + los más frecuentes
+    const typeCounts = new Map<string, number>();
+    documents.forEach(doc => {
+      if (doc.tipo_documento && doc.tipo_documento !== INDEFINIDO) {
+        typeCounts.set(doc.tipo_documento, (typeCounts.get(doc.tipo_documento) || 0) + 1);
+      }
+    });
+
+    // Ordenar por: 1) custom types primero, 2) cantidad de docs
+    const sortedTypes = Array.from(documentedTypes).sort((a, b) => {
+      const aIsCustom = customTypes.includes(a);
+      const bIsCustom = customTypes.includes(b);
+      if (aIsCustom && !bIsCustom) return -1;
+      if (!aIsCustom && bIsCustom) return 1;
+      return (typeCounts.get(b) || 0) - (typeCounts.get(a) || 0);
+    });
+
+    // ✅ Tomar solo los primeros MAX_FOLDERS
+    const allowedTypes = new Set(sortedTypes.slice(0, MAX_FOLDERS));
+
+    // ✅ Agrupar documentos
+    const grouped = new Map<string, Document[]>();
+    allowedTypes.forEach(t => grouped.set(t, []));
+    grouped.set(INDEFINIDO, []);
     grouped.set(UNCLASSIFIED, []);
+
     documents.forEach(doc => {
       let tipo = doc.tipo_documento || 'Sin categoría';
 
       // 🔄 LOGIC: Reclassify Albaranes
-      // If it's an Albarán (or unclassified but looks like one), map it to Facturas
       const isAlbaran = tipo.toLowerCase().includes('albarán') || tipo.toLowerCase().includes('albaran');
-
       if (isAlbaran) {
-        console.log('🔍 [GroupedView] Detectado Albarán:', doc.id_documento, doc.tipo_documento, doc.entidades);
-        // Determine if Emitida or Recibida based on entities
-        // If it has a 'cliente' entity, it's likely Emitida (Sales)
         const hasCliente = doc.entidades?.some(e => e.rol === 'cliente' || e.rol === 'receptor');
-
-        // Check if destination buckets exist or default to standard names
-        // Ideally we map to existing buckets if they are close.
-        if (hasCliente) {
-          tipo = 'Factura Emitida';
-        } else {
-          tipo = 'Factura Recibida';
-        }
+        tipo = hasCliente ? 'Factura Emitida' : 'Factura Recibida';
       }
 
-      let matchedType = allUniqueTypes.find(ct => ct.toLowerCase() === tipo.toLowerCase());
-
-      if (!matchedType && isAlbaran) {
-        matchedType = tipo;
-        if (!grouped.has(matchedType)) {
-          grouped.set(matchedType, []);
-          allUniqueTypes.push(matchedType);
-        }
+      // ✅ Si el tipo está permitido, asignarlo, sino va a Indefinido
+      if (allowedTypes.has(tipo)) {
+        grouped.get(tipo)!.push(doc);
+      } else if (!tipo || tipo === 'Sin categoría') {
+        grouped.get(UNCLASSIFIED)!.push(doc);
+      } else {
+        grouped.get(INDEFINIDO)!.push(doc);
       }
-
-      if (matchedType) grouped.get(matchedType)!.push(doc);
-      else grouped.get(UNCLASSIFIED)!.push(doc);
     });
+
     return Array.from(grouped.entries())
-      .filter(([t, d]) => d.length > 0 || customTypes.includes(t))
+      .filter(([t, d]) => d.length > 0)
       .sort((a, b) => {
+        if (a[0] === INDEFINIDO) return 1;
+        if (b[0] === INDEFINIDO) return -1;
         if (a[0] === UNCLASSIFIED) return 1;
         if (b[0] === UNCLASSIFIED) return -1;
         return a[0].localeCompare(b[0]);
@@ -258,6 +353,7 @@ export function GroupedDocumentsView({
         const isCustomType = customTypes.includes(tipo);
         const isDraggingOver = dragOverType === tipo;
 
+
         return (
           <div key={tipo} className="space-y-2 group/folder relative w-full">
             <div className="flex w-full items-center relative">
@@ -288,15 +384,15 @@ export function GroupedDocumentsView({
                 <div className={`${classes.text} shrink-0 ml-1`}>{isExpanded ? <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}</div>
               </button>
 
-              {/* Botones de acción absolutamente posicionados PARA QUE NO AFECTEN EL ANCHO */}
-              <div className="absolute right-[3.5rem] flex gap-1 opacity-0 group-hover/folder:opacity-100 transition-all duration-300 translate-x-4 group-hover/folder:translate-x-0 z-20 pointer-events-none group-hover/folder:pointer-events-auto">
-                {isCustomType && !isEditing && (
+              {/* Botones de acción - Siempre visibles para TODAS las carpetas */}
+              <div className="absolute right-[3.5rem] flex gap-1 transition-all duration-300 z-20 opacity-100">
+                {!isEditing && (
                   <Button variant="secondary" size="icon" className="h-8 w-8 shadow-lg border border-border/50 backdrop-blur-md bg-background/80 hover:bg-background" title="Editar carpeta" onClick={(e) => { e.stopPropagation(); startEditing(tipo); }}>
                     <Edit2 className="h-3.5 w-3.5 text-foreground" />
                   </Button>
                 )}
-                {isCustomType && !isEditing && (
-                  <Button variant="destructive" size="icon" className="h-8 w-8 shadow-lg border border-red-500/20" title="Eliminar carpeta" onClick={(e) => { e.stopPropagation(); handleDeleteFolder(tipo); }}>
+                {!isEditing && (
+                  <Button variant="destructive" size="icon" className="h-8 w-8 shadow-lg border border-red-500/20" title="Eliminar carpeta" onClick={(e) => { e.stopPropagation(); confirmDeleteFolder(tipo); }}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
@@ -321,6 +417,42 @@ export function GroupedDocumentsView({
           </div>
         );
       })}
+
+      <AlertDialog open={!!folderToDelete} onOpenChange={(open) => !open && setFolderToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              ¿Eliminar carpeta "{folderToDelete?.tipo}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 pt-2">
+              <p>
+                Estás a punto de eliminar esta carpeta.
+              </p>
+              {folderToDelete && folderToDelete.count > 0 && (
+                <div className="bg-destructive/10 p-3 rounded-md border border-destructive/20 text-destructive text-sm font-medium">
+                  ⚠️ Atención: Esta carpeta contiene <span className="font-bold">{folderToDelete.count} documentos</span>.
+
+                  <ul className="list-disc pl-5 mt-2 font-normal text-xs opacity-90">
+                    <li>Los documentos <strong>NO</strong> se eliminarán.</li>
+                    <li>Serán movidos automáticamente a la carpeta <strong>"Indefinido"</strong>.</li>
+                    <li>Podrás clasificarlos de nuevo más tarde.</li>
+                  </ul>
+                </div>
+              )}
+              {folderToDelete && folderToDelete.count === 0 && (
+                <p className="text-sm text-muted-foreground">La carpeta está vacía y se eliminará permanentemente.</p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleExecuteDeleteFolder} className="bg-destructive hover:bg-destructive/90">
+              Confirmar eliminación
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
