@@ -653,80 +653,106 @@ export async function uploadDocument(
  * Esto evita pasar por el servidor de Next.js (bypass 4.5MB limit de Vercel).
  */
 export async function getPresignedUploadUrl(
-    fileName: string,
-    fileType: string,
-    empresaId: string
+  fileName: string,
+  fileType: string,
+  empresaId: string
 ): Promise<{ url: string; uploadId: string; key: string; publicUrl: string; normalizedFileName: string }> {
-    try {
-        const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+  try {
+    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
 
-        if (!MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
-            throw new Error('Configuración de almacenamiento incompleta');
-        }
-
-        // 1. Normalizar nombre
-        const normalizedFileName = normalizeFileName(fileName);
-
-        // 2. Generar Key única
-        const now = new Date();
-        const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
-
-        const fileNameWithoutExt = normalizedFileName.includes('.')
-            ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.'))
-            : normalizedFileName;
-        const fileExt = normalizedFileName.includes('.')
-            ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.'))
-            : '';
-
-        const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
-        const key = `archivos/${uniqueFileName}`;
-        const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        // 3. Crear cliente S3
-        const s3Client = new S3Client({
-            region: MINIO_REGION || "us-east-1",
-            endpoint: MINIO_ENDPOINT,
-            credentials: {
-                accessKeyId: MINIO_ACCESS_KEY,
-                secretAccessKey: MINIO_SECRET_KEY,
-            },
-            forcePathStyle: true,
-        });
-
-        // 4. Generar URL firmada para PUT
-        const command = new PutObjectCommand({
-            Bucket: MINIO_BUCKET_NAME,
-            Key: key,
-            ContentType: fileType,
-            ACL: 'public-read',
-        });
-
-        const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hora
-        const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${key}`;
-
-        console.log(`🔑 [PresignedURL] Generada para: ${normalizedFileName} -> ${key}`);
-
-        // 5. Crear registro de actividad INICIAL
-        await createActivityRecord(
-            uploadId,
-            empresaId,
-            normalizedFileName,
-            getNormalizedFileType(fileType, fileExt.replace('.', '')),
-            undefined
-        );
-
-        return {
-            url: signedUrl,
-            uploadId,
-            key,
-            publicUrl,
-            normalizedFileName
-        };
-
-    } catch (error: any) {
-        console.error('❌ Error generando Presigned URL:', error);
-        throw new Error('Error al preparar la carga del archivo.');
+    if (!MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
+      throw new Error('Configuración de almacenamiento incompleta');
     }
+
+    // 1. Normalizar nombre
+    const normalizedFileName = normalizeFileName(fileName);
+
+    // 2. Generar Key única
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
+
+    const fileNameWithoutExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.'))
+      : normalizedFileName;
+    const fileExt = normalizedFileName.includes('.')
+      ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.'))
+      : '';
+
+    const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
+    const key = `archivos/${uniqueFileName}`;
+    const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // 3. Crear cliente S3
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY,
+        secretAccessKey: MINIO_SECRET_KEY,
+      },
+      forcePathStyle: true,
+    });
+
+    // 4. Generar URL firmada para PUT
+    const command = new PutObjectCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+      ContentType: fileType,
+      ACL: 'public-read',
+    });
+
+    // Generamos la URL firmada normal (hacia MinIO interno)
+    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+    // 🔥 PROXY REWRITE STRATEGY:
+    // El cliente (Frontend) está en HTTPS, pero MinIO está en HTTP.
+    // Para evitar "Mixed Content", el cliente subirá a "/minio-proxy/..." (HTTPS)
+    // Next.js (middleware/rewrite) redirigirá internamente a MinIO (HTTP).
+
+    // Obtenemos solo los query params de la firma (ej. ?X-Amz-Signature=...)
+    const urlObj = new URL(signedUrl);
+    const searchParams = urlObj.search;
+
+    // Construimos la URL del Proxy relativa a nuestra App
+    // Client PUT -> https://gestor.muvail.com/minio-proxy/archivos/file.pdf?signature...
+    // Rewrite -> http://flux1a-minio.../gestor-documental/archivos/file.pdf?signature...
+
+    // Usamos NEXT_PUBLIC_URL o un fallback seguro
+    const appBaseUrl = process.env.NEXT_PUBLIC_URL?.replace(/\/$/, '') || 'https://gestor.muvail.com';
+
+    // La ruta del proxy definida en next.config.ts es /minio-proxy/:path*
+    const proxyUrl = `${appBaseUrl}/minio-proxy/${key}${searchParams}`;
+
+    // La URL pública real del archivo (para guardar en BD y mostrar después)
+    // Esta sí puede ser HTTP porque no se fetch-ea directamente desde el navegador en contextos seguros (o MinIO debería tener HTTPS para lectura)
+    // OJO: Si MinIO no tiene HTTPS, ver esto en un `img src` en un sitio HTTPS también dará warnings, pero el upload es lo crítico ahora.
+    const endpointUrl = MINIO_ENDPOINT.replace(/\/$/, '');
+    const publicUrl = `${endpointUrl}/${MINIO_BUCKET_NAME}/${key}`;
+
+    console.log(`🔑 [ProxyUpload] signedUrl original: ${signedUrl}`);
+    console.log(`🔑 [ProxyUpload] Redirigiendo a: ${proxyUrl}`);
+
+    // 5. Crear registro de actividad INICIAL
+    await createActivityRecord(
+      uploadId,
+      empresaId,
+      normalizedFileName,
+      getNormalizedFileType(fileType, fileExt.replace('.', '')),
+      undefined
+    );
+
+    return {
+      url: proxyUrl, // El frontend recibirá esta URL "falsa" pero segura
+      uploadId,
+      key,
+      publicUrl,
+      normalizedFileName
+    };
+
+  } catch (error: any) {
+    console.error('❌ Error generando Presigned URL:', error);
+    throw new Error('Error al preparar la carga del archivo.');
+  }
 }
 
 /**
@@ -735,179 +761,179 @@ export async function getPresignedUploadUrl(
  * manteniendo la compatibilidad con el flujo de n8n.
  */
 export async function processUploadedDocument(
-    key: string,
-    uploadId: string,
-    empresaId: string,
-    originalFileName: string,
-    fileType: string,
-    fileSize: number, // Tamaño reportado por el cliente (informativo)
-    publicUrl: string
+  key: string,
+  uploadId: string,
+  empresaId: string,
+  originalFileName: string,
+  fileType: string,
+  fileSize: number, // Tamaño reportado por el cliente (informativo)
+  publicUrl: string
 ): Promise<z.infer<typeof UploadResponseSchema>> {
-    const normalizedFileName = normalizeFileName(originalFileName);
-    console.log(`⚙️ [Process] Iniciando procesamiento post-upload: ${normalizedFileName}`);
+  const normalizedFileName = normalizeFileName(originalFileName);
+  console.log(`⚙️ [Process] Iniciando procesamiento post-upload: ${normalizedFileName}`);
 
-    const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
-    const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
+  const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
+  const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
 
-    try {
-        const s3Client = new S3Client({
-            region: MINIO_REGION || "us-east-1",
-            endpoint: MINIO_ENDPOINT,
-            credentials: {
-                accessKeyId: MINIO_ACCESS_KEY!,
-                secretAccessKey: MINIO_SECRET_KEY!,
-            },
-            forcePathStyle: true,
-        });
+  try {
+    const s3Client = new S3Client({
+      region: MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY!,
+        secretAccessKey: MINIO_SECRET_KEY!,
+      },
+      forcePathStyle: true,
+    });
 
-        // 1. Descargar el archivo desde S3 para procesarlo (hash, extracción, etc.)
-        // Esto es rápido porque ocurre entre servidores (Vercel -> MinIO) y no consume ancho de banda de subida del cliente
-        console.log(`📥 [Process] Descargando desde S3 para verificación: ${key}`);
+    // 1. Descargar el archivo desde S3 para procesarlo (hash, extracción, etc.)
+    // Esto es rápido porque ocurre entre servidores (Vercel -> MinIO) y no consume ancho de banda de subida del cliente
+    console.log(`📥 [Process] Descargando desde S3 para verificación: ${key}`);
 
-        const getCommand = new GetObjectCommand({
-            Bucket: MINIO_BUCKET_NAME,
-            Key: key,
-        });
+    const getCommand = new GetObjectCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: key,
+    });
 
-        const s3Response = await s3Client.send(getCommand);
-        const fileBuffer = await s3Response.Body?.transformToByteArray();
+    const s3Response = await s3Client.send(getCommand);
+    const fileBuffer = await s3Response.Body?.transformToByteArray();
 
-        if (!fileBuffer) {
-            throw new Error('No se pudo leer el archivo desde S3');
-        }
-
-        const buffer = Buffer.from(fileBuffer); // Convertir a Buffer de Node
-
-        // 2. Calcular HASH (igual que antes)
-        console.log(`#️⃣ [Process] Calculando hash...`);
-        const mainFileHash = await calculateFileHash(buffer);
-        console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
-
-        // 3. Obtener CIF
-        const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
-        const empresaData = rows as { CIF: string }[];
-        if (!empresaData || empresaData.length === 0) throw new Error('Empresa no encontrada');
-        const cif = empresaData[0].CIF;
-
-        // 4. Lógica de ZIP/RAR/Duplicados (Reutilizada)
-        const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
-        const normalizedFileType = getNormalizedFileType(fileType, fileExtension);
-        let individualFileHashes: { [fileName: string]: string } = {};
-        let individualUploadIds: { [fileName: string]: string } = {};
-        let isCompressedFile = false;
-
-        if (normalizedFileType === 'zip') {
-            isCompressedFile = true;
-            try {
-                individualFileHashes = await extractAndHashZipFiles(buffer);
-                // ... Logica de hijos (simplificada para este snippet, reutilizar la existente si es posible o copiar)
-                for (const fileName of Object.keys(individualFileHashes)) {
-                    const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
-                    individualUploadIds[fileName] = childUploadId;
-                    await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
-                }
-            } catch (e: any) {
-                console.error('Error ZIP', e);
-                // Manejo de error
-            }
-        } else if (normalizedFileType === 'rar') {
-            isCompressedFile = true;
-            try {
-                const rarResult = await extractAndHashRarFiles(buffer, uploadId);
-                individualFileHashes = rarResult.fileHashes;
-                individualUploadIds = rarResult.uploadIds;
-                for (const fileName of Object.keys(individualFileHashes)) {
-                    const childUploadId = individualUploadIds[fileName];
-                    await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
-                }
-            } catch (e: any) {
-                console.error('Error RAR', e);
-            }
-        } else {
-            // Chequeo duplicados
-            const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
-            if (duplicateRecord) {
-                console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
-                await markUploadAsFailed(uploadId, `Duplicado del ${new Date(duplicateRecord.uploaded_at).toLocaleString()}`, 'Verificación');
-                await notifyFrontendError(uploadId, 'Archivo duplicado', 'Duplicado');
-                return {
-                    success: false,
-                    isDuplicate: true,
-                    message: `❌ Archivo duplicado.`,
-                    fileHash: mainFileHash,
-                    duplicateInfo: {
-                        fileName: duplicateRecord.file_name,
-                        uploadedAt: new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR'),
-                        empresaId: empresaId,
-                    }
-                };
-            }
-        }
-
-        // 5. Webhook n8n
-        const webhookPayload: any = {
-            text: key, // En el original mandaba filePath que es lo mismo que key
-            empresaId,
-            cif,
-            fileHash: mainFileHash,
-            uploadId,
-            fileName: normalizedFileName,
-            originalFileName,
-            fileSize,
-            publicUrl,
-            isCompressedFile,
-            mimeType: fileType,
-            normalizedFileType,
-            fileExtension,
-            fechaSubida: new Date().toISOString(),
-        };
-
-        if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
-            webhookPayload.individualFileHashes = individualFileHashes;
-            webhookPayload.individualUploadIds = individualUploadIds;
-        }
-
-        console.log(`📡 [Process] Llamando a n8n webhook...`);
-        const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(webhookPayload),
-        });
-
-        if (!webhookResponse.ok) {
-            throw new Error(`Microservice error: ${webhookResponse.status}`);
-        }
-
-        // Parsear respuesta webhook
-        const responseText = await webhookResponse.text();
-        let webhookResult;
-        try {
-            webhookResult = JSON.parse(responseText);
-        } catch {
-            webhookResult = { mensaje: responseText };
-        }
-
-        // Chequeo final duplicados (respuesta del webhook)
-        if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
-            return {
-                success: false,
-                isDuplicate: true,
-                message: webhookResult.mensaje || 'Duplicado detectado por agente.',
-                fileHash: mainFileHash
-            };
-        }
-
-        return {
-            success: true,
-            message: webhookResult.mensaje || 'Procesado correctamente',
-            url: publicUrl,
-            fileHash: mainFileHash
-        };
-
-    } catch (error: any) {
-        console.error(`❌ [Process] Error:`, error);
-        await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
-        await notifyFrontendError(uploadId, 'Error procesando archivo', 'Error');
-        throw new Error('Error procesando el archivo subido.');
+    if (!fileBuffer) {
+      throw new Error('No se pudo leer el archivo desde S3');
     }
+
+    const buffer = Buffer.from(fileBuffer); // Convertir a Buffer de Node
+
+    // 2. Calcular HASH (igual que antes)
+    console.log(`#️⃣ [Process] Calculando hash...`);
+    const mainFileHash = await calculateFileHash(buffer);
+    console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
+
+    // 3. Obtener CIF
+    const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
+    const empresaData = rows as { CIF: string }[];
+    if (!empresaData || empresaData.length === 0) throw new Error('Empresa no encontrada');
+    const cif = empresaData[0].CIF;
+
+    // 4. Lógica de ZIP/RAR/Duplicados (Reutilizada)
+    const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
+    const normalizedFileType = getNormalizedFileType(fileType, fileExtension);
+    let individualFileHashes: { [fileName: string]: string } = {};
+    let individualUploadIds: { [fileName: string]: string } = {};
+    let isCompressedFile = false;
+
+    if (normalizedFileType === 'zip') {
+      isCompressedFile = true;
+      try {
+        individualFileHashes = await extractAndHashZipFiles(buffer);
+        // ... Logica de hijos (simplificada para este snippet, reutilizar la existente si es posible o copiar)
+        for (const fileName of Object.keys(individualFileHashes)) {
+          const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+          individualUploadIds[fileName] = childUploadId;
+          await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
+        }
+      } catch (e: any) {
+        console.error('Error ZIP', e);
+        // Manejo de error
+      }
+    } else if (normalizedFileType === 'rar') {
+      isCompressedFile = true;
+      try {
+        const rarResult = await extractAndHashRarFiles(buffer, uploadId);
+        individualFileHashes = rarResult.fileHashes;
+        individualUploadIds = rarResult.uploadIds;
+        for (const fileName of Object.keys(individualFileHashes)) {
+          const childUploadId = individualUploadIds[fileName];
+          await createActivityRecord(childUploadId, empresaId, fileName, fileName.split('.').pop() || 'unknown', uploadId);
+        }
+      } catch (e: any) {
+        console.error('Error RAR', e);
+      }
+    } else {
+      // Chequeo duplicados
+      const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
+      if (duplicateRecord) {
+        console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
+        await markUploadAsFailed(uploadId, `Duplicado del ${new Date(duplicateRecord.uploaded_at).toLocaleString()}`, 'Verificación');
+        await notifyFrontendError(uploadId, 'Archivo duplicado', 'Duplicado');
+        return {
+          success: false,
+          isDuplicate: true,
+          message: `❌ Archivo duplicado.`,
+          fileHash: mainFileHash,
+          duplicateInfo: {
+            fileName: duplicateRecord.file_name,
+            uploadedAt: new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR'),
+            empresaId: empresaId,
+          }
+        };
+      }
+    }
+
+    // 5. Webhook n8n
+    const webhookPayload: any = {
+      text: key, // En el original mandaba filePath que es lo mismo que key
+      empresaId,
+      cif,
+      fileHash: mainFileHash,
+      uploadId,
+      fileName: normalizedFileName,
+      originalFileName,
+      fileSize,
+      publicUrl,
+      isCompressedFile,
+      mimeType: fileType,
+      normalizedFileType,
+      fileExtension,
+      fechaSubida: new Date().toISOString(),
+    };
+
+    if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
+      webhookPayload.individualFileHashes = individualFileHashes;
+      webhookPayload.individualUploadIds = individualUploadIds;
+    }
+
+    console.log(`📡 [Process] Llamando a n8n webhook...`);
+    const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhookPayload),
+    });
+
+    if (!webhookResponse.ok) {
+      throw new Error(`Microservice error: ${webhookResponse.status}`);
+    }
+
+    // Parsear respuesta webhook
+    const responseText = await webhookResponse.text();
+    let webhookResult;
+    try {
+      webhookResult = JSON.parse(responseText);
+    } catch {
+      webhookResult = { mensaje: responseText };
+    }
+
+    // Chequeo final duplicados (respuesta del webhook)
+    if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
+      return {
+        success: false,
+        isDuplicate: true,
+        message: webhookResult.mensaje || 'Duplicado detectado por agente.',
+        fileHash: mainFileHash
+      };
+    }
+
+    return {
+      success: true,
+      message: webhookResult.mensaje || 'Procesado correctamente',
+      url: publicUrl,
+      fileHash: mainFileHash
+    };
+
+  } catch (error: any) {
+    console.error(`❌ [Process] Error:`, error);
+    await markUploadAsFailed(uploadId, 'Error interno procesando archivo', 'Procesamiento');
+    await notifyFrontendError(uploadId, 'Error procesando archivo', 'Error');
+    throw new Error('Error procesando el archivo subido.');
+  }
 }
