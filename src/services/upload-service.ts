@@ -944,12 +944,16 @@ export async function processUploadedDocument(
       });
 
       // 1. Descargar el archivo desde S3 para procesarlo (hash, extracción, etc.)
-      // Esto es rápido porque ocurre entre servidores (Vercel -> MinIO) y no consume ancho de banda de subida del cliente
-      console.log(`📥 [Process] Descargando desde S3 para verificación: ${key}`);
+      const decodedKey = decodeURIComponent(key);
+      console.log(`📥 [Process] Debug S3 Info:`);
+      console.log(`   - Endpoint: "${MINIO_ENDPOINT}"`);
+      console.log(`   - Bucket: "${MINIO_BUCKET_NAME}"`);
+      console.log(`   - Raw Key: "${key}"`);
+      console.log(`   - Decoded Key: "${decodedKey}"`);
 
       const getCommand = new GetObjectCommand({
         Bucket: MINIO_BUCKET_NAME,
-        Key: key,
+        Key: decodedKey, // Trying decoded key
       });
 
       const s3Response = await s3Client.send(getCommand);
