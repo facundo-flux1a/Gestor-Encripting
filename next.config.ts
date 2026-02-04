@@ -23,14 +23,6 @@ const nextConfig: NextConfig = {
     },
     middlewareClientMaxBodySize: '25mb',
   },
-  async rewrites() {
-    return [
-      {
-        source: '/s3-proxy/:path*',
-        destination: 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/:path*',
-      },
-    ];
-  },
 };
 
 export default nextConfig;
