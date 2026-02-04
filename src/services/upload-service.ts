@@ -768,7 +768,7 @@ export async function initiateMultipartUpload(
   fileName: string,
   fileType: string,
   empresaId: string
-): Promise<{ uploadId: string; key: string; s3UploadId: string }> {
+): Promise<{ success: boolean; data?: { uploadId: string; key: string; s3UploadId: string }; error?: string }> {
   try {
     const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
 
@@ -815,14 +815,17 @@ export async function initiateMultipartUpload(
     );
 
     return {
-      uploadId: myUploadId, // Nuestro ID interno
-      key: key,
-      s3UploadId: result.UploadId!, // ID de S3 para el multipart
+      success: true,
+      data: {
+        uploadId: myUploadId, // Nuestro ID interno
+        key: key,
+        s3UploadId: result.UploadId!, // ID de S3 para el multipart
+      }
     };
 
   } catch (error: any) {
     console.error('❌ Error iniciando Multipart Upload:', error);
-    throw new Error('Error al iniciar la carga del archivo.');
+    return { success: false, error: `Error inicial: ${error.message}` };
   }
 }
 
@@ -834,7 +837,7 @@ export async function uploadMultipartChunk(
   key: string,
   partNumber: number,
   formData: FormData
-): Promise<{ ETag: string }> {
+): Promise<{ success: boolean; data?: { ETag: string }; error?: string }> {
   try {
     const chunk = formData.get('chunk') as File;
     if (!chunk) throw new Error('No chunk provided');
@@ -862,11 +865,11 @@ export async function uploadMultipartChunk(
 
     const result = await s3Client.send(command);
 
-    return { ETag: result.ETag! };
+    return { success: true, data: { ETag: result.ETag! } };
 
   } catch (error: any) {
     console.error(`❌ Error subiendo chunk ${partNumber}:`, error);
-    throw new Error(`Error al subir parte ${partNumber}`);
+    return { success: false, error: `Error chunk ${partNumber}: ${error.message}` };
   }
 }
 
@@ -877,7 +880,7 @@ export async function completeMultipartUpload(
   s3UploadId: string,
   key: string,
   parts: { PartNumber: number; ETag: string }[]
-): Promise<{ location: string }> {
+): Promise<{ success: boolean; data?: { location: string }; error?: string }> {
   try {
     const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_REGION } = process.env;
     const s3Client = new S3Client({
@@ -899,16 +902,17 @@ export async function completeMultipartUpload(
       },
     });
 
-    const result = await s3Client.send(command);
+    console.log('✅ [Server] S3 CompleteMultipartUpload exitoso');
 
     const endpointUrl = MINIO_ENDPOINT!.replace(/\/$/, '');
     const publicUrl = `${endpointUrl}/${MINIO_BUCKET_NAME}/${key}`;
 
-    return { location: publicUrl };
+    return { success: true, data: { location: publicUrl } };
 
   } catch (error: any) {
     console.error('❌ Error completando Multipart Upload:', error);
-    throw new Error('Error al finalizar la carga.');
+    // Retornamos el mensaje real del error para verlo en el cliente
+    return { success: false, error: `Error finalización: ${error.message}` };
   }
 }
 

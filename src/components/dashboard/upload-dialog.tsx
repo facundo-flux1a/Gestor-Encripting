@@ -164,18 +164,24 @@ export function UploadDialog({
         try {
           // 1. INICIAR CARGA MULTIPARTE (Server Action)
           console.log('📤 [UploadDialog] Iniciando Multipart Upload:', file.name);
-          const { uploadId, key, s3UploadId } = await initiateMultipartUpload(
+          const initResult = await initiateMultipartUpload(
             file.name,
             file.type,
             companyId
           );
+
+          if (!initResult.success || !initResult.data) {
+            throw new Error(initResult.error || "No se pudo iniciar la carga");
+          }
+
+          const { uploadId, key, s3UploadId } = initResult.data;
 
           if ((window as any).__uploadProgressManager) {
             (window as any).__uploadProgressManager.addUpload(uploadId, file.name); // Usamos nombre original por ahora
           }
 
           // 2. SUBIR POR CHUNKS (Frontend -> Server Action -> MinIO)
-          const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB (Debajo del límite de 4.5MB de Vercel)
+          const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB (Reducido para seguridad Vercel)
           const totalParts = Math.ceil(file.size / CHUNK_SIZE);
           const parts: { PartNumber: number; ETag: string }[] = [];
 
@@ -190,8 +196,12 @@ export function UploadDialog({
             formData.append('chunk', chunk);
 
             // Subimos el chunk al servidor
-            const { ETag } = await uploadMultipartChunk(s3UploadId, key, partNumber, formData);
-            parts.push({ PartNumber: partNumber, ETag });
+            const chunkResult = await uploadMultipartChunk(s3UploadId, key, partNumber, formData);
+            if (!chunkResult.success || !chunkResult.data) {
+              throw new Error(chunkResult.error || `Error subiendo parte ${partNumber}`);
+            }
+
+            parts.push({ PartNumber: partNumber, ETag: chunkResult.data.ETag });
 
             console.log(`  ✅ Parte ${partNumber}/${totalParts} subida`);
 
@@ -200,8 +210,14 @@ export function UploadDialog({
 
           // 3. COMPLETAR CARGA (Server Action)
           console.log('🏁 [UploadDialog] Finalizando Multipart Upload...');
-          const { location } = await completeMultipartUpload(s3UploadId, key, parts);
-          console.log('✅ [UploadDialog] Archivo ensamblado en MinIO:', location);
+          const completeResult = await completeMultipartUpload(s3UploadId, key, parts);
+
+          if (!completeResult.success || !completeResult.data) {
+            console.error("❌ Error en completeMultipartUpload:", completeResult.error);
+            throw new Error(completeResult.error || "Error al ensamblar el archivo en el servidor");
+          }
+
+          console.log('✅ [UploadDialog] Archivo ensamblado en MinIO:', completeResult.data.location);
 
           // 4. PROCESAR ARCHIVO (Server Action standard)
           // Usamos la URL pública generada o la key
@@ -213,7 +229,7 @@ export function UploadDialog({
             file.name,
             file.type,
             file.size,
-            location
+            completeResult.data.location
           );
 
           if (result.isDuplicate) {
