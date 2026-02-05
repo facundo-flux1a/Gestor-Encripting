@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     console.log('🔍 [API-DOCUMENTS] Llamando getDocuments...');
 
-    const documents = await getDocuments(empresaIds);
+    const documents = await getDocuments(empresaIds, true);
 
     console.log('✅ [API-DOCUMENTS] Documentos obtenidos:', documents.length);
 

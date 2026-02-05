@@ -177,6 +177,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = React.useState<User | null>(null);
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
+  const [incidentCount, setIncidentCount] = React.useState(0);
 
   React.useEffect(() => {
     getSession().then(session => {
@@ -208,11 +209,28 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Fetch de incidencias pendientes
+  const fetchIncidentCount = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/incidents/count');
+      if (res.ok) {
+        const data = await res.json();
+        setIncidentCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching incident count:', err);
+    }
+  }, []);
+
   React.useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+    fetchIncidentCount();
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      fetchIncidentCount();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, fetchIncidentCount]);
 
   React.useEffect(() => {
     if (pathname !== '/dashboard/actividad') {
@@ -278,6 +296,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                           <Sparkles className="w-3 h-3" />
                         )}
                         {unreadActivity.total}
+                      </span>
+                    )}
+
+                    {/* Badge de incidencias pendientes - SOLO EN INCIDENCIAS */}
+                    {item.href === '/incidents' && incidentCount > 0 && (
+                      <span className="ml-auto w-5 h-5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
+                        {incidentCount}
                       </span>
                     )}
                   </Link>

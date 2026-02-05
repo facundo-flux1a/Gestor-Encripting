@@ -412,8 +412,8 @@ export async function createCompany(data: {
 /**
  * Obtiene todos los documentos, opcionalmente filtrados por empresas
  */
-export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
-  console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds });
+export async function getDocuments(empresaIds?: number[], excludeIncidents: boolean = false): Promise<Document[]> {
+  console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds, excludeIncidents });
 
   try {
     const user = await getCurrentUser();
@@ -452,6 +452,11 @@ export async function getDocuments(empresaIds?: number[]): Promise<Document[]> {
     if (empresaIds && empresaIds.length > 0) {
       query += ' AND d.id_de_empresa IN (?)';
       params.push(empresaIds);
+    }
+
+    // ✅ NUEVO: Filtro para excluir documentos con incidencias pendientes
+    if (excludeIncidents) {
+      query += ` AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
     }
 
     query += ' ORDER BY d.fecha_emision DESC';
@@ -965,7 +970,6 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             lineaNueva.precio_neto,
             lineaNueva.importe_linea,
             JSON.stringify(lineaNueva.datos_extra || {}),
-            JSON.stringify(lineaNueva.datos_extra || {}),
             empresaId || null,
             lineaExistente.id
           ]
@@ -984,7 +988,6 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             lineaNueva.descuento_porcentaje,
             lineaNueva.precio_neto,
             lineaNueva.importe_linea,
-            JSON.stringify(lineaNueva.datos_extra || {}),
             JSON.stringify(lineaNueva.datos_extra || {}),
             empresaId || null
           ]
@@ -1506,7 +1509,8 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   const whereDocType = `AND (
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-    )`;
+    )
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ PASO 1: Obtener proveedores y documentos
   const [providerRows] = await db.query<any[]>(`
@@ -1879,7 +1883,8 @@ export async function getProviderAnalytics(
   const whereDocType = `AND (
         (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-    )`;
+    )
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
   const [docs] = await db.query<DocumentPacket[]>(`
@@ -2291,7 +2296,8 @@ export async function getDashboardAnalytics(
         OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-    )`;
+    )
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ CONSTRUCCIÓN DINÁMICA DE FILTRO TEMPORAL
   let wherePeriodFilter = '';
@@ -3203,6 +3209,7 @@ export async function getTrimestresList(
     (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
+AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
         GROUP BY d.id
       )
 SELECT
@@ -3369,7 +3376,8 @@ export async function getDocumentosByTrimestre(
     whereConditions.push(`(
     (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-    )`);
+    )
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`);
 
     const whereClause = whereConditions.join(' AND ');
 
@@ -3446,7 +3454,9 @@ export async function cerrarTrimestre(
       'e.id_de_usuario = ?',
       'd.año_trimestre = ?',
       'd.num_trimestre = ?',
-      'd.trimestre_cerrado = 0'
+      'd.trimestre_cerrado = 0',
+      // ✅ Asegurar que NO tiene incidencias pendientes
+      'd.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)'
     ];
     const params: any[] = [userId, payload.año, payload.trimestre];
 
@@ -3552,6 +3562,7 @@ d.trimestre_cerrado = 1,
     (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
         GROUP BY d.id
       )
 SELECT
