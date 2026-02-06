@@ -1186,6 +1186,8 @@ export function DocumentsTable({
     }
   }, [onDocumentChanged, toast]);
 
+
+
   const columns = useMemo(() => {
     const cols = getColumns(
       handleUpdate as any,
