@@ -46,7 +46,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from './theme-toggle';
 import { Separator } from '@/components/ui/separator';
+
 import { CompaniesSelector } from '../companies-selector';
+import { useCompanyContext } from '@/context/CompanyProvider';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -179,6 +181,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
   const [incidentCount, setIncidentCount] = React.useState(0);
 
+  // ✅ Usar el contexto de compañías
+  const { selectedCompanyIds } = useCompanyContext();
+
   React.useEffect(() => {
     getSession().then(session => {
       if (session) {
@@ -196,18 +201,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   // Fetch de actividades no leídas
   const fetchUnreadCount = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/activity/unread-count');
+      const params = new URLSearchParams();
+      if (selectedCompanyIds.length > 0) {
+        params.append('empresaId', selectedCompanyIds.join(','));
+      }
+
+      const res = await fetch(`/api/activity/unread-count?${params}`);
       if (res.ok) {
         const data = await res.json();
         setUnreadActivity({
-          total: data.totalUnread || 0,
+          total: data.total_unread || 0,
           hasErrors: (data.unreadFailed || 0) > 0,
         });
       }
     } catch (err) {
       console.error('Error fetching unread count:', err);
     }
-  }, []);
+  }, [selectedCompanyIds]);
 
   // Fetch de incidencias pendientes
   const fetchIncidentCount = React.useCallback(async () => {
@@ -230,7 +240,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       fetchIncidentCount();
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount, fetchIncidentCount]);
+  }, [fetchUnreadCount, fetchIncidentCount, selectedCompanyIds]);
 
   React.useEffect(() => {
     if (pathname !== '/dashboard/actividad') {
@@ -301,7 +311,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
                     {/* Badge de incidencias pendientes - SOLO EN INCIDENCIAS */}
                     {item.href === '/incidents' && incidentCount > 0 && (
-                      <span className="ml-auto w-5 h-5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
+                      <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
+                        <AlertCircle className="w-3 h-3" />
                         {incidentCount}
                       </span>
                     )}

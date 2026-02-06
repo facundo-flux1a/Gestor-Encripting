@@ -8,31 +8,45 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
+    // Obtener parámetros de query string
+    const url = new URL(request.url);
+    const empresaIdParam = url.searchParams.get('empresaId');
+
+    let query = `
+      SELECT 
+       SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) = 'completado' THEN 1 ELSE 0 END) as unread_success,
+       SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) IN ('fallido', 'error', 'interrumpido') THEN 1 ELSE 0 END) as unread_failed,
+       SUM(CASE WHEN a.is_new = 1 THEN 1 ELSE 0 END) as total_unread
+      FROM erp49.actividad a
+      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
+      WHERE u.id = ?`;
+
+    const params: any[] = [session.userId];
+
+    if (empresaIdParam) {
+      const empresaIds = empresaIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (empresaIds.length > 0) {
+        query += ` AND a.id_de_empresa IN (${empresaIds.map(() => '?').join(',')})`;
+        params.push(...empresaIds);
+      }
+    }
+
     // Contar actividades no leídas separadas por tipo (success vs fallidas)
-    const [rows] = await connection.query(
-      `SELECT 
-        SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) = 'completado' THEN 1 ELSE 0 END) as unread_success,
-        SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) IN ('fallido', 'error', 'interrumpido') THEN 1 ELSE 0 END) as unread_failed,
-        SUM(CASE WHEN a.is_new = 1 THEN 1 ELSE 0 END) as total_unread
-       FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE u.id = ?`,
-      [session.userId]
-    );
+    const [rows] = await connection.query(query, params);
 
-    const result = (rows as any[])[0];
+    const result = (rows as any[])[0] || {};
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       unreadSuccess: Number(result.unread_success) || 0,
       unreadFailed: Number(result.unread_failed) || 0,
-      totalUnread: Number(result.total_unread) || 0
+      total_unread: Number(result.total_unread) || 0
     });
 
   } catch (error) {

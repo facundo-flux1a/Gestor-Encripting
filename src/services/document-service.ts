@@ -181,7 +181,9 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       cuota: i.cuota,
     }));
 
-    const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+    const total_iva = iva_details
+      .filter(tax => !tax.tipo_impuesto?.toLowerCase().includes('retencion'))
+      .reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
 
     const entidades: DocumentEntity[] = currentEntidades.map(e => ({
       id: e.id,

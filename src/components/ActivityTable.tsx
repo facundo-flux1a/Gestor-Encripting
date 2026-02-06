@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 import { getSession } from '@/services/auth-service';
+import { useCompanyContext } from '@/context/CompanyProvider';
 import {
   HelpCircle,
   Monitor,
@@ -112,6 +113,9 @@ export default function ActivityTable({
 }: ActivityTableProps) {
   const router = useRouter();
   const { toast } = useToast();
+  // ✅ Usar contexto de compañías
+  const { selectedCompanyIds, companies, toggleCompanyId } = useCompanyContext();
+
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +192,7 @@ export default function ActivityTable({
     if (isAuthenticated) {
       fetchActivities();
     }
-  }, [isAuthenticated, empresaId, pagination.offset, filters]);
+  }, [isAuthenticated, empresaId, pagination.offset, filters, selectedCompanyIds]);
 
   useEffect(() => {
     if (!isAuthenticated || !autoRefreshEnabled) return;
@@ -196,7 +200,7 @@ export default function ActivityTable({
       fetchActivities(true);
     }, refreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, empresaId, autoRefreshEnabled, refreshInterval]);
+  }, [isAuthenticated, empresaId, autoRefreshEnabled, refreshInterval, selectedCompanyIds]);
 
   const checkAuth = async () => {
     const session = await getSession();
@@ -204,6 +208,14 @@ export default function ActivityTable({
   };
 
   const fetchActivities = async (silent = false) => {
+    // ✅ Si no hay empresas seleccionadas, no cargar nada y limpiar estado
+    if (selectedCompanyIds.length === 0) {
+      setActivities([]);
+      setPagination(prev => ({ ...prev, total: 0, hasMore: false }));
+      setLoading(false);
+      return;
+    }
+
     try {
       if (!silent) setLoading(true);
       setError(null);
@@ -213,7 +225,11 @@ export default function ActivityTable({
         offset: pagination.offset.toString(),
       });
 
-      if (empresaId) params.append('empresaId', empresaId);
+      // ✅ Usar selectedCompanyIds
+      if (selectedCompanyIds.length > 0) {
+        params.append('empresaId', selectedCompanyIds.join(','));
+      }
+
       if (filters.status && filters.status.length > 0) {
         params.append('status', filters.status.join(','));
       }
@@ -995,20 +1011,23 @@ export default function ActivityTable({
     );
   }
 
-  if (activities.length === 0) {
+
+  if (loading && activities.length === 0) {
     return (
-      <div className="space-y-4">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium bg-secondary hover:bg-secondary/80 rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 group"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 group-hover:-translate-x-1 transition-transform" />
-          <span>Volver</span>
-        </button>
-        <div className="bg-muted/30 border border-border rounded-lg p-8 sm:p-12 text-center backdrop-blur-sm animate-fade-in">
-          <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4 shrink-0" />
-          <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-2">Los documentos subidos aparecerán aquí</p>
+      <div className="w-full space-y-4 p-4 animate-pulse">
+        <div className="flex justify-between items-center mb-6">
+          <div className="h-8 bg-muted rounded w-48"></div>
+          <div className="flex gap-2">
+            <div className="h-9 bg-muted rounded w-24"></div>
+            <div className="h-9 bg-muted rounded w-24"></div>
+          </div>
+        </div>
+        <div className="h-16 bg-muted rounded-lg w-full mb-6"></div>
+        <div className="space-y-3">
+          <div className="h-12 bg-muted rounded w-full"></div>
+          <div className="h-12 bg-muted rounded w-full"></div>
+          <div className="h-12 bg-muted rounded w-full"></div>
+          <div className="h-12 bg-muted rounded w-full"></div>
         </div>
       </div>
     );
@@ -1119,7 +1138,64 @@ export default function ActivityTable({
 
         {showFilters && (
           <div className="bg-muted/50 border rounded-lg p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+              {/* ✅ NUEVO: Filtro de Empresas Separado */}
+              <div>
+                <label className="block text-xs sm:text-sm font-medium mb-2">Empresa</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal border-dashed h-10">
+                      <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                      {selectedCompanyIds.length > 0 ? (
+                        <>
+                          <Badge variant="secondary" className="rounded-sm px-1 font-normal mr-1">
+                            {selectedCompanyIds.length}
+                          </Badge>
+                          <span className="truncate">seleccionadas</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">Seleccionar empresa...</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar empresa..." />
+                      <CommandList>
+                        <CommandEmpty>No encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {companies.map((company) => {
+                            const isSelected = selectedCompanyIds.includes(company.id);
+                            return (
+                              <CommandItem
+                                key={company.id}
+                                onSelect={() => {
+                                  toggleCompanyId(company.id);
+                                  setPagination(prev => ({ ...prev, offset: 0 }));
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <div
+                                  className={cn(
+                                    "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                    isSelected
+                                      ? "bg-primary text-primary-foreground"
+                                      : "opacity-50 [&_svg]:invisible"
+                                  )}
+                                >
+                                  <Check className={cn("h-4 w-4")} />
+                                </div>
+                                <span className="truncate">{company.name}</span>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
               <div>
                 <label className="block text-xs sm:text-sm font-medium mb-2">Estado</label>
                 <Popover>
@@ -1256,69 +1332,93 @@ export default function ActivityTable({
           </div>
         )}
 
-        {/* ✅ TABLA CON COMPONENTE SHADCN */}
+
+        {/* ✅ CONTENIDO PRINCIPAL: Tabla o Estados Vacíos */}
         <div className="bg-card border rounded-lg overflow-hidden shadow-sm backdrop-blur-sm animate-fade-in" style={{ animationDelay: '150ms' }}>
-          <Table data-tutorial="actividad-table">
-            <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
-              <TableRow>
-                <TableHead
-                  onClick={() => handleSort('status')}
-                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span>Estado</span>
-                    {getSortIcon('status')}
-                  </div>
-                </TableHead>
-                <TableHead
-                  onClick={() => handleSort('documento')}
-                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span>Documento</span>
-                    {getSortIcon('documento')}
-                  </div>
-                </TableHead>
-                <TableHead
-                  onClick={() => handleSort('empresa')}
-                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden md:table-cell group"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span>Empresa</span>
-                    {getSortIcon('empresa')}
-                  </div>
-                </TableHead>
-                <TableHead
-                  onClick={() => handleSort('fecha')}
-                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden lg:table-cell group"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span>Fecha</span>
-                    {getSortIcon('fecha')}
-                  </div>
-                </TableHead>
-                <TableHead
-                  onClick={() => handleSort('progreso')}
-                  className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden sm:table-cell group"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span>Progreso</span>
-                    {getSortIcon('progreso')}
-                  </div>
-                </TableHead>
-                <TableHead className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="divide-y divide-border/50">
-              {parentFiles.map(activity => {
-                if (zipUploadIds.has(activity.upload_id)) {
-                  const children = childrenMap.get(activity.upload_id) || [];
-                  return renderZipRow(activity, children);
-                }
-                return renderActivityRow(activity);
-              })}
-            </TableBody>
-          </Table>
+          {selectedCompanyIds.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center bg-muted/10">
+              <Building2 className="w-16 h-16 sm:w-20 sm:h-20 text-muted-foreground/40 mx-auto mb-4 shrink-0" />
+              <p className="text-lg sm:text-xl font-medium text-foreground">Selecciona una empresa</p>
+              <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                Utiliza el filtro superior "Empresa" o el selector del menú lateral para comenzar a ver la actividad.
+              </p>
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[300px] p-8 text-center bg-muted/10">
+              <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/50 mx-auto mb-4 shrink-0" />
+              <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                No se encontraron documentos ni actividades para la empresa seleccionada con los filtros actuales.
+              </p>
+              {activeFiltersCount > 0 && (
+                <Button variant="link" onClick={clearFilters} className="mt-2 text-primary">
+                  Limpiar filtros
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Table data-tutorial="actividad-table">
+              <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
+                <TableRow>
+                  <TableHead
+                    onClick={() => handleSort('status')}
+                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span>Estado</span>
+                      {getSortIcon('status')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    onClick={() => handleSort('documento')}
+                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span>Documento</span>
+                      {getSortIcon('documento')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    onClick={() => handleSort('empresa')}
+                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden md:table-cell group"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span>Empresa</span>
+                      {getSortIcon('empresa')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    onClick={() => handleSort('fecha')}
+                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden lg:table-cell group"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span>Fecha</span>
+                      {getSortIcon('fecha')}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    onClick={() => handleSort('progreso')}
+                    className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none hidden sm:table-cell group"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span>Progreso</span>
+                      {getSortIcon('progreso')}
+                    </div>
+                  </TableHead>
+                  <TableHead className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-border/50">
+                {parentFiles.map(activity => {
+                  if (zipUploadIds.has(activity.upload_id)) {
+                    const children = childrenMap.get(activity.upload_id) || [];
+                    return renderZipRow(activity, children);
+                  }
+                  return renderActivityRow(activity);
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
 
         {pagination.hasMore && (
@@ -1364,7 +1464,7 @@ export default function ActivityTable({
         isOpen={errorModalOpen}
         onOpenChange={setErrorModalOpen}
         activity={selectedErrorActivity}
-        onRetry={handleRetryFromModal}
+        onRetry={(activity) => handleRetry(activity)}
         isRetrying={selectedErrorActivity ? retrying.has(selectedErrorActivity.id) : false}
       />
 

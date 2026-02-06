@@ -59,8 +59,11 @@ export async function GET(request: Request) {
 
     // Filtros
     if (empresaId) {
-      query += ` AND a.id_de_empresa = ?`;
-      params.push(empresaId);
+      const empresaIds = empresaId.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (empresaIds.length > 0) {
+        query += ` AND a.id_de_empresa IN (${empresaIds.map(() => '?').join(',')})`;
+        params.push(...empresaIds);
+      }
     }
 
     if (status) {
@@ -117,8 +120,11 @@ export async function GET(request: Request) {
     const countParams: any[] = [session.userId];
 
     if (empresaId) {
-      countQuery += ` AND a.id_de_empresa = ?`;
-      countParams.push(empresaId);
+      const empresaIds = empresaId.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (empresaIds.length > 0) {
+        countQuery += ` AND a.id_de_empresa IN (${empresaIds.map(() => '?').join(',')})`;
+        countParams.push(...empresaIds);
+      }
     }
 
     if (status) {
