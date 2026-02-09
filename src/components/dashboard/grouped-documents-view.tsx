@@ -375,7 +375,7 @@ export function GroupedDocumentsView({
                     <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-red-500/20" onClick={() => setIsEditing(null)}><X className="h-4 w-4 text-red-500" /></Button>
                   </div>
                 ) : (
-                  <span className={`font-semibold ${classes.text} flex-1 text-left text-xs sm:text-sm lg:text-base truncate mr-16`}>{tipo}</span>
+                  <span className={`font-semibold ${classes.text} flex-1 text-left text-xs sm:text-sm lg:text-base truncate mr-24`}>{tipo}</span>
                 )}
 
                 <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium ${classes.badge} whitespace-nowrap shrink-0`}>
@@ -385,7 +385,7 @@ export function GroupedDocumentsView({
               </button>
 
               {/* Botones de acción - Siempre visibles para TODAS las carpetas */}
-              <div className="absolute right-[3.5rem] flex gap-1 transition-all duration-300 z-20 opacity-100">
+              <div className="absolute right-[5rem] flex gap-1 transition-all duration-300 z-20 opacity-100">
                 {!isEditing && (
                   <Button variant="secondary" size="icon" className="h-8 w-8 shadow-lg border border-border/50 backdrop-blur-md bg-background/80 hover:bg-background" title="Editar carpeta" onClick={(e) => { e.stopPropagation(); startEditing(tipo); }}>
                     <Edit2 className="h-3.5 w-3.5 text-foreground" />

@@ -1975,8 +1975,8 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
       };
     }
 
-    // ✅ Filtro de tipo de documento
-    const whereDocType = `AND LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
+    // ✅ Filtro de tipo de documento - solo excluir "sin confirmar"
+    const whereDocType = `AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
 
     // ✅ Filtro de empresas (ahora siempre presente)
     const whereEmpresa = 'AND e2.id_de_usuario = ? AND d.id_de_empresa IN (?)';
