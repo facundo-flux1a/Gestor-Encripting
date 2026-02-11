@@ -23,7 +23,7 @@ export default async function SettingsPage() {
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
                 <MainLayoutHeader>
-                     <h2 className="text-3xl font-bold tracking-tight">Ajustes Generales</h2>
+                    <h2 className="text-3xl font-bold tracking-tight">Ajustes Generales</h2>
                 </MainLayoutHeader>
 
                 <div className="grid gap-6">
@@ -35,7 +35,7 @@ export default async function SettingsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                             <div className="space-y-4 max-w-lg">
+                            <div className="space-y-4 max-w-lg">
                                 <div className="space-y-2">
                                     <Label htmlFor="companyName">Nombre</Label>
                                     <Input id="companyName" defaultValue={user?.nombre || ''} disabled />
@@ -46,6 +46,25 @@ export default async function SettingsPage() {
                                 </div>
                                 <Button type="submit" disabled>Guardar Cambios</Button>
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Configuración de Alertas</CardTitle>
+                            <CardDescription>
+                                Personaliza el comportamiento de las alertas de Actividad e Incidencias
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Controla cómo se filtran las alertas según las empresas seleccionadas
+                            </p>
+                            <Button asChild>
+                                <a href="/dashboard/configuracion">
+                                    Configurar Alertas
+                                </a>
+                            </Button>
                         </CardContent>
                     </Card>
 

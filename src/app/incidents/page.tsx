@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
 import { IncidentsAnalytics } from "@/components/incidents/incidents-analytics";
 import { AnalyzeDocumentsCard } from "@/components/incidents/analyze-documents-card";
-import { AIIncidentsTable } from "@/components/incidents/ai-incidents-table";
+import { GroupedAIIncidentsTable } from "@/components/incidents/grouped-ai-incidents-table";
 import { useCompanyContext } from "@/context/CompanyProvider";
 import { useState, useEffect } from "react";
 import type { Document } from "@/lib/types";
@@ -66,9 +66,9 @@ function IncidentsPageContent() {
         fetchIncidents();
     }, [selectedCompanyIds]);
 
-    const handleAnalysisComplete = () => {
+    const handleAnalysisComplete = async () => {
         console.log('🔄 [IncidentsPage] Análisis completado, recargando...');
-        fetchIncidents();
+        await fetchIncidents();
     };
 
     if (isLoading) {
@@ -119,10 +119,10 @@ function IncidentsPageContent() {
 
                     <Separator className="my-4 sm:my-6" />
 
-                    {/* Tabla de Incidencias de IA con animación y hover */}
+                    {/* Tabla de Incidencias de IA Agrupada con animación y hover */}
                     {/* 🎯 data-tutorial="incidencias-ai-table" */}
                     <div className="animate-fade-in transition-all duration-300 hover:scale-[1.005]" style={{ animationDelay: '100ms' }} data-tutorial="incidencias-ai-table">
-                        <AIIncidentsTable
+                        <GroupedAIIncidentsTable
                             empresaIds={selectedCompanyIds}
                             onRefresh={handleAnalysisComplete}
                         />

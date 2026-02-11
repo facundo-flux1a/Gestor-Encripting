@@ -12,14 +12,30 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
         }
 
-        const [rows] = await db.query<RowDataPacket[]>(`
+        // Obtener parámetros de query string
+        const url = new URL(request.url);
+        const empresaIdParam = url.searchParams.get('empresaId');
+
+        let query = `
       SELECT COUNT(DISTINCT d.id) as count
       FROM documentos d
       JOIN incidencias_documento i ON d.id = i.documento_id
       JOIN empresas e ON d.id_de_empresa = e.id
       WHERE i.validado = 0 
-        AND e.id_de_usuario = ?
-    `, [session.userId]);
+        AND e.id_de_usuario = ?`;
+
+        const params: any[] = [session.userId];
+
+        // Filtrar por empresa si se proporciona el parámetro
+        if (empresaIdParam) {
+            const empresaIds = empresaIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+            if (empresaIds.length > 0) {
+                query += ` AND d.id_de_empresa IN (${empresaIds.map(() => '?').join(',')})`;
+                params.push(...empresaIds);
+            }
+        }
+
+        const [rows] = await db.query<RowDataPacket[]>(query, params);
 
         return NextResponse.json({
             count: rows[0]?.count || 0

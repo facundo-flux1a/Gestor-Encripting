@@ -11,8 +11,8 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    const { 
+
+    const {
       uploadId,
       parentUploadId,
       status,
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     // 🔥 MANEJO ESPECIAL PARA ERRORES
     if (status === 'Fallido' || status === 'Error' || status === 'error') {
       console.error(`❌ [POST] Marcando como fallido: ${uploadId}`);
-      
+
       await connection.query(
         `UPDATE actividad 
          SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, updated_at = NOW()
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         await markParentAsFailed(parentUploadId, message);
       }
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         uploadId,
         status: 'Fallido',
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       await updateParentProgress(parentUploadId);
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       uploadId,
       stored: true
@@ -127,7 +127,7 @@ async function updateParentProgress(parentUploadId: string) {
     // Determinar estado del padre
     const allCompleted = children.every((child: any) => child.status === 'Completado');
     const anyFailed = children.some((child: any) => child.status === 'Fallido');
-    
+
     let parentStatus = 'procesando';
     let parentStep = 'Procesando archivos...';
     let parentMessage = `${children.length} archivos en proceso`;
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
 
   try {
     console.log('🔍 [GET] Solicitando estado de:', uploadId);
-    
+
     // Obtener el registro principal
     const [rows] = await connection.query(
       `SELECT * FROM actividad WHERE upload_id = ? LIMIT 1`,
@@ -179,14 +179,14 @@ export async function GET(request: NextRequest) {
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { 
+        {
           status: 'waiting',
           step: 'Iniciando',
           progress: 0,
           message: 'Esperando procesamiento...',
           timestamp: Date.now()
         },
-        { 
+        {
           status: 200,
           headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
         }
@@ -205,6 +205,26 @@ export async function GET(request: NextRequest) {
       children = childRows;
     }
 
+    // 🆕 VERIFICAR SI EL DOCUMENTO TIENE INCIDENCIAS
+    let hasIncidents = false;
+    console.log(`🔍 [GET] mainRecord:`, {
+      status: mainRecord.status,
+      documento_id: mainRecord.documento_id,
+      upload_id: mainRecord.upload_id
+    });
+
+    if (mainRecord.status === 'Completado' && mainRecord.documento_id) {
+      const [incidentRows] = await connection.query(
+        `SELECT COUNT(*) as count FROM incidencias_documento 
+         WHERE documento_id = ?`,
+        [mainRecord.documento_id]
+      ) as any;
+      hasIncidents = incidentRows[0]?.count > 0;
+      console.log(`🔍 [GET] Documento ID ${mainRecord.documento_id} tiene incidencias:`, hasIncidents, `(${incidentRows[0]?.count} incidencias)`);
+    } else {
+      console.log(`⚠️ [GET] No se puede verificar incidencias - Status: ${mainRecord.status}, documento_id: ${mainRecord.documento_id}`);
+    }
+
     const response = {
       status: mainRecord.status,
       step: mainRecord.step,
@@ -212,6 +232,7 @@ export async function GET(request: NextRequest) {
       message: mainRecord.mensaje,
       timestamp: Date.now(),
       isCompressed: children.length > 0,
+      hasIncidents, // 🆕 Nuevo campo
       children: children.map((child: any) => ({
         uploadId: child.upload_id,
         fileName: child.documento_nombre,
@@ -223,7 +244,7 @@ export async function GET(request: NextRequest) {
     };
 
     console.log(`✅ [GET] Retornando: ${uploadId} - ${mainRecord.step} (${mainRecord.progress}%)${children.length > 0 ? ` + ${children.length} hijos` : ''}`);
-    
+
     return NextResponse.json(response, {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
     });

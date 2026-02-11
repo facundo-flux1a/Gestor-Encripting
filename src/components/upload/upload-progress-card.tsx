@@ -23,6 +23,7 @@ interface UploadProgressData {
   message: string;
   error?: string;
   isCompressed?: boolean;
+  hasIncidents?: boolean; // 🆕 Indica si el documento tiene incidencias
   children?: ChildProgress[];
   data?: {
     error?: string;
@@ -299,6 +300,13 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
               const data: UploadProgressData = await response.json();
               consecutiveErrors = 0;
 
+              console.log('📦 [Manager] Datos recibidos:', {
+                uploadId: upload.uploadId,
+                status: data.status,
+                hasIncidents: data.hasIncidents,
+                progress: data.progress
+              });
+
               setUploads(prev => {
                 const newUploads = new Map(prev);
                 const current = newUploads.get(upload.uploadId);
@@ -322,13 +330,16 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                       pollIntervalsRef.current.delete(upload.uploadId);
                     }
 
-                    // 🔥 INICIAR TIMER DE AUTO-CLOSE (5 segundos)
+                    // 🔥 INICIAR TIMER DE AUTO-CLOSE
+                    // Si tiene incidencias, dar más tiempo para que el usuario lo vea (15s en lugar de 5s)
+                    const closeDelay = data.hasIncidents ? 15000 : AUTO_CLOSE_DELAY;
+
                     if (!autoCloseTimersRef.current.has(upload.uploadId)) {
-                      console.log(`⏲️ [Manager] Auto-close programado en ${AUTO_CLOSE_DELAY / 1000}s para:`, upload.uploadId);
+                      console.log(`⏲️ [Manager] Auto-close programado en ${closeDelay / 1000}s para:`, upload.uploadId, data.hasIncidents ? '(CON INCIDENCIAS)' : '');
                       const timer = setTimeout(() => {
                         console.log('🔄 [Manager] Auto-close ejecutado para:', upload.uploadId);
                         removeUpload(upload.uploadId);
-                      }, AUTO_CLOSE_DELAY);
+                      }, closeDelay);
                       autoCloseTimersRef.current.set(upload.uploadId, timer);
                     }
                   }
@@ -610,12 +621,33 @@ function UploadCard({
           )}
 
           {(upload.progressData.status === 'completed' || upload.progressData.status === 'Completado') && (
-            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md p-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                  ✅ Documento procesado exitosamente
-                </p>
+            <div className={cn(
+              "border rounded-md p-3",
+              upload.progressData.hasIncidents
+                ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
+            )}>
+              <div className="flex items-start gap-2">
+                {upload.progressData.hasIncidents ? (
+                  <>
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                        ⚠️ Documento procesado con incidencias
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        Visita la sección de <span className="font-semibold">Incidencias</span> para revisarlas
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                      ✅ Documento procesado exitosamente
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}

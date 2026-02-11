@@ -49,6 +49,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { CompaniesSelector } from '../companies-selector';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { usePreferences } from '@/contexts/preferences-context';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -198,12 +199,25 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     });
   }, [pathname]);
 
+  // Hook de preferencias
+  const { preferences } = usePreferences();
+
   // Fetch de actividades no leídas
   const fetchUnreadCount = React.useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (selectedCompanyIds.length > 0) {
-        params.append('empresaId', selectedCompanyIds.join(','));
+
+      // Si dinamizar_actividad está habilitado o se fuerza siempre
+      // if (preferences?.dinamizar_actividad) {
+      if (true) {
+        if (selectedCompanyIds.length > 0) {
+          params.append('empresaId', selectedCompanyIds.join(','));
+        }
+        // else if (!preferences?.sin_seleccion_mostrar_todo) {
+        //   // Si no hay empresas seleccionadas y la preferencia es no mostrar nada
+        //   // setUnreadActivity({ total: 0, hasErrors: false });
+        //   // return;
+        // }
       }
 
       const res = await fetch(`/api/activity/unread-count?${params}`);
@@ -217,12 +231,29 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Error fetching unread count:', err);
     }
-  }, [selectedCompanyIds]);
+  }, [selectedCompanyIds, preferences]);
+
+
 
   // Fetch de incidencias pendientes
   const fetchIncidentCount = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/incidents/count');
+      const params = new URLSearchParams();
+
+      // Si dinamizar_incidencias está habilitado o se fuerza siempre
+      // if (preferences?.dinamizar_incidencias) {
+      if (true) {
+        if (selectedCompanyIds.length > 0) {
+          params.append('empresaId', selectedCompanyIds.join(','));
+        }
+        // else if (!preferences?.sin_seleccion_mostrar_todo) {
+        //   // Si no hay empresas seleccionadas y la preferencia es no mostrar nada
+        //   // setIncidentCount(0);
+        //   // return;
+        // }
+      }
+
+      const res = await fetch(`/api/incidents/count?${params}`);
       if (res.ok) {
         const data = await res.json();
         setIncidentCount(data.count || 0);
@@ -230,7 +261,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Error fetching incident count:', err);
     }
-  }, []);
+  }, [selectedCompanyIds, preferences]);
 
   React.useEffect(() => {
     fetchUnreadCount();
@@ -240,7 +271,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       fetchIncidentCount();
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchUnreadCount, fetchIncidentCount, selectedCompanyIds]);
+  }, [fetchUnreadCount, fetchIncidentCount]);
 
   React.useEffect(() => {
     if (pathname !== '/dashboard/actividad') {
