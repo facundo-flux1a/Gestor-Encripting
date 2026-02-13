@@ -1687,6 +1687,7 @@ export async function getDocumentsByProviderName(
         LEFT JOIN empresas e ON d.id_de_empresa = e.id
         WHERE ed.identificador_fiscal = ? 
           AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     `;
 
   const params: any[] = [fiscalId];
@@ -1760,6 +1761,7 @@ export async function getProductsByProviderName(
             JOIN entidades_documento ed ON d.id = ed.documento_id
             WHERE ed.identificador_fiscal = ? 
               AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               AND (
                 (ld.codigo IS NOT NULL AND ld.codigo != '') 
                 OR 
@@ -2554,6 +2556,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               ${wherePeriodFilter}
         )
@@ -2647,6 +2650,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               -- No filters for period here, we want ALL available history
         )
@@ -2731,6 +2735,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               -- No year filter for yearly summary strictly, unless we wanted to filter by range, but usually we want all years
         )
@@ -2776,6 +2781,7 @@ export async function getDashboardAnalytics(
             OR (LOWER(tipo_documento) LIKE '%abono%' AND LOWER(tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(tipo_documento) LIKE '%albar%' AND LOWER(tipo_documento) NOT LIKE '%(sin confirmar)%')
         )
+        AND id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
         ${hasEmpresaFilter ? 'AND id_de_empresa IN (?)' : ''}
         ${wherePeriodFilter.replace(/d\./g, '')}
         GROUP BY tipo_documento
@@ -2829,6 +2835,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             ${wherePeriodFilter}
         )
@@ -2924,6 +2931,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
@@ -3008,6 +3016,7 @@ export async function getDashboardAnalytics(
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
+              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
@@ -3069,6 +3078,7 @@ export async function getDashboardAnalytics(
               OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           )
+          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
         GROUP BY e.identificador_fiscal, e.nombre

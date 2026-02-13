@@ -12,9 +12,7 @@ export default function ConfiguracionPage() {
                     <h2 className="text-3xl font-bold tracking-tight">Configuración de Alertas</h2>
                 </MainLayoutHeader>
 
-                <PreferencesProvider>
-                    <FilteringPreferences />
-                </PreferencesProvider>
+                <FilteringPreferences />
             </div>
         </MainLayout>
     );

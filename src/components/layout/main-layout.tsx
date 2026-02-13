@@ -207,17 +207,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     try {
       const params = new URLSearchParams();
 
-      // Si dinamizar_actividad está habilitado o se fuerza siempre
-      // if (preferences?.dinamizar_actividad) {
-      if (true) {
-        if (selectedCompanyIds.length > 0) {
+      // Lógica de preferencias para Actividad
+      const dinamizar = preferences?.dinamizar_actividad ?? true;
+      const mostrarTodoSinSeleccion = preferences?.sin_seleccion_mostrar_todo ?? false;
+
+      // 1. Manejo de sin selección (Prioritario)
+      if (selectedCompanyIds.length === 0) {
+        if (!mostrarTodoSinSeleccion) {
+          // Si elige "No mostrar nada", esto aplica SIEMPRE que no haya selección,
+          // independientemente de si "Dinamizar" está o no activo.
+          setUnreadActivity({ total: 0, hasErrors: false });
+          return;
+        }
+      } else {
+        // 2. Manejo con selección
+        if (dinamizar) {
           params.append('empresaId', selectedCompanyIds.join(','));
         }
-        // else if (!preferences?.sin_seleccion_mostrar_todo) {
-        //   // Si no hay empresas seleccionadas y la preferencia es no mostrar nada
-        //   // setUnreadActivity({ total: 0, hasErrors: false });
-        //   // return;
-        // }
       }
 
       const res = await fetch(`/api/activity/unread-count?${params}`);
@@ -240,17 +246,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     try {
       const params = new URLSearchParams();
 
-      // Si dinamizar_incidencias está habilitado o se fuerza siempre
-      // if (preferences?.dinamizar_incidencias) {
-      if (true) {
-        if (selectedCompanyIds.length > 0) {
+      // Lógica de preferencias para Incidencias
+      const dinamizar = preferences?.dinamizar_incidencias ?? true;
+      const mostrarTodoSinSeleccion = preferences?.sin_seleccion_mostrar_todo ?? false;
+
+      // 1. Manejo de sin selección (Prioritario)
+      if (selectedCompanyIds.length === 0) {
+        if (!mostrarTodoSinSeleccion) {
+          setIncidentCount(0);
+          return;
+        }
+      } else {
+        // 2. Manejo con selección
+        if (dinamizar) {
           params.append('empresaId', selectedCompanyIds.join(','));
         }
-        // else if (!preferences?.sin_seleccion_mostrar_todo) {
-        //   // Si no hay empresas seleccionadas y la preferencia es no mostrar nada
-        //   // setIncidentCount(0);
-        //   // return;
-        // }
       }
 
       const res = await fetch(`/api/incidents/count?${params}`);
