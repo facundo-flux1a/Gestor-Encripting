@@ -21,6 +21,7 @@ import {
 
 // Importar el servicio para obtener las empresas
 //import { getCompanies } from '@/services/document-service';
+import { useTutorial } from '@/context/tutorial-context';
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -114,6 +115,9 @@ const SidebarProvider = React.forwardRef<
     // Hook para datos de usuario
     const { user, loading, error, updateUser, refetch } = useUserData()
 
+    // 🆕 Hook para tutoriales
+    const { shouldShowTutorial, isTutorialActive, isLoading: isTutorialLoading } = useTutorial()
+
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen)
@@ -139,6 +143,14 @@ const SidebarProvider = React.forwardRef<
         ? setOpenMobile((open) => !open)
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
+
+    // 🆕 EFECTO: Abrir sidebar automáticamente en móvil si hay tutorial
+    React.useEffect(() => {
+      if (isMobile && !isTutorialLoading && (shouldShowTutorial || isTutorialActive)) {
+        console.log('📱 [Sidebar] Tutorial detectado en móvil -> Abriendo sidebar automáticamente');
+        setOpenMobile(true);
+      }
+    }, [isMobile, isTutorialLoading, shouldShowTutorial, isTutorialActive]);
 
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
