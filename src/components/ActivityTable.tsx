@@ -33,6 +33,7 @@ import {
   RotateCw,
   Sparkles,
   CheckCheck,
+  CheckCircle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DeleteActivityDialog } from '@/components/DeleteActivityDialog';
@@ -67,6 +68,17 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Activity {
   id: number;
@@ -148,6 +160,20 @@ export default function ActivityTable({
     dateTo: '',
     searchText: '',
   });
+
+  // 🆕 Estados para selección múltiple
+  const [rowSelection, setRowSelection] = useState<Record<number, boolean>>({});
+  const [isBulkMarkingRead, setIsBulkMarkingRead] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+
+  // 🆕 Calcular IDs seleccionados
+  const selectedIds = React.useMemo(() => {
+    return Object.keys(rowSelection)
+      .filter(key => rowSelection[parseInt(key)])
+      .map(key => activities[parseInt(key)]?.id)
+      .filter(Boolean);
+  }, [rowSelection, activities]);
 
   const [sortConfig, setSortConfig] = useState<{
     key: 'status' | 'documento' | 'empresa' | 'fecha' | 'progreso' | null;
@@ -312,6 +338,107 @@ export default function ActivityTable({
       });
     } finally {
       setIsMarkingRead(false);
+    }
+  };
+
+  // 🆕 Marcar múltiples como vistas
+  const handleBulkMarkAsRead = async () => {
+    if (selectedIds.length === 0) return;
+
+    // Filtrar solo las actividades que son nuevas (is_new = 1)
+    const selectedActivities = selectedIds
+      .map(id => activities.find(act => act.id === id))
+      .filter((act): act is Activity => act !== undefined);
+
+    const newActivities = selectedActivities.filter(act => act.is_new === 1);
+    const alreadyReadCount = selectedActivities.length - newActivities.length;
+    const newActivityIds = newActivities.map(act => act.id);
+
+    // Si no hay actividades nuevas para marcar
+    if (newActivityIds.length === 0) {
+      toast({
+        title: 'ℹ️ Información',
+        description: 'Todas las actividades seleccionadas ya están marcadas como vistas',
+        className: "bg-gradient-to-br from-blue-500 to-cyan-600 text-white",
+      });
+      return;
+    }
+
+    setIsBulkMarkingRead(true);
+    try {
+      const response = await fetch('/api/activity/mark-multiple-read', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityIds: newActivityIds })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al marcar actividades como vistas');
+      }
+
+      const data = await response.json();
+
+      // Refrescar actividades
+      await fetchActivities();
+      setRowSelection({});
+
+      // Mensaje personalizado según si había actividades ya vistas
+      const description = alreadyReadCount > 0
+        ? `${newActivityIds.length} actividad${newActivityIds.length !== 1 ? 'es' : ''} marcada${newActivityIds.length !== 1 ? 's' : ''} como vista${newActivityIds.length !== 1 ? 's' : ''}. ${alreadyReadCount} ya estaba${alreadyReadCount !== 1 ? 'n' : ''} vista${alreadyReadCount !== 1 ? 's' : ''}.`
+        : `${newActivityIds.length} actividad${newActivityIds.length !== 1 ? 'es' : ''} marcada${newActivityIds.length !== 1 ? 's' : ''} como vista${newActivityIds.length !== 1 ? 's' : ''}`;
+
+      toast({
+        title: '✅ Éxito',
+        description,
+        className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: '❌ Error',
+        description: 'No se pudieron marcar las actividades como vistas',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkMarkingRead(false);
+    }
+  };
+
+  // 🆕 Eliminar múltiples (confirmación)
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedIds.length === 0) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const response = await fetch('/api/activity/delete-multiple', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityIds: selectedIds })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar actividades');
+      }
+
+      // Refrescar actividades
+      await fetchActivities();
+      setRowSelection({});
+      setIsBulkDeleteDialogOpen(false);
+
+      toast({
+        title: '✅ Éxito',
+        description: `${selectedIds.length} actividad${selectedIds.length !== 1 ? 'es' : ''} eliminada${selectedIds.length !== 1 ? 's' : ''}`,
+        className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: '❌ Error',
+        description: 'No se pudieron eliminar las actividades',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -749,6 +876,33 @@ export default function ActivityTable({
         style={{ animationDelay: `${activities.indexOf(activity) * 50}ms` }}
         onClick={handleRowClick}
       >
+        {/* 🆕 Columna de checkbox */}
+        <TableCell className="px-3 sm:px-6 py-3 sm:py-4 w-[60px]">
+          <div
+            className="flex items-center justify-center p-2 -m-2 cursor-pointer rounded hover:bg-accent/30 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              const newChecked = !rowSelection[activities.indexOf(activity)];
+              setRowSelection(prev => ({
+                ...prev,
+                [activities.indexOf(activity)]: newChecked
+              }));
+            }}
+          >
+            <Checkbox
+              checked={rowSelection[activities.indexOf(activity)] || false}
+              onCheckedChange={(checked) => {
+                setRowSelection(prev => ({
+                  ...prev,
+                  [activities.indexOf(activity)]: !!checked
+                }));
+              }}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Seleccionar fila"
+              className="h-5 w-5 transition-all duration-300 hover:scale-110 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          </div>
+        </TableCell>
         <TableCell
           className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap"
           data-tutorial={isFirstRow ? "actividad-badges" : undefined}
@@ -1360,6 +1514,24 @@ export default function ActivityTable({
             <Table data-tutorial="actividad-table">
               <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
                 <TableRow>
+                  {/* 🆕 Columna de checkbox */}
+                  <TableHead className="w-[180px] px-3 sm:px-6 py-2 sm:py-3">
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={activities.length > 0 && activities.every((_, idx) => rowSelection[idx])}
+                        onCheckedChange={(checked) => {
+                          const newSelection: Record<number, boolean> = {};
+                          if (checked) {
+                            activities.forEach((_, idx) => { newSelection[idx] = true; });
+                          }
+                          setRowSelection(newSelection);
+                        }}
+                        aria-label="Seleccionar todos"
+                        className="h-5 w-5 transition-all duration-300 hover:scale-110 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                      <span className="font-medium text-xs uppercase tracking-wider">Selección Múltiple</span>
+                    </div>
+                  </TableHead>
                   <TableHead
                     onClick={() => handleSort('status')}
                     className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-accent/50 transition-all duration-200 select-none group"
@@ -1459,6 +1631,101 @@ export default function ActivityTable({
         activityCount={pagination.total}
         isDeleting={isDeletingAll}
       />
+
+      {/* 🆕 FLOATING BULK ACTIONS BAR */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-none">
+          <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 shadow-2xl flex items-center gap-4 border border-primary/20 bg-background/80 backdrop-blur-xl">
+            <span className="text-sm font-medium text-foreground whitespace-nowrap">
+              <span className="font-bold text-primary">{selectedIds.length}</span> seleccionado{selectedIds.length !== 1 ? 's' : ''}
+            </span>
+            <div className="h-4 w-px bg-border"></div>
+
+            {/* Botón Marcar como Vistas */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/30"
+              onClick={handleBulkMarkAsRead}
+              disabled={isBulkMarkingRead || isBulkDeleting}
+            >
+              {isBulkMarkingRead ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  Marcando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Marcar como vistas
+                </span>
+              )}
+            </Button>
+
+            {/* Botón Eliminar */}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsBulkDeleteDialogOpen(true)}
+              disabled={isBulkDeleting || isBulkMarkingRead}
+              className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all"
+            >
+              {isBulkDeleting ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Eliminar {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
+            </Button>
+
+            {/* Botón Cancelar */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setRowSelection({})}
+              className="rounded-full h-8 w-8 ml-1 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <span className="sr-only">Cancelar</span>
+              <div className="h-4 w-4 font-bold">✕</div>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 BULK DELETE CONFIRMATION DIALOG */}
+      <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-lg transition-all duration-300 animate-in fade-in zoom-in-95">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              ¿Eliminar {selectedIds.length} actividad{selectedIds.length !== 1 ? 'es' : ''}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm space-y-2 pt-2">
+              <p>
+                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>.
+                Estás a punto de eliminar permanentemente <span className="font-bold text-foreground">{selectedIds.length} registro{selectedIds.length !== 1 ? 's' : ''} de actividad</span>.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDeleteConfirm}
+              disabled={isBulkDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ActivityErrorModal
         isOpen={errorModalOpen}

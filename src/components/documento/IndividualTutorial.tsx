@@ -20,7 +20,7 @@ export function IndividualTutorial() {
     // Esperar a que el documento esté cargado
     const checkForDocument = setInterval(() => {
       const documentHeader = document.querySelector('[data-tutorial="documento-header"]');
-      
+
       if (documentHeader) {
         console.log('✅ [IndividualTutorial] Documento encontrado, iniciando tutorial');
         clearInterval(checkForDocument);
@@ -162,17 +162,17 @@ export function IndividualTutorial() {
       overlayClickNext: false,
       disableActiveInteraction: true,
       steps,
-      
+
       nextBtnText: 'Siguiente →',
       prevBtnText: '← Anterior',
       doneBtnText: '¡Entendido!',
-      
+
       onHighlightStarted: (element, step, options) => {
         const currentStepIndex = options.state.activeIndex ?? 0;
         lastStepRef.current = currentStepIndex;
         console.log('🎯 [IndividualTutorial] Paso:', currentStepIndex, element);
       },
-      
+
       onNextClick: (element, step, options) => {
         const currentIndex = options.state.activeIndex;
         console.log('➡️ [IndividualTutorial] Avanzando desde paso:', currentIndex);
@@ -183,13 +183,13 @@ export function IndividualTutorial() {
         console.log('⬅️ [IndividualTutorial] Retrocediendo');
         driverInstance.movePrevious();
       },
-      
+
       onDestroyStarted: async () => {
         const finalStep = lastStepRef.current;
         const totalSteps = steps.length - 1;
-        
+
         console.log('🏁 [IndividualTutorial] Cerrando en paso:', finalStep, '/ Total:', totalSteps);
-        
+
         // Solo marcar como completado si llegó al final
         if (finalStep >= totalSteps) {
           console.log('✅ [IndividualTutorial] Tutorial completado');
@@ -197,7 +197,7 @@ export function IndividualTutorial() {
         } else {
           console.log('⚠️ [IndividualTutorial] Tutorial cerrado prematuramente');
         }
-        
+
         if (driverInstance) {
           driverInstance.destroy();
         }
@@ -205,7 +205,7 @@ export function IndividualTutorial() {
     });
 
     driverInstanceRef.current = driverInstance;
-    
+
     // Pequeño delay para asegurar renderizado
     setTimeout(() => {
       driverInstance.drive();
@@ -306,7 +306,7 @@ export function IndividualTutorial() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);

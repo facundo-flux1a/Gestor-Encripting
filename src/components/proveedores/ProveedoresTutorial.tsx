@@ -112,17 +112,17 @@ export function ProveedoresTutorial() {
         onDestroyStarted: async () => {
           const finalStep = lastStepRef.current;
           const totalSteps = textSteps.length - 1;
-          
+
           console.log('🏁 [ProveedoresTutorial] === onDestroyStarted ===');
           console.log('📊 [ProveedoresTutorial] Paso final:', finalStep, '/ Total:', totalSteps);
-          
+
           if (finalStep >= totalSteps) {
             console.log('✅ [ProveedoresTutorial] Tutorial completado, marcando...');
             await markAsCompleted();
           } else {
             console.log('⚠️ [ProveedoresTutorial] Tutorial cerrado prematuramente');
           }
-          
+
           if (driverInstanceRef.current) {
             driverInstanceRef.current.destroy();
             driverInstanceRef.current = null;
@@ -185,7 +185,7 @@ export function ProveedoresTutorial() {
             description: 'En la pestaña Documentos del proveedor tienes acceso completo a:\n\n• Todas las facturas y comprobantes de ese proveedor ordenados cronológicamente\n• Filtros avanzados por rango de fechas, tipo de documento y monto\n• Búsqueda rápida por número de documento o concepto\n• Descarga de archivos PDF originales de cada comprobante\n\nAudita transacciones y haz seguimiento detallado de cada operación fácilmente.',
             side: 'over' as const,
           },
-        },{
+        }, {
           element: 'body',
           popover: {
             title: 'Pestaña Productos 📦',
@@ -258,17 +258,17 @@ export function ProveedoresTutorial() {
         onDestroyStarted: async () => {
           const finalStep = lastStepRef.current;
           const totalSteps = visualSteps.length - 1;
-          
+
           console.log('🏁 [ProveedoresTutorial] === onDestroyStarted VISUAL ===');
           console.log('📊 [ProveedoresTutorial] Paso final:', finalStep, '/ Total:', totalSteps);
-          
+
           if (finalStep >= totalSteps) {
             console.log('✅ [ProveedoresTutorial] Tutorial completo terminado');
             await markAsCompleted();
           } else {
             console.log('⚠️ [ProveedoresTutorial] Tutorial cerrado prematuramente');
           }
-          
+
           if (driverInstanceRef.current) {
             driverInstanceRef.current.destroy();
             driverInstanceRef.current = null;
@@ -290,7 +290,7 @@ export function ProveedoresTutorial() {
       console.log('🚀 [ProveedoresTutorial] Sin empresas → Tutorial corto (4 pasos)');
       hasRunRef.current = true;
       startTextOnlyTutorial();
-      
+
       return () => {
         console.log('🧹 [ProveedoresTutorial] Cleanup (corto)');
         if (driverInstanceRef.current) {
@@ -302,14 +302,14 @@ export function ProveedoresTutorial() {
 
     // Con empresas: buscar elementos para tutorial visual
     console.log('🔍 [ProveedoresTutorial] Con empresas → Buscando elementos...');
-    
+
     let attempts = 0;
     const maxAttempts = 50;
 
     const checkForPage = () => {
       const header = document.querySelector('[data-tutorial="proveedores-header"]');
       const tabla = document.querySelector('[data-tutorial="proveedores-tabla"]');
-      
+
       console.log(`🔎 [ProveedoresTutorial] Intento ${attempts}/${maxAttempts}:`, {
         header: !!header,
         tabla: !!tabla,
@@ -320,7 +320,7 @@ export function ProveedoresTutorial() {
 
     const interval = setInterval(() => {
       attempts++;
-      
+
       if (attempts >= maxAttempts) {
         console.warn('⚠️ [ProveedoresTutorial] TIMEOUT → Usando tutorial completo sin highlights');
         clearInterval(interval);
@@ -328,7 +328,7 @@ export function ProveedoresTutorial() {
         startVisualTutorial();
         return;
       }
-      
+
       if (!checkForPage()) {
         return;
       }
@@ -347,7 +347,7 @@ export function ProveedoresTutorial() {
         driverInstanceRef.current = null;
       }
     };
-    
+
   }, [shouldShowTutorial, isLoading, markAsCompleted, selectedCompanyIds]); // ⬅️ FIX
 
   // 🔥 ESTILOS CRÍTICOS
@@ -444,7 +444,7 @@ export function ProveedoresTutorial() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);

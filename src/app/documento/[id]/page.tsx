@@ -26,25 +26,25 @@ import { IndividualTutorial } from '@/components/documento/IndividualTutorial';
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
   if (isNaN(value)) return '0';
-  
+
   const parts = value.toString().split('.');
   const integerPart = parts[0];
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return formattedInteger;
 };
 
 const formatCurrency = (amount: number | string): string => {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return '0,00 €';
-  
+
   const fixed = num.toFixed(2);
   const parts = fixed.split('.');
   const integerPart = parts[0];
   const decimalPart = parts[1];
-  
+
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return `${formattedInteger},${decimalPart} €`;
 };
 
@@ -59,7 +59,7 @@ function DocumentoPageContent() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
-  
+
   const lastDocIdRef = useRef<number | null>(null);
 
   const form = useForm<DocumentUpdatePayload>({
@@ -72,17 +72,24 @@ function DocumentoPageContent() {
   });
 
   const { fields: entidadFields, append: appendEntidad, remove: removeEntidad } = useFieldArray({
-      control: form.control,
-      name: "entidades"
+    control: form.control,
+    name: "entidades"
   });
 
   const resetFormWithDocData = useCallback((docData: Document) => {
+    // Extraer CIF de datos_extra
+    const cifFromDatosExtra = docData.datos_extra?.CLIENTE?.CIF ||
+      docData.datos_extra?.METADATOS?.NIF_CIF_RELACIONADO ||
+      docData.datos_extra?.EMPRESA_EMISORA?.CIF ||
+      '';
+
     const formData = {
-        ...docData,
-        fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
-        fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
+      ...docData,
+      fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
+      fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
+      cif: cifFromDatosExtra, // ⬅️ Agregar CIF desde datos_extra
     };
-    
+
     form.reset(formData, {
       keepErrors: false,
       keepDirty: false,
@@ -96,28 +103,28 @@ function DocumentoPageContent() {
   const fetchDocument = useCallback(async (id: number) => {
     try {
       setIsLoading(true);
-      
+
       const response = await fetch(`/api/documents/${id}`, {
         method: 'GET',
         cache: 'no-store'
       });
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           notFound();
         }
         throw new Error(`Error ${response.status}`);
       }
-      
+
       const fetchedDoc = await response.json();
       setDoc(fetchedDoc);
-      
+
       if (lastDocIdRef.current !== fetchedDoc.id_documento) {
         console.log('🔄 [page] Reseteando form para nuevo documento:', fetchedDoc.id_documento);
         resetFormWithDocData(fetchedDoc);
         lastDocIdRef.current = fetchedDoc.id_documento;
       }
-      
+
     } catch (error) {
       console.error("Failed to fetch document", error);
       toast({
@@ -155,9 +162,9 @@ function DocumentoPageContent() {
       const response = await fetch(`/api/documents/${doc.id_documento}`, {
         method: 'DELETE',
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         toast({
           title: "✅ Documento Eliminado",
@@ -191,13 +198,13 @@ function DocumentoPageContent() {
       const response = await fetch(`/api/documents/${doc.id_documento}/validate`, {
         method: 'POST',
       });
-      
+
       if (!response.ok) {
         throw new Error('Error al validar');
       }
-      
+
       const esSinConfirmar = doc.tipo_documento?.toUpperCase().includes('(SIN CONFIRMAR)');
-      
+
       if (esSinConfirmar) {
         const confirmResponse = await fetch('/api/documents-confirm', {
           method: 'PATCH',
@@ -209,15 +216,15 @@ function DocumentoPageContent() {
           throw new Error('Error al confirmar el documento');
         }
       }
-      
+
       toast({
         title: "✅ Documento Validado",
-        description: esSinConfirmar 
-          ? "Incidencias resueltas y documento confirmado" 
+        description: esSinConfirmar
+          ? "Incidencias resueltas y documento confirmado"
           : "Las incidencias han sido marcadas como resueltas",
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
-      
+
       fetchDocument(doc.id_documento);
     } catch (error) {
       console.error("Failed to validate incidents", error);
@@ -233,18 +240,18 @@ function DocumentoPageContent() {
 
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
-    
+
     // ✅ GUARD: Prevenir ejecución si no está en modo edición
     if (!isEditing) {
       console.log('⚠️ [onSubmit] Bloqueado - no está en modo edición');
       return;
     }
-    
+
     if (isSaving) {
       console.log('⚠️ [onSubmit] Bloqueado - ya está guardando');
       return;
     }
-    
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/documents/${doc.id_documento}`, {
@@ -252,23 +259,23 @@ function DocumentoPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Error al actualizar');
       }
-      
+
       const updatedDoc = { ...doc, ...data };
       setDoc(updatedDoc);
       resetFormWithDocData(updatedDoc);
-      
+
       toast({
         title: '✅ Cambios Guardados',
         description: 'El documento se actualizó correctamente.',
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
-      
+
       setIsEditing(false);
 
     } catch (error: any) {
@@ -282,11 +289,11 @@ function DocumentoPageContent() {
       setIsSaving(false);
     }
   };
-  
+
   const resetForm = useCallback(() => {
-      if (!doc) return;
-      console.log('🔄 [page] Reset manual al cancelar edición');
-      resetFormWithDocData(doc);
+    if (!doc) return;
+    console.log('🔄 [page] Reset manual al cancelar edición');
+    resetFormWithDocData(doc);
   }, [doc, resetFormWithDocData]);
 
   const isEditable = useMemo(() => {
@@ -331,13 +338,13 @@ function DocumentoPageContent() {
               )}
             </h2>
           </div>
-          
+
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap" data-tutorial="documento-actions">
             {isEditing ? (
               <>
-                <Button 
-                  variant="outline" 
-                  type="button" 
+                <Button
+                  variant="outline"
+                  type="button"
                   size="sm"
                   onClick={() => {
                     setIsEditing(false);
@@ -348,8 +355,8 @@ function DocumentoPageContent() {
                   <X className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
                   <span className="hidden xs:inline">Cancelar</span>
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   size="sm"
                   disabled={isSaving || !form.formState.isDirty}
                   className="flex-1 sm:flex-none bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50"
@@ -366,12 +373,12 @@ function DocumentoPageContent() {
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div tabIndex={0} className="flex-1 sm:flex-none"> 
-                      <Button 
-                        variant="outline" 
+                    <div tabIndex={0} className="flex-1 sm:flex-none">
+                      <Button
+                        variant="outline"
                         type="button"
                         size="sm"
-                        onClick={() => setIsPreviewOpen(true)} 
+                        onClick={() => setIsPreviewOpen(true)}
                         disabled={!documentUrl}
                         className="w-full sm:w-auto hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-400 dark:hover:border-blue-700 transition-all duration-200 group disabled:cursor-not-allowed"
                         data-tutorial="documento-archivo"
@@ -387,12 +394,12 @@ function DocumentoPageContent() {
                     </TooltipContent>
                   )}
                 </Tooltip>
-                
+
                 {doc.incidencia && (
-                  <Button 
+                  <Button
                     type="button"
                     size="sm"
-                    onClick={handleValidate} 
+                    onClick={handleValidate}
                     disabled={isValidating}
                     className="hidden md:flex bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
                   >
@@ -408,10 +415,10 @@ function DocumentoPageContent() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div tabIndex={0} className="flex-1 sm:flex-none">
-                      <Button 
+                      <Button
                         type="button"
                         size="sm"
-                        onClick={() => setIsEditing(true)} 
+                        onClick={() => setIsEditing(true)}
                         disabled={!isEditable}
                         className="w-full sm:w-auto hover:bg-primary/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:scale-100 disabled:opacity-50 group"
                       >
@@ -430,12 +437,12 @@ function DocumentoPageContent() {
                     </TooltipContent>
                   )}
                 </Tooltip>
-                
-                <Button 
-                  variant="destructive" 
+
+                <Button
+                  variant="destructive"
                   type="button"
                   size="sm"
-                  onClick={() => setIsDeleteDialogOpen(true)} 
+                  onClick={() => setIsDeleteDialogOpen(true)}
                   disabled={isDeleting}
                   className="hidden lg:flex hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
                 >
@@ -446,11 +453,11 @@ function DocumentoPageContent() {
                   )}
                   Eliminar
                 </Button>
-                
+
                 <div className="hidden lg:block">
-                  <ExportButton 
-                    data={exportData} 
-                    filename={`documento_${doc.id_documento}`} 
+                  <ExportButton
+                    data={exportData}
+                    filename={`documento_${doc.id_documento}`}
                   />
                 </div>
               </>
@@ -465,10 +472,10 @@ function DocumentoPageContent() {
             <DocumentView doc={doc} isEditing={isEditing} form={form} />
           </div>
         </div>
-        
+
         <div className="space-y-4 sm:space-y-6">
           {doc.incidencia && (
-            <div 
+            <div
               className="bg-red-50 border border-red-200 rounded-lg p-4 dark:bg-red-950 dark:border-red-800"
               data-tutorial="documento-incidencias"
             >
@@ -478,20 +485,21 @@ function DocumentoPageContent() {
             </div>
           )}
 
-          <div className="animate-fade-in group" style={{ animationDelay: '100ms' }} data-tutorial="documento-analizar">
+          <div className="animate-fade-in group" style={{ animationDelay: '100ms' }} data-tutorial="documento-financiero">
             <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-              <AnalyzeDocumentCard 
-                documentId={doc.id_documento} 
-                onAnalysisComplete={onAnalysisComplete} 
+              <FinancialDetailsCard
+                doc={doc}
+                isEditing={isEditing}
+                form={form}
               />
             </div>
           </div>
-          
+
           <div data-tutorial="documento-entidades">
             {entidadFields.map((field, index) => (
-              <div 
-                key={field.id} 
-                className="animate-fade-in group mb-4" 
+              <div
+                key={field.id}
+                className="animate-fade-in group mb-4"
                 style={{ animationDelay: `${150 + (index * 50)}ms` }}
               >
                 <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
@@ -508,44 +516,43 @@ function DocumentoPageContent() {
 
           {isEditing && (
             <div className="animate-fade-in" style={{ animationDelay: `${150 + (entidadFields.length * 50)}ms` }}>
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
-                onClick={() => appendEntidad({ 
-                  rol: 'Otro', 
-                  nombre: '', 
-                  direccion: '', 
-                  identificador_fiscal: '', 
-                  telefono: '', 
-                  email: '', 
-                  datos_extra: null 
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendEntidad({
+                  rol: 'Otro',
+                  nombre: '',
+                  direccion: '',
+                  identificador_fiscal: '',
+                  telefono: '',
+                  email: '',
+                  datos_extra: null
                 })}
                 className="w-full hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-200 group"
               >
-                <PlusCircle className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" /> 
+                <PlusCircle className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
                 Añadir Entidad
               </Button>
             </div>
           )}
-          
-          <div className="animate-fade-in group" style={{ animationDelay: `${200 + (entidadFields.length * 50)}ms` }} data-tutorial="documento-financiero">
+
+          <div className="animate-fade-in group" style={{ animationDelay: `${250 + (entidadFields.length * 50)}ms` }} data-tutorial="documento-analizar">
             <div className="transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10">
-              <FinancialDetailsCard 
-                doc={doc} 
-                isEditing={isEditing} 
-                form={form} 
+              <AnalyzeDocumentCard
+                documentId={doc.id_documento}
+                onAnalysisComplete={onAnalysisComplete}
               />
             </div>
           </div>
-          
+
           {!isEditing && (
             <div className="flex flex-col gap-2 lg:hidden animate-fade-in" style={{ animationDelay: `${250 + (entidadFields.length * 50)}ms` }}>
               {doc.incidencia && (
-                <Button 
+                <Button
                   type="button"
                   size="sm"
-                  onClick={handleValidate} 
+                  onClick={handleValidate}
                   disabled={isValidating}
                   className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
                 >
@@ -557,12 +564,12 @@ function DocumentoPageContent() {
                   Validar Incidencias
                 </Button>
               )}
-              
-              <Button 
-                variant="destructive" 
+
+              <Button
+                variant="destructive"
                 type="button"
                 size="sm"
-                onClick={() => setIsDeleteDialogOpen(true)} 
+                onClick={() => setIsDeleteDialogOpen(true)}
                 disabled={isDeleting}
                 className="w-full hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
               >
@@ -573,9 +580,9 @@ function DocumentoPageContent() {
                 )}
                 Eliminar Documento
               </Button>
-              
-              <ExportButton 
-                data={exportData} 
+
+              <ExportButton
+                data={exportData}
                 filename={`documento_${doc.id_documento}`}
                 className="w-full"
               />
@@ -600,7 +607,7 @@ function DocumentoPageContent() {
           )}
         </Form>
       </TooltipProvider>
-      
+
       <DeleteConfirmationDialog
         isOpen={isDeleteDialogOpen}
         onClose={() => setIsDeleteDialogOpen(false)}

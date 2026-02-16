@@ -236,6 +236,13 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const pendientes = incidencias.filter(i => !i.validado).length;
     const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
 
+    const datosExtra: any = safeJsonParse(doc.datos_extra) || {};
+
+    // Priorizar CIF de datos_extra si existe
+    const cifFromDatosExtra = datosExtra?.CLIENTE?.CIF ||
+      datosExtra?.METADATOS?.NIF_CIF_RELACIONADO ||
+      datosExtra?.EMPRESA_EMISORA?.CIF;
+
     return {
       id_documento: doc.id,
       numero_documento: doc.numero_documento,
@@ -248,7 +255,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       fecha_creacion: doc.fecha_creacion,
       moneda: doc.moneda,
       observaciones: doc.observaciones,
-      datos_extra: safeJsonParse(doc.datos_extra),
+      datos_extra: datosExtra,
       base_imponible: Number(doc.importe_sin_impuestos) || 0,
       iva: total_iva,
       total: Number(doc.importe_total) || 0,
@@ -258,7 +265,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       archivos: archivos,
       incidencias: incidencias,
       proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
-      cif: emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
+      cif: cifFromDatosExtra || emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
       empresa_id: doc.id_de_empresa,
       empresa_nombre: doc.empresa_nombre || 'Sin empresa',
       empresa_cif: doc.empresa_cif || null,
@@ -905,6 +912,51 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     console.log('✅ [updateDocument] Documento principal actualizado');
 
     // ═══════════════════════════════════════════════════════════
+    // PASO 3.5: Actualizar CIF en datos_extra si viene en el payload
+    // ═══════════════════════════════════════════════════════════
+    if ((data as any).cif !== undefined) {
+      console.log('🔄 [updateDocument] Actualizando CIF en datos_extra...');
+
+      const [docRows] = await connection.query<RowDataPacket[]>(
+        'SELECT datos_extra FROM documentos WHERE id = ?',
+        [id]
+      );
+
+      let datosExtra: any = {};
+      try {
+        datosExtra = typeof docRows[0].datos_extra === 'string'
+          ? JSON.parse(docRows[0].datos_extra)
+          : docRows[0].datos_extra || {};
+      } catch (e) {
+        console.warn('⚠️ datos_extra no es JSON válido, creando nuevo objeto');
+        datosExtra = {};
+      }
+
+      // Actualizar CIF en todas las ubicaciones posibles
+      if (datosExtra.CLIENTE) {
+        datosExtra.CLIENTE.CIF = (data as any).cif;
+      }
+      if (datosExtra.METADATOS) {
+        datosExtra.METADATOS.NIF_CIF_RELACIONADO = (data as any).cif;
+      }
+      if (datosExtra.EMPRESA_EMISORA) {
+        datosExtra.EMPRESA_EMISORA.CIF = (data as any).cif;
+      }
+
+      // Si no existe ninguna estructura, crear CLIENTE
+      if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
+        datosExtra.CLIENTE = { CIF: (data as any).cif };
+      }
+
+      await connection.query(
+        'UPDATE documentos SET datos_extra = ? WHERE id = ?',
+        [JSON.stringify(datosExtra), id]
+      );
+
+      console.log('✅ [updateDocument] CIF actualizado en datos_extra');
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // PASO 4: Actualizar entidades
     // ═══════════════════════════════════════════════════════════
     console.log('🔄 [updateDocument] Procesando entidades...');
@@ -1122,6 +1174,49 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         fieldName === 'total' ? 'importe_total' :
           fieldName;
       await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
+    } else if (fieldName === 'cif') {
+      // 🆕 Editar CIF en datos_extra
+      const [docRows] = await connection.query<RowDataPacket[]>(
+        'SELECT datos_extra FROM documentos WHERE id = ?',
+        [id]
+      );
+
+      if (docRows.length === 0) {
+        throw new Error('Documento no encontrado.');
+      }
+
+      let datosExtra: any = {};
+      try {
+        datosExtra = typeof docRows[0].datos_extra === 'string'
+          ? JSON.parse(docRows[0].datos_extra)
+          : docRows[0].datos_extra || {};
+      } catch (e) {
+        console.warn('⚠️ datos_extra no es JSON válido, creando nuevo objeto');
+        datosExtra = {};
+      }
+
+      // Actualizar CIF en múltiples ubicaciones posibles
+      if (datosExtra.CLIENTE) {
+        datosExtra.CLIENTE.CIF = value;
+      }
+      if (datosExtra.METADATOS) {
+        datosExtra.METADATOS.NIF_CIF_RELACIONADO = value;
+      }
+      if (datosExtra.EMPRESA_EMISORA) {
+        datosExtra.EMPRESA_EMISORA.CIF = value;
+      }
+
+      // Si no existe ninguna estructura, crear METADATOS
+      if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
+        datosExtra.METADATOS = { NIF_CIF_RELACIONADO: value };
+      }
+
+      await connection.query(
+        'UPDATE documentos SET datos_extra = ? WHERE id = ?',
+        [JSON.stringify(datosExtra), id]
+      );
+
+      console.log('✅ [updateDocumentField] CIF actualizado en datos_extra');
     } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
       const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
       const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
@@ -3355,14 +3450,14 @@ COALESCE((
 // Reemplazar la función getDocumentosByTrimestre (línea ~2650) con esta versión:
 
 /**
- * Obtiene documentos de un trimestre específico
+ * Obtiene documentos de un trimestre específico (o todo el año si trimestre es undefined)
  * ✅ ARREGLADO: Ahora acepta múltiples empresas (array)
  * ✅ ARREGLADO: Ahora filtra por tipo de documento (igual que getTrimestresList)
  */
 export async function getDocumentosByTrimestre(
   userId: number,
   año: number,
-  trimestre: number,
+  trimestre?: number, // ✅ AHORA ES OPCIONAL
   empresaIds?: number[] | null
 ): Promise<Document[]> {
   try {
@@ -3374,10 +3469,15 @@ export async function getDocumentosByTrimestre(
 
     let whereConditions = [
       'e.id_de_usuario = ?',
-      'd.año_trimestre = ?',
-      'd.num_trimestre = ?'
+      'd.año_trimestre = ?'
     ];
-    const params: any[] = [userId, año, trimestre];
+    const params: any[] = [userId, año];
+
+    // ✅ FILTRO TRIMESTRE OPCIONAL
+    if (trimestre) {
+      whereConditions.push('d.num_trimestre = ?');
+      params.push(trimestre);
+    }
 
     // ✅ AHORA SIEMPRE hay empresaIds (validado arriba)
     const placeholders = empresaIds.map(() => '?').join(',');

@@ -141,12 +141,11 @@ export function FilteringPreferences() {
         </CardContent>
       </Card>
 
-      {/* Información adicional */}
+      {/* Hint informativo */}
       <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30">
         <CardContent className="pt-6">
           <p className="text-sm text-blue-900 dark:text-blue-100">
-            <strong>💡 Nota:</strong> Los cambios se aplican inmediatamente sin necesidad de recargar la página.
-            Los contadores de actividad e incidencias se actualizarán automáticamente.
+            <strong>💡 Pista:</strong> La dinamización implica filtrar las alertas en base a las empresas seleccionadas, y también puedes decidir el comportamiento al no tener ninguna seleccionada.
           </p>
         </CardContent>
       </Card>

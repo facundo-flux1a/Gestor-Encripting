@@ -29,8 +29,11 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Calendar,
+  Download,
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
+import { generateAdvancedExport } from '@/lib/export-utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
@@ -239,6 +242,80 @@ function TrimestresPageContent() {
     setSelectedTrimestre(1);
   };
 
+  const handleExportar = async (año: number, trimestre: number | null) => {
+    try {
+      toast({
+        title: 'Generando exportación...',
+        description: 'Por favor espere mientras se recopilan los datos.',
+      });
+
+      const params = new URLSearchParams({
+        año: año.toString(),
+      });
+
+      if (trimestre) {
+        params.append('trimestre', trimestre.toString());
+      }
+
+      selectedCompanyIds.forEach(id => {
+        params.append('empresa_id', id.toString());
+      });
+
+      // Usar endpoint existente que soporta filtros
+      const response = await fetch(`/api/trimestres/documentos?${params}`);
+      if (!response.ok) throw new Error('Error al cargar datos para exportación');
+
+      const data = await response.json();
+
+      if (data.length === 0) {
+        toast({
+          title: 'Sin datos',
+          description: 'No hay documentos para exportar en el periodo seleccionado.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Columnas para el reporte (definidas aquí o reutilizadas)
+      const exportColumns = [
+        { id: 'numero_documento', header: 'Número' },
+        { id: 'fecha_emision', header: 'Fecha Emisión' },
+        { id: 'proveedor', header: 'Emisor/Receptor' }, // Adaptar según modelo real
+        { id: 'cif', header: 'CIF' },
+        { id: 'base_imponible', header: 'Base Imponible' },
+        { id: 'total', header: 'Total' },
+        // Campos de impuestos específicos si queremos detalle
+        { id: 'base_21', header: 'Base 21%' },
+        { id: 'iva_21', header: 'IVA 21%' },
+        { id: 'base_10', header: 'Base 10%' },
+        { id: 'iva_10', header: 'IVA 10%' },
+        { id: 'base_4', header: 'Base 4%' },
+        { id: 'iva_4', header: 'IVA 4%' },
+        { id: 'base_0', header: 'Base 0%' },
+      ];
+
+      generateAdvancedExport(data, exportColumns, {
+        filename: `Export_Trimestres_${año}${trimestre ? `_T${trimestre}` : '_Anual'}`,
+        format: 'excel',
+        includeSummary: true,
+        trimestre, // Nuevo para desglose
+      });
+
+      toast({
+        title: '✅ Exportación completada',
+        description: 'El archivo se ha descargado correctamente.',
+      });
+
+    } catch (error) {
+      console.error('❌ Error exporting:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo generar la exportación',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleCerrarTrimestre = async (empresaId: number | null, enviarAlSII: boolean = false) => {
     if (!trimestreToClose) return;
 
@@ -421,6 +498,33 @@ function TrimestresPageContent() {
                       <span className="xs:hidden">Cerrar</span>
                     </Button>
                   )}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+                      >
+                        <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                        <span className="hidden xs:inline">Exportar</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => handleExportar(selectedAño, selectedTrimestre)}
+                        className="cursor-pointer"
+                      >
+                        Exportar Trimestre Actual (T{selectedTrimestre})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleExportar(selectedAño, null)}
+                        className="cursor-pointer"
+                      >
+                        Exportar Año Completo ({selectedAño})
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
                   {puedeEnviarAlSII && (
                     <Button

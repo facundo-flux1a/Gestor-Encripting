@@ -259,6 +259,35 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                             <p className="text-xs sm:text-sm font-medium">{formatDate(doc.fecha_creacion)}</p>
                         </FormItem>
                         {renderEditableField("moneda", "Moneda")}
+
+
+                        {/* 🆕 Campo CIF del documento (datos_extra) */}
+                        <FormField
+                            control={form.control}
+                            name="cif"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-muted-foreground text-xs sm:text-sm">CIF Documento</FormLabel>
+                                    <FormControl>
+                                        {isEditing ? (
+                                            <Input
+                                                {...field}
+                                                type="text"
+                                                className="h-8 sm:h-9 text-xs sm:text-sm"
+                                                placeholder="B12345678"
+                                                value={field.value || ''}
+                                            />
+                                        ) : (
+                                            <p className="text-xs sm:text-sm font-medium font-mono">
+                                                {field.value || 'N/A'}
+                                            </p>
+                                        )}
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
                         <FormItem>
                             <FormLabel className="text-muted-foreground text-xs sm:text-sm flex items-center gap-1">
                                 <Calendar className="h-3.5 w-3.5" /> Trimestre
