@@ -168,6 +168,20 @@ export async function PATCH(
       values.push(body.mailDeCarga?.trim() || null);
     }
 
+    if ('recargo' in body) {
+      fieldsToUpdate.push('recargo = ?');
+      // Safer boolean conversion handling string "false"
+      const rawRecargo = body.recargo;
+      let recargoValue = 0;
+
+      if (rawRecargo === true || rawRecargo === 1 || rawRecargo === 'true') {
+        recargoValue = 1;
+      }
+
+      console.log(`🔌 [API-UPDATE] Recargo parsing: raw=${rawRecargo} (${typeof rawRecargo}) -> db=${recargoValue}`);
+      values.push(recargoValue);
+    }
+
     // Verificar que haya al menos un campo para actualizar
     if (fieldsToUpdate.length === 0) {
       return NextResponse.json(
@@ -200,9 +214,14 @@ export async function PATCH(
 
     // Obtener la empresa actualizada
     const [updatedCompany] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga FROM empresas WHERE id = ?',
+      'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo FROM empresas WHERE id = ?',
       [empresaId]
     );
+
+    // Mapear recargo a boolean
+    if (updatedCompany.length > 0) {
+      updatedCompany[0].recargo = !!updatedCompany[0].recargo;
+    }
 
     console.log('✅ [API-UPDATE-COMPANY] Empresa actualizada exitosamente');
 

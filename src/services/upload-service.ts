@@ -358,16 +358,17 @@ export async function uploadDocument(
     const mainFileHash = await calculateFileHash(fileBuffer);
     console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
 
-    console.log(`[${normalizedFileName}] Consultando CIF para empresaId: ${empresaId}`);
-    const [rows] = await connection.query('SELECT CIF FROM empresas WHERE id = ?', [empresaId]);
-    const empresaData = rows as { CIF: string }[];
+    console.log(`[${normalizedFileName}] Consultando CIF y Recargo para empresaId: ${empresaId}`);
+    const [rows] = await connection.query('SELECT CIF, recargo FROM empresas WHERE id = ?', [empresaId]);
+    const empresaData = rows as { CIF: string, recargo: number }[];
 
     if (!empresaData || empresaData.length === 0) {
       throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
     }
 
     const cif = empresaData[0].CIF;
-    console.log(`[${normalizedFileName}] CIF: ${cif}`);
+    const recargo = !!empresaData[0].recargo; // Convertir a booleano
+    console.log(`[${normalizedFileName}] CIF: ${cif}, Recargo: ${recargo}`);
 
     let individualFileHashes: { [fileName: string]: string } = {};
     let individualUploadIds: { [fileName: string]: string } = {};
@@ -529,6 +530,7 @@ export async function uploadDocument(
       text: filePath,
       empresaId: empresaId,
       cif: cif,
+      recargo: recargo, // ✅ NUEVO CAMPO: Recargo de equivalencia
       fileHash: mainFileHash,
       uploadId: uploadId,
       fileName: normalizedFileName, // 🔥 Nombre normalizado

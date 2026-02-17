@@ -297,7 +297,7 @@ export async function getCompanies(): Promise<Company[]> {
 
     console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
 
-    const query = 'SELECT id, nombre_de_empresa as name, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
+    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
 
     console.log('📝 [getCompanies] Query:', query);
     console.log('📝 [getCompanies] Params:', [user.id]);
@@ -313,7 +313,11 @@ export async function getCompanies(): Promise<Company[]> {
 
     const companies = rows.map(row => ({
       id: row.id,
-      name: row.name
+      name: row.name,
+      nombreFiscal: row.nombre_fiscal,
+      cif: row.CIF,
+      mail_de_carga: row.mail_de_carga,
+      recargo: !!row.recargo,
     }));
 
     console.log('✅ [getCompanies] Empresas mapeadas:', companies);
@@ -336,6 +340,7 @@ export async function createCompany(data: {
   nombreFiscal?: string | null;
   cif: string;
   mailDeCarga?: string | null;
+  recargo?: boolean | number | null;
 }): Promise<Company> {
   try {
     console.log('🏢 [createCompany] Iniciando creación de empresa:', data);
@@ -380,14 +385,15 @@ export async function createCompany(data: {
       }
     }
 
-    // Insertar la nueva empresa CON mail_de_carga
+    // Insertar la nueva empresa CON mail_de_carga y recargo
     const [result] = await db.query<OkPacket>(
-      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, id_de_usuario) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario) VALUES (?, ?, ?, ?, ?, ?)',
       [
         data.name.trim(),
         data.nombreFiscal?.trim() || null,
         data.cif.trim(),
         data.mailDeCarga?.trim() || null,
+        data.recargo ? 1 : 0,
         user.id
       ]
     );
@@ -398,7 +404,8 @@ export async function createCompany(data: {
       id: result.insertId,
       name: data.name.trim(),
       nombreFiscal: data.nombreFiscal?.trim() || null,
-      cif: data.cif.trim()
+      cif: data.cif.trim(),
+      recargo: !!data.recargo
     };
 
     // Revalidar las rutas relevantes
@@ -1248,6 +1255,13 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
       } else {
         await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
+      }
+    } else if (fieldName === 'recargo') {
+      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%recargo%']);
+      if (existing.length > 0) {
+        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
+      } else {
+        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Recargo de Equivalencia', 0, 0, value]);
       }
     } else {
       throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
@@ -2443,6 +2457,11 @@ export async function getDashboardAnalytics(
                  FROM impuestos_documento di 
                  WHERE di.documento_id = d.id 
                    AND di.tipo_impuesto NOT LIKE '%retencion%') as total_iva,
+                -- ✅ NUEVO: RECARGO (para desglose)
+                (SELECT SUM(di.cuota) 
+                 FROM impuestos_documento di 
+                 WHERE di.documento_id = d.id 
+                   AND (di.tipo_impuesto LIKE '%recargo%' OR di.tipo_impuesto LIKE '%equivalencia%')) as recargo,
                 CASE 
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 
                     THEN 1 
@@ -2545,6 +2564,27 @@ export async function getDashboardAnalytics(
             THEN ABS(total_iva)
             ELSE 0 
           END), 0) as ivaSoportado,
+
+          -- ✅ NUEVO: RECARGO EQUIVALENCIA
+          COALESCE(SUM(CASE 
+            WHEN is_issued = 0 AND es_abono = 0 
+            THEN recargo
+            ELSE 0 
+          END), 0) - COALESCE(SUM(CASE 
+            WHEN is_issued = 0 AND es_abono = 1 
+            THEN ABS(recargo)
+            ELSE 0 
+          END), 0) as recargoSoportado,
+
+          COALESCE(SUM(CASE 
+            WHEN is_issued = 1 AND es_abono = 0 
+            THEN recargo
+            ELSE 0 
+          END), 0) - COALESCE(SUM(CASE 
+            WHEN is_issued = 1 AND es_abono = 1 
+            THEN ABS(recargo)
+            ELSE 0 
+          END), 0) as recargoRepercutido,
           
           COUNT(DISTINCT CASE WHEN is_issued = 1 THEN id END) as totalFacturasIngreso,
           COUNT(DISTINCT CASE WHEN is_issued = 0 THEN id END) as totalFacturasGasto,
@@ -3372,6 +3412,30 @@ COALESCE((
             AND(i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
 ), 0) as iva_soportado,
 
+  -- ✅ NUEVO: RECARGO REPERCUTIDO
+  COALESCE((
+    SELECT SUM(i.cuota)
+    FROM impuestos_documento i
+    JOIN DocTypes dt4 ON i.documento_id = dt4.id
+    WHERE dt4.año_trimestre = dt.año_trimestre
+      AND dt4.num_trimestre = dt.num_trimestre
+      AND dt4.id_de_empresa = dt.id_de_empresa
+      AND dt4.is_issued = 1
+      AND (i.tipo_impuesto LIKE '%recargo%' OR i.tipo_impuesto LIKE '%equivalencia%')
+  ), 0) as recargo_repercutido,
+
+  -- ✅ NUEVO: RECARGO SOPORTADO
+  COALESCE((
+    SELECT SUM(i.cuota)
+    FROM impuestos_documento i
+    JOIN DocTypes dt5 ON i.documento_id = dt5.id
+    WHERE dt5.año_trimestre = dt.año_trimestre
+      AND dt5.num_trimestre = dt.num_trimestre
+      AND dt5.id_de_empresa = dt.id_de_empresa
+      AND dt5.is_issued = 0
+      AND (i.tipo_impuesto LIKE '%recargo%' OR i.tipo_impuesto LIKE '%equivalencia%')
+  ), 0) as recargo_soportado,
+
   MAX(dt.trimestre_cerrado) as cerrado,
   MAX(dt.fecha_cierre_trimestre) as fecha_cierre
       FROM DocTypes dt
@@ -3418,6 +3482,8 @@ COALESCE((
 
       iva_repercutido: Number(row.iva_repercutido || 0),
       iva_soportado: Number(row.iva_soportado || 0),
+      recargo_repercutido: Number(row.recargo_repercutido || 0), // ✅ NUEVO
+      recargo_soportado: Number(row.recargo_soportado || 0),     // ✅ NUEVO
       cerrado: Boolean(row.cerrado),
       fecha_cierre: row.fecha_cierre || null,
     }));

@@ -220,6 +220,8 @@ export type Company = {
   name: string;
   nombreFiscal?: string | null;
   cif?: string;
+  mail_de_carga?: string | null;
+  recargo?: boolean | number | null;
 };
 
 export type CreateDocumentPayload = {
@@ -250,6 +252,8 @@ export type DashboardAnalytics = {
     beneficioSinIva: number;            // ✅ NUEVO - SIN IVA
     ivaRepercutido: number;
     ivaSoportado: number;
+    recargoRepercutido: number; // ✅ NUEVO
+    recargoSoportado: number;   // ✅ NUEVO
     resultadoIva: number;
     incidenciasAbiertas: number;
     totalProveedores: number;
@@ -314,8 +318,10 @@ export const TrimestreSchema = z.object({
   total_gastos_sin_iva: z.number(),
   iva_repercutido: z.number(),
   iva_soportado: z.number(),
+  recargo_repercutido: z.number().optional().default(0), // ✅ NUEVO
+  recargo_soportado: z.number().optional().default(0),   // ✅ NUEVO
   cerrado: z.boolean(),
-  fecha_cierre: z.string().nullable(),
+  fecha_cierre: z.string().nullable().optional(),
 });
 export type Trimestre = z.infer<typeof TrimestreSchema>;
 

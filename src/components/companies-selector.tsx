@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ interface Company {
   nombre_fiscal?: string | null;
   cif?: string | null;
   mail_de_carga?: string | null;
+  recargo?: boolean | number | null;
 }
 
 // Función de validación de email
@@ -60,6 +62,7 @@ const CreateCompanyFormComponent = React.memo(({
   const fiscalRef = React.useRef<HTMLInputElement>(null);
   const cifRef = React.useRef<HTMLInputElement>(null);
   const emailRef = React.useRef<HTMLInputElement>(null);
+  const [recargoEnabled, setRecargoEnabled] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string>('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -79,6 +82,7 @@ const CreateCompanyFormComponent = React.memo(({
       nombreFiscal: fiscalRef.current?.value || '',
       cif: cifRef.current?.value || '',
       mailDeCarga: email,
+      recargo: recargoEnabled,
     });
   };
 
@@ -166,6 +170,27 @@ const CreateCompanyFormComponent = React.memo(({
           <p className="text-sm text-destructive">{emailError}</p>
         )}
       </div>
+
+      <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-muted/20">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-base">
+              Recargo de Equivalencia
+            </Label>
+            <span title="Si activas esto, el sistema buscará activamente recargos de equivalencia (5.2%, 1.4%, 0.5%) en los documentos subidos." className="cursor-help">
+              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground max-w-[200px] leading-tight mt-1">
+            Facilita la detección automática de recargos para autónomos en régimen especial.
+          </div>
+        </div>
+        <Switch
+          checked={recargoEnabled}
+          onCheckedChange={setRecargoEnabled}
+          disabled={isCreating}
+        />
+      </div>
     </form>
   );
 });
@@ -184,6 +209,7 @@ const EditCompanyFormComponent = React.memo(({
   const [localFiscal, setLocalFiscal] = React.useState(company.nombre_fiscal ?? '');
   const [localCIF, setLocalCIF] = React.useState(company.cif || '');
   const [localEmail, setLocalEmail] = React.useState(company.mail_de_carga ?? '');
+  const [localRecargo, setLocalRecargo] = React.useState(!!company.recargo);
   const [emailError, setEmailError] = React.useState<string>('');
 
   React.useEffect(() => {
@@ -191,6 +217,7 @@ const EditCompanyFormComponent = React.memo(({
     setLocalFiscal(company.nombre_fiscal || '');
     setLocalCIF(company.cif || '');
     setLocalEmail(company.mail_de_carga || '');
+    setLocalRecargo(!!company.recargo);
   }, [company]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -285,6 +312,32 @@ const EditCompanyFormComponent = React.memo(({
         {emailError && (
           <p className="text-sm text-destructive">{emailError}</p>
         )}
+      </div>
+
+      <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-muted/20">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="edit-recargo-switch" className="text-base cursor-pointer">
+              Recargo de Equivalencia
+            </Label>
+            <span title="Si activas esto, el sistema buscará activamente recargos de equivalencia (5.2%, 1.4%, 0.5%) en los documentos subidos." className="cursor-help">
+              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground max-w-[200px] leading-tight mt-1">
+            Facilita la detección automática de recargos para autónomos en régimen especial.
+          </div>
+        </div>
+        <Switch
+          id="edit-recargo-switch"
+          checked={localRecargo}
+          onCheckedChange={setLocalRecargo}
+        />
+        <input
+          type="hidden"
+          name="recargo"
+          value={localRecargo ? 'true' : 'false'}
+        />
       </div>
     </form>
   );
@@ -513,13 +566,29 @@ export function CompaniesSelector() {
       const nombreFiscal = (formData.get('nombreFiscal') as string)?.trim();
       const cif = (formData.get('cif') as string)?.trim();
       const mailDeCarga = (formData.get('mailDeCarga') as string)?.trim();
+      const recargo = formData.get('recargo') === 'true';
+
+      console.log('🔍 [handleSaveCompany] Debug:', {
+        name,
+        originalName: originalCompany.name,
+        recargoFormData: formData.get('recargo'),
+        recargoParsed: recargo,
+        originalRecargo: originalCompany.recargo,
+        localRecargoState: document.querySelector('input[name="recargo"]')?.getAttribute('value')
+      });
 
       const nameChanged = name !== originalCompany.name;
       const fiscalChanged = nombreFiscal !== (originalCompany.nombre_fiscal || '');
       const cifChanged = cif !== (originalCompany.cif || '');
       const emailChanged = mailDeCarga !== (originalCompany.mail_de_carga || '');
+      const recargoChanged = recargo !== (!!originalCompany.recargo);
 
-      if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged) {
+      console.log('🔍 [handleSaveCompany] Changes:', {
+        nameChanged,
+        recargoChanged
+      });
+
+      if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged && !recargoChanged) {
         toast({
           title: 'Sin cambios',
           description: 'No se detectaron cambios en la empresa',
@@ -564,6 +633,10 @@ export function CompaniesSelector() {
 
       if (emailChanged) {
         payload.mailDeCarga = mailDeCarga || null;
+      }
+
+      if (recargoChanged) {
+        payload.recargo = recargo;
       }
 
       setIsCreating(true);

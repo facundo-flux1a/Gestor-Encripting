@@ -428,9 +428,12 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
       console.log(`🔑 Usando shared key: ${provider} (preferencia del usuario: ${userConfig?.shared_provider || 'gemini'})`);
     }
 
-    // Obtener datos del documento
+    // Obtener datos del documento y configuración de la empresa (Recargo)
     const [rows] = await db.query<any[]>(
-      `SELECT * FROM erp49.documentos WHERE id = ?`,
+      `SELECT d.*, e.recargo as empresa_recargo 
+       FROM erp49.documentos d
+       LEFT JOIN erp49.empresas e ON d.id_de_empresa = e.id
+       WHERE d.id = ?`,
       [documentId]
     );
 
@@ -508,6 +511,21 @@ FECHA ACTUAL: ${new Date().toISOString().split('T')[0]}
 
     // Construir prompt completo
     let fullPrompt = BASE_SYSTEM_PROMPT;
+
+    // ✅ INSTRUCCIONES DE RECARGO DE EQUIVALENCIA
+    const hasRecargo = !!doc.empresa_recargo;
+
+    if (hasRecargo) {
+      fullPrompt += `\n\n📌 REGIMEN ESPECIAL: RECARGO DE EQUIVALENCIA ACTIVO
+Esta empresa está sujeta al régimen de Recargo de Equivalencia.
+1. DEBES verificar si los totales del documento incluyen el recargo (aprox 5.2% para IVA 21%, 1.4% para IVA 10%, 0.5% para IVA 4%).
+2. Si el "Total" es mayor que "Base + IVA" por una cantidad que coincide con el Recargo, NO lo reportes como error de cálculo.
+3. Si detectas el recargo y NO está desglosado explícitamente, repórtalo como incidencia de tipo "Datos faltantes" con severidad BAJA/MEDIA indicando: "Recargo de equivalencia detectado en total pero no desglosado".
+4. Si el Recargo DEBERÍA estar (por ser factura de compra para esta empresa) y NO está ni en desglose ni en totales, repórtalo como incidencia "Compliance Fiscal" (Severidad ALTA).`;
+    } else {
+      fullPrompt += `\n\n📌 RECARGO DE EQUIVALENCIA: INACTIVO
+Esta empresa NO aplica recargo de equivalencia. Si encuentras un recargo cobrado en la factura, verifica si es correcto. Si altera el total inesperadamente, repórtalo.`;
+    }
 
     if (userConfig?.custom_prompt?.trim()) {
       fullPrompt += `\n\n--- INSTRUCCIONES ADICIONALES DEL USUARIO ---\n${userConfig.custom_prompt.trim()}\n`;

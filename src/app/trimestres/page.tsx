@@ -507,6 +507,7 @@ function TrimestresPageContent() {
                       >
                         <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                         <span className="hidden xs:inline">Exportar</span>
+                        <span className="xs:hidden">Export</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

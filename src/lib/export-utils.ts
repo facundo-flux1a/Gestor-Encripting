@@ -467,43 +467,6 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
     rows.push([]); // Espacio
 
-    // Total final (Base + Cuota)
-    const totalRow: (string | number)[] = ['Total (Base + IVA)'];
-    // Suma por columna (trimestre)
-    activeQuarters.forEach(q => {
-        let sumQ = 0;
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q];
-            if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q];
-        });
-        if (options?.format === 'excel') {
-            totalRow.push(sumQ);
-        } else {
-            totalRow.push(formatCurrency(sumQ));
-        }
-    });
-
-    // Suma total global
-    let sumTotal = 0;
-    if (options?.trimestre) {
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`][options.trimestre!];
-            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`][options.trimestre!];
-        });
-    } else {
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`].total;
-            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`].total;
-        });
-    }
-
-    if (options?.format === 'excel') {
-        totalRow.push(sumTotal);
-    } else {
-        totalRow.push(formatCurrency(sumTotal));
-    }
-    rows.push(totalRow);
-
     // ✅ NUEVO: Totales separados
     rows.push([]); // Espacio
 
@@ -556,6 +519,45 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
         totalIvaRow.push(formatCurrency(sumTotalIva));
     }
     rows.push(totalIvaRow);
+
+    rows.push([]); // Espacio
+
+    // Total final (Base + Cuota)
+    const totalRow: (string | number)[] = ['Total (Base + IVA)'];
+    // Suma por columna (trimestre)
+    activeQuarters.forEach(q => {
+        let sumQ = 0;
+        rates.forEach(r => {
+            if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q];
+            if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q];
+        });
+        if (options?.format === 'excel') {
+            totalRow.push(sumQ);
+        } else {
+            totalRow.push(formatCurrency(sumQ));
+        }
+    });
+
+    // Suma total global
+    let sumTotal = 0;
+    if (options?.trimestre) {
+        rates.forEach(r => {
+            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`][options.trimestre!];
+            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`][options.trimestre!];
+        });
+    } else {
+        rates.forEach(r => {
+            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`].total;
+            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`].total;
+        });
+    }
+
+    if (options?.format === 'excel') {
+        totalRow.push(sumTotal);
+    } else {
+        totalRow.push(formatCurrency(sumTotal));
+    }
+    rows.push(totalRow);
 
 
     return XLSX.utils.aoa_to_sheet(rows);

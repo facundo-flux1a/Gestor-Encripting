@@ -123,7 +123,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-filters"]',
           popover: {
             title: '🔍 Filtros',
-            description: 'Usá los filtros para buscar actividades específicas por estado, fecha, o texto. El contador muestra cuántos filtros están activos.',
+            description: 'Usá los filtros para buscar actividades específicas por estado, fecha, o texto (Predeterminadamente, los filtros mostrarán actividad fallidas para su pronta revisión). El contador muestra cuántos filtros están activos.',
             side: 'bottom' as const,
             align: 'end' as const,
           },

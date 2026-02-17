@@ -749,6 +749,48 @@ const getColumns = (
     },
 
     {
+      accessorKey: 'recargo',
+      header: 'R. Equiv.',
+      cell: ({ row }: { row: Row<Document> }) => {
+        const recargoDetails = row.original.iva_details.filter(i =>
+          i.tipo_impuesto?.toLowerCase().includes('recargo') ||
+          i.tipo_impuesto?.toLowerCase().includes('equivalencia')
+        );
+
+        const recargoSum = recargoDetails.reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+
+        if (recargoSum === 0) return <div className="text-right text-muted-foreground">-</div>;
+
+        const formatted = formatCurrency(recargoSum);
+        return (
+          <div className="text-right font-medium transition-colors duration-300">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+          const detailSum = row.original.iva_details
+            .filter(d =>
+              d.tipo_impuesto?.toLowerCase().includes('recargo') ||
+              d.tipo_impuesto?.toLowerCase().includes('equivalencia')
+            )
+            .reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+          return sum + detailSum;
+        }, 0);
+
+        if (total === 0) return null;
+
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
+
+    {
       accessorKey: 'base_imponible',
       header: 'Total Base',
       cell: ({ row }) => {
@@ -772,8 +814,58 @@ const getColumns = (
     },
 
     {
+      id: 'iva_only',
+      header: 'IVA',
+      cell: ({ row }) => {
+        const totalImpuestos = Number(row.original.iva) || 0;
+        const recargoSum = row.original.iva_details
+          .filter(i =>
+            i.tipo_impuesto?.toLowerCase().includes('recargo') ||
+            i.tipo_impuesto?.toLowerCase().includes('equivalencia')
+          )
+          .reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+
+        const ivaOnly = totalImpuestos - recargoSum;
+        const formatted = formatCurrency(ivaOnly);
+        return (
+          <div className="text-right font-semibold transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const totalImpuestos = Number(row.original.iva) || 0;
+          const recargoSum = row.original.iva_details
+            .filter(i =>
+              i.tipo_impuesto?.toLowerCase().includes('recargo') ||
+              i.tipo_impuesto?.toLowerCase().includes('equivalencia')
+            )
+            .reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+          return sum + (totalImpuestos - recargoSum);
+        }, 0);
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
+
+    {
       accessorKey: 'iva',
-      header: 'Total IVA',
+      header: () => (
+        <div className="text-right">
+          <div>Imp. Netos</div>
+          <div className="text-[10px] text-muted-foreground font-normal leading-tight opacity-80 flex flex-col items-end">
+            <span>(IVA</span>
+            <span>+ Recargos</span>
+            <span>Retenciones</span>
+            <span>etc.)</span>
+          </div>
+        </div>
+      ),
       cell: ({ row }) => {
         const value = row.getValue('iva');
         const formatted = formatCurrency(value);
