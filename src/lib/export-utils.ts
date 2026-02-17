@@ -29,7 +29,7 @@ export const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
 };
 
 // Función auxiliar para obtener valor de una celda o propiedad de documento
-export const getValueForExport = (item: any, columnId: string): string => {
+export const getValueForExport = (item: any, columnId: string, format?: ExportFormat): string | number => {
     let value: any;
 
     // Si es Row de react-table
@@ -43,7 +43,7 @@ export const getValueForExport = (item: any, columnId: string): string => {
         // Si es objeto plano (Document)
         value = item[columnId];
         if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
-            return getTaxColumnValue(item, columnId);
+            return getTaxColumnValue(item, columnId, format);
         }
     }
 
@@ -56,6 +56,7 @@ export const getValueForExport = (item: any, columnId: string): string => {
 
     // Formateo de moneda para columnas conocidas
     if (typeof value === 'number') {
+        if (format === 'excel') return value;
         return formatCurrency(value);
     }
 
@@ -66,15 +67,17 @@ export const getValueForExport = (item: any, columnId: string): string => {
     return String(value ?? '');
 };
 
-const getTaxColumnValue = (doc: any, columnId: string): string => {
+const getTaxColumnValue = (doc: any, columnId: string, format?: ExportFormat): string | number => {
     const rateMatch = columnId.match(/\d+/);
     if (rateMatch) {
         const rate = Number(rateMatch[0]);
         const ivaDetail = doc.iva_details?.find((i: any) => Number(i.porcentaje) === rate);
         if (columnId.startsWith('base_')) {
+            if (format === 'excel') return ivaDetail?.base_imponible ?? 0;
             return formatCurrency(ivaDetail?.base_imponible ?? 0);
         }
         if (columnId.startsWith('iva_')) {
+            if (format === 'excel') return ivaDetail?.cuota ?? 0;
             return formatCurrency(ivaDetail?.cuota ?? 0);
         }
     }
@@ -131,6 +134,57 @@ const downloadFile = (content: string, filename: string, mimeType: string) => {
     URL.revokeObjectURL(url);
 };
 
+// Helper para aplicar formato de miles a celdas numéricas
+const applyExcelNumberFormat = (sheet: XLSX.WorkSheet) => {
+    const range = XLSX.utils.decode_range(sheet['!ref'] || "A1:A1");
+    // Iterar sobre todas las celdas
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = sheet[cellAddress];
+
+            // Si la celda existe y es de tipo numérico ('n')
+            if (cell && cell.t === 'n') {
+                // Aplicar formato estándar con separador de miles y 2 decimales
+                // #,##0.00 se adapta a la configuración regional del usuario al abrir Excel
+                cell.z = '#,##0.00';
+            }
+        }
+    }
+};
+
+// Helper para ajustar ancho de columnas automáticamente
+const adjustColumnWidths = (sheet: XLSX.WorkSheet) => {
+    const range = XLSX.utils.decode_range(sheet['!ref'] || "A1:A1");
+    const colWidths: number[] = [];
+
+    // Iterar para encontrar el ancho máximo por columna
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        let maxLen = 10; // Ancho mínimo base
+
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = sheet[cellAddress];
+
+            if (cell && cell.v) {
+                let cellLen = 0;
+                // Si es número, estimar longitud incluyendo formato (aprox: dígitos + 30%)
+                if (cell.t === 'n') {
+                    cellLen = String(cell.v).length + 4;
+                } else {
+                    cellLen = String(cell.v).length;
+                }
+
+                if (cellLen > maxLen) maxLen = cellLen;
+            }
+        }
+        // Limitar ancho máximo para no exagerar (ej. descripciones largas)
+        colWidths[C] = Math.min(maxLen + 2, 50);
+    }
+
+    sheet['!cols'] = colWidths.map(w => ({ wch: w }));
+};
+
 export const generateAdvancedExport = (
     data: any[], // Row<any>[] | Document[]
     columns: { id: string, header: string }[],
@@ -145,7 +199,7 @@ export const generateAdvancedExport = (
         const rows = sheetData.map(item => {
             const rowData: { [key: string]: any } = {};
             columns.forEach(col => {
-                rowData[col.header] = getValueForExport(item, col.id);
+                rowData[col.header] = getValueForExport(item, col.id, format);
             });
             return rowData;
         });
@@ -174,7 +228,11 @@ export const generateAdvancedExport = (
                     || col.id.startsWith('base_') || col.id.startsWith('iva_');
 
                 if (isNumeric) {
-                    totalRowData[col.header] = formatCurrency(totals[col.id] || 0);
+                    if (isExcel) {
+                        totalRowData[col.header] = totals[col.id] || 0;
+                    } else {
+                        totalRowData[col.header] = formatCurrency(totals[col.id] || 0);
+                    }
                 } else {
                     totalRowData[col.header] = "";
                 }
@@ -191,6 +249,8 @@ export const generateAdvancedExport = (
         // 1. HOJA RESUMEN IVA
         if (options.includeSummary) {
             const summarySheet = generateIvaSummarySheet(data, options);
+            applyExcelNumberFormat(summarySheet); // ✅ Aplicar formato
+            adjustColumnWidths(summarySheet); // ✅ Ajustar anchos
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen IVA');
         }
 
@@ -220,6 +280,8 @@ export const generateAdvancedExport = (
         [1, 2, 3, 4].forEach(q => {
             if (quarters[q].length > 0) {
                 const sheet = generateDataSheet(quarters[q]);
+                applyExcelNumberFormat(sheet); // ✅ Aplicar formato
+                adjustColumnWidths(sheet); // ✅ Ajustar anchos
                 XLSX.utils.book_append_sheet(workbook, sheet, `${q}T`);
             }
         });
@@ -231,6 +293,8 @@ export const generateAdvancedExport = (
             const dataToUse = unknownQuarter.length > 0 ? unknownQuarter : data;
             if (dataToUse.length > 0) {
                 const sheet = generateDataSheet(dataToUse);
+                applyExcelNumberFormat(sheet); // ✅ Aplicar formato
+                adjustColumnWidths(sheet); // ✅ Ajustar anchos
                 XLSX.utils.book_append_sheet(workbook, sheet, 'General');
             }
         }
@@ -351,11 +415,15 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
     // Helper para construir fila de datos
     const buildRow = (label: string, dataObj: any) => {
-        const row = [label];
+        const row: (string | number)[] = [label];
         let rowSum = 0;
         activeQuarters.forEach(q => {
             const val = dataObj[q];
-            row.push(formatCurrency(val));
+            if (options?.format === 'excel') {
+                row.push(val);
+            } else {
+                row.push(formatCurrency(val));
+            }
 
             if (options?.trimestre) {
                 rowSum += val;
@@ -363,7 +431,11 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
                 rowSum = dataObj.total; // En anual usamos el total acumulado real
             }
         });
-        row.push(formatCurrency(rowSum));
+        if (options?.format === 'excel') {
+            row.push(rowSum);
+        } else {
+            row.push(formatCurrency(rowSum));
+        }
         return row;
     };
 
@@ -396,7 +468,7 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
     rows.push([]); // Espacio
 
     // Total final (Base + Cuota)
-    const totalRow = ['Total (Base + IVA)'];
+    const totalRow: (string | number)[] = ['Total (Base + IVA)'];
     // Suma por columna (trimestre)
     activeQuarters.forEach(q => {
         let sumQ = 0;
@@ -404,7 +476,11 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q];
             if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q];
         });
-        totalRow.push(formatCurrency(sumQ));
+        if (options?.format === 'excel') {
+            totalRow.push(sumQ);
+        } else {
+            totalRow.push(formatCurrency(sumQ));
+        }
     });
 
     // Suma total global
@@ -421,18 +497,26 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
         });
     }
 
-    totalRow.push(formatCurrency(sumTotal));
+    if (options?.format === 'excel') {
+        totalRow.push(sumTotal);
+    } else {
+        totalRow.push(formatCurrency(sumTotal));
+    }
     rows.push(totalRow);
 
     // ✅ NUEVO: Totales separados
     rows.push([]); // Espacio
 
     // Total Bases
-    const totalBasesRow = ['Total Bases'];
+    const totalBasesRow: (string | number)[] = ['Total Bases'];
     activeQuarters.forEach(q => {
         let sumQ = 0;
         rates.forEach(r => { if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q]; });
-        totalBasesRow.push(formatCurrency(sumQ));
+        if (options?.format === 'excel') {
+            totalBasesRow.push(sumQ);
+        } else {
+            totalBasesRow.push(formatCurrency(sumQ));
+        }
     });
     // Sum total bases
     let sumTotalBases = 0;
@@ -441,15 +525,23 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
     } else {
         rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`].total; });
     }
-    totalBasesRow.push(formatCurrency(sumTotalBases));
+    if (options?.format === 'excel') {
+        totalBasesRow.push(sumTotalBases);
+    } else {
+        totalBasesRow.push(formatCurrency(sumTotalBases));
+    }
     rows.push(totalBasesRow);
 
     // Total IVA
-    const totalIvaRow = ['Total IVA'];
+    const totalIvaRow: (string | number)[] = ['Total IVA'];
     activeQuarters.forEach(q => {
         let sumQ = 0;
         rates.forEach(r => { if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q]; });
-        totalIvaRow.push(formatCurrency(sumQ));
+        if (options?.format === 'excel') {
+            totalIvaRow.push(sumQ);
+        } else {
+            totalIvaRow.push(formatCurrency(sumQ));
+        }
     });
     // Sum total iva
     let sumTotalIva = 0;
@@ -458,7 +550,11 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
     } else {
         rates.forEach(r => { if (summaryData[`iva_${r}`]) sumTotalIva += summaryData[`iva_${r}`].total; });
     }
-    totalIvaRow.push(formatCurrency(sumTotalIva));
+    if (options?.format === 'excel') {
+        totalIvaRow.push(sumTotalIva);
+    } else {
+        totalIvaRow.push(formatCurrency(sumTotalIva));
+    }
     rows.push(totalIvaRow);
 
 

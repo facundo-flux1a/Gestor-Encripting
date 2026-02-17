@@ -35,7 +35,9 @@ import {
   CheckCheck,
   CheckCircle,
 } from 'lucide-react';
+import { Activity } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import { useActividad, ActividadFilters } from '@/context/ActividadProvider';
 import { DeleteActivityDialog } from '@/components/DeleteActivityDialog';
 import { DeleteAllActivitiesDialog } from '@/components/DeleteAllActivitiesDialog';
 import { ActivityErrorModal } from '@/components/ActivityErrorModal';
@@ -80,39 +82,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-interface Activity {
-  id: number;
-  upload_id: string;
-  parent_upload_id: string | null;
-  id_de_empresa: number;
-  documento_id: number | null;
-  documento_nombre: string;
-  documento_tipo: string;
-  status: string;
-  step: string;
-  progress: number;
-  mensaje: string;
-  error_detalle: string | null;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-  nombre_de_empresa: string;
-  CIF: string;
-  tipo_documento?: string;
-  numero_documento?: string;
-  empresa_emisora?: string;
-  cliente?: string;
-  is_new?: number;
-  'dashboard-correo'?: string;
-}
 
-interface Filters {
-  status: string[];
-  tipoDocumento: string;
-  dateFrom: string;
-  dateTo: string;
-  searchText: string;
-}
+// ✅ Usar la interfaz exportada del Provider
+export type Filters = ActividadFilters;
 
 interface ActivityTableProps {
   empresaId?: string;
@@ -127,6 +99,13 @@ export default function ActivityTable({
   const { toast } = useToast();
   // ✅ Usar contexto de compañías
   const { selectedCompanyIds, companies, toggleCompanyId } = useCompanyContext();
+
+  // ✅ Obtener filtros del proveedor de actividad si está disponible
+  const actividadContext = useActividad();
+
+  const filters = actividadContext.filters;
+  const setFilters = actividadContext.setFilters;
+
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,14 +131,6 @@ export default function ActivityTable({
   const [selectedErrorActivity, setSelectedErrorActivity] = useState<Activity | null>(null);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
   const [showActiveFilterHint, setShowActiveFilterHint] = useState(false);
-
-  const [filters, setFilters] = useState<Filters>({
-    status: ['fallido', 'interrumpido', 'error'],
-    tipoDocumento: '',
-    dateFrom: '',
-    dateTo: '',
-    searchText: '',
-  });
 
   // 🆕 Estados para selección múltiple
   const [rowSelection, setRowSelection] = useState<Record<number, boolean>>({});
@@ -215,18 +186,18 @@ export default function ActivityTable({
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !actividadContext.isLoading) {
       fetchActivities();
     }
-  }, [isAuthenticated, empresaId, pagination.offset, filters, selectedCompanyIds]);
+  }, [isAuthenticated, empresaId, pagination.offset, filters, selectedCompanyIds, actividadContext.tutorialActive, actividadContext.isLoading]);
 
   useEffect(() => {
-    if (!isAuthenticated || !autoRefreshEnabled) return;
+    if (!isAuthenticated || !autoRefreshEnabled || actividadContext.tutorialActive || actividadContext.isLoading) return;
     const interval = setInterval(() => {
       fetchActivities(true);
     }, refreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, empresaId, autoRefreshEnabled, refreshInterval, selectedCompanyIds]);
+  }, [isAuthenticated, empresaId, autoRefreshEnabled, refreshInterval, selectedCompanyIds, actividadContext.tutorialActive, actividadContext.isLoading]);
 
   const checkAuth = async () => {
     const session = await getSession();
@@ -495,8 +466,8 @@ export default function ActivityTable({
     }
   };
 
-  const handleRetry = async (activity: Activity, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRetry = async (activity: Activity, e?: React.MouseEvent) => {
+    e?.stopPropagation();
 
     try {
       setRetrying(prev => new Set(prev).add(activity.id));
@@ -770,7 +741,7 @@ export default function ActivityTable({
     }).format(date);
   };
 
-  const getSourceIcon = (source?: string) => {
+  const getSourceIcon = (source?: string | null) => {
     const sourceMap: Record<string, { icon: JSX.Element; label: string; color: string }> = {
       'dashboard': {
         icon: <Monitor className="w-4 h-4 shrink-0" />,
@@ -1188,7 +1159,14 @@ export default function ActivityTable({
   }
 
   const { parentFiles, childrenMap, zipUploadIds } = organizeActivities();
-  const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
+  const baseFiltersCount = Object.values(filters).filter(v => {
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== '' && v !== null && v !== undefined;
+  }).length;
+
+  // 🔥 Durante el tutorial forzamos a 0 para una UI limpia
+  const activeFiltersCount = actividadContext.tutorialActive ? 0 : baseFiltersCount;
+
   const unreadCount = activities.filter(a => a.is_new === 1).length;
 
   return (
@@ -1261,7 +1239,7 @@ export default function ActivityTable({
                   </span>
                 )}
               </button>
-              {showActiveFilterHint && (
+              {showActiveFilterHint && !actividadContext.tutorialActive && (
                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-32 bg-primary text-primary-foreground text-[10px] py-1 px-2 rounded-md shadow-lg animate-bounce z-[100] text-center pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-primary">
                   Filtros aplicados
                 </div>
@@ -1488,8 +1466,12 @@ export default function ActivityTable({
 
 
         {/* ✅ CONTENIDO PRINCIPAL: Tabla o Estados Vacíos */}
-        <div className="bg-card border rounded-lg overflow-hidden shadow-sm backdrop-blur-sm animate-fade-in" style={{ animationDelay: '150ms' }}>
-          {selectedCompanyIds.length === 0 ? (
+        <div
+          className="bg-card border rounded-lg overflow-hidden shadow-sm backdrop-blur-sm animate-fade-in"
+          style={{ animationDelay: '150ms' }}
+          data-tutorial="actividad-table"
+        >
+          {selectedCompanyIds.length === 0 && !actividadContext.tutorialActive ? (
             <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center bg-muted/10">
               <Building2 className="w-16 h-16 sm:w-20 sm:h-20 text-muted-foreground/40 mx-auto mb-4 shrink-0" />
               <p className="text-lg sm:text-xl font-medium text-foreground">Selecciona una empresa</p>
@@ -1511,7 +1493,7 @@ export default function ActivityTable({
               )}
             </div>
           ) : (
-            <Table data-tutorial="actividad-table">
+            <Table>
               <TableHeader className="bg-muted/50 backdrop-blur-sm border-b">
                 <TableRow>
                   {/* 🆕 Columna de checkbox */}

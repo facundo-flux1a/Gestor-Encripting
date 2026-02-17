@@ -14,9 +14,9 @@ import { Label } from '@/components/ui/label';
  * Usa el contexto global de CompanyProvider
  */
 export function CompaniesHeaderSelector() {
-  const { 
+  const {
     companies,
-    selectedCompanyIds, 
+    selectedCompanyIds,
     toggleCompanyId,
     isLoading
   } = useCompanyContext();
@@ -47,17 +47,18 @@ export function CompaniesHeaderSelector() {
           role="combobox"
           aria-expanded={isPopoverOpen}
           className="w-full justify-between"
+          data-tutorial="company-selector"
         >
           {selectedCompanyIds.length === 0
             ? 'Seleccionar empresas'
             : selectedCompanyIds.length === companies.length
-            ? 'Todas las empresas'
-            : `${selectedCompanyIds.length} seleccionada(s)`}
+              ? 'Todas las empresas'
+              : `${selectedCompanyIds.length} seleccionada(s)`}
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent 
-        className="w-[300px] p-0" 
+      <PopoverContent
+        className="w-[300px] p-0"
         align="start"
       >
         <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
@@ -69,7 +70,7 @@ export function CompaniesHeaderSelector() {
                   checked={selectedCompanyIds.includes(company.id)}
                   onCheckedChange={() => toggleCompanyId(company.id)}
                 />
-                <Label 
+                <Label
                   htmlFor={`company-header-${company.id}`}
                   className="flex-1 cursor-pointer text-sm"
                 >

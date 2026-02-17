@@ -90,7 +90,7 @@ export function ProveedoresTutorial() {
         prevBtnText: '← Anterior',
         doneBtnText: '¡Entendido!',
         allowClose: false,
-        overlayClickNext: false,
+        // overlayClickNext: false,
         disableActiveInteraction: false,
         showButtons: ['next', 'previous'],
         animate: true,
@@ -166,7 +166,7 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Vista de Detalle del Proveedor 🔍',
-            description: 'Al hacer clic en un proveedor de la tabla, entras a su página de detalle con tres pestañas:\n\n• Resumen: Analíticas y gráficos completos de gastos y compras\n• Documentos: Todas las facturas y comprobantes con filtros avanzados\n• Productos: Catálogo completo con historial de precios\n\nEsta vista te permite profundizar en toda la información específica de ese proveedor.',
+            description: 'Cuando tengas proveedores registrados, al hacer clic en uno de ellos entrarás a su página de detalle. Si aún no ves ninguno, no te preocupes, irán apareciendo a medida que proceses documentos. En esa vista encontrarás tres pestañas:\n\n• Resumen: Analíticas y gráficos completos de gastos y compras\n• Documentos: Todas las facturas y comprobantes con filtros avanzados\n• Productos: Catálogo completo con historial de precios',
             side: 'over' as const,
           },
         },
@@ -174,7 +174,7 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Pestaña Resumen - Analíticas 📈',
-            description: 'En la pestaña Resumen del proveedor seleccionado visualizas:\n\n• Gráfico de Gastos: Evolución mensual de tus compras a ese proveedor en el tiempo\n• Cantidad de Compras: Frecuencia de pedidos y comportamiento de compra\n• Métricas Clave: Total gastado acumulado, promedio mensual y fecha de última compra\n\nIdentifica patrones estacionales, temporadas altas de compra y optimiza costos.',
+            description: 'En la pestaña Resumen (visible cuando selecciones un proveedor) visualizarías gráficos de gastos mensuales, frecuencia de pedidos y métricas clave. Esto te permitirá identificar patrones estacionales y optimizar costos cuando tengas historial.',
             side: 'over' as const,
           },
         },
@@ -182,14 +182,14 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Pestaña Documentos 📄',
-            description: 'En la pestaña Documentos del proveedor tienes acceso completo a:\n\n• Todas las facturas y comprobantes de ese proveedor ordenados cronológicamente\n• Filtros avanzados por rango de fechas, tipo de documento y monto\n• Búsqueda rápida por número de documento o concepto\n• Descarga de archivos PDF originales de cada comprobante\n\nAudita transacciones y haz seguimiento detallado de cada operación fácilmente.',
+            description: 'La pestaña Documentos almacenará todas las facturas y comprobantes ordenados cronológicamente. Podrás usar filtros avanzados y descargar PDFs originales. Si aún no hay datos, esta sección se llenará automáticamente al procesar tus facturas.',
             side: 'over' as const,
           },
         }, {
           element: 'body',
           popover: {
             title: 'Pestaña Productos 📦',
-            description: 'En la pestaña Productos del proveedor exploras su catálogo completo:\n\n• Lista completa de productos que has comprado a ese proveedor específico\n• Historial de precios de cada producto con evolución temporal\n• Cantidad total comprada acumulada y frecuencia de pedidos\n• Fecha de última compra de cada producto\n\nCompara precios históricos entre diferentes períodos y detecta variaciones importantes.',
+            description: 'Aquí explorarías el catálogo completo de productos comprados a ese proveedor. Podrás ver historiales de precios y frecuencias de compra para comparar periodos, una vez que el sistema haya procesado tu información.',
             side: 'over' as const,
           },
         },
@@ -197,7 +197,7 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Detalle Individual de Producto 🎯',
-            description: 'Al hacer clic en un producto específico desde la pestaña Productos, accedes a su análisis profundo:\n\n• Alertas Inteligentes: El sistema detecta automáticamente cambios bruscos de precio mayores al 20%, variaciones inusuales de cantidad comprada o patrones anómalos en la frecuencia\n• Estadísticas Completas: Precio promedio ponderado, última compra realizada, cantidad total acumulada y frecuencia de pedidos\n• Gráficos Históricos: Visualización de la evolución de precios y cantidades a lo largo del tiempo',
+            description: 'Al acceder al detalle de un producto específico (disponible cuando tengas historial de compras), verás estadísticas completas como precio promedio y gráficos de evolución, además de alertas sobre variaciones de costos.',
             side: 'over' as const,
           },
         },
@@ -205,7 +205,7 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Pestañas de Análisis de Producto 📊',
-            description: 'Dentro del detalle de cada producto encontrarás cuatro pestañas de análisis:\n\n• Resumen: Métricas generales, estadísticas principales y gráficos de tendencia\n• Precios: Evolución histórica completa con detección automática de anomalías de precio\n• Patrones: Análisis de frecuencia de compra, detección de estacionalidad y tendencias de consumo\n• Detalles: Historial completo línea por línea con fecha exacta, cantidad comprada y precio unitario de cada transacción',
+            description: 'El detalle de cada producto ofrecerá cuatro pestañas de análisis: Resumen, Precios, Patrones y Detalles. Estas herramientas te ayudarán a entender tu consumo y detectar anomalías en cuanto tengas datos suficientes.',
             side: 'over' as const,
           },
         },
@@ -213,7 +213,7 @@ export function ProveedoresTutorial() {
           element: 'body',
           popover: {
             title: 'Alertas Inteligentes 🚨',
-            description: 'El sistema detecta automáticamente anomalías en tus compras de productos:\n\n• Cambios Bruscos de Precio: Variaciones superiores al 20% entre compras consecutivas del mismo producto\n• Cantidades Inusuales: Pedidos muy por encima o muy por debajo del promedio histórico\n• Patrones Anormales: Cambios significativos en la frecuencia habitual de pedidos\n\nEstas alertas te ayudan a identificar problemas potenciales, detectar errores de facturación y negociar mejores condiciones con tus proveedores.',
+            description: 'Finalmente, el sistema está diseñado para detectar automáticamente anomalías como cambios bruscos de precio o cantidades inusuales. Estas alertas te avisarán proactivamente sobre problemas potenciales en tus futuras compras.',
             side: 'over' as const,
           },
         },
@@ -236,7 +236,7 @@ export function ProveedoresTutorial() {
         prevBtnText: '← Anterior',
         doneBtnText: '¡Entendido!',
         allowClose: false,
-        overlayClickNext: false,
+        // overlayClickNext: false,
         disableActiveInteraction: false,
         showButtons: ['next', 'previous'],
         animate: true,
@@ -247,32 +247,45 @@ export function ProveedoresTutorial() {
           console.log('💡 [ProveedoresTutorial] Paso:', currentStepIndex + 1, '/', visualSteps.length);
         },
         onNextClick: (element, step, options) => {
-          const currentIndex = options.state.activeIndex;
-          console.log('➡️ [ProveedoresTutorial] Avanzando desde paso:', currentIndex);
-          driverObj.moveNext();
+          const idx = options.state.activeIndex ?? 0;
+          const totalStepsCount = driverObj.getConfig().steps?.length ?? 0;
+          console.log('➡️ [ProveedoresTutorial] onNextClick - Paso:', idx, 'de', totalStepsCount);
+
+          if (idx === totalStepsCount - 1) {
+            console.log('🏁 [ProveedoresTutorial] Último paso alcanzado. Completando...');
+            markAsCompleted();
+            setTimeout(() => {
+              console.log('🧨 [ProveedoresTutorial] Ejecutando destroy()');
+              driverObj.destroy();
+            }, 100);
+          } else {
+            driverObj.moveNext();
+          }
         },
+
+        onCloseClick: () => {
+          console.log('❌ [ProveedoresTutorial] onCloseClick');
+          const idx = driverObj.getActiveIndex() ?? 0;
+          const totalStepsCount = driverObj.getConfig().steps?.length ?? 0;
+
+          if (idx >= totalStepsCount - 2) {
+            markAsCompleted();
+          }
+
+          driverObj.destroy();
+        },
+
         onPrevClick: () => {
           console.log('⬅️ [ProveedoresTutorial] Retrocediendo');
           driverObj.movePrevious();
         },
-        onDestroyStarted: async () => {
-          const finalStep = lastStepRef.current;
-          const totalSteps = visualSteps.length - 1;
 
-          console.log('🏁 [ProveedoresTutorial] === onDestroyStarted VISUAL ===');
-          console.log('📊 [ProveedoresTutorial] Paso final:', finalStep, '/ Total:', totalSteps);
-
-          if (finalStep >= totalSteps) {
-            console.log('✅ [ProveedoresTutorial] Tutorial completo terminado');
-            await markAsCompleted();
-          } else {
-            console.log('⚠️ [ProveedoresTutorial] Tutorial cerrado prematuramente');
-          }
-
-          if (driverInstanceRef.current) {
-            driverInstanceRef.current.destroy();
-            driverInstanceRef.current = null;
-          }
+        onDestroyStarted: () => {
+          console.log('🏁 [ProveedoresTutorial] onDestroyStarted');
+          // Limpieza de clases del body
+          document.body.classList.forEach(cls => {
+            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+          });
         },
       });
 
@@ -397,22 +410,38 @@ export function ProveedoresTutorial() {
       }
       
       .driver-popover {
-        border: 2px solid hsl(var(--primary)) !important;
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
-        color: hsl(var(--primary)) !important;
-        font-weight: 600;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+      }
+
+      .driver-popover-description {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
       }
       
       .driver-popover-progress-text {
-        color: hsl(var(--primary)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-next-btn {
         background-color: hsl(var(--primary)) !important;
         color: white !important;
+        border: none !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
         transition: all 0.2s;
+        border-radius: 6px !important;
       }
       
       .driver-popover-next-btn:hover {
@@ -421,16 +450,30 @@ export function ProveedoresTutorial() {
       }
       
       .driver-popover-prev-btn {
-        color: hsl(var(--primary)) !important;
-        border: 1px solid hsl(var(--primary)) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: transparent !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+      }
+
+      .driver-popover-prev-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
       }
       
       .driver-popover-close-btn {
-        color: hsl(var(--muted-foreground)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-close-btn:hover {
-        color: hsl(var(--foreground)) !important;
+        color: white !important;
+      }
+
+      .driver-popover-arrow {
+        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
+        border-top-color: rgba(15, 23, 42, 0.8) !important;
       }
       
       /* 🔥 Asegurar que NADA fuera del popover es clickeable */

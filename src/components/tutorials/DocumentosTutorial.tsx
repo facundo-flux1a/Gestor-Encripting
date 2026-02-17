@@ -122,6 +122,86 @@ export function DocumentosTutorial() {
     if (!localShouldShow || isModalOpen) return;
 
     const timer = setTimeout(() => {
+      const finalSteps = [
+        {
+          element: 'body',
+          popover: {
+            title: '📄 ¡Bienvenido a Documentos!',
+            description: 'Te guiaremos por las funciones principales de esta sección.',
+            side: 'bottom', align: 'center'
+          } as any
+        },
+        {
+          element: '[data-tutorial="company-selector"]',
+          popover: {
+            title: '🏢 Paso 1: Selecciona una empresa',
+            description: 'Selecciona al menos una empresa para continuar. Si ya tienes facturas registradas verás un resumen organizado por tipos.',
+            side: 'right', align: 'start'
+          }
+        },
+        {
+          element: '[data-tutorial="upload-button"]',
+          popover: {
+            title: '📤 Paso 2: Sube un documento',
+            description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. **Nota:** Si el documento tiene alguna inconsistencia, será enviado a la sección de **Incidencias**.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: 'body',
+          popover: {
+            title: '⚠️ ¿No ves tu documento?',
+            description: 'Si después de subir un documento no aparece aquí, es probable que tenga una **incidencia**. Podrás encontrarlo y corregirlo en la sección de Incidencias del menú lateral. Por ahora, sigamos conociendo esta sección.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: '[data-tutorial="tabs-filters"]',
+          popover: {
+            title: '🔍 Filtros y Categorías',
+            description: 'Organiza tus documentos. Filtra entre facturas recibidas, emitidas, otros tipos, y **documentos sin confirmar** (aquellos que el sistema no pudo clasificar y requieren tu revisión manual).',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: '[data-tutorial="export-pdf"]',
+          popover: {
+            title: '📑 Exportar información',
+            description: '¿Necesitas un reporte? Puedes exportar la información de tus documentos filtrados directamente a PDF.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: '[data-tutorial="documents-table"]',
+          popover: {
+            title: '📋 Tabla de documentos',
+            description: 'Aquí verás todos los documentos procesados correctamente. Puedes ordenarlos, buscar y ver detalles. Si subiste un documento y no lo ves aquí, recuerda revisar la sección de **Incidencias**. ¡También puedes exportar en Excel, CSV y más!',
+            side: 'top', align: 'center'
+          }
+        },
+        {
+          element: 'body',
+          popover: {
+            title: '🔍 Detalle del Documento',
+            description: 'Al hacer clic en cualquier fila, entrarás al detalle del documento. Allí encontrarás otra tabla con todos los datos extraídos línea por línea (bases por producto, impuestos, etc.) para un control total.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: 'body',
+          popover: {
+            title: '✨ ¡Listo para empezar!',
+            description: 'Ya conoces cómo gestionar tus documentos, facturas y abonos.',
+            side: 'bottom', align: 'center'
+          }
+        }
+      ].filter(step => {
+        if (typeof step.element === 'string' && step.element !== 'body') {
+          return !!document.querySelector(step.element);
+        }
+        return true;
+      });
+
       const driverObj = driver({
         showProgress: true,
         showButtons: ['next', 'previous'],
@@ -130,65 +210,7 @@ export function DocumentosTutorial() {
         overlayOpacity: 0.8,
         overlayColor: '#000000',
         disableActiveInteraction: false,
-
-        steps: [
-          {
-            element: 'body',
-            popover: {
-              title: '📄 ¡Bienvenido a Documentos!',
-              description: 'Te guiaremos por las funciones principales de esta sección.',
-              side: 'bottom', align: 'center'
-            }
-          },
-          {
-            element: '[data-tutorial="company-selector"]',
-            popover: {
-              title: '🏢 Paso 1: Selecciona una empresa',
-              description: 'Selecciona al menos una empresa para continuar. Si ya tienes facturas registradas verás un resumen organizado por tipos.',
-              side: 'right', align: 'start'
-            }
-          },
-          {
-            element: '[data-tutorial="upload-button"]',
-            popover: {
-              title: '📤 Paso 2: Sube un documento',
-              description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. Soportamos PDF, ZIP Y RAR. Si ya tienes un documento subido solo dale a "siguiente".',
-              side: 'bottom', align: 'center'
-            }
-          },
-          {
-            element: '[data-tutorial="tabs-filters"]',
-            popover: {
-              title: '🔍 Filtros y Categorías',
-              description: 'Organiza tus documentos. Puedes filtrar por facturas emitidas, recibidas o abonos para una gestión más sencilla.',
-              side: 'bottom', align: 'center'
-            }
-          },
-          {
-            element: '[data-tutorial="export-pdf"]',
-            popover: {
-              title: '📑 Exportar información',
-              description: '¿Necesitas un reporte? Puedes exportar la información de tus documentos filtrados directamente a PDF.',
-              side: 'bottom', align: 'center'
-            }
-          },
-          {
-            element: '[data-tutorial="documents-table"]',
-            popover: {
-              title: '📋 Tabla de documentos',
-              description: 'Aquí verás todos tus documentos organizados. Puedes ordenarlos, buscar y hacer clic en cualquier documento para ver sus detalles completos. ¡También puedes exportar la tabla en Excel, CSV y texto plano, y elegir que columnas mostrar!',
-              side: 'top', align: 'center'
-            }
-          },
-          {
-            element: 'body',
-            popover: {
-              title: '✨ ¡Listo para empezar!',
-              description: 'Ya conoces cómo gestionar tus documentos, facturas y abonos.',
-              side: 'bottom', align: 'center'
-            }
-          }
-        ],
+        steps: finalSteps,
 
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
@@ -206,59 +228,73 @@ export function DocumentosTutorial() {
         },
 
         onNextClick: (element, step, options) => {
-          const idx = options.state.activeIndex;
+          const idx = options.state.activeIndex ?? 0;
+          const totalStepsCount = finalSteps.length;
+          console.log('➡️ [DocumentosTutorial] onNextClick - Paso:', idx, 'de', totalStepsCount);
+
           if (idx === 1) {
             if (selectedIdsRef.current.length > 0) setTimeout(() => driverObj.moveNext(), 100);
             else showErrorMessage('⚠️ Por favor, selecciona al menos una empresa antes de continuar.');
           } else if (idx === 2) {
-            // 🔍 VALIDACIÓN ROBUSTA DE DOCUMENTOS (Sin falsos positivos)
+            // 🔍 VALIDACIÓN ROBUSTA DE DOCUMENTOS
             const documentContainer = document.querySelector('[data-tutorial="documents-table"]');
-
-            // 1. ¿Hay filas reales en la tabla?
             const hasTableRows = !!documentContainer?.querySelector('tbody tr:not(.no-docs)');
-
-            // 2. ¿Hay carpetas de la vista agrupada ('Otros')?
             const hasFolders = !!documentContainer?.querySelector('.space-y-3.sm\\:space-y-4 button span.font-semibold');
-
-            // 3. Búsqueda de texto específica dentro del contenedor (evitando tabs/headers)
             const containerText = documentContainer?.textContent || '';
             const hasSpecificDoc = containerText.includes('DECLARACIÓN IRPF') ||
               containerText.includes('Nómina') ||
               (containerText.includes('Factura') && !containerText.includes('No hay facturas'));
 
             if (hasTableRows || hasFolders || hasSpecificDoc || documentUploaded || localStorage.getItem('tutorial_document_uploaded') === 'true') {
-              console.log('✅ [TUTORIAL] Paso 2 superado:', { hasTableRows, hasFolders, hasSpecificDoc, documentUploaded, ls: localStorage.getItem('tutorial_document_uploaded') });
+              console.log('✅ [DocumentosTutorial] Paso 2 superado');
               localStorage.setItem('tutorial_document_uploaded', 'true');
               driverObj.moveNext();
             } else {
-              console.warn('❌ [TUTORIAL] Paso 2 bloqueado: No se detectan documentos.', {
-                hasTableRows, hasFolders, hasSpecificDoc, documentUploaded,
-                containerTextSample: containerText.substring(0, 50)
-              });
               showErrorMessage('⚠️ Por favor, sube al menos un documento antes de continuar.');
             }
+          } else if (idx === totalStepsCount - 1) {
+            console.log('🏁 [DocumentosTutorial] Último paso alcanzado. Completando...');
+            // ✅ Llamada inmediata al backend
+            fetch('/api/user/tutorial-documentos', { method: 'POST' })
+              .then(res => {
+                if (res.ok) {
+                  setLocalShouldShow(false);
+                  setIsTutorialActive(false);
+                  localStorage.removeItem('tutorial_document_uploaded');
+                  console.log('✅ [DocumentosTutorial] DB actualizada');
+                }
+              })
+              .catch(console.error);
+
+            // ✅ Cierre de UI
+            setTimeout(() => {
+              console.log('🧨 [DocumentosTutorial] Ejecutando destroy()');
+              driverObj.destroy();
+            }, 100);
           } else {
             driverObj.moveNext();
           }
         },
 
-        onDestroyStarted: async () => {
+        onCloseClick: () => {
+          console.log('❌ [DocumentosTutorial] onCloseClick');
+          const idx = driverObj.getActiveIndex() ?? 0;
+          const totalStepsCount = finalSteps.length;
+
+          if (idx >= totalStepsCount - 2) {
+            fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
+          }
+
+          driverObj.destroy();
+          setIsTutorialActive(false);
+        },
+
+        onDestroyStarted: () => {
+          console.log('🏁 [DocumentosTutorial] onDestroyStarted');
+          setIsTutorialActive(false);
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
           });
-          if (lastStepRef.current >= 6) {
-            try {
-              const res = await fetch('/api/user/tutorial-documentos', { method: 'POST' });
-              if (res.ok) {
-                setLocalShouldShow(false);
-                setIsTutorialActive(false);
-                localStorage.removeItem('tutorial_document_uploaded');
-                setTimeout(() => window.location.reload(), 500);
-              }
-            } catch (e) {
-              console.error(e);
-            }
-          }
         },
       });
 
@@ -275,7 +311,7 @@ export function DocumentosTutorial() {
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
-       .driver-popover { z-index: 10000 !important; }
+        /* .driver-popover { z-index: 10000 !important; } */
         .driver-overlay { 
            z-index: 9997 !important; 
            pointer-events: none !important; 
@@ -336,8 +372,73 @@ export function DocumentosTutorial() {
          z-index: 100 !important;
       }
 
-      .driver-popover-title { color: hsl(var(--primary)) !important; font-weight: 600; }
-      .driver-popover-next-btn { background-color: hsl(var(--primary)) !important; color: white !important; }
+      .driver-popover {
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
+        z-index: 10000 !important;
+      }
+      
+      .driver-popover-title {
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+      }
+
+      .driver-popover-description {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
+      }
+      
+      .driver-popover-progress-text {
+        color: rgba(255, 255, 255, 0.5) !important;
+      }
+      
+      .driver-popover-next-btn {
+        background-color: hsl(var(--primary)) !important;
+        color: white !important;
+        border: none !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
+        transition: all 0.2s;
+        border-radius: 6px !important;
+      }
+      
+      .driver-popover-next-btn:hover {
+        background-color: hsl(var(--primary) / 0.9) !important;
+        transform: translateY(-1px);
+      }
+      
+      .driver-popover-prev-btn {
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: transparent !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+      }
+
+      .driver-popover-prev-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+      }
+      
+      .driver-popover-close-btn {
+        color: rgba(255, 255, 255, 0.5) !important;
+      }
+      
+      .driver-popover-close-btn:hover {
+        color: white !important;
+      }
+
+      .driver-popover-arrow {
+        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
+        border-top-color: rgba(15, 23, 42, 0.8) !important;
+      }
     `;
     document.head.appendChild(style);
     return () => {

@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 export default function ActividadPage() {
   return (
     <ActividadProvider>
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8" data-tutorial="actividad-welcome">
         <PageHeader
           title="Registro de Actividad"
           icon={Activity}

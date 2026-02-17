@@ -159,7 +159,7 @@ export function IndividualTutorial() {
       animate: true,
       allowClose: false,
       overlayOpacity: 0.75,
-      overlayClickNext: false,
+      // overlayClickNext: false,
       disableActiveInteraction: true,
       steps,
 
@@ -174,9 +174,32 @@ export function IndividualTutorial() {
       },
 
       onNextClick: (element, step, options) => {
-        const currentIndex = options.state.activeIndex;
-        console.log('➡️ [IndividualTutorial] Avanzando desde paso:', currentIndex);
-        driverInstance.moveNext();
+        const idx = options.state.activeIndex ?? 0;
+        const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
+        console.log('➡️ [IndividualTutorial] onNextClick - Paso:', idx, 'de', totalStepsCount);
+
+        if (idx === totalStepsCount - 1) {
+          console.log('🏁 [IndividualTutorial] Último paso alcanzado. Completando...');
+          markAsCompleted();
+          setTimeout(() => {
+            console.log('🧨 [IndividualTutorial] Ejecutando destroy()');
+            driverInstance.destroy();
+          }, 100);
+        } else {
+          driverInstance.moveNext();
+        }
+      },
+
+      onCloseClick: () => {
+        console.log('❌ [IndividualTutorial] onCloseClick');
+        const idx = driverInstance.getActiveIndex() ?? 0;
+        const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
+
+        if (idx >= totalStepsCount - 2) {
+          markAsCompleted();
+        }
+
+        driverInstance.destroy();
       },
 
       onPrevClick: () => {
@@ -184,23 +207,12 @@ export function IndividualTutorial() {
         driverInstance.movePrevious();
       },
 
-      onDestroyStarted: async () => {
-        const finalStep = lastStepRef.current;
-        const totalSteps = steps.length - 1;
-
-        console.log('🏁 [IndividualTutorial] Cerrando en paso:', finalStep, '/ Total:', totalSteps);
-
-        // Solo marcar como completado si llegó al final
-        if (finalStep >= totalSteps) {
-          console.log('✅ [IndividualTutorial] Tutorial completado');
-          await markAsCompleted();
-        } else {
-          console.log('⚠️ [IndividualTutorial] Tutorial cerrado prematuramente');
-        }
-
-        if (driverInstance) {
-          driverInstance.destroy();
-        }
+      onDestroyStarted: () => {
+        console.log('🏁 [IndividualTutorial] onDestroyStarted');
+        // Limpieza de clases del body
+        document.body.classList.forEach(cls => {
+          if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+        });
       },
     });
 
@@ -259,22 +271,38 @@ export function IndividualTutorial() {
       }
       
       .driver-popover {
-        border: 2px solid hsl(var(--primary)) !important;
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
-        color: hsl(var(--primary)) !important;
-        font-weight: 600;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+      }
+
+      .driver-popover-description {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
       }
       
       .driver-popover-progress-text {
-        color: hsl(var(--primary)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-next-btn {
         background-color: hsl(var(--primary)) !important;
         color: white !important;
+        border: none !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
         transition: all 0.2s;
+        border-radius: 6px !important;
       }
       
       .driver-popover-next-btn:hover {
@@ -283,16 +311,30 @@ export function IndividualTutorial() {
       }
       
       .driver-popover-prev-btn {
-        color: hsl(var(--primary)) !important;
-        border: 1px solid hsl(var(--primary)) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: transparent !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+      }
+
+      .driver-popover-prev-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
       }
       
       .driver-popover-close-btn {
-        color: hsl(var(--muted-foreground)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-close-btn:hover {
-        color: hsl(var(--foreground)) !important;
+        color: white !important;
+      }
+
+      .driver-popover-arrow {
+        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
+        border-top-color: rgba(15, 23, 42, 0.8) !important;
       }
       
       /* 🔥 Asegurar que NADA fuera del popover es clickeable */

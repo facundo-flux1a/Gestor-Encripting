@@ -462,12 +462,12 @@ export async function completeTutorial() {
 
     console.log('📝 [completeTutorial] Actualizando tutorial para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorial] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorial] Tutorial marcado como completado');
+    console.log('✅ [completeTutorial] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -498,12 +498,12 @@ export async function completeTutorialDocumentos() {
 
     console.log('📝 [completeTutorialDocumentos] Actualizando tutorial documentos para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialDocumentos] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_documentos = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialDocumentos] Tutorial documentos marcado como completado');
+    console.log('✅ [completeTutorialDocumentos] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -534,12 +534,12 @@ export async function completeTutorialTrimestres() {
 
     console.log('📝 [completeTutorialTrimestres] Actualizando tutorial trimestres para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialTrimestres] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_trimestres = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialTrimestres] Tutorial trimestres marcado como completado');
+    console.log('✅ [completeTutorialTrimestres] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -570,12 +570,12 @@ export async function completeTutorialActividad() {
 
     console.log('📝 [completeTutorialActividad] Actualizando tutorial actividad para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialActividad] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_actividad = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialActividad] Tutorial actividad marcado como completado');
+    console.log('✅ [completeTutorialActividad] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -606,12 +606,12 @@ export async function completeTutorialIndividual() {
 
     console.log('📝 [completeTutorialIndividual] Actualizando tutorial individual para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialIndividual] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_individual = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialIndividual] Tutorial individual marcado como completado');
+    console.log('✅ [completeTutorialIndividual] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -642,12 +642,12 @@ export async function completeTutorialIncidencias() {
 
     console.log('📝 [completeTutorialIncidencias] Actualizando tutorial incidencias para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialIncidencias] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_incidencias = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialIncidencias] Tutorial incidencias marcado como completado');
+    console.log('✅ [completeTutorialIncidencias] Resultado DB:', result);
 
     await createSession(
       session.userId,
@@ -678,12 +678,12 @@ export async function completeTutorialProveedores() {
 
     console.log('📝 [completeTutorialProveedores] Actualizando tutorial proveedores para usuario:', session.userId);
 
-    await db.query(
+    console.log('📝 [completeTutorialProveedores] Ejecutando query UPDATE para usuario:', session.userId);
+    const [result]: any = await db.query(
       'UPDATE usuarios SET tutorial_proveedores = 0 WHERE id = ?',
       [session.userId]
     );
-
-    console.log('✅ [completeTutorialProveedores] Tutorial proveedores marcado como completado');
+    console.log('✅ [completeTutorialProveedores] Resultado DB:', result);
 
     await createSession(
       session.userId,

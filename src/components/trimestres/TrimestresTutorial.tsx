@@ -7,7 +7,7 @@ import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
 
 export function TrimestresTutorial() {
-  const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialState } = useTrimestres();
+  const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialState, setMostrarVacios } = useTrimestres();
   const driverInstanceRef = useRef<ReturnType<typeof driver> | null>(null);
   const hasRunRef = useRef(false);
   const lastStepRef = useRef(0);
@@ -121,7 +121,29 @@ export function TrimestresTutorial() {
             element: '[data-tutorial="trimestres-table"]',
             popover: {
               title: '📌 Sobre la asignación de documentos',
-              description: 'Los documentos se asignan al trimestre viable más cercano. Por ejemplo: si un documento es del Q1 2025 pero ya pasó, irá al Q4 2025 (actual). Si Q4 está cerrado, irá al siguiente disponible.',
+              description: (() => {
+                const now = new Date();
+                const month = now.getMonth();
+                const day = now.getDate();
+                const year = now.getFullYear();
+
+                let q = 0;
+                let qYear = year;
+
+                // Lógica de periodos de gracia (20/30 días)
+                if (month === 0 && day <= 30) { q = 4; qYear = year - 1; }
+                else if (month === 3 && day <= 20) { q = 1; }
+                else if (month === 6 && day <= 20) { q = 2; }
+                else if (month === 9 && day <= 20) { q = 3; }
+                else {
+                  if (month < 3) q = 1;
+                  else if (month < 6) q = 2;
+                  else if (month < 9) q = 3;
+                  else q = 4;
+                }
+
+                return `Los documentos se asignan al trimestre viable más cercano. Por ejemplo: si hay documentos antiguos, irán al T${q} ${qYear} (actual). Si ese trimestre está cerrado, irán al siguiente disponible.`;
+              })(),
               side: 'top',
               align: 'center',
             },
@@ -147,6 +169,12 @@ export function TrimestresTutorial() {
 
           // 🔄 Sincronizar estado con el proveedor
           setTutorialState(true, currentStepIndex);
+
+          // ✅ FORZAR MOSTRAR VACIOS (Step 4 en adelante = índice 3)
+          if (currentStepIndex >= 3) {
+            console.log('🔄 [TrimestresTutorial] Forzando mostrarVacios: true');
+            setMostrarVacios(true);
+          }
 
           // ✅ PASO 1 (índice 1): Selector de empresas
           if (currentStepIndex === 1) {
@@ -195,55 +223,57 @@ export function TrimestresTutorial() {
         },
 
         onNextClick: (element, step, options) => {
-          const currentIndex = options.state.activeIndex;
+          const idx = options.state.activeIndex ?? 0;
+          const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
+          console.log('➡️ [TrimestresTutorial] onNextClick - Paso:', idx, 'de', totalStepsCount);
 
-          console.log('🎯 [onNextClick] currentIndex:', currentIndex);
-
-          // PASO 1: Verificar empresa seleccionada
-          if (currentIndex === 1) {
+          if (idx === 1) {
             const hasSelectedCompanies = selectedIdsRef.current.length > 0;
-
-            console.log('🏢 [PASO 1] Verificando empresa:', { hasSelectedCompanies, selectedIds: selectedIdsRef.current });
-
             if (hasSelectedCompanies) {
-              console.log('✅ Empresa seleccionada, avanzando');
               setTimeout(() => {
                 driverInstance.moveNext();
               }, 100);
             } else {
-              console.log('❌ NO hay empresa seleccionada');
               showErrorMessage('⚠️ Por favor, selecciona al menos una empresa antes de continuar.');
             }
-          }
-          // Resto de pasos: avanzar normalmente
-          else {
-            console.log('➡️ [PASO', currentIndex, '] Avanzando');
+          } else if (idx === totalStepsCount - 1) {
+            console.log('🏁 [TrimestresTutorial] Último paso alcanzado. Completando...');
+            markAsCompleted();
+            setTimeout(() => {
+              console.log('🧨 [TrimestresTutorial] Ejecutando destroy()');
+              driverInstance.destroy();
+            }, 100);
+          } else {
             driverInstance.moveNext();
           }
+        },
+
+        onCloseClick: () => {
+          console.log('❌ [TrimestresTutorial] onCloseClick');
+          const idx = driverInstance.getActiveIndex() ?? 0;
+          const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
+
+          if (idx >= totalStepsCount - 2) {
+            markAsCompleted();
+          }
+
+          driverInstance.destroy();
         },
 
         onPrevClick: () => {
           driverInstance.movePrevious();
         },
 
-        onDestroyStarted: async () => {
-          const finalStep = lastStepRef.current;
+        onDestroyStarted: () => {
+          console.log('🏁 [TrimestresTutorial] onDestroyStarted');
           document.body.removeAttribute('data-tutorial-step');
-
           // 🔄 Limpiar estado en el proveedor
           setTutorialState(false, 0);
 
-          // Solo marcar como completado si llegó al final (paso 8 = índice 8)
-          if (finalStep >= 8) {
-            console.log('🏁 [TrimestresTutorial] Tutorial completado en paso:', finalStep);
-            await markAsCompleted();
-          } else {
-            console.log('⚠️ [TrimestresTutorial] Tutorial cerrado prematuramente en paso:', finalStep);
-          }
-
-          if (driverInstance) {
-            driverInstance.destroy();
-          }
+          // Limpieza de clases del body
+          document.body.classList.forEach(cls => {
+            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+          });
         },
       });
 
@@ -315,23 +345,38 @@ export function TrimestresTutorial() {
       }
       
       .driver-popover {
-        border: none !important;
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
-        color: hsl(var(--primary)) !important;
-        font-weight: 600;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+      }
+
+      .driver-popover-description {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
       }
       
       .driver-popover-progress-text {
-        color: hsl(var(--primary)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-next-btn {
         background-color: hsl(var(--primary)) !important;
         color: white !important;
+        border: none !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
         transition: all 0.2s;
+        border-radius: 6px !important;
       }
       
       .driver-popover-next-btn:hover {
@@ -340,16 +385,30 @@ export function TrimestresTutorial() {
       }
       
       .driver-popover-prev-btn {
-        color: hsl(var(--primary)) !important;
-        border: 1px solid hsl(var(--primary)) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: transparent !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+      }
+
+      .driver-popover-prev-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
       }
       
       .driver-popover-close-btn {
-        color: hsl(var(--muted-foreground)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-close-btn:hover {
-        color: hsl(var(--foreground)) !important;
+        color: white !important;
+      }
+
+      .driver-popover-arrow {
+        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
+        border-top-color: rgba(15, 23, 42, 0.8) !important;
       }
     `;
     document.head.appendChild(style);

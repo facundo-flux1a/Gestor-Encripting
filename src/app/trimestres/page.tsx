@@ -37,7 +37,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
-  const { isTutorialActive, currentStep } = useTrimestres();
+  const { isTutorialActive, currentStep, mostrarVacios, setMostrarVacios } = useTrimestres();
   const { toast } = useToast();
 
   const formatNumber = (num: number | string): string => {
@@ -70,7 +70,6 @@ function TrimestresPageContent() {
   const [documentos, setDocumentos] = React.useState<Document[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
-  const [mostrarVacios, setMostrarVacios] = React.useState(false);
 
   // Trimestre seleccionado
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
@@ -114,7 +113,7 @@ function TrimestresPageContent() {
         });
       }
 
-      params.append('mostrar_vacios', 'false');
+      params.append('mostrar_vacios', mostrarVacios.toString());
 
       console.log('📡 [loadTrimestres] Fetching con params:', params.toString());
 

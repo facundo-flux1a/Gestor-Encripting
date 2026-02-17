@@ -70,7 +70,11 @@ export function DashboardTutorial() {
 
   useEffect(() => {
     if (!shouldShowTutorial) {
-      console.log('❌ Tutorial no debe mostrarse');
+      if (driverInstance) {
+        console.log('🛑 [DashboardTutorial] Destruyendo driver desde el efecto cleanup');
+        (driverInstance as any).destroy();
+        setDriverInstance(null);
+      }
       return;
     }
 
@@ -81,7 +85,33 @@ export function DashboardTutorial() {
 
     console.log('✅ Iniciando tutorial. Companies:', companies.length);
 
-    const timer = setTimeout(() => {
+    // Helper para esperar a que el DOM esté listo
+    const waitForElement = (selector: string, timeout = 2000): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (document.querySelector(selector)) return resolve(true);
+
+        const observer = new MutationObserver(() => {
+          if (document.querySelector(selector)) {
+            observer.disconnect();
+            resolve(true);
+          }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(false);
+        }, timeout);
+      });
+    };
+
+    const initDriver = async () => {
+      // Esperar a que el elemento crítico (KPIs) esté presente
+      // Esto asegura que la página de "Overview" ha renderizado
+      const kpisExist = await waitForElement('[data-tutorial="kpis"]');
+      console.log('🔍 Elemento KPI encontrado:', kpisExist);
+
       const hasCompaniesAtInit = companiesRef.current && companiesRef.current.length > 0;
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -92,15 +122,19 @@ export function DashboardTutorial() {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       const driverObj = driver({
+        nextBtnText: 'Siguiente →',
+        prevBtnText: '← Anterior',
+        doneBtnText: '¡Entendido!',
         showProgress: true,
-        showButtons: ['next', 'previous'],
-        allowClose: false,
+        showButtons: ['next', 'previous', 'close'],
         animate: true,
-        overlayOpacity: 0.7,
-        disableActiveInteraction: true, // ✅ FIX: Desactivar interacción globalmente con elementos destacados
+        allowClose: true,
+        overlayOpacity: 0.75,
+        disableActiveInteraction: true,
 
         onHighlightStarted: (element, step, options) => {
           const currentIndex = options.state.activeIndex ?? 0;
+          console.log('🎯 [DashboardTutorial] Paso:', currentIndex, element);
 
           // Gestionar clases de paso en el body para control CSS preciso
           document.body.classList.forEach(cls => {
@@ -110,16 +144,20 @@ export function DashboardTutorial() {
           });
           document.body.classList.add(`tutorial-step-${currentIndex}`);
 
+          // Reset overlay pointer events for all steps
+          const overlay = document.querySelector('.driver-overlay');
+          if (overlay) (overlay as HTMLElement).style.pointerEvents = 'auto';
+
           setCurrentStep(currentIndex);
           lastStepRef.current = currentIndex;
 
           // Control del Bloqueador React para Paso 1 y Escudo para Pasos 8/9
-          if (currentIndex === 0 || currentIndex === 9) { // Pasos 'body'
+          if (currentIndex === 0 || currentIndex === 8) { // Pasos 'body' (final ahora es 8 si hay empresas)
             setIsStep1Active(true);
             setIsShieldActive(false);
-          } else if (currentIndex === 7 || currentIndex === 8) { // Pasos Filtros y Export
+          } else if (currentIndex === 7) { // Paso Filtros
             setIsStep1Active(false);
-            setIsShieldActive(true); // Activa el escudo transparente sobre el header
+            setIsShieldActive(true);
           } else {
             setIsStep1Active(false);
             setIsShieldActive(false);
@@ -128,99 +166,85 @@ export function DashboardTutorial() {
           if (currentIndex === 1) {
             isStep2Active.current = true;
             setIsTutorialActive(true);
-
             removeSidebarBlocker();
-
             setTimeout(() => {
               const overlay = document.querySelector('.driver-overlay');
-
               if (overlay) {
+                console.log('🔓 Deshabilitando pointer-events en overlay para permitir interacción con selector');
                 (overlay as HTMLElement).style.pointerEvents = 'none';
               }
-
               const sidebar = document.querySelector('[data-sidebar="sidebar"]');
               const trigger = document.querySelector('[data-sidebar="trigger"]');
-
               if (sidebar?.getAttribute('data-state') === 'collapsed' && trigger) {
                 (trigger as HTMLElement).click();
               }
             }, 100);
-          }
-          else if (currentIndex === 2) {
+          } else if (currentIndex === 2) {
             isStep2Active.current = false;
-
             const sidebar = document.querySelector('[data-sidebar="sidebar"]');
             const trigger = document.querySelector('[data-sidebar="trigger"]');
-
             if (sidebar?.getAttribute('data-state') === 'collapsed' && trigger) {
-              console.log('🔧 Expandiendo sidebar para el paso 3');
               (trigger as HTMLElement).click();
             }
-
-            setTimeout(() => {
-              createSidebarBlocker();
-            }, 150);
-          }
-          else {
+            setTimeout(() => createSidebarBlocker(), 150);
+          } else {
             isStep2Active.current = false;
             removeSidebarBlocker();
           }
         },
 
         onNextClick: (element, step, options) => {
-          const currentIndex = options.state.activeIndex;
+          const currentIndex = options.state.activeIndex ?? 0;
+          const totalSteps = driverObj.getConfig().steps?.length ?? 0;
+          console.log('➡️ [DashboardTutorial] onNextClick - Paso:', currentIndex, 'de', totalSteps);
 
           if (currentIndex === 1) {
-            const currentSelectedIds = selectedIdsRef.current;
-            const hasSelectedCompanies = currentSelectedIds.length > 0;
+            const hasSelectedCompanies = selectedIdsRef.current.length > 0;
             const currentHasCompanies = companiesRef.current && companiesRef.current.length > 0;
-
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('🔍 VALIDACIÓN PASO 2 (Selector empresa)');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📊 selectedIdsRef.current:', selectedIdsRef.current);
-            console.log('📊 currentSelectedIds:', currentSelectedIds);
-            console.log('📊 currentSelectedIds.length:', currentSelectedIds.length);
-            console.log('📊 hasSelectedCompanies:', hasSelectedCompanies);
-            console.log('📊 currentHasCompanies:', currentHasCompanies);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
             if (currentHasCompanies && hasSelectedCompanies) {
-              console.log('✅ VALIDACIÓN PASADA - Empresa seleccionada - avanzando al paso 3');
-
-              setTimeout(() => {
-                console.log('⏩ Ejecutando moveNext()');
-                driverObj.moveNext();
-              }, 300);
-            }
-            else if (!currentHasCompanies && companiesRef.current.length > 0) {
-              console.log('✅ EMPRESA CREADA - Avanzando');
-
-              setTimeout(() => {
-                driverObj.moveNext();
-              }, 300);
-            }
-            else {
-              console.log('❌ VALIDACIÓN FALLIDA - NO hay empresas seleccionadas');
-              console.log('❌ Mostrando mensaje de error...');
+              setTimeout(() => driverObj.moveNext(), 300);
+            } else if (!currentHasCompanies && companiesRef.current.length > 0) {
+              setTimeout(() => driverObj.moveNext(), 300);
+            } else {
               showErrorMessage(currentHasCompanies);
             }
+          } else if (currentIndex === totalSteps - 1) {
+            console.log('🏁 [DashboardTutorial] Último paso alcanzado. Completando y cerrando...');
+            // ✅ Llamada directa para asegurar que se guarde en DB
+            completeTutorial();
+            // ✅ Cierre forzado con pequeño delay
+            setTimeout(() => {
+              console.log('🧨 [DashboardTutorial] Ejecutando destroy()');
+              driverObj.destroy();
+              setIsTutorialActive(false);
+            }, 100);
           } else {
-            console.log('⏭️ No es paso 2, avanzando normalmente');
             driverObj.moveNext();
           }
         },
 
-        onPrevClick: () => {
-          driverObj.movePrevious();
-        }, steps: [
+        onCloseClick: () => {
+          console.log('❌ [DashboardTutorial] onCloseClick invocado');
+          // Al cerrar, si estamos en el último paso o cerca, completamos
+          const currentIndex = driverObj.getActiveIndex() ?? 0;
+          const totalSteps = driverObj.getConfig().steps?.length ?? 0;
+          if (currentIndex >= totalSteps - 2) {
+            completeTutorial();
+          }
+          driverObj.destroy();
+          setIsTutorialActive(false);
+        },
+
+        onPrevClick: () => driverObj.movePrevious(),
+
+        steps: [
           {
             element: 'body',
             popover: {
               title: '¡Bienvenido a tu Gestor Documental! 🎉',
               description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
-              side: 'bottom',
-              align: 'center'
+              side: 'bottom' as any,
+              align: 'center' as any
             }
           },
           {
@@ -231,9 +255,9 @@ export function DashboardTutorial() {
               title: hasCompaniesAtInit ? 'Seleccionar empresa 🏢' : 'Crear tu primera empresa 🏢',
               description: hasCompaniesAtInit
                 ? '<p><strong>Acción requerida:</strong> Haz clic en una empresa para seleccionarla.</p><p class="text-sm text-muted-foreground mt-2">Puedes seleccionar múltiples empresas desde el mismo panel.</p>'
-                : '<p><strong>Acción requerida:</strong> Haz clic en "Agregar Empresa" para crear tu primera empresa.</p><ul class="list-disc list-inside text-sm space-y-1 mt-2"><li><strong>Nombre</strong> (obligatorio): El nombre que se mostrará</li><li><strong>Nombre fiscal</strong> (opcional): La razón social</li><li><strong>CIF</strong> (obligatorio): Tu identificación fiscal</li><li><strong>Mail de carga</strong> (opcional): Para subir documentos</li></ul>',
-              side: 'right',
-              align: 'start'
+                : '<p><strong>Acción requerida:</strong> Haz clic en "Agregar Empresa" para crear tu primera empresa.</p>',
+              side: 'right' as any,
+              align: 'start' as any
             }
           },
           {
@@ -241,8 +265,8 @@ export function DashboardTutorial() {
             popover: {
               title: 'Menú de navegación 🗂️',
               description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Proveedores.',
-              side: 'right',
-              align: 'center'
+              side: 'right' as any,
+              align: 'center' as any
             }
           },
           {
@@ -250,26 +274,26 @@ export function DashboardTutorial() {
             popover: {
               title: 'Métricas principales 📊',
               description: 'Estas tarjetas muestran las métricas clave: ingresos, gastos, beneficio bruto, resultado de IVA y total de documentos procesados.',
-              side: 'bottom',
-              align: 'center'
+              side: 'bottom' as any,
+              align: 'center' as any
             }
           },
           {
-            element: '[data-tutorial="financial-chart"]',
+            element: '[data-tutorial="financial-summary"]',
             popover: {
               title: 'Resumen Financiero 📈',
               description: 'Este gráfico muestra la evolución trimestral de tus ingresos (ventas) y gastos.',
-              side: 'top',
-              align: 'center'
+              side: 'top' as any,
+              align: 'center' as any
             }
           },
           {
             element: '[data-tutorial="distribution-chart"]',
             popover: {
               title: 'Distribución de Documentos 🥧',
-              description: 'Aquí ves la distribución de tus documentos: facturas de ingreso vs facturas de gasto.',
-              side: 'top',
-              align: 'center'
+              description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes, abonos, etc.',
+              side: 'top' as any,
+              align: 'center' as any
             }
           },
           {
@@ -277,8 +301,8 @@ export function DashboardTutorial() {
             popover: {
               title: 'Resumen de IVA 💰',
               description: 'Este gráfico te muestra el IVA repercutido y soportado por trimestre para que controles tu situación fiscal.',
-              side: 'top',
-              align: 'center'
+              side: 'top' as any,
+              align: 'center' as any
             }
           },
           {
@@ -286,17 +310,8 @@ export function DashboardTutorial() {
             popover: {
               title: 'Filtros de análisis 🔍',
               description: 'Usa estos filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
-              side: 'bottom',
-              align: 'start'
-            }
-          },
-          {
-            element: '[data-tutorial="export-button"]',
-            popover: {
-              title: 'Exportar a PDF 📄',
-              description: 'Cuando necesites un reporte del dashboard, puedes exportarlo a PDF desde aquí.',
-              side: 'bottom',
-              align: 'end'
+              side: 'bottom' as any,
+              align: 'start' as any
             }
           },
           {
@@ -307,95 +322,38 @@ export function DashboardTutorial() {
                 <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
                 <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
               `,
-              side: 'bottom',
-              align: 'center'
+              side: 'bottom' as any,
+              align: 'center' as any
             }
           }
-        ],
-        nextBtnText: 'Siguiente →',
-        prevBtnText: '← Anterior',
-        doneBtnText: '¡Comenzar!',
-        onDestroyed: async (element, step, options) => {
-          const finalStep = lastStepRef.current;
-
-          console.log('🔚 Tutorial destruido');
-          setIsStep1Active(false); // Limpiar blocker 1
-          setIsShieldActive(false); // Limpiar escudo
-          console.log('📊 Estado al destruir:', {
-            activeIndex: options?.state?.activeIndex,
-            totalSteps: options?.config?.steps?.length,
-            currentStepFromContext: currentStep,
-            finalStepFromRef: finalStep
-          });
-
+        ].filter(step => {
+          if (!hasCompaniesAtInit && step.element === '[data-tutorial="iva-chart"]') return false;
+          return true;
+        }),
+        onDestroyStarted: () => {
+          console.log('🏁 [DashboardTutorial] onDestroyStarted invocado');
+          // Limpiar estado local
           setIsTutorialActive(false);
-          removeSidebarBlocker();
+          setDriverInstance(null);
 
-          // Limpiar clases de pasos
+          // Asegurar que las clases del body se limpien
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) {
               document.body.classList.remove(cls);
             }
           });
-
-          console.log('🔍 Paso actual guardado desde ref:', finalStep);
-
-          if (finalStep >= 8) {
-            console.log('🎉 Usuario completó el tutorial (paso', finalStep, ') - llamando a API');
-
-            try {
-              const response = await fetch('/api/user/tutorial', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                }
-              });
-
-              console.log('📡 Response status:', response.status);
-
-              if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Respuesta de la API:', data);
-                console.log('✅ Tutorial marcado como completado en BD');
-
-                completeTutorial();
-
-                console.log('🔄 Recargando página para actualizar sesión...');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 500);
-              } else {
-                const errorData = await response.json();
-                console.error('❌ Error al completar tutorial:', response.status, errorData);
-              }
-            } catch (error) {
-              console.error('❌ Error llamando a API:', error);
-            }
-          } else {
-            console.log('⚠️ Tutorial cerrado antes de completar (paso', finalStep, ')');
-          }
-
-          setCurrentStep(0);
-          lastStepRef.current = 0;
         }
       });
 
       setDriverInstance(driverObj as any);
       setIsTutorialActive(true);
       hasInitialized.current = true;
+      driverObj.drive();
+    };
 
-      if (currentStep > 0) {
-        console.log('🔄 Restaurando paso:', currentStep);
-        setTimeout(() => {
-          driverObj.drive(currentStep);
-        }, 100);
-      } else {
-        driverObj.drive();
-      }
-    }, 500);
+    initDriver();
 
     return () => {
-      clearTimeout(timer);
       removeSidebarBlocker();
     };
   }, [shouldShowTutorial]); const showErrorMessage = (hasCompanies: boolean) => {
@@ -418,12 +376,6 @@ export function DashboardTutorial() {
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
-      .driver-overlay,
-      #driver-page-overlay,
-      #driver-highlighted-element-stage {
-        pointer-events: none !important;
-      }
-      
       .driver-active-element,
       .driver-active-element * {
         pointer-events: auto !important;
@@ -470,22 +422,38 @@ export function DashboardTutorial() {
       }
       
       .driver-popover {
-        border: 2px solid hsl(var(--primary)) !important;
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
       }
       
       .driver-popover-title {
-        color: hsl(var(--primary)) !important;
-        font-weight: 600;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+      }
+
+      .driver-popover-description {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
       }
       
       .driver-popover-progress-text {
-        color: hsl(var(--primary)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-next-btn {
         background-color: hsl(var(--primary)) !important;
         color: white !important;
+        border: none !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
         transition: all 0.2s;
+        border-radius: 6px !important;
       }
       
       .driver-popover-next-btn:hover {
@@ -494,16 +462,30 @@ export function DashboardTutorial() {
       }
       
       .driver-popover-prev-btn {
-        color: hsl(var(--primary)) !important;
-        border: 1px solid hsl(var(--primary)) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: transparent !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+      }
+
+      .driver-popover-prev-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
       }
       
       .driver-popover-close-btn {
-        color: hsl(var(--muted-foreground)) !important;
+        color: rgba(255, 255, 255, 0.5) !important;
       }
       
       .driver-popover-close-btn:hover {
-        color: hsl(var(--foreground)) !important;
+        color: white !important;
+      }
+
+      .driver-popover-arrow {
+        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
+        border-top-color: rgba(15, 23, 42, 0.8) !important;
       }
       
       #tutorial-sidebar-blocker {
@@ -550,13 +532,27 @@ export function DashboardTutorial() {
         z-index: 100002 !important;
       }
       
+      /* ✅ FIX: Liberar TabsContent (tabpanel) para que no atrape el z-index */
+      body.driver-active [role="tabpanel"],
+      body.driver-active [data-state="active"] {
+        z-index: auto !important;
+        transform: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        perspective: none !important;
+        contain: none !important;
+        will-change: auto !important;
+        isolation: auto !important;
+        overflow: visible !important;
+      }
+      
       /* ✅ FIX: Elevar elementos específicos del tutorial sobre el overlay */
       body.driver-active [data-tutorial="kpis"],
-      body.driver-active [data-tutorial="financial-chart"],
+      body.driver-active [data-tutorial="financial-summary"],
       body.driver-active [data-tutorial="distribution-chart"],
       body.driver-active [data-tutorial="iva-chart"],
       body.driver-active [data-tutorial="filters"],
-      body.driver-active [data-tutorial="export-button"], 
+      body.driver-active [data-tutorial="export-button"],  
       body.driver-active [data-tutorial="company-selector"] {
          z-index: 100003 !important; /* Un poco más que sidebar */
          position: relative !important;

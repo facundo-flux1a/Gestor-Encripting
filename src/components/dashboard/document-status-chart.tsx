@@ -10,10 +10,10 @@ type ChartData = {
 };
 
 const COLORS = [
-  'hsl(var(--chart-1))', 
-  'hsl(var(--chart-2))', 
-  'hsl(var(--vat-other))', 
-  'hsl(var(--chart-4))', 
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--vat-other))',
+  'hsl(var(--chart-4))',
   'hsl(var(--chart-5))'
 ];
 
@@ -45,7 +45,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 export function DocumentStatusChart({ data }: { data: ChartData[] }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [isHovering, setIsHovering] = useState(false);
-  
+
   const totalDocuments = data.reduce((acc, curr) => acc + curr.value, 0);
 
   const onPieEnter = (_: any, index: number) => {
@@ -59,20 +59,23 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
   };
 
   return (
-    <Card className="overflow-hidden hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] transition-all duration-300 group">
+    <Card
+      className="overflow-hidden hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] transition-all duration-300 group"
+      data-tutorial="distribution-chart"
+    >
       {/* 📱 HEADER RESPONSIVE */}
       <CardHeader className="px-3 py-3 sm:px-4 lg:px-6 sm:py-4">
         <CardTitle className="text-base sm:text-lg lg:text-xl group-hover:text-primary transition-colors duration-300">
           Distribución de Documentos
         </CardTitle>
         <CardDescription className="text-xs sm:text-sm group-hover:text-foreground/70 transition-colors duration-300">
-          Proporción de cada tipo de documento. 
+          Proporción de cada tipo de documento.
           <span className="block sm:inline sm:ml-1">
             Total: <span className="font-medium tabular-nums text-primary">{totalDocuments}</span>.
           </span>
         </CardDescription>
       </CardHeader>
-      
+
       {/* 📱 CONTENT RESPONSIVE */}
       <CardContent className="px-2 sm:px-3 lg:px-4 pb-2 sm:pb-3 lg:pb-4">
         {data.length > 0 ? (
@@ -80,9 +83,9 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
             <ResponsiveContainer width="100%" height={250} className="sm:h-[280px] lg:h-[300px]">
               <PieChart>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend 
-                  iconType="circle" 
-                  wrapperStyle={{ 
+                <Legend
+                  iconType="circle"
+                  wrapperStyle={{
                     fontSize: '12px',
                     paddingTop: '10px'
                   }}
@@ -106,8 +109,8 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
                   animationEasing="ease-out"
                 >
                   {data.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
+                    <Cell
+                      key={`cell-${index}`}
                       fill={activeIndex === index ? HOVER_COLORS[index % HOVER_COLORS.length] : COLORS[index % COLORS.length]}
                       className="stroke-background cursor-pointer transition-all duration-300"
                       strokeWidth={activeIndex === index ? 3 : 2}

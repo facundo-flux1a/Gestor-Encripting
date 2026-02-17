@@ -9,31 +9,17 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { 
-  XCircle, 
-  AlertCircle, 
-  FileText, 
-  Building2, 
-  Calendar, 
+import {
+  XCircle,
+  AlertCircle,
+  FileText,
+  Building2,
+  Calendar,
   RotateCw,
   X
 } from 'lucide-react';
+import { Activity } from '@/lib/types';
 
-interface Activity {
-  id: number;
-  upload_id: string;
-  documento_nombre: string;
-  documento_tipo: string;
-  status: string;
-  step: string;
-  progress: number;
-  mensaje: string;
-  error_detalle: string | null;
-  created_at: string;
-  updated_at: string;
-  nombre_de_empresa: string;
-  CIF: string;
-}
 
 interface ActivityErrorModalProps {
   isOpen: boolean;
@@ -122,7 +108,7 @@ export function ActivityErrorModal({
               <p className="text-xs text-violet-400 uppercase tracking-wide mb-1">Progreso</p>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2 bg-violet-900/50 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className={`h-full bg-${statusColor}-400 rounded-full`}
                     style={{ width: `${activity.progress}%` }}
                   />

@@ -95,7 +95,10 @@ export function FinancialSummary({ annualData, quarterlyData, defaultYear }: Fin
     [quarterlyData]);
 
   return (
-    <Card className="col-span-4 h-full shadow-md hover:shadow-lg transition-all duration-300 border-border/50 bg-card/50 backdrop-blur-sm">
+    <Card
+      className="col-span-4 h-full shadow-md hover:shadow-lg transition-all duration-300 border-border/50 bg-card/50 backdrop-blur-sm"
+      data-tutorial="financial-summary"
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
         <div className="space-y-1.5">
           <CardTitle className="text-base font-semibold flex items-center gap-2">

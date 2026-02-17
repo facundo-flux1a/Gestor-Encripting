@@ -80,7 +80,10 @@ export function IvaSummary({
     : (quarterlyData[viewYear] || []);
 
   return (
-    <Card className="overflow-hidden hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] transition-all duration-300 group">
+    <Card
+      className="overflow-hidden hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] transition-all duration-300 group"
+      data-tutorial="iva-chart"
+    >
       <CardHeader className="px-3 sm:px-6 py-3 sm:py-6 flex flex-row items-center justify-between space-y-0">
         <div className="flex flex-col space-y-1.5">
           <CardTitle className="text-base sm:text-lg lg:text-xl group-hover:text-primary transition-colors duration-300">

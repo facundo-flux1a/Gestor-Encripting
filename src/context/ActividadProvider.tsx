@@ -1,10 +1,22 @@
 'use client';
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, SetStateAction } from 'react';
+
+export interface ActividadFilters {
+  status: string[];
+  tipoDocumento: string;
+  dateFrom: string;
+  dateTo: string;
+  searchText: string;
+}
 
 type ActividadContextType = {
   shouldShowTutorial: boolean;
   isLoading: boolean;
   markAsCompleted: () => Promise<void>;
+  filters: ActividadFilters;
+  setFilters: Dispatch<SetStateAction<ActividadFilters>>;
+  tutorialActive: boolean;
+  setTutorialMode: (active: boolean) => void;
 };
 
 const ActividadContext = createContext<ActividadContextType | undefined>(undefined);
@@ -14,6 +26,35 @@ const STORAGE_KEY = 'actividad_tutorial_completed';
 export const ActividadProvider = ({ children }: { children: ReactNode }) => {
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // 🎯 Iniciamos con filtros VACÍOS por defecto (serán aplicados si NO hay tutorial)
+  const [filters, setFilters] = useState<ActividadFilters>({
+    status: [],
+    tipoDocumento: '',
+    dateFrom: '',
+    dateTo: '',
+    searchText: '',
+  });
+  const [tutorialActive, setTutorialActive] = useState(false);
+  const [prevFilters, setPrevFilters] = useState<ActividadFilters | null>(null);
+
+  const setTutorialMode = (active: boolean) => {
+    setTutorialActive(active);
+    if (active) {
+      // Guardar y limpiar
+      setPrevFilters({ ...filters });
+      setFilters({
+        status: [],
+        tipoDocumento: '',
+        dateFrom: '',
+        dateTo: '',
+        searchText: '',
+      });
+    } else if (prevFilters) {
+      // Restaurar
+      setFilters(prevFilters);
+      setPrevFilters(null);
+    }
+  };
 
   useEffect(() => {
     async function checkTutorialStatus() {
@@ -39,6 +80,20 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
           console.log('📊 [ActividadProvider] shouldShowTutorial:', showTutorial);
 
           setShouldShowTutorial(showTutorial);
+
+          // 🔥 LÓGICA DE FILTROS:
+          if (showTutorial) {
+            // Si hay tutorial, mantenemos filtros limpios y activamos modo tutorial
+            console.log('✨ [ActividadProvider] Tutorial activo: filtros permanecen limpios');
+            setTutorialActive(true);
+          } else {
+            // Si NO hay tutorial, aplicamos los filtros predeterminados de error
+            console.log('🔍 [ActividadProvider] Sin tutorial: aplicando filtros por defecto');
+            setFilters(prev => ({
+              ...prev,
+              status: ['fallido', 'interrumpido', 'error']
+            }));
+          }
 
           // Si ya está completado en servidor, guardar en localStorage
           if (!showTutorial && typeof window !== 'undefined') {
@@ -95,7 +150,11 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
       value={{
         shouldShowTutorial,
         isLoading,
-        markAsCompleted
+        markAsCompleted,
+        filters,
+        setFilters,
+        tutorialActive,
+        setTutorialMode
       }}
     >
       {children}

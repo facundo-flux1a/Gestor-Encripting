@@ -520,7 +520,13 @@ export default function DashboardPage() {
           >
             <div className="flex items-center gap-2">
               <FilterSheet />
-              <Button size="sm" variant="outline" disabled className="hidden sm:flex">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="hidden sm:flex"
+                data-tutorial="export-button"
+              >
                 <FileText className="h-4 w-4 mr-2" />
                 <span className="hidden lg:inline">Exportar</span>
               </Button>
@@ -646,7 +652,7 @@ export default function DashboardPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5" data-tutorial="kpis">
               <HoverCard>
                 <HoverCardTrigger asChild>
                   <Card className="hover:shadow-lg transition-all duration-200 cursor-default">

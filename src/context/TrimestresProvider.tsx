@@ -6,6 +6,8 @@ type TrimestresContextType = {
   isTutorialActive: boolean;
   currentStep: number;
   isLoading: boolean;
+  mostrarVacios: boolean;
+  setMostrarVacios: (show: boolean) => void;
   setTutorialState: (active: boolean, step: number) => void;
   markAsCompleted: () => Promise<void>;
 };
@@ -96,6 +98,7 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
 
   const [isTutorialActive, setIsTutorialActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [mostrarVacios, setMostrarVacios] = useState(false);
 
   const setTutorialState = useCallback((active: boolean, step: number) => {
     setIsTutorialActive(active);
@@ -109,6 +112,8 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
         isTutorialActive,
         currentStep,
         isLoading,
+        mostrarVacios,
+        setMostrarVacios,
         setTutorialState,
         markAsCompleted
       }}
