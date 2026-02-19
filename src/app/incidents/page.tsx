@@ -147,6 +147,7 @@ function IncidentsPageContent() {
                             documents={docs}
                             isIncidentsPage={true}
                             filename="incidencias"
+                            onDocumentChanged={fetchIncidents}
                         />
                     </div>
                 </div>

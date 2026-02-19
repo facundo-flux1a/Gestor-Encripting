@@ -22,6 +22,7 @@ interface GroupedDocumentsViewProps {
   documents: Document[];
   filename?: string;
   hiddenColumns?: string[];
+  onDocumentChanged?: () => void;
 }
 
 const UNCLASSIFIED = 'No clasificado';
@@ -50,7 +51,8 @@ const colorClasses = {
 export function GroupedDocumentsView({
   documents,
   filename = 'otros_documentos',
-  hiddenColumns = []
+  hiddenColumns = [],
+  onDocumentChanged
 }: GroupedDocumentsViewProps) {
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [customTypes, setCustomTypes] = useState<string[]>([]);
@@ -80,12 +82,12 @@ export function GroupedDocumentsView({
   useEffect(() => {
     const handleRefetch = () => {
       console.log('🔄 [GroupedView] Refetching after document change');
-      window.location.reload(); // Forzar recarga para actualizar la vista
+      if (onDocumentChanged) onDocumentChanged();
     };
 
     window.addEventListener('documentUploaded', handleRefetch);
     return () => window.removeEventListener('documentUploaded', handleRefetch);
-  }, []);
+  }, [onDocumentChanged]);
 
   // Scroll durante drag
   useEffect(() => {
@@ -143,6 +145,7 @@ export function GroupedDocumentsView({
       if (res.ok) {
         toast({ title: 'Documentos movidos', description: `Se han movido ${docIds.length} documentos a "${targetTipo}".` });
         window.dispatchEvent(new CustomEvent('documentUploaded'));
+        if (onDocumentChanged) onDocumentChanged();
       }
     } catch (err) { console.error(err); }
   }, []);
@@ -188,6 +191,7 @@ export function GroupedDocumentsView({
 
     toast({ title: 'Carpeta eliminada', description: `${ids.length} documentos movidos a "Indefinido"` });
     window.dispatchEvent(new CustomEvent('documentUploaded'));
+    if (onDocumentChanged) onDocumentChanged();
     setFolderToDelete(null);
   };
 
@@ -225,6 +229,7 @@ export function GroupedDocumentsView({
 
       toast({ title: 'Carpeta renombrada', description: `"${oldName}" → "${newName}"` });
       window.dispatchEvent(new CustomEvent('documentUploaded'));
+      if (onDocumentChanged) onDocumentChanged();
     } catch (err) {
       console.error(err);
       toast({ title: 'Error', description: 'No se pudo renombrar la carpeta', variant: 'destructive' });
@@ -408,6 +413,7 @@ export function GroupedDocumentsView({
                     hiddenColumns={hiddenColumns}
                     customTypes={customTypes}
                     onMove={handleMove}
+                    onDocumentChanged={onDocumentChanged}
                   />
                 ) : (
                   <div className="py-8 text-center text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/20">No hay documentos de este tipo. Arrastra documentos aquí para clasificarlos.</div>

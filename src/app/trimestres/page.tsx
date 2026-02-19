@@ -8,6 +8,7 @@ import { TrimestreSelector } from '@/components/trimestres/trimestre-selector';
 import { PageHeader } from '@/components/layout/page-header';
 import { TrimestreStatsCard } from '@/components/trimestres/trimestre-stats-card';
 import { TrimestreTable } from '@/components/trimestres/trimestres-table';
+import { StatsHoverTable } from '@/components/trimestres/stats-hover-table'; // 🆕 IMPORT
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
@@ -154,6 +155,8 @@ function TrimestresPageContent() {
               total_gastos_sin_iva: 0,
               iva_repercutido: 0,
               iva_soportado: 0,
+              recargo_repercutido: 0,
+              recargo_soportado: 0,
               cerrado: false,
               fecha_cierre: null,
             });
@@ -388,9 +391,11 @@ function TrimestresPageContent() {
       // ✅ TOTALES SIN IVA (para breakdown)
       total_ingresos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_ingresos_sin_iva || 0), 0),
       total_gastos_sin_iva: trimestresDelPeriodo.reduce((sum, t) => sum + (t.total_gastos_sin_iva || 0), 0),
-
       iva_repercutido: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_repercutido, 0),
       iva_soportado: trimestresDelPeriodo.reduce((sum, t) => sum + t.iva_soportado, 0),
+      recargo_repercutido: trimestresDelPeriodo.reduce((sum, t) => sum + (t.recargo_repercutido || 0), 0),
+      recargo_soportado: trimestresDelPeriodo.reduce((sum, t) => sum + (t.recargo_soportado || 0), 0),
+
       cerrado: trimestresDelPeriodo.every(t => t.cerrado),
       fecha_cierre: null,
     };
@@ -417,6 +422,62 @@ function TrimestresPageContent() {
 
     return Array.from(unique.values());
   }, [trimestres]);
+
+  // 🆕 CÁLCULO DE DESGLOSES PARA HOVERS ESTILO EXCEL
+  const { ingresosBreakdown, gastosBreakdown } = React.useMemo(() => {
+    const init = () => ({
+      bases: { base21: 0, base15: 0, base10: 0, base4: 0, base0: 0 },
+      quotas: { iva21: 0, iva15: 0, iva10: 0, iva4: 0 },
+      recargo: 0,
+      retencion: 0,
+      totalBase: 0,
+      totalIVA: 0,
+      total: 0
+    });
+
+    const ingresos = init();
+    const gastos = init();
+
+    documentos.forEach(doc => {
+      // Determinar si es Ingreso (Factura Emitida) o Gasto (Resto)
+      const isIngreso = doc.tipo_documento === 'Factura Emitida';
+      const target = isIngreso ? ingresos : gastos;
+
+      target.totalBase += Number(doc.base_imponible) || 0;
+      target.totalIVA += Number(doc.iva) || 0;
+      target.total += Number(doc.total) || 0;
+
+      // Sumar detalles de IVA
+      if (doc.iva_details && Array.isArray(doc.iva_details)) {
+        doc.iva_details.forEach(det => {
+          const rate = Math.round(Number(det.porcentaje));
+          const base = Number(det.base_imponible) || 0;
+          const cuota = Number(det.cuota) || 0;
+          const type = det.tipo_impuesto?.toLowerCase() || '';
+
+          // Recargo
+          if (type.includes('recargo') || type.includes('equivalencia')) {
+            target.recargo += cuota;
+            return;
+          }
+          // Retención
+          if (type.includes('retencion')) {
+            target.retencion += cuota;
+            return;
+          }
+
+          // Bases y Cuotas
+          if (rate === 21) { target.bases.base21 += base; target.quotas.iva21 += cuota; }
+          else if (rate === 15) { target.bases.base15 += base; target.quotas.iva15 += cuota; }
+          else if (rate === 10) { target.bases.base10 += base; target.quotas.iva10 += cuota; }
+          else if (rate === 4) { target.bases.base4 += base; target.quotas.iva4 += cuota; }
+          else if (rate === 0) { target.bases.base0 += base; }
+        });
+      }
+    });
+
+    return { ingresosBreakdown: ingresos, gastosBreakdown: gastos };
+  }, [documentos]);
 
   const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
   const puedeEnviarAlSII = trimestreAgregado && trimestreAgregado.cerrado;
@@ -588,23 +649,7 @@ function TrimestresPageContent() {
                 icon={TrendingUp}
                 description="Total CON IVA"
                 trend="up"
-                breakdown={[
-                  {
-                    label: "Base (sin IVA)",
-                    value: formatCurrency(trimestreAgregado.total_ingresos_sin_iva || 0),
-                    className: "text-muted-foreground"
-                  },
-                  {
-                    label: "IVA Repercutido",
-                    value: formatCurrency(trimestreAgregado.iva_repercutido),
-                    className: "text-green-600 dark:text-green-500"
-                  },
-                  {
-                    label: "Total CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_ingresos),
-                    className: "text-green-600 dark:text-green-500 font-bold"
-                  }
-                ]}
+                richTooltip={<StatsHoverTable {...ingresosBreakdown} type="ingresos" />}
               />
 
               {/* 3️⃣ Gastos - ✅ MODIFICADO CON BREAKDOWN */}
@@ -614,23 +659,7 @@ function TrimestresPageContent() {
                 icon={TrendingDown}
                 description="Total CON IVA"
                 trend="down"
-                breakdown={[
-                  {
-                    label: "Base (sin IVA)",
-                    value: formatCurrency(trimestreAgregado.total_gastos_sin_iva || 0),
-                    className: "text-muted-foreground"
-                  },
-                  {
-                    label: "IVA Soportado",
-                    value: formatCurrency(trimestreAgregado.iva_soportado),
-                    className: "text-red-600 dark:text-red-500"
-                  },
-                  {
-                    label: "Total CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_gastos),
-                    className: "text-red-600 dark:text-red-500 font-bold"
-                  }
-                ]}
+                richTooltip={<StatsHoverTable {...gastosBreakdown} type="gastos" />}
               />
 
               {/* 4️⃣ Beneficio Bruto - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
@@ -687,23 +716,7 @@ function TrimestresPageContent() {
                 icon={ArrowUpCircle}
                 description="IVA cobrado"
                 trend="neutral"
-                breakdown={[
-                  {
-                    label: "Base Facturas Emitidas",
-                    value: formatCurrency(trimestreAgregado.total_ingresos_sin_iva || 0),
-                    className: "text-muted-foreground"
-                  },
-                  {
-                    label: "IVA Repercutido",
-                    value: formatCurrency(trimestreAgregado.iva_repercutido),
-                    className: "text-green-600 dark:text-green-500 font-bold"
-                  },
-                  {
-                    label: "Total Ingresos CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_ingresos),
-                    className: "text-green-600 dark:text-green-500"
-                  }
-                ]}
+                richTooltip={<StatsHoverTable {...ingresosBreakdown} type="ingresos" />}
               />
 
               {/* 6️⃣ IVA SOPORTADO - ✅ MODIFICADO CON BREAKDOWN */}
@@ -713,23 +726,7 @@ function TrimestresPageContent() {
                 icon={ArrowDownCircle}
                 description="IVA pagado"
                 trend="neutral"
-                breakdown={[
-                  {
-                    label: "Base Facturas Recibidas",
-                    value: formatCurrency(trimestreAgregado.total_gastos_sin_iva || 0),
-                    className: "text-muted-foreground"
-                  },
-                  {
-                    label: "IVA Soportado",
-                    value: formatCurrency(trimestreAgregado.iva_soportado),
-                    className: "text-red-600 dark:text-red-500 font-bold"
-                  },
-                  {
-                    label: "Total Gastos CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_gastos),
-                    className: "text-red-600 dark:text-red-500"
-                  }
-                ]}
+                richTooltip={<StatsHoverTable {...gastosBreakdown} type="gastos" />}
               />
 
               {/* 7️⃣ IVA NETO - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}

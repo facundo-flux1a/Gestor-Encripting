@@ -455,7 +455,7 @@ export default function ActivityTable({
       setDeleteAllDialogOpen(false);
       toast({
         title: '✅ Éxito',
-        description: `${result.deleted.activities} actividades y ${result.deleted.documents} documentos eliminados`,
+        description: `${result.deleted.activities} actividades eliminadas`,
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
     } catch (err: any) {

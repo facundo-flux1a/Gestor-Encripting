@@ -280,7 +280,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       fetchUnreadCount();
       fetchIncidentCount();
     }, 30000);
-    return () => clearInterval(interval);
+
+    const handleGlobalUpdate = () => {
+      console.log('🔄 [MainLayout] Refetching counters due to global event');
+      fetchUnreadCount();
+      fetchIncidentCount();
+    };
+
+    window.addEventListener('documentUploaded', handleGlobalUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('documentUploaded', handleGlobalUpdate);
+    };
   }, [fetchUnreadCount, fetchIncidentCount]);
 
   React.useEffect(() => {

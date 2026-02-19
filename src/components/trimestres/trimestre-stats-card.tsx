@@ -22,6 +22,7 @@ interface TrimestreStatsCardProps {
   trend?: 'up' | 'down' | 'neutral';
   className?: string;
   breakdown?: BreakdownItem[];
+  richTooltip?: React.ReactNode; // 🆕 NUEVO: Soporte para contenido rico
 }
 
 export function TrimestreStatsCard({
@@ -32,11 +33,12 @@ export function TrimestreStatsCard({
   trend,
   className,
   breakdown,
+  richTooltip, // 🆕
 }: TrimestreStatsCardProps) {
   const cardContent = (
-    <Card 
+    <Card
       className={cn(
-        'transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] group cursor-pointer',
+        'transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 hover:scale-[1.02] group cursor-pointer h-full',
         className
       )}
     >
@@ -47,16 +49,16 @@ export function TrimestreStatsCard({
         </CardTitle>
         <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0 transition-all duration-300 group-hover:scale-110 group-hover:text-primary" />
       </CardHeader>
-      
+
       {/* 📱 CONTENT RESPONSIVE CON ANIMACIÓN */}
       <CardContent className="pt-0">
         {/* Valor principal con scale en hover */}
-        <div 
+        <div
           className="text-lg sm:text-xl lg:text-2xl font-bold truncate transition-all duration-300 group-hover:scale-105"
         >
           {value}
         </div>
-        
+
         {/* Descripción con trend y hover effect */}
         {description && (
           <p
@@ -74,37 +76,49 @@ export function TrimestreStatsCard({
     </Card>
   );
 
-  // Si no hay breakdown, devolver solo la card
-  if (!breakdown || breakdown.length === 0) {
+  // Si no hay breakdown ni tooltip, devolver solo la card
+  if ((!breakdown || breakdown.length === 0) && !richTooltip) {
     return cardContent;
   }
 
-  // Con breakdown, envolver en HoverCard
+  // Con breakdown o richTooltip, envolver en HoverCard
   return (
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>
         {cardContent}
       </HoverCardTrigger>
-      <HoverCardContent className="w-80" align="start">
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold border-b pb-2 flex items-center gap-2">
-            <Icon className="h-4 w-4 text-muted-foreground" />
-            {title} - Desglose Detallado
-          </h4>
-          <div className="space-y-2">
-            {breakdown.map((item, index) => (
-              <div 
-                key={index} 
-                className="flex justify-between items-center text-sm py-1.5 px-2 rounded-md hover:bg-accent/50 transition-colors"
-              >
-                <span className="text-muted-foreground font-medium">{item.label}</span>
-                <span className={cn('font-semibold tabular-nums', item.className || 'text-foreground')}>
-                  {item.value}
-                </span>
-              </div>
-            ))}
+      <HoverCardContent className="w-auto min-w-[320px] p-0 overflow-hidden" align="start">
+        {richTooltip ? (
+          // 🎨 Renderizado CUSTOM (Tabla estilo Excel)
+          <div className="bg-popover p-3">
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+              <Icon className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm">{title}</span>
+            </div>
+            {richTooltip}
           </div>
-        </div>
+        ) : (
+          // 📄 Renderizado DEFAULT (Lista simple)
+          <div className="p-4 space-y-3">
+            <h4 className="text-sm font-semibold border-b pb-2 flex items-center gap-2">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              {title} - Desglose Detallado
+            </h4>
+            <div className="space-y-2">
+              {breakdown!.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex justify-between items-center text-sm py-1.5 px-2 rounded-md hover:bg-accent/50 transition-colors"
+                >
+                  <span className="text-muted-foreground font-medium">{item.label}</span>
+                  <span className={cn('font-semibold tabular-nums', item.className || 'text-foreground')}>
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </HoverCardContent>
     </HoverCard>
   );

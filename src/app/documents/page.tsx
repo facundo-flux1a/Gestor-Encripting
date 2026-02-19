@@ -806,6 +806,7 @@ function DocumentsPageContent() {
                     documents={otrosDocumentos}
                     filename="otros_documentos"
                     hiddenColumns={otherDocsHiddenColumns}
+                    onDocumentChanged={handleDocumentChanged}
                   />
                 </div>
               )}

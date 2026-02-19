@@ -754,7 +754,10 @@ export function CompaniesSelector() {
             : "Empresa eliminada correctamente",
         });
 
-        window.location.reload();
+        // ✅ REFACTOR: Usar router.refresh() en lugar de reload
+        // window.location.reload(); 
+        setCompanies(prev => prev.filter(c => c.id !== companyToDelete.id)); // Actualizar contexto
+        window.dispatchEvent(new CustomEvent('documentUploaded')); // Refetchear contadores
       } else {
         toast({
           title: "Error",

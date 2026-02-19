@@ -25,17 +25,17 @@ interface TrimestreTableProps {
 // 🎯 FUNCIONES DE FORMATO MANUAL
 const formatCurrency = (amount: number | string | null | undefined): string => {
   if (amount === null || amount === undefined) return '0,00 €';
-  
+
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return '0,00 €';
-  
+
   const fixed = num.toFixed(2);
   const parts = fixed.split('.');
   const integerPart = parts[0];
   const decimalPart = parts[1];
-  
+
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return `${formattedInteger},${decimalPart} €`;
 };
 
@@ -90,17 +90,31 @@ export function TrimestreTable({
                 <TableHead className="text-right text-xs sm:text-sm font-semibold">Total</TableHead>
                 <TableHead className="text-center text-xs sm:text-sm font-semibold">Estado</TableHead>
               </TableRow>
+              {/* ✅ TOTALS ROW (Replicated from DocumentsTable) */}
+              <TableRow className="bg-muted/50 hover:bg-muted/50 font-bold border-b-2 border-primary/20">
+                <TableHead colSpan={5} className="text-right text-xs sm:text-sm">Totales del Periodo:</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm text-foreground">
+                  {formatCurrency(documentos.reduce((sum, doc) => sum + (doc.base_imponible || 0), 0))}
+                </TableHead>
+                <TableHead className="text-right text-xs sm:text-sm text-foreground">
+                  {formatCurrency(documentos.reduce((sum, doc) => sum + (doc.iva || 0), 0))}
+                </TableHead>
+                <TableHead className="text-right text-xs sm:text-sm text-primary text-base">
+                  {formatCurrency(documentos.reduce((sum, doc) => sum + (doc.total || 0), 0))}
+                </TableHead>
+                <TableHead></TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
               {documentos.map((doc, index) => {
                 const baseImponible = doc.base_imponible || 0;
                 const ivaTotal = doc.iva || 0;
                 const total = doc.total || 0;
-                
-                const fechaEmision = doc.fecha_emision 
+
+                const fechaEmision = doc.fecha_emision
                   ? new Date(doc.fecha_emision).toLocaleDateString('es-ES')
                   : '-';
-                
+
                 return (
                   <TableRow
                     key={doc.id_documento}
@@ -112,24 +126,24 @@ export function TrimestreTable({
                   >
                     {/* Tipo Documento */}
                     <TableCell className="text-xs sm:text-sm">
-                      <Badge 
+                      <Badge
                         variant="secondary"
                         className="text-[10px] sm:text-xs whitespace-nowrap transition-all duration-200 group-hover:scale-105 group-hover:shadow-sm"
                       >
                         {doc.tipo_documento}
                       </Badge>
                     </TableCell>
-                    
+
                     {/* Número Documento */}
                     <TableCell className="font-medium text-xs sm:text-sm group-hover:text-primary transition-colors duration-200">
                       {doc.numero_documento}
                     </TableCell>
-                    
+
                     {/* Fecha */}
                     <TableCell className="text-xs sm:text-sm whitespace-nowrap group-hover:text-foreground transition-colors duration-200">
                       {fechaEmision}
                     </TableCell>
-                    
+
                     {/* Empresa */}
                     <TableCell className="text-xs sm:text-sm">
                       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -139,34 +153,34 @@ export function TrimestreTable({
                         </span>
                       </div>
                     </TableCell>
-                    
+
                     {/* Proveedor */}
                     <TableCell className="text-xs sm:text-sm">
                       <span className="truncate max-w-[150px] sm:max-w-[200px] block group-hover:text-foreground transition-colors duration-200" title={doc.proveedor || '-'}>
                         {doc.proveedor || '-'}
                       </span>
                     </TableCell>
-                    
+
                     {/* Base Imponible - CON FORMATO */}
                     <TableCell className="text-right text-xs sm:text-sm tabular-nums group-hover:text-foreground group-hover:scale-105 transition-all duration-200">
                       {formatCurrency(baseImponible)}
                     </TableCell>
-                    
+
                     {/* IVA - CON FORMATO */}
                     <TableCell className="text-right text-xs sm:text-sm tabular-nums group-hover:text-foreground group-hover:scale-105 transition-all duration-200">
                       {formatCurrency(ivaTotal)}
                     </TableCell>
-                    
+
                     {/* Total - CON FORMATO */}
                     <TableCell className="text-right font-semibold text-xs sm:text-sm tabular-nums group-hover:text-primary group-hover:scale-110 transition-all duration-200">
                       {formatCurrency(total)}
                     </TableCell>
-                    
+
                     {/* Estado */}
                     <TableCell className="text-center">
                       {doc.incidencia ? (
-                        <Badge 
-                          variant="destructive" 
+                        <Badge
+                          variant="destructive"
                           className="text-[10px] sm:text-xs whitespace-nowrap transition-all duration-20 group-hover:scale-110 group-hover:shadow-md animate-pulse"
                         >
                           Incidencia
@@ -182,14 +196,14 @@ export function TrimestreTable({
           </Table>
         </div>
       </div>
-      
+
       {/* 📱 INDICADOR DE SCROLL HORIZONTAL CON GRADIENTE */}
       <div className="sm:hidden bg-gradient-to-r from-muted/30 via-muted/50 to-muted/30 px-4 py-2 text-center border-t">
         <p className="text-[10px] text-muted-foreground animate-pulse">
           ← Desliza para ver más columnas →
         </p>
       </div>
-      
+
       {/* 🎨 ANIMACIONES GLOBALES */}
       <style jsx global>{`
         @keyframes fade-in {
