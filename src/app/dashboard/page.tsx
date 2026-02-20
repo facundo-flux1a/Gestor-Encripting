@@ -678,8 +678,8 @@ export default function DashboardPage() {
                       <span className="font-medium">{formatCurrency(analytics.kpis.totalIngresosSinIva)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IVA Repercutido:</span>
-                      <span className="font-medium">{formatCurrency(analytics.kpis.ivaRepercutido)}</span>
+                      <span className="text-muted-foreground">IVA Rep. (incl. recargo):</span>
+                      <span className="font-medium">{formatCurrency((analytics.kpis.ivaRepercutido || 0) + (analytics.kpis.recargoRepercutido || 0))}</span>
                     </div>
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>Total:</span>
@@ -714,8 +714,8 @@ export default function DashboardPage() {
                       <span className="font-medium">{formatCurrency(analytics.kpis.totalGastosSinIva)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IVA Soportado:</span>
-                      <span className="font-medium">{formatCurrency(analytics.kpis.ivaSoportado)}</span>
+                      <span className="text-muted-foreground">IVA Sop. (incl. recargo):</span>
+                      <span className="font-medium">{formatCurrency((analytics.kpis.ivaSoportado || 0) + (analytics.kpis.recargoSoportado || 0))}</span>
                     </div>
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>Total:</span>
@@ -783,12 +783,12 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold">Desglose de IVA</h4>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Repercutido (Ventas):</span>
-                      <span className="text-green-600 font-medium">+{formatCurrency(analytics.kpis.ivaRepercutido)}</span>
+                      <span className="text-muted-foreground">Repercutido + Recargo:</span>
+                      <span className="text-green-600 font-medium">+{formatCurrency((analytics.kpis.ivaRepercutido || 0) + (analytics.kpis.recargoRepercutido || 0))}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Soportado (Compras):</span>
-                      <span className="text-red-600 font-medium">-{formatCurrency(analytics.kpis.ivaSoportado)}</span>
+                      <span className="text-muted-foreground">Soportado + Recargo:</span>
+                      <span className="text-red-600 font-medium">-{formatCurrency((analytics.kpis.ivaSoportado || 0) + (analytics.kpis.recargoSoportado || 0))}</span>
                     </div>
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>A liquidar:</span>

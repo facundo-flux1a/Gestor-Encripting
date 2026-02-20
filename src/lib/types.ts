@@ -162,6 +162,7 @@ export type Document = {
   año_trimestre?: number;
   num_trimestre?: number;
   trimestre_cerrado?: number;
+  is_issued?: number;  // ✅ 1 = emitida (ingreso), 0 = recibida (gasto) — calculado por backend
 };
 
 export const DocumentUpdateSchema = z.object({

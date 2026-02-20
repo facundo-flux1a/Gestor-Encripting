@@ -13,6 +13,7 @@ interface ExportOptions {
     format: ExportFormat;
     includeSummary?: boolean; // Nuevo: incluir hoja de resumen IVA
     trimestre?: number | null; // Nuevo: trimestre específico o null para todo el año
+    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
 }
 
 // ==========================================
@@ -85,7 +86,21 @@ const getTaxColumnValue = (doc: any, columnId: string, format?: ExportFormat): s
 };
 
 const getNumericValue = (item: any, columnId: string): number => {
-    // Lógica para obtener valor numérico crudo para sumatorias
+    // Lógica para obtener valor numérico
+    let val: any;
+    if (item && typeof item.getValue === 'function') {
+        val = item.getValue(columnId);
+    } else {
+        val = item[columnId];
+    }
+
+    // Si la celda explícitamente existe en el root del objeto o fila
+    if (val !== undefined && val !== null) {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string' && !isNaN(Number(val))) return Number(val);
+    }
+
+    // Lógica para obtener dinámicamente desgloses de IVA (base_21, iva_21)
     if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
         const doc = item.original || item; // Support both Row and Document
         const rateMatch = columnId.match(/\d+/);
@@ -98,22 +113,8 @@ const getNumericValue = (item: any, columnId: string): number => {
                 return Number(ivaDetail?.cuota) || 0;
             }
         }
-        return 0;
     }
 
-    let val: any;
-    if (item && typeof item.getValue === 'function') {
-        val = item.getValue(columnId);
-    } else {
-        val = item[columnId];
-    }
-
-    if (typeof val === 'number') return val;
-    if (typeof val === 'string') {
-        if (['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos'].includes(columnId)) {
-            return Number(val) || 0;
-        }
-    }
     return 0;
 };
 
@@ -225,7 +226,11 @@ export const generateAdvancedExport = (
             columns.slice(1).forEach(col => {
                 // Check heuristic for numeric column or tax column
                 const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos'].includes(col.id)
-                    || col.id.startsWith('base_') || col.id.startsWith('iva_');
+                    || col.id.startsWith('base_')
+                    || col.id.startsWith('iva_')
+                    || col.id.includes('total')
+                    || col.id.includes('ingreso')
+                    || col.id.includes('gasto');
 
                 if (isNumeric) {
                     if (isExcel) {
@@ -331,32 +336,46 @@ export const generateAdvancedExport = (
 // ==========================================
 
 const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.WorkSheet => {
-    // Estructura:
-    //          1T  2T  3T  4T  Total
-    // Base 21
-    // Base 10
-    // ...
-    // IVA 21
-    // ...
-    // Totales
-
-    const summaryData: any = {};
-    // keys: base_21, base_10, base_4, base_0, iva_21, iva_10, iva_4, iva_0
-    // values: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 }
-
-    const rates = [21, 15, 10, 4, 0]; // Agregado 15% por si acaso (retenciones o nuevos tipos)
+    const rates = [21, 15, 10, 4, 0];
     const types = ['base', 'iva'];
 
-    // Inicializar estructura
-    types.forEach(type => {
-        rates.forEach(rate => {
-            if (type === 'iva' && rate === 0) return; // IVA 0 no suele tener cuota
-            summaryData[`${type}_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+    const createEmptySummary = () => {
+        const sum: any = {
+            retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+            recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+            total_real: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 }
+        };
+        types.forEach(type => {
+            rates.forEach(rate => {
+                if (type === 'iva' && rate === 0) return;
+                sum[`${type}_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+            });
         });
+        return sum;
+    };
+
+    const ingresosSum = createEmptySummary();
+    const gastosSum = createEmptySummary();
+    const totalNetoSum = createEmptySummary();
+    const quartersWithData = new Set<number>();
+
+    let totalIsIssued = 0;
+    let totalNotIssued = 0;
+
+    data.forEach(item => {
+        const doc = item.original || item;
+        let isIssued = false;
+        if (doc.is_issued !== undefined && doc.is_issued !== null) {
+            isIssued = Number(doc.is_issued) === 1;
+        } else {
+            isIssued = Number(doc.importe_total || doc.total) >= 0;
+        }
+        if (isIssued) totalIsIssued++;
+        else totalNotIssued++;
     });
 
-    // Detectar qué trimestres tienen datos
-    const quartersWithData = new Set<number>();
+    const isExportingGastos = (totalNotIssued > 0 && totalIsIssued === 0);
+    const ctx = options?.exportContext || (isExportingGastos ? 'documentos_recibidas' : 'documentos');
 
     data.forEach(item => {
         const doc = item.original || item;
@@ -366,199 +385,232 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             q = Math.ceil(month / 3);
         }
         if (!q || q < 1 || q > 4) return;
-
         quartersWithData.add(q);
+
+        const tipoLower = (doc.tipo_documento || '').toLowerCase();
+        const esAbono = tipoLower.includes('abono') || tipoLower.includes('crédito') || tipoLower.includes('credito') || Number(doc.importe_total || doc.total) < 0;
+
+        let isIssued = false;
+        if (doc.is_issued !== undefined && doc.is_issued !== null) {
+            isIssued = Number(doc.is_issued) === 1;
+        } else {
+            isIssued = Number(doc.importe_total || doc.total) >= 0;
+        }
+
+        if (ctx === 'documentos_recibidas' && isIssued) return;
+        if (ctx === 'documentos_emitidas' && !isIssued) return;
+
+        const targetSum = isIssued ? ingresosSum : gastosSum;
+        const absSign = esAbono ? -1 : 1;
+
+        // El Total Real del documento se suma en positivo a su propia tabla (ingresos o gastos)
+        const docTotal = Math.abs(Number(doc.importe_total || doc.total) || 0) * absSign;
+        targetSum.total_real[q] += docTotal;
+        targetSum.total_real.total += docTotal;
+
+        // Para el balance neto (Trimestres): Ingresos suman, Gastos restan
+        const netoBaseSign = isIssued ? 1 : -1;
+        const netoSign = esAbono ? (netoBaseSign * -1) : netoBaseSign;
+        const docTotalNeto = Math.abs(Number(doc.importe_total || doc.total) || 0) * netoSign;
+        totalNetoSum.total_real[q] += docTotalNeto;
+        totalNetoSum.total_real.total += docTotalNeto;
 
         if (doc.iva_details && Array.isArray(doc.iva_details)) {
             doc.iva_details.forEach((detail: any) => {
-                const rate = Number(detail.porcentaje);
+                const tipoIva = (detail.tipo_impuesto || '').toLowerCase();
+                const cuota = Math.abs(Number(detail.cuota) || 0);
+                const cuotaAbs = cuota * absSign;
+                const cuotaNeto = cuota * netoSign;
 
-                // Acumular Base
-                const keyBase = `base_${rate}`;
-                if (summaryData[keyBase]) {
-                    const base = Number(detail.base_imponible) || 0;
-                    summaryData[keyBase][q] += base;
-                    summaryData[keyBase].total += base;
+                if (tipoIva.includes('retencion')) {
+                    targetSum.retenciones[q] += cuotaAbs;
+                    targetSum.retenciones.total += cuotaAbs;
+                    totalNetoSum.retenciones[q] += cuotaNeto;
+                    totalNetoSum.retenciones.total += cuotaNeto;
+                    return;
                 }
 
-                // Acumular Cuota
+                if (tipoIva.includes('recargo') || tipoIva.includes('equivalencia')) {
+                    targetSum.recargos[q] += cuotaAbs;
+                    targetSum.recargos.total += cuotaAbs;
+                    totalNetoSum.recargos[q] += cuotaNeto;
+                    totalNetoSum.recargos.total += cuotaNeto;
+                    return;
+                }
+
+                const rate = Number(detail.porcentaje);
+
+                const keyBase = `base_${rate}`;
+                if (targetSum[keyBase]) {
+                    const base = Math.abs(Number(detail.base_imponible) || 0);
+                    const baseAbs = base * absSign;
+                    const baseNeto = base * netoSign;
+
+                    targetSum[keyBase][q] += baseAbs;
+                    targetSum[keyBase].total += baseAbs;
+
+                    totalNetoSum[keyBase][q] += baseNeto;
+                    totalNetoSum[keyBase].total += baseNeto;
+                }
+
                 const keyIva = `iva_${rate}`;
-                if (summaryData[keyIva]) {
-                    const cuota = Number(detail.cuota) || 0;
-                    summaryData[keyIva][q] += cuota;
-                    summaryData[keyIva].total += cuota;
+                if (targetSum[keyIva]) {
+                    targetSum[keyIva][q] += cuotaAbs;
+                    targetSum[keyIva].total += cuotaAbs;
+
+                    totalNetoSum[keyIva][q] += cuotaNeto;
+                    totalNetoSum[keyIva].total += cuotaNeto;
                 }
             });
         }
     });
 
-    // Determinar qué columnas mostrar
     let activeQuarters: number[] = [];
     if (options?.trimestre) {
-        // Si se especificó un trimestre, mostrar SOLO ese trimestre
         activeQuarters = [options.trimestre];
     } else {
-        // Si NO se especificó trimestre (Anual), mostrar SIEMPRE los 4 trimestres
         activeQuarters = [1, 2, 3, 4];
     }
 
-    // Construir filas para Excel
-    const rows = [];
+    const rows: (string | number)[][] = [];
 
-    // Header row
-    rows.push(['Resumen anual iva']);
+    const buildTable = (title: string, summaryData: any) => {
+        rows.push([title]);
 
-    const subHeaderRow = [''];
-    activeQuarters.forEach(q => subHeaderRow.push(`${q} trimestre`));
-    subHeaderRow.push('total');
-    rows.push(subHeaderRow);
+        const subHeaderRow = [''];
+        activeQuarters.forEach(q => subHeaderRow.push(`${q} trimestre`));
+        subHeaderRow.push('total');
+        rows.push(subHeaderRow);
 
-    // Helper para construir fila de datos
-    const buildRow = (label: string, dataObj: any) => {
-        const row: (string | number)[] = [label];
-        let rowSum = 0;
-        activeQuarters.forEach(q => {
-            const val = dataObj[q];
-            if (options?.format === 'excel') {
-                row.push(val);
-            } else {
-                row.push(formatCurrency(val));
-            }
+        const buildRow = (label: string, dataObj: any) => {
+            const row: (string | number)[] = [label];
+            let rowSum = 0;
+            activeQuarters.forEach(q => {
+                const val = dataObj[q];
+                if (options?.format === 'excel') row.push(val);
+                else row.push(formatCurrency(val));
 
-            if (options?.trimestre) {
-                rowSum += val;
-            } else {
-                rowSum = dataObj.total; // En anual usamos el total acumulado real
-            }
+                if (options?.trimestre) rowSum += val;
+                else rowSum = dataObj.total;
+            });
+            if (options?.format === 'excel') row.push(rowSum);
+            else row.push(formatCurrency(rowSum));
+            return row;
+        };
+
+        rates.forEach(rate => {
+            const key = `base_${rate}`;
+            if (summaryData[key]) rows.push(buildRow(`base ${rate}`, summaryData[key]));
         });
-        if (options?.format === 'excel') {
-            row.push(rowSum);
+
+        rows.push([]);
+
+        rates.forEach(rate => {
+            const key = `iva_${rate}`;
+            if (summaryData[key]) rows.push(buildRow(`iva ${rate}`, summaryData[key]));
+        });
+
+        rows.push([]);
+
+        const totalBasesRow: (string | number)[] = ['Total Bases'];
+        activeQuarters.forEach(q => {
+            let sumQ = 0;
+            rates.forEach(r => { if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q]; });
+            if (options?.format === 'excel') totalBasesRow.push(sumQ);
+            else totalBasesRow.push(formatCurrency(sumQ));
+        });
+        let sumTotalBases = 0;
+        if (options?.trimestre) {
+            rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`][options.trimestre!]; });
         } else {
-            row.push(formatCurrency(rowSum));
+            rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`].total; });
         }
-        return row;
+        if (options?.format === 'excel') totalBasesRow.push(sumTotalBases);
+        else totalBasesRow.push(formatCurrency(sumTotalBases));
+        rows.push(totalBasesRow);
+
+        const totalIvaRow: (string | number)[] = ['Total IVA'];
+        activeQuarters.forEach(q => {
+            let sumQ = 0;
+            rates.forEach(r => { if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q]; });
+            if (options?.format === 'excel') totalIvaRow.push(sumQ);
+            else totalIvaRow.push(formatCurrency(sumQ));
+        });
+        let sumTotalIva = 0;
+        if (options?.trimestre) {
+            rates.forEach(r => { if (summaryData[`iva_${r}`]) sumTotalIva += summaryData[`iva_${r}`][options.trimestre!]; });
+        } else {
+            rates.forEach(r => { if (summaryData[`iva_${r}`]) sumTotalIva += summaryData[`iva_${r}`].total; });
+        }
+        if (options?.format === 'excel') totalIvaRow.push(sumTotalIva);
+        else totalIvaRow.push(formatCurrency(sumTotalIva));
+        rows.push(totalIvaRow);
+
+        rows.push([]);
+
+        const hasRecargos = summaryData.recargos.total !== 0 || [1, 2, 3, 4].some(q => summaryData.recargos[q] !== 0);
+        const hasRetenciones = summaryData.retenciones.total !== 0 || [1, 2, 3, 4].some(q => summaryData.retenciones[q] !== 0);
+
+        if (hasRecargos) rows.push(buildRow('Total Recargos', summaryData.recargos));
+
+        if (hasRetenciones) {
+            const rowR: (string | number)[] = ['Total Retenciones'];
+            let rowSum = 0;
+            activeQuarters.forEach(q => {
+                const val = summaryData.retenciones[q];
+                // Las retenciones las mostramos en negativo si restan, pero matemáticamente ya están bien.
+                // Como las pasamos sumadas directamente, las mostramos positivo.
+                if (options?.format === 'excel') rowR.push(val);
+                else rowR.push(formatCurrency(val));
+                if (options?.trimestre) rowSum += val;
+                else rowSum = summaryData.retenciones.total;
+            });
+            if (options?.format === 'excel') rowR.push(rowSum);
+            else rowR.push(formatCurrency(rowSum));
+            rows.push(rowR);
+        }
+
+        if (hasRecargos || hasRetenciones) rows.push([]);
+
+        const totalRowLabel = 'Total Gral. Facturado';
+        const totalRow: (string | number)[] = [totalRowLabel];
+
+        activeQuarters.forEach(q => {
+            const val = summaryData.total_real[q];
+            if (options?.format === 'excel') totalRow.push(val);
+            else totalRow.push(formatCurrency(val));
+        });
+
+        let sumTotalReal = 0;
+        if (options?.trimestre) {
+            sumTotalReal = summaryData.total_real[options.trimestre!];
+        } else {
+            sumTotalReal = summaryData.total_real.total;
+        }
+
+        if (options?.format === 'excel') totalRow.push(sumTotalReal);
+        else totalRow.push(formatCurrency(sumTotalReal));
+
+        rows.push(totalRow);
+
+        // Espaciador entre tablas si hay varias
+        rows.push([]);
+        rows.push([]);
     };
 
-    // Filas Base
-    rates.forEach(rate => {
-        const key = `base_${rate}`;
-        if (!summaryData[key]) return;
-        const d = summaryData[key];
-
-        // Solo agregar fila si hay datos
-        //if (d.total !== 0) { // Comentado para mostrar siempre en anual
-        rows.push(buildRow(`base ${rate}`, d));
-        //}
-    });
-
-    rows.push([]); // Espacio
-
-    // Filas IVA
-    rates.forEach(rate => {
-        const key = `iva_${rate}`;
-        if (!summaryData[key]) return;
-        const d = summaryData[key];
-
-        // Solo agregar fila si hay datos
-        //if (d.total !== 0) {
-        rows.push(buildRow(`iva ${rate}`, d));
-        //}
-    });
-
-    rows.push([]); // Espacio
-
-    // ✅ NUEVO: Totales separados
-    rows.push([]); // Espacio
-
-    // Total Bases
-    const totalBasesRow: (string | number)[] = ['Total Bases'];
-    activeQuarters.forEach(q => {
-        let sumQ = 0;
-        rates.forEach(r => { if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q]; });
-        if (options?.format === 'excel') {
-            totalBasesRow.push(sumQ);
-        } else {
-            totalBasesRow.push(formatCurrency(sumQ));
-        }
-    });
-    // Sum total bases
-    let sumTotalBases = 0;
-    if (options?.trimestre) {
-        rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`][options.trimestre!]; });
+    if (ctx === 'trimestres') {
+        buildTable('Resumen anual iva (Ingresos)', ingresosSum);
+        buildTable('Resumen anual iva (Gastos)', gastosSum);
+        buildTable('Resumen anual iva (Total Neto)', totalNetoSum);
+    } else if (ctx === 'documentos_recibidas') {
+        buildTable('Resumen anual iva (Gastos)', gastosSum);
+    } else if (ctx === 'documentos_emitidas') {
+        buildTable('Resumen anual iva (Ingresos)', ingresosSum);
     } else {
-        rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`].total; });
+        const primarySum = totalIsIssued >= totalNotIssued ? ingresosSum : gastosSum;
+        const mainLabel = totalIsIssued >= totalNotIssued ? 'Resumen anual iva (Ingresos)' : 'Resumen anual iva (Gastos)';
+        buildTable(mainLabel, primarySum);
     }
-    if (options?.format === 'excel') {
-        totalBasesRow.push(sumTotalBases);
-    } else {
-        totalBasesRow.push(formatCurrency(sumTotalBases));
-    }
-    rows.push(totalBasesRow);
-
-    // Total IVA
-    const totalIvaRow: (string | number)[] = ['Total IVA'];
-    activeQuarters.forEach(q => {
-        let sumQ = 0;
-        rates.forEach(r => { if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q]; });
-        if (options?.format === 'excel') {
-            totalIvaRow.push(sumQ);
-        } else {
-            totalIvaRow.push(formatCurrency(sumQ));
-        }
-    });
-    // Sum total iva
-    let sumTotalIva = 0;
-    if (options?.trimestre) {
-        rates.forEach(r => { if (summaryData[`iva_${r}`]) sumTotalIva += summaryData[`iva_${r}`][options.trimestre!]; });
-    } else {
-        rates.forEach(r => { if (summaryData[`iva_${r}`]) sumTotalIva += summaryData[`iva_${r}`].total; });
-    }
-    if (options?.format === 'excel') {
-        totalIvaRow.push(sumTotalIva);
-    } else {
-        totalIvaRow.push(formatCurrency(sumTotalIva));
-    }
-    rows.push(totalIvaRow);
-
-    rows.push([]); // Espacio
-
-    // Total final (Base + Cuota)
-    const totalRow: (string | number)[] = ['Total (Base + IVA)'];
-    // Suma por columna (trimestre)
-    activeQuarters.forEach(q => {
-        let sumQ = 0;
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q];
-            if (summaryData[`iva_${r}`]) sumQ += summaryData[`iva_${r}`][q];
-        });
-        if (options?.format === 'excel') {
-            totalRow.push(sumQ);
-        } else {
-            totalRow.push(formatCurrency(sumQ));
-        }
-    });
-
-    // Suma total global
-    let sumTotal = 0;
-    if (options?.trimestre) {
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`][options.trimestre!];
-            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`][options.trimestre!];
-        });
-    } else {
-        rates.forEach(r => {
-            if (summaryData[`base_${r}`]) sumTotal += summaryData[`base_${r}`].total;
-            if (summaryData[`iva_${r}`]) sumTotal += summaryData[`iva_${r}`].total;
-        });
-    }
-
-    if (options?.format === 'excel') {
-        totalRow.push(sumTotal);
-    } else {
-        totalRow.push(formatCurrency(sumTotal));
-    }
-    rows.push(totalRow);
-
 
     return XLSX.utils.aoa_to_sheet(rows);
 };

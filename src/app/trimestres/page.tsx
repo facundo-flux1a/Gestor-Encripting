@@ -278,15 +278,80 @@ function TrimestresPageContent() {
         return;
       }
 
-      // Columnas para el reporte (definidas aquí o reutilizadas)
+      // 🔄 Pre-procesar datos para dividirlos claramente en Ingresos vs Gastos en Excel
+      const processedData = data.map((doc: any) => {
+        const tipo = (doc.tipo_documento || '').toLowerCase();
+
+        // Extraer emisor/receptor de forma resiliente
+        let emisorNombre = '';
+        let emisorCif = '';
+        let receptorNombre = '';
+
+        if (doc.entidades && Array.isArray(doc.entidades)) {
+          doc.entidades.forEach((e: any) => {
+            if (e.rol === 'emisor' || e.rol === 'proveedor') {
+              emisorNombre = e.nombre;
+              emisorCif = e.identificador_fiscal;
+            }
+            if (e.rol === 'receptor' || e.rol === 'cliente') {
+              receptorNombre = e.nombre;
+            }
+          });
+        }
+
+        // Fallbacks si entidades viene vacío o nulo
+        if (!emisorNombre && !receptorNombre) {
+          const datosExtra = typeof doc.datos_extra === 'string'
+            ? JSON.parse(doc.datos_extra)
+            : (doc.datos_extra || {});
+
+          // A veces el proveedor viene en la raíz o en datos_extra
+          emisorNombre = doc.proveedor || datosExtra?.EMPRESA_EMISORA?.NOMBRE || '';
+          emisorCif = doc.cif || datosExtra?.EMPRESA_EMISORA?.CIF || '';
+          receptorNombre = datosExtra?.CLIENTE?.NOMBRE || '';
+        }
+
+        // Lógica espejo de la SQL (misma que Hover Cards + Fallback robusto)
+        const isIssued = !!(
+          doc.empresa_cif &&
+          emisorCif &&
+          emisorCif.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
+        );
+
+        // Si es un abono el valor resta
+        const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || doc.total < 0;
+        const sign = isAbono ? -1 : 1;
+
+        const baseDoc = Math.abs(Number(doc.base_imponible) || 0) * sign;
+        const ivaDoc = Math.abs(Number(doc.iva) || 0) * sign;
+        const totalDoc = Math.abs(Number(doc.total) || 0) * sign;
+
+        // Apply sign to the deeply nested iva_details so the Resumen IVA sums correctly
+        const correctedIvaDetails = (doc.iva_details || []).map((detail: any) => ({
+          ...detail,
+          base_imponible: Math.abs(Number(detail.base_imponible) || 0) * sign,
+          cuota: Math.abs(Number(detail.cuota) || 0) * sign,
+        }));
+
+        return {
+          ...doc,
+          proveedor: isIssued ? receptorNombre : emisorNombre,
+          cif: isIssued ? '' : emisorCif,
+          total: totalDoc,
+          base_imponible: baseDoc,
+          iva_details: correctedIvaDetails,
+          is_issued: isIssued
+        };
+      });
+
+      // Columnas para el reporte (formato original restaurado)
       const exportColumns = [
         { id: 'numero_documento', header: 'Número' },
         { id: 'fecha_emision', header: 'Fecha Emisión' },
-        { id: 'proveedor', header: 'Emisor/Receptor' }, // Adaptar según modelo real
+        { id: 'proveedor', header: 'Emisor/Receptor' },
         { id: 'cif', header: 'CIF' },
         { id: 'base_imponible', header: 'Base Imponible' },
         { id: 'total', header: 'Total' },
-        // Campos de impuestos específicos si queremos detalle
         { id: 'base_21', header: 'Base 21%' },
         { id: 'iva_21', header: 'IVA 21%' },
         { id: 'base_10', header: 'Base 10%' },
@@ -296,16 +361,17 @@ function TrimestresPageContent() {
         { id: 'base_0', header: 'Base 0%' },
       ];
 
-      generateAdvancedExport(data, exportColumns, {
+      generateAdvancedExport(processedData, exportColumns, {
         filename: `Export_Trimestres_${año}${trimestre ? `_T${trimestre}` : '_Anual'}`,
         format: 'excel',
         includeSummary: true,
         trimestre, // Nuevo para desglose
+        exportContext: 'trimestres',
       });
 
       toast({
         title: '✅ Exportación completada',
-        description: 'El archivo se ha descargado correctamente.',
+        description: 'El archivo se ha descargado correctamente con los totales desglosados.',
       });
 
     } catch (error) {
@@ -439,39 +505,60 @@ function TrimestresPageContent() {
     const gastos = init();
 
     documentos.forEach(doc => {
-      // Determinar si es Ingreso (Factura Emitida) o Gasto (Resto)
-      const isIngreso = doc.tipo_documento === 'Factura Emitida';
-      const target = isIngreso ? ingresos : gastos;
+      // 1️⃣ DETERMINAR SI ES EMITIDA (INGRESO) O RECIBIDA (GASTO)
+      // Lógica espejo FINAL del SQL en getTrimestresList:
+      // Si la empresa emisora tiene nuestro CIF, entonces lo emitimos nosotros.
+      const tipo = doc.tipo_documento.toLowerCase();
+      const isIssued = doc.entidades.some(e =>
+        (e.rol === 'emisor' || e.rol === 'proveedor') &&
+        doc.empresa_cif && e.identificador_fiscal?.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
+      );
 
-      target.totalBase += Number(doc.base_imponible) || 0;
-      target.totalIVA += Number(doc.iva) || 0;
-      target.total += Number(doc.total) || 0;
+      // 2️⃣ DETERMINAR SI ES ABONO (RESTA)
+      // SQL: WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 THEN 1
+      const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || doc.total < 0;
+
+      const target = isIssued ? ingresos : gastos;
+
+      // Si es abono, RESTAMOS los valores absolutos. Si es factura normal, SUMAMOS.
+      const sign = isAbono ? -1 : 1;
+
+      // Valores base (usar absoluto para controlar el signo explícitamente)
+      const baseDoc = Math.abs(Number(doc.base_imponible) || 0);
+      const ivaDoc = Math.abs(Number(doc.iva) || 0);
+      const totalDoc = Math.abs(Number(doc.total) || 0);
+
+      target.totalBase += baseDoc * sign;
+      target.totalIVA += ivaDoc * sign;
+      target.total += totalDoc * sign;
 
       // Sumar detalles de IVA
       if (doc.iva_details && Array.isArray(doc.iva_details)) {
         doc.iva_details.forEach(det => {
           const rate = Math.round(Number(det.porcentaje));
-          const base = Number(det.base_imponible) || 0;
-          const cuota = Number(det.cuota) || 0;
+          const base = Math.abs(Number(det.base_imponible) || 0);
+          const cuota = Math.abs(Number(det.cuota) || 0);
           const type = det.tipo_impuesto?.toLowerCase() || '';
 
           // Recargo
           if (type.includes('recargo') || type.includes('equivalencia')) {
-            target.recargo += cuota;
+            target.recargo += cuota * sign;
             return;
           }
-          // Retención
+          // Retención (La retención resta al total a pagar, pero en desglose impositivo se suele sumar aparte o restar)
+          // SQL: i.tipo_impuesto NOT LIKE '%retencion%' para el IVA.
+          // Aquí la sumamos al acumulado de retenciones.
           if (type.includes('retencion')) {
-            target.retencion += cuota;
+            target.retencion += cuota * sign;
             return;
           }
 
           // Bases y Cuotas
-          if (rate === 21) { target.bases.base21 += base; target.quotas.iva21 += cuota; }
-          else if (rate === 15) { target.bases.base15 += base; target.quotas.iva15 += cuota; }
-          else if (rate === 10) { target.bases.base10 += base; target.quotas.iva10 += cuota; }
-          else if (rate === 4) { target.bases.base4 += base; target.quotas.iva4 += cuota; }
-          else if (rate === 0) { target.bases.base0 += base; }
+          if (rate === 21) { target.bases.base21 += base * sign; target.quotas.iva21 += cuota * sign; }
+          else if (rate === 15) { target.bases.base15 += base * sign; target.quotas.iva15 += cuota * sign; }
+          else if (rate === 10) { target.bases.base10 += base * sign; target.quotas.iva10 += cuota * sign; }
+          else if (rate === 4) { target.bases.base4 += base * sign; target.quotas.iva4 += cuota * sign; }
+          else if (rate === 0) { target.bases.base0 += base * sign; }
         });
       }
     });
@@ -649,7 +736,13 @@ function TrimestresPageContent() {
                 icon={TrendingUp}
                 description="Total CON IVA"
                 trend="up"
-                richTooltip={<StatsHoverTable {...ingresosBreakdown} type="ingresos" />}
+                richTooltip={<StatsHoverTable
+                  {...ingresosBreakdown}
+                  type="ingresos"
+                  totalBaseOverride={trimestreAgregado.total_ingresos_sin_iva}
+                  totalIvaOverride={(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0))}
+                  totalOverride={trimestreAgregado.total_ingresos}
+                />}
               />
 
               {/* 3️⃣ Gastos - ✅ MODIFICADO CON BREAKDOWN */}
@@ -659,7 +752,13 @@ function TrimestresPageContent() {
                 icon={TrendingDown}
                 description="Total CON IVA"
                 trend="down"
-                richTooltip={<StatsHoverTable {...gastosBreakdown} type="gastos" />}
+                richTooltip={<StatsHoverTable
+                  {...gastosBreakdown}
+                  type="gastos"
+                  totalBaseOverride={trimestreAgregado.total_gastos_sin_iva}
+                  totalIvaOverride={(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))}
+                  totalOverride={trimestreAgregado.total_gastos}
+                />}
               />
 
               {/* 4️⃣ Beneficio Bruto - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
@@ -712,57 +811,71 @@ function TrimestresPageContent() {
               {/* 5️⃣ IVA REPERCUTIDO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Repercutido"
-                value={formatCurrency(trimestreAgregado.iva_repercutido)}
+                value={formatCurrency(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0))}
                 icon={ArrowUpCircle}
-                description="IVA cobrado"
+                description="IVA cobrado (incl. recargo)"
                 trend="neutral"
-                richTooltip={<StatsHoverTable {...ingresosBreakdown} type="ingresos" />}
+                richTooltip={<StatsHoverTable
+                  {...ingresosBreakdown}
+                  type="ingresos"
+                  showBases={false}
+                  showTotal={false}
+                  retencion={0}
+                  totalIvaOverride={trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)}
+                />}
               />
 
               {/* 6️⃣ IVA SOPORTADO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Soportado"
-                value={formatCurrency(trimestreAgregado.iva_soportado)}
+                value={formatCurrency(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))}
                 icon={ArrowDownCircle}
-                description="IVA pagado"
+                description="IVA pagado (incl. recargo)"
                 trend="neutral"
-                richTooltip={<StatsHoverTable {...gastosBreakdown} type="gastos" />}
+                richTooltip={<StatsHoverTable
+                  {...gastosBreakdown}
+                  type="gastos"
+                  showBases={false}
+                  showTotal={false}
+                  retencion={0}
+                  totalIvaOverride={trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)}
+                />}
               />
 
               {/* 7️⃣ IVA NETO - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="IVA Neto"
-                value={formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado)}
+                value={formatCurrency((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)))}
                 icon={Receipt}
                 description={
-                  (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) > 0
+                  ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) > 0
                     ? "A pagar a Hacienda"
-                    : (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) < 0
+                    : ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) < 0
                       ? "A devolver por Hacienda"
                       : "Sin diferencia"
                 }
                 trend={
-                  (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) > 0
+                  ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) > 0
                     ? 'down'
-                    : (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) < 0
+                    : ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) < 0
                       ? 'up'
                       : 'neutral'
                 }
                 breakdown={[
                   {
-                    label: "IVA Repercutido",
-                    value: formatCurrency(trimestreAgregado.iva_repercutido),
+                    label: "IVA Rep. + Recargo",
+                    value: formatCurrency(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)),
                     className: "text-green-600 dark:text-green-500"
                   },
                   {
-                    label: "IVA Soportado",
-                    value: formatCurrency(trimestreAgregado.iva_soportado),
+                    label: "IVA Sop. + Recargo",
+                    value: formatCurrency(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
                     className: "text-red-600 dark:text-red-500"
                   },
                   {
                     label: "Resultado IVA",
-                    value: formatCurrency(trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado),
-                    className: (trimestreAgregado.iva_repercutido - trimestreAgregado.iva_soportado) >= 0
+                    value: formatCurrency((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))),
+                    className: ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) >= 0
                       ? 'text-red-600 dark:text-red-500 font-bold'
                       : 'text-green-600 dark:text-green-500 font-bold'
                   }
@@ -817,8 +930,29 @@ function TrimestresPageContent() {
             </div>
           ) : (
             <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
-              <TrimestreTable documentos={documentos} />
-            </div>
+              <TrimestreTable
+                documentos={documentos}
+                footerValues={trimestreAgregado ? {
+                  base: (trimestreAgregado.total_ingresos_sin_iva || 0) - (trimestreAgregado.total_gastos_sin_iva || 0),
+                  iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)), // IVA Neto = Repercutido - Soportado
+                  total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos, // Beneficio Bruto
+                  label: "Resultado del Periodo:",
+                  breakdown: {
+                    ingresos: {
+                      base: trimestreAgregado.total_ingresos_sin_iva || 0,
+                      iva: trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0),
+                      total: trimestreAgregado.total_ingresos,
+                      retencion: ingresosBreakdown.retencion || 0
+                    },
+                    gastos: {
+                      base: trimestreAgregado.total_gastos_sin_iva || 0,
+                      iva: trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0),
+                      total: trimestreAgregado.total_gastos,
+                      retencion: gastosBreakdown.retencion || 0
+                    }
+                  }
+                } : undefined}
+              /></div>
           )}
         </div>
 

@@ -11,10 +11,15 @@ interface TaxRowProps {
 }
 
 const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency: 'EUR',
-    }).format(amount);
+    if (amount === null || amount === undefined || isNaN(amount)) return '0,00 €';
+
+    const fixed = amount.toFixed(2);
+    const parts = fixed.split('.');
+
+    // Add thousands separator manually
+    const formattedInteger = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    return `${formattedInteger},${parts[1]} €`;
 };
 
 const TaxRow = ({ label, value, isTotal, className, onClick, isActive = true }: TaxRowProps) => (
@@ -44,6 +49,8 @@ const TaxRow = ({ label, value, isTotal, className, onClick, isActive = true }: 
     </div>
 );
 
+// ... existing imports
+
 interface StatsHoverTableProps {
     bases: {
         base21: number;
@@ -61,6 +68,11 @@ interface StatsHoverTableProps {
     recargo?: number;
     retencion?: number;
     type?: 'ingresos' | 'gastos';
+    showBases?: boolean;
+    showTotal?: boolean;
+    totalBaseOverride?: number;
+    totalIvaOverride?: number;
+    totalOverride?: number;
 }
 
 export function StatsHoverTable({
@@ -68,7 +80,12 @@ export function StatsHoverTable({
     quotas,
     recargo,
     retencion,
-    type = 'ingresos'
+    type = 'ingresos',
+    showBases = true,
+    showTotal = true,
+    totalBaseOverride,
+    totalIvaOverride,
+    totalOverride
 }: StatsHoverTableProps) {
     // Estado para claves desactivadas
     const [disabledKeys, setDisabledKeys] = React.useState<Set<string>>(new Set());
@@ -85,6 +102,7 @@ export function StatsHoverTable({
 
     // Helper para verificar si está activo
     const isActive = (key: string) => !disabledKeys.has(key);
+    const hasDisabledKeys = disabledKeys.size > 0;
 
     // 🔄 CÁLCULO DINÁMICO DE TOTALES BASADO EN ESTADO
     const currentBases = {
@@ -105,56 +123,94 @@ export function StatsHoverTable({
     const currentRecargo = isActive('recargo') ? (recargo || 0) : 0;
     const currentRetencion = isActive('retencion') ? (retencion || 0) : 0;
 
-    const totalBase = Object.values(currentBases).reduce((a, b) => a + b, 0);
-    // Total IVA incluye cuotas + recargo - retencion (si aplica, aunque retención suele ir aparte, aquí lo sumamos al "total impuestos" si es lo deseado, o al total final)
-    // Ajuste: Total Impuestos = Suma de IVAs + Recargo - Retención
-    const totalImpuestos = Object.values(currentQuotas).reduce((a, b) => a + b, 0) + currentRecargo - currentRetencion;
+    const calculatedTotalBase =
+        (isActive('base21') ? bases.base21 : 0) +
+        (isActive('base15') ? (bases.base15 || 0) : 0) +
+        (isActive('base10') ? bases.base10 : 0) +
+        (isActive('base4') ? bases.base4 : 0) +
+        (isActive('base0') ? bases.base0 : 0);
+    const calculatedTotalImpuestos =
+        (isActive('iva21') ? quotas.iva21 : 0) +
+        (isActive('iva15') ? (quotas.iva15 || 0) : 0) +
+        (isActive('iva10') ? quotas.iva10 : 0) +
+        (isActive('iva4') ? quotas.iva4 : 0) +
+        currentRecargo - currentRetencion;
 
-    const grandTotal = totalBase + totalImpuestos;
+    // Delta de bases desactivadas (lo que el usuario removió)
+    const disabledBasesDelta =
+        (!isActive('base21') ? bases.base21 : 0) +
+        (!isActive('base15') ? (bases.base15 || 0) : 0) +
+        (!isActive('base10') ? bases.base10 : 0) +
+        (!isActive('base4') ? bases.base4 : 0) +
+        (!isActive('base0') ? bases.base0 : 0);
+
+    // Delta de cuotas desactivadas
+    const disabledQuotasDelta =
+        (!isActive('iva21') ? quotas.iva21 : 0) +
+        (!isActive('iva15') ? (quotas.iva15 || 0) : 0) +
+        (!isActive('iva10') ? quotas.iva10 : 0) +
+        (!isActive('iva4') ? quotas.iva4 : 0) +
+        (!isActive('recargo') ? (recargo || 0) : 0);
+
+    // Si hay override del backend, anclar a él y restar exactamente lo desactivado
+    // Esto garantiza que desactivar 2€ reste exactamente 2€ (no cientos)
+    const totalBase = totalBaseOverride !== undefined
+        ? Math.abs(totalBaseOverride) - Math.abs(disabledBasesDelta)
+        : calculatedTotalBase;
+
+    const totalImpuestos = totalIvaOverride !== undefined
+        ? Math.abs(totalIvaOverride) - Math.abs(disabledQuotasDelta)
+        : Math.abs(calculatedTotalImpuestos);
+
+    const grandTotal = totalOverride !== undefined
+        ? Math.abs(totalOverride) - Math.abs(disabledBasesDelta) - Math.abs(disabledQuotasDelta) + (!isActive('retencion') ? Math.abs(retencion || 0) : 0)
+        : (totalBase + totalImpuestos);
 
     return (
         <div className="min-w-[240px] p-1 space-y-3 select-none">
             {/* Bases Section */}
-            <div className="space-y-0.5">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Bases Imponibles</div>
+            {showBases && ( // 🆕 Conditional rendering
+                <div className="space-y-0.5">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Bases Imponibles</div>
 
-                <TaxRow
-                    label="Base 21%"
-                    value={bases.base21}
-                    onClick={() => toggleKey('base21')}
-                    isActive={isActive('base21')}
-                />
-                {bases.base15 !== undefined && bases.base15 !== 0 && (
                     <TaxRow
-                        label="Base 15%"
-                        value={bases.base15}
-                        onClick={() => toggleKey('base15')}
-                        isActive={isActive('base15')}
+                        label="Base 21%"
+                        value={bases.base21}
+                        onClick={() => toggleKey('base21')}
+                        isActive={isActive('base21')}
                     />
-                )}
-                <TaxRow
-                    label="Base 10%"
-                    value={bases.base10}
-                    onClick={() => toggleKey('base10')}
-                    isActive={isActive('base10')}
-                />
-                <TaxRow
-                    label="Base 4%"
-                    value={bases.base4}
-                    onClick={() => toggleKey('base4')}
-                    isActive={isActive('base4')}
-                />
-                <TaxRow
-                    label="Base 0%"
-                    value={bases.base0}
-                    onClick={() => toggleKey('base0')}
-                    isActive={isActive('base0')}
-                />
+                    {bases.base15 !== undefined && bases.base15 !== 0 && (
+                        <TaxRow
+                            label="Base 15%"
+                            value={bases.base15}
+                            onClick={() => toggleKey('base15')}
+                            isActive={isActive('base15')}
+                        />
+                    )}
+                    <TaxRow
+                        label="Base 10%"
+                        value={bases.base10}
+                        onClick={() => toggleKey('base10')}
+                        isActive={isActive('base10')}
+                    />
+                    <TaxRow
+                        label="Base 4%"
+                        value={bases.base4}
+                        onClick={() => toggleKey('base4')}
+                        isActive={isActive('base4')}
+                    />
+                    <TaxRow
+                        label="Base 0%"
+                        value={bases.base0}
+                        onClick={() => toggleKey('base0')}
+                        isActive={isActive('base0')}
+                    />
 
-                <div className="border-t pt-1 mt-1 transition-all">
-                    <TaxRow label="Total Bases" value={totalBase} isTotal />
+                    <div className="border-t pt-1 mt-1 transition-all">
+                        <TaxRow label="Total Bases" value={totalBase} isTotal />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* IVA Section */}
             <div className="space-y-0.5">
@@ -187,7 +243,7 @@ export function StatsHoverTable({
                     isActive={isActive('iva4')}
                 />
 
-                {/* Recargo & Retencion */}
+                {/* Recargo */}
                 {(recargo || 0) > 0 && (
                     <TaxRow
                         label="Recargo Equiv."
@@ -197,7 +253,16 @@ export function StatsHoverTable({
                         isActive={isActive('recargo')}
                     />
                 )}
-                {(retencion || 0) > 0 && (
+
+                <div className="border-t pt-1 mt-1 transition-all">
+                    <TaxRow label="Total Impuestos" value={totalImpuestos} isTotal />
+                </div>
+            </div>
+
+            {/* Retenciones IRPF — fuera del bloque IVA, explica la diferencia con el total */}
+            {(retencion || 0) > 0 && (
+                <div className="space-y-0.5">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">IRPF</div>
                     <TaxRow
                         label="Retenciones"
                         value={-retencion!}
@@ -205,30 +270,28 @@ export function StatsHoverTable({
                         onClick={() => toggleKey('retencion')}
                         isActive={isActive('retencion')}
                     />
-                )}
-
-                <div className="border-t pt-1 mt-1 transition-all">
-                    <TaxRow label="Total Impuestos" value={totalImpuestos} isTotal />
                 </div>
-            </div>
+            )}
 
             {/* Grand Total */}
-            <div className={cn(
-                "border-t-2 pt-2 mt-2 transition-colors duration-300",
-                type === 'ingresos' ? "border-green-500/20" : "border-red-500/20"
-            )}>
-                <div className="flex justify-between items-center">
-                    <span className="font-bold text-sm">TOTAL {type === 'ingresos' ? 'FACTURADO' : 'GASTADO'}</span>
-                    <span className={cn(
-                        "font-bold text-sm tabular-nums transition-all duration-300",
-                        type === 'ingresos' ? "text-green-600" : "text-red-600",
-                        // Si hay cosas desactivadas, mostrar con un indicador visual extra (opcional)
-                        disabledKeys.size > 0 && "scale-105"
-                    )}>
-                        {formatCurrency(grandTotal)}
-                    </span>
+            {showTotal && (
+                <div className={cn(
+                    "border-t-2 pt-2 mt-2 transition-colors duration-300",
+                    type === 'ingresos' ? "border-green-500/20" : "border-red-500/20"
+                )}>
+                    <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm">TOTAL {type === 'ingresos' ? 'FACTURADO' : 'GASTADO'}</span>
+                        <span className={cn(
+                            "font-bold text-sm tabular-nums transition-all duration-300",
+                            type === 'ingresos' ? "text-green-600" : "text-red-600",
+                            // Si hay cosas desactivadas, mostrar con un indicador visual extra (opcional)
+                            disabledKeys.size > 0 && "scale-105"
+                        )}>
+                            {formatCurrency(grandTotal)}
+                        </span>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

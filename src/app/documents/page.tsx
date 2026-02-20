@@ -126,18 +126,14 @@ function DocumentsPageContent() {
 
     documents.forEach(doc => {
       const tipoLower = doc.tipo_documento?.toLowerCase() || '';
-      const total = doc.total || 0;
-
-      console.log(`📄 Doc ${doc.id_documento}: Tipo="${doc.tipo_documento}", Total=${total}`);
 
       // PASO 1: Verificar si es "sin confirmar"
       if (tipoLower.includes('(sin confirmar)')) {
         sinConfirmar.push(doc);
-        console.log(`   ⚠️ -> Sin confirmar`);
         return;
       }
 
-      // PASO 2: Verificar si es factura, abono O ALBARÁN (para agruparlos igual)
+      // PASO 2: Verificar si es factura, abono o albarán
       const esFacturaOAbono = tipoLower.includes('factura')
         || tipoLower.includes('abono')
         || tipoLower.includes('albaran')
@@ -145,72 +141,26 @@ function DocumentsPageContent() {
 
       if (!esFacturaOAbono) {
         otrosDocumentos.push(doc);
-        console.log(`   📦 -> Otros`);
         return;
       }
 
-      // ✅ LÓGICA CORREGIDA DE CLASIFICACIÓN
-      let esEmitida = false;
-
-      // REGLA 1: Prioridad absoluta a texto explícito ("Emitida/o" o "Recibida/o")
-      // Esto arregla "Albaran Recibido" cayendo en emitida por tener cliente
-      if (/emitid[oa]/i.test(tipoLower)) {
-        esEmitida = true;
-        console.log(`   ✅ Tipo explícito "emitida" -> EMITIDA`);
-      }
-      else if (/recibid[oa]/i.test(tipoLower)) {
-        esEmitida = false;
-        console.log(`   ✅ Tipo explícito "recibida" -> RECIBIDA`);
-      }
-      // REGLA 2: Si no dice nada, PERO es Albarán -> Mirar entidades
-      else if (tipoLower.includes('albaran') || tipoLower.includes('albarán')) {
-        // Si tiene un cliente/receptor, asumimos que se lo emitimos nosotros -> Emitida
-        const hasCliente = doc.entidades?.some(e => e.rol === 'cliente' || e.rol === 'receptor');
-        esEmitida = hasCliente;
-        console.log(`   🚚 Albarán genérico -> ${esEmitida ? 'EMITIDA' : 'RECIBIDA'} (Cliente: ${hasCliente})`);
-      }
-      // ✅ REGLA 3 CORREGIDA: Es un ABONO sin especificar emitida/recibida
-      else if (tipoLower.includes('abono')) {
-        // Buscar el emisor del documento
-        const emisor = doc.entidades?.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
-        const cifEmisor = emisor?.identificador_fiscal?.trim().toUpperCase();
-        const cifEmpresa = doc.empresa_cif?.trim().toUpperCase();
-
-        if (cifEmisor && cifEmpresa && cifEmisor === cifEmpresa) {
-          // El CIF del emisor coincide con el CIF de nuestra empresa → ABONO EMITIDO
-          esEmitida = true;
-          console.log(`   🎫 Abono EMITIDO por nuestra empresa (CIF coincide: ${cifEmisor})`);
-        } else {
-          // El CIF del emisor NO coincide → ABONO RECIBIDO de proveedor
-          esEmitida = false;
-          console.log(`   🎫 Abono RECIBIDO de proveedor (CIF emisor: ${cifEmisor}, CIF empresa: ${cifEmpresa})`);
-        }
-      }
-      // REGLA 4: Es una FACTURA sin especificar emitida/recibida
-      else {
-        // Usar el signo del total como fallback
-        esEmitida = total < 0;
-        console.log(`   ⚖️ Total ${total < 0 ? 'negativo' : 'positivo'} -> ${esEmitida ? 'EMITIDA' : 'RECIBIDA'}`);
+      // ✅ CLASIFICACIÓN: usar is_issued del backend (misma lógica que Trimestres/Dashboard)
+      // is_issued = 1 → emitida (ingreso), 0 → recibida (gasto)
+      // Fallback: si undefined (doc sin entidades/CIF), usar signo del total
+      let esEmitida: boolean;
+      if (doc.is_issued !== undefined) {
+        esEmitida = doc.is_issued === 1;
+      } else {
+        // Fallback legacy: facturas emitidas suelen tener total positivo
+        esEmitida = (doc.total || 0) > 0;
       }
 
-      // Clasificar en la categoría correspondiente
       if (esEmitida) {
         facturasEmitidas.push(doc);
-        console.log(`   ✅ -> FACTURAS EMITIDAS`);
       } else {
         facturasRecibidas.push(doc);
-        console.log(`   ✅ -> FACTURAS RECIBIDAS`);
       }
     });
-
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('📊 Clasificación final:', {
-      emitidas: facturasEmitidas.length,
-      recibidas: facturasRecibidas.length,
-      otros: otrosDocumentos.length,
-      sinConfirmar: sinConfirmar.length
-    });
-    console.log('═══════════════════════════════════════════════════════');
 
     return { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar };
   }, [documents]);

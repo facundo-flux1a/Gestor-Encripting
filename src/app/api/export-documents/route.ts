@@ -54,6 +54,14 @@ export async function POST(request: NextRequest) {
       LEFT JOIN documento_entidades de ON d.id_documento = de.id_documento
       LEFT JOIN entidades ent ON de.id_entidad = ent.id_entidad
       WHERE 1=1
+        AND (
+            (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        )
+        AND d.id_documento NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     `;
 
     const params: any[] = [];
@@ -155,16 +163,38 @@ export async function POST(request: NextRequest) {
       const base = parseFloat(doc.importe_sin_impuestos) || 0;
       const iva = total - base;
 
+      // Extract entidades data
+      const entidadesData = doc.entidades_data?.split(';').reduce((acc: any, e: string) => {
+        const [rol, data] = e.split(':');
+        if (data) {
+          const [nombre, cif] = data.split('|');
+          acc[rol] = { nombre, cif: cif || '' };
+        }
+        return acc;
+      }, {}) || {};
+
+      const tipo = doc.tipo_documento?.toLowerCase() || '';
+      const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || total < 0;
+
+      // Logic identical to SQL:
+      const emisor = entidadesData.emisor || entidadesData.proveedor;
+      const emisorCif = emisor?.cif?.trim().toLowerCase();
+      const empresaCif = doc.empresa_cif?.trim().toLowerCase();
+
+      let isIssued = false;
+      if (emisorCif && empresaCif && emisorCif === empresaCif) {
+        isIssued = true;
+      }
+
       totales.totalBaseImponible += base;
       totales.totalIva += iva;
       totales.totalImporte += total;
 
-      // Clasificar ingresos vs gastos
-      const tipo = doc.tipo_documento?.toLowerCase() || '';
-      if (tipo.includes('factura emitida') || tipo.includes('ingreso')) {
-        totales.totalIngresos += total;
-      } else if (tipo.includes('factura recibida') || tipo.includes('gasto')) {
-        totales.totalGastos += total;
+      // Clasificar ingresos vs gastos con abonos restando
+      if (isIssued) {
+        totales.totalIngresos += isAbono ? -Math.abs(total) : total;
+      } else {
+        totales.totalGastos += isAbono ? -Math.abs(total) : total;
       }
 
       // Contar incidencias
