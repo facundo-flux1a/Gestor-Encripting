@@ -1867,18 +1867,22 @@ export async function getProductsByProviderName(
 ): Promise<DocumentLine[]> {
   console.log('🔍 [getProductsByProviderName] Iniciando:', { fiscalId, empresaIds });
 
+  // 🛠️ Subquery para limpiar duplicados del JOIN antes de aplicar Window Functions
   let baseQuery = `
-        WITH RankedLines AS (
-            SELECT 
-                ld.*, 
-                d.fecha_emision,
-                ROW_NUMBER() OVER(
-                    PARTITION BY (CASE 
-                        WHEN ld.codigo IS NOT NULL AND ld.codigo != '' THEN ld.codigo 
-                        ELSE ld.descripcion 
-                    END) 
-                    ORDER BY d.fecha_emision DESC
-                ) as rn
+        WITH FilteredLines AS (
+            SELECT DISTINCT
+                ld.id as line_id,
+                ld.documento_id,
+                ld.codigo,
+                ld.descripcion,
+                ld.cantidad,
+                ld.unidad,
+                ld.precio_unitario,
+                ld.descuento_porcentaje,
+                ld.precio_neto,
+                ld.importe_linea,
+                ld.datos_extra,
+                d.fecha_emision
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
             JOIN entidades_documento ed ON d.id = ed.documento_id
@@ -1894,7 +1898,6 @@ export async function getProductsByProviderName(
 
   const params: any[] = [fiscalId];
 
-  // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
     baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
@@ -1902,17 +1905,98 @@ export async function getProductsByProviderName(
   }
 
   baseQuery += `
+        ),
+        RankedLines AS (
+            SELECT 
+                *,
+                -- ✅ Ahora el COUNT funciona bien porque FilteredLines ya no tiene duplicados de JOIN
+                COUNT(*) OVER(
+                    PARTITION BY (CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END)
+                ) as veces_comprado,
+                SUM(cantidad) OVER(
+                    PARTITION BY (CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END)
+                ) as total_cantidad_comprada,
+                ROW_NUMBER() OVER(
+                    PARTITION BY (CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END) 
+                    ORDER BY fecha_emision DESC
+                ) as rn
+            FROM FilteredLines
         )
         SELECT * FROM RankedLines WHERE rn = 1
         ORDER BY descripcion ASC
     `;
 
-  console.log('📝 [getProductsByProviderName] Query:', baseQuery);
-  console.log('📝 [getProductsByProviderName] Params:', params);
+  const [lineaRows] = await db.query<any[]>(baseQuery, params);
+
+  const products: DocumentLine[] = lineaRows.map(l => ({
+    id: l.line_id,
+    documento_id: l.documento_id,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje,
+    precio_neto: l.precio_neto,
+    importe_linea: l.importe_linea,
+    datos_extra: safeJsonParse(l.datos_extra),
+    fecha_emision: l.fecha_emision,
+    total_cantidad_comprada: l.total_cantidad_comprada,
+    veces_comprado: l.veces_comprado,
+  }));
+
+  return JSON.parse(JSON.stringify(products));
+}
+
+export async function getAllProductLinesByProviderName(
+  fiscalId: string,
+  empresaIds?: number[]
+): Promise<DocumentLine[]> {
+  console.log('🔍 [getAllProductLinesByProviderName] Iniciando:', { fiscalId, empresaIds });
+
+  let baseQuery = `
+      SELECT 
+          ld.*, 
+          d.fecha_emision,
+          d.numero_documento
+      FROM lineas_documento ld
+      JOIN documentos d ON ld.documento_id = d.id
+      JOIN entidades_documento ed ON d.id = ed.documento_id
+      WHERE ed.identificador_fiscal = ? 
+        AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        AND (
+          (ld.codigo IS NOT NULL AND ld.codigo != '') 
+          OR 
+          (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+        )
+  `;
+
+  const params: any[] = [fiscalId];
+
+  // ✅ Agregar filtro de empresas si se especifica
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  baseQuery += ` ORDER BY d.fecha_emision DESC `;
+
+  console.log('📝 [getAllProductLinesByProviderName] Query:', baseQuery);
 
   const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
 
-  console.log('📊 [getProductsByProviderName] Productos encontrados:', lineaRows.length);
+  console.log('📊 [getAllProductLinesByProviderName] Productos encontrados:', lineaRows.length);
 
   const products: DocumentLine[] = lineaRows.map(l => ({
     id: l.id,
@@ -1928,6 +2012,7 @@ export async function getProductsByProviderName(
     datos_extra: safeJsonParse(l.datos_extra),
     fecha_creacion: l.fecha_creacion,
     fecha_emision: l.fecha_emision,
+    numero_documento: l.numero_documento,
   }));
 
   return JSON.parse(JSON.stringify(products));
@@ -1939,27 +2024,40 @@ export async function getProductHistory(
   searchBy: 'code' | 'description' = 'code'
 ): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
 
+  // ✅ Usamos ROW_NUMBER con PARTITION BY d.numero_documento
+  // Esto elige solo UNA fila por cada número de factura repetido
   let query = `
+    WITH UniqueHistory AS (
         SELECT 
-            ld.*, 
+            ld.id,
+            ld.documento_id,
+            ld.codigo,
+            ld.descripcion,
+            ld.cantidad,
+            ld.unidad,
+            ld.precio_unitario,
+            ld.importe_linea,
             d.fecha_emision,
-            d.numero_documento
+            d.numero_documento,
+            ROW_NUMBER() OVER(
+                PARTITION BY d.numero_documento 
+                ORDER BY d.fecha_emision DESC, ld.id DESC
+            ) as rn
         FROM lineas_documento ld
         JOIN documentos d ON ld.documento_id = d.id
         JOIN entidades_documento ed ON d.id = ed.documento_id
         WHERE ed.identificador_fiscal = ? 
           AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-    `;
+          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+          AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+          ${searchBy === 'code' ? 'AND ld.codigo = ?' : 'AND ld.descripcion = ?'}
+    )
+    SELECT * FROM UniqueHistory 
+    WHERE rn = 1 
+    ORDER BY fecha_emision DESC;
+  `;
 
-  if (searchBy === 'code') {
-    query += ` AND ld.codigo = ?`;
-  } else {
-    query += ` AND ld.descripcion = ?`;
-  }
-
-  query += ` ORDER BY d.fecha_emision DESC;`;
-
-  const [lineaRows] = await db.query<LineaPacket[]>(query, [providerFiscalId, identifier]);
+  const [lineaRows] = await db.query<any[]>(query, [providerFiscalId, identifier]);
 
   if (lineaRows.length === 0) {
     return { productInfo: null, history: [] };
@@ -1973,12 +2071,10 @@ export async function getProductHistory(
     cantidad: l.cantidad,
     unidad: l.unidad,
     precio_unitario: l.precio_unitario,
-    descuento_porcentaje: l.descuento_porcentaje,
-    precio_neto: l.precio_neto,
     importe_linea: l.importe_linea,
-    datos_extra: safeJsonParse(l.datos_extra),
     fecha_emision: l.fecha_emision,
     numero_documento: l.numero_documento,
+    datos_extra: {},
     fecha_creacion: null,
   }));
 
@@ -2025,22 +2121,51 @@ export async function getProviderAnalytics(
     `, params);
 
   console.log(`📊 [getProviderAnalytics] Documentos encontrados para ${fiscalId}:`, docs.length);
-  console.log(`🏢 [getProviderAnalytics] Empresas filtradas:`, empresaIds); // ✅ AGREGADO
+  console.log(`🏢 [getProviderAnalytics] Empresas filtradas:`, empresaIds);
 
-  const docIds = docs.map(d => d.id);
-  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
+  // ✅ FIX: Aplicar el mismo filtro de empresaIds a la query de líneas
+  let lineQuery = `
+    SELECT ld.importe_linea
+    FROM lineas_documento ld
+    JOIN documentos d ON ld.documento_id = d.id
+    JOIN entidades_documento ed ON d.id = ed.documento_id
+    WHERE ed.identificador_fiscal = ? 
+      AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+      AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+      AND (
+        (ld.codigo IS NOT NULL AND ld.codigo != '') 
+        OR 
+        (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+      )
+  `;
+  let lineParams: any[] = [fiscalId];
+
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    lineQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    lineParams.push(...empresaIds);
+  }
+
+  const [lineRows] = await db.query<LineaPacket[]>(lineQuery, lineParams);
+
+  let totalProductsSpent = lineRows.reduce((acc, l) => acc + Number(l.importe_linea || 0), 0);
 
   const totalSpent = docs.reduce((acc, doc) => acc + Number(doc.importe_total || 0), 0);
   const totalDocuments = docs.length;
   const averagePurchaseValue = totalDocuments > 0 ? totalSpent / totalDocuments : 0;
 
+  // ✅ Top Products (filtro de Facturas/Abonos para consistencia financiera)
+  const docIds = docs.map(d => d.id);
+  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
+
   const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
   lines.forEach(line => {
+    const amt = Number(line.importe_linea || 0);
     if (line.codigo && line.descripcion) {
       if (!productSpend[line.codigo]) {
         productSpend[line.codigo] = { codigo: line.codigo, descripcion: line.descripcion, total: 0 };
       }
-      productSpend[line.codigo].total += Number(line.importe_linea || 0);
+      productSpend[line.codigo].total += amt;
     }
   });
 
@@ -2056,16 +2181,38 @@ export async function getProviderAnalytics(
     }
   });
 
-  const monthlySpend = Object.entries(monthlySpendMap)
-    .map(([month, total]) => ({ month, total }))
-    .sort((a, b) => a.month.localeCompare(b.month));
+  let monthlySpend: { month: string, total: number }[] = [];
+  const monthKeys = Object.keys(monthlySpendMap).sort();
+
+  if (monthKeys.length > 0) {
+    const minMonthStr = monthKeys[0];
+    const now = new Date();
+    const currentMonthStr = now.toISOString().substring(0, 7);
+    const maxMonthStr = monthKeys[monthKeys.length - 1] > currentMonthStr
+      ? monthKeys[monthKeys.length - 1]
+      : currentMonthStr;
+
+    let currentDate = new Date(`${minMonthStr}-01T12:00:00Z`);
+    const endDate = new Date(`${maxMonthStr}-01T12:00:00Z`);
+
+    while (currentDate <= endDate) {
+      const mStr = currentDate.toISOString().substring(0, 7);
+      monthlySpend.push({
+        month: mStr,
+        total: monthlySpendMap[mStr] || 0
+      });
+      currentDate.setUTCMonth(currentDate.getUTCMonth() + 1);
+    }
+  }
 
   console.log(`💰 [getProviderAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
+  console.log(`💰 [getProviderAnalytics] Total productos: ${totalProductsSpent.toFixed(2)} EUR`);
   console.log(`📈 [getProviderAnalytics] Meses con compras: ${monthlySpend.length}`);
 
   const analyticsData = {
     provider,
     totalSpent,
+    totalProductsSpent,
     totalDocuments,
     uniqueProducts: Object.keys(productSpend).length,
     averagePurchaseValue,
@@ -4149,6 +4296,59 @@ WHERE(e.rol = 'proveedor' OR e.rol = 'emisor')
     return proveedores;
   } catch (error) {
     console.error('❌ [getUniqueProvidersNames] Error:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene lista única de tipos de documento para filtros
+ * Opcional: filtrar por empresaIds, año y trimestre
+ */
+export async function getUniqueDocumentTypes(
+  empresaIds?: number[],
+  año?: number,
+  trimestre?: number
+): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    let query = `
+      SELECT DISTINCT d.tipo_documento
+      FROM documentos d
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE d.tipo_documento IS NOT NULL
+        AND d.tipo_documento != ''
+        AND emp.id_de_usuario = ?
+    `;
+
+    const params: any[] = [user.id];
+
+    if (empresaIds && empresaIds.length > 0) {
+      const placeholders = empresaIds.map(() => '?').join(',');
+      query += ` AND d.id_de_empresa IN(${placeholders})`;
+      params.push(...empresaIds);
+    }
+
+    if (año !== undefined) {
+      query += ` AND d.año_trimestre = ?`;
+      params.push(año);
+    }
+
+    if (trimestre !== undefined) {
+      query += ` AND d.num_trimestre = ?`;
+      params.push(trimestre);
+    }
+
+    query += ` ORDER BY d.tipo_documento ASC`;
+
+    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    const tipos = rows.map(r => r.tipo_documento);
+
+    console.log('✅ [getUniqueDocumentTypes] Tipos encontrados:', tipos.length);
+    return tipos;
+  } catch (error) {
+    console.error('❌ [getUniqueDocumentTypes] Error:', error);
     return [];
   }
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import type { DocumentLine } from "@/lib/types";
-import { Euro, Calendar, ArrowRight } from "lucide-react";
+import { Euro, Calendar, ArrowRight, Package, ShoppingCart } from "lucide-react";
 
 interface ProductCardProps {
     product: DocumentLine;
@@ -52,9 +52,22 @@ export function ProductCard({ product, providerFiscalId }: ProductCardProps) {
 
     const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}`;
 
+    const vecesComprado = product.veces_comprado ? Number(product.veces_comprado) : 1;
+    const isFolder = vecesComprado > 1;
+
     return (
-        <Link href={productUrl} className="group">
-            <Card className="h-full flex flex-col transition-all group-hover:border-primary group-hover:shadow-lg">
+        <Link href={productUrl} className="group relative block w-full outline-none mt-3">
+            {isFolder && (
+                <div className="absolute -top-[17px] left-0 w-max px-3 pb-[1px] h-[18px] flex items-end justify-center bg-card border border-b-0 border-border rounded-t-md transition-all duration-300 group-hover:border-primary z-0">
+                    <span className="text-[10px] font-bold text-muted-foreground group-hover:text-primary transition-colors flex items-center gap-1.5 leading-none">
+                        <ShoppingCart className="w-[10px] h-[10px]" />
+                        x{vecesComprado}
+                    </span>
+                    {/* Parche visual para simular union Seamless de carpeta */}
+                    <div className="absolute -bottom-[2px] left-[1px] right-[1px] h-[4px] bg-card z-10"></div>
+                </div>
+            )}
+            <Card className={`h-full flex flex-col transition-all duration-300 group-hover:border-primary group-hover:shadow-lg bg-card relative z-10 ${isFolder ? 'rounded-tl-none' : ''}`}>
                 <CardHeader className="flex-grow pb-2 px-3 sm:px-6 py-3 sm:py-6">
                     <CardDescription className="font-mono text-[10px] sm:text-xs break-all">
                         {product.codigo}
@@ -82,7 +95,27 @@ export function ProductCard({ product, providerFiscalId }: ProductCardProps) {
                             {formatDate(product.fecha_emision)}
                         </span>
                     </div>
-                    <div className="flex justify-end pt-1 sm:pt-2">
+                    <div className="flex items-center justify-between text-[11px] sm:text-sm text-muted-foreground mt-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                            <Package className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                            <span>Unidades Totales</span>
+                        </div>
+                        <span className="tabular-nums font-medium">
+                            {product.total_cantidad_comprada ? Number(product.total_cantidad_comprada).toLocaleString('es-ES') : 0}
+                        </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] sm:text-sm text-muted-foreground mt-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                            <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                            <span>Veces Comprado</span>
+                        </div>
+                        <span className="tabular-nums font-medium">
+                            {product.veces_comprado ? Number(product.veces_comprado).toLocaleString('es-ES') : 0}
+                        </span>
+                    </div>
+
+                    <div className="flex justify-end pt-2 sm:pt-3 border-t mt-2">
                         <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
                     </div>
                 </CardContent>

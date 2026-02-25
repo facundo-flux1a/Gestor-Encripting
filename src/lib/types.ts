@@ -92,6 +92,8 @@ export const DocumentLineSchema = z.object({
   fecha_creacion: z.string().optional().nullable(),
   fecha_emision: z.string().optional(),
   numero_documento: z.string().optional(),
+  total_cantidad_comprada: z.coerce.number().optional(),
+  veces_comprado: z.coerce.number().optional(),
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 

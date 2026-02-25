@@ -4,13 +4,13 @@ import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Building, Loader2 } from "lucide-react";
 import { ProviderDetailClient } from "./provider-detail-client";
 import { useEffect, useState, use } from "react";
-import { getProviderByFiscalId, getDocumentsByProviderName, getProductsByProviderName, getProviderAnalytics } from "@/services/document-service";
+import { getProviderByFiscalId, getDocumentsByProviderName, getProductsByProviderName, getProviderAnalytics, getAllProductLinesByProviderName } from "@/services/document-service";
 import { useCompanyContext } from "@/context/CompanyProvider";
 
 export default function ProveedorDetailPage({ params }: { params: Promise<{ name: string }> }) {
     // ✅ Unwrap params usando React.use()
     const resolvedParams = use(params);
-    
+
     const { selectedCompanyIds, companies } = useCompanyContext();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -18,23 +18,24 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
     useEffect(() => {
         async function loadData() {
             const fiscalId = decodeURIComponent(resolvedParams.name);
-            
+
             // 🎯 Usar las empresas seleccionadas del contexto
             // Si no hay selección, usar TODAS las empresas del usuario
-            const empresaIds = selectedCompanyIds.length > 0 
-                ? selectedCompanyIds 
+            const empresaIds = selectedCompanyIds.length > 0
+                ? selectedCompanyIds
                 : companies.map(c => c.id);
-            
+
             console.log(`🔍 [ProveedorDetailPage] Fiscal ID: ${fiscalId}`);
             console.log(`🏢 [ProveedorDetailPage] Empresas del contexto:`, companies.map(c => c.id));
             console.log(`✅ [ProveedorDetailPage] Empresas seleccionadas:`, selectedCompanyIds);
             console.log(`📊 [ProveedorDetailPage] Empresas a filtrar:`, empresaIds);
 
-            const [prov, docs, prods, analytics] = await Promise.all([
+            const [prov, docs, prods, analytics, allProds] = await Promise.all([
                 getProviderByFiscalId(fiscalId),
                 getDocumentsByProviderName(fiscalId, empresaIds),
                 getProductsByProviderName(fiscalId, empresaIds),
-                getProviderAnalytics(fiscalId, empresaIds)
+                getProviderAnalytics(fiscalId, empresaIds),
+                getAllProductLinesByProviderName(fiscalId, empresaIds)
             ]);
 
             console.log(`✅ [ProveedorDetailPage] Datos cargados:`);
@@ -44,7 +45,7 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
             console.log(`   - Total gastado: ${analytics.totalGastado} ${analytics.moneda}`);
             console.log(`   - Datos gráfico:`, analytics.comprasPorMes);
 
-            setData({ prov, docs, prods, analytics });
+            setData({ prov, docs, prods, analytics, allProds });
             setLoading(false);
         }
 
@@ -94,6 +95,7 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
                     initialProvider={data.prov}
                     initialDocuments={data.docs}
                     initialProducts={data.prods}
+                    initialAllProducts={data.allProds}
                     initialAnalyticsData={data.analytics}
                 />
             </div>

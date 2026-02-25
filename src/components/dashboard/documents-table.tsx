@@ -393,6 +393,24 @@ const getColumns = (
         );
       }
     },
+    {
+      accessorKey: 'fecha_vencimiento',
+      header: 'Fecha Vencimiento',
+      cell: ({ row, table }) => {
+        return (
+          <EditableCell
+            docId={row.original.id_documento}
+            initialValue={row.getValue('fecha_vencimiento')}
+            fieldName="fecha_vencimiento"
+            onUpdate={onUpdate}
+            inputType="date"
+            table={table}
+            rowIndex={row.index}
+            trimestre_cerrado={row.original.trimestre_cerrado}
+          />
+        );
+      }
+    },
 
     {
       accessorKey: 'fecha_creacion',

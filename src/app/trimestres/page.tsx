@@ -35,6 +35,24 @@ import {
 import type { Document, Trimestre } from '@/lib/types';
 import { generateAdvancedExport } from '@/lib/export-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { TrimestresFilterBar, type TrimestresFilterState } from '@/components/trimestres/trimestres-filter-bar';
+
+// Valor inicial de filtros — declarado fuera del componente para ser estable
+const EMPTY_FILTERS: TrimestresFilterState = {
+  searchText: '',
+  selectedTipos: [],
+  selectedProveedores: [],
+  selectedClientes: [],
+  selectedEmpresas: [],
+  fechaDesde: '',
+  fechaHasta: '',
+  baseMin: '',
+  baseMax: '',
+  ivaMin: '',
+  ivaMax: '',
+  totalMin: '',
+  totalMax: '',
+};
 
 function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
@@ -75,6 +93,111 @@ function TrimestresPageContent() {
   // Trimestre seleccionado
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
   const [selectedTrimestre, setSelectedTrimestre] = React.useState<number>(1);
+
+  // ─── FILTROS DE LA TABLA DE DOCUMENTOS ─────────────────────────────────────
+  const [filters, setFilters] = React.useState<TrimestresFilterState>(EMPTY_FILTERS);
+
+  // ── Resetear filtros al cambiar de trimestre o año ──
+  React.useEffect(() => {
+    setFilters(EMPTY_FILTERS);
+  }, [selectedAño, selectedTrimestre]);
+
+  // ── Documentos visibles en la tabla (con filtros aplicados) ─────────────────
+  // NOTA: `footerValues` usa siempre `documentos` (trimestre completo, sin filtrar).
+  // Si en el futuro se quiere que los totales reflejen el filtro activo,
+  // reemplaza `documentos` por `documentosFiltrados` en el bloque `footerValues`.
+  const documentosFiltrados = React.useMemo(() => {
+    const {
+      searchText, selectedTipos, selectedProveedores, selectedClientes, selectedEmpresas,
+      fechaDesde, fechaHasta,
+      baseMin, baseMax, ivaMin, ivaMax, totalMin, totalMax,
+    } = filters;
+
+    const noFilters =
+      !searchText &&
+      selectedTipos.length === 0 &&
+      selectedProveedores.length === 0 &&
+      selectedClientes.length === 0 &&
+      selectedEmpresas.length === 0 &&
+      !fechaDesde && !fechaHasta &&
+      !baseMin && !baseMax &&
+      !ivaMin && !ivaMax &&
+      !totalMin && !totalMax;
+
+    // Atajo: si no hay filtros activos, devolvemos el array original directamente
+    if (noFilters) return documentos;
+
+    // Parsear límites de fecha una sola vez
+    const desde = fechaDesde ? new Date(fechaDesde) : null;
+    const hasta = fechaHasta ? new Date(fechaHasta) : null;
+
+    // Parsear límites numéricos una sola vez
+    const baseMinN = baseMin !== '' ? parseFloat(baseMin) : null;
+    const baseMaxN = baseMax !== '' ? parseFloat(baseMax) : null;
+    const ivaMinN = ivaMin !== '' ? parseFloat(ivaMin) : null;
+    const ivaMaxN = ivaMax !== '' ? parseFloat(ivaMax) : null;
+    const totalMinN = totalMin !== '' ? parseFloat(totalMin) : null;
+    const totalMaxN = totalMax !== '' ? parseFloat(totalMax) : null;
+
+    return documentos.filter(doc => {
+      // Búsqueda de texto libre
+      if (searchText) {
+        const q = searchText.toLowerCase();
+        const haystack = [
+          doc.numero_documento,
+          doc.proveedor,
+          doc.empresa_nombre,
+          doc.observaciones,
+          ...(doc.entidades || []).map(e => e.nombre),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
+      // Tipo de documento (multi-select)
+      if (selectedTipos.length > 0 && !selectedTipos.includes(doc.tipo_documento)) return false;
+
+      // Proveedor (multi-select)
+      if (selectedProveedores.length > 0 && !selectedProveedores.includes(doc.proveedor || '')) return false;
+
+      // Cliente (multi-select)
+      if (selectedClientes.length > 0) {
+        const cliente =
+          doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '';
+        if (!selectedClientes.includes(cliente)) return false;
+      }
+
+      // Empresa del sistema (multi-select)
+      if (selectedEmpresas.length > 0 && !selectedEmpresas.includes(doc.empresa_nombre || '')) return false;
+
+      // Fecha desde/hasta (por fecha_emision)
+      if (desde || hasta) {
+        const fechaDoc = doc.fecha_emision ? new Date(doc.fecha_emision) : null;
+        if (!fechaDoc) return false;
+        if (desde && fechaDoc < desde) return false;
+        if (hasta) {
+          // Comparar hasta fin del día
+          const hastaFinDia = new Date(hasta);
+          hastaFinDia.setHours(23, 59, 59, 999);
+          if (fechaDoc > hastaFinDia) return false;
+        }
+      }
+
+      // Rangos numéricos
+      const base = parseFloat(String(doc.base_imponible)) || 0;
+      const iva = parseFloat(String(doc.iva)) || 0;
+      const total = parseFloat(String(doc.total)) || 0;
+
+      if (baseMinN !== null && base < baseMinN) return false;
+      if (baseMaxN !== null && base > baseMaxN) return false;
+      if (ivaMinN !== null && iva < ivaMinN) return false;
+      if (ivaMaxN !== null && iva > ivaMaxN) return false;
+      if (totalMinN !== null && total < totalMinN) return false;
+      if (totalMaxN !== null && total > totalMaxN) return false;
+
+      return true;
+    });
+  }, [documentos, filters]);
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Dialog de cierre
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -566,6 +689,79 @@ function TrimestresPageContent() {
     return { ingresosBreakdown: ingresos, gastosBreakdown: gastos };
   }, [documentos]);
 
+  // ── Breakdown para DOCUMENTOS FILTRADOS (usado cuando dinamizarCards=true) ──
+  const { ingresosBreakdown: ingresosFiltrado, gastosBreakdown: gastosFiltrado } = React.useMemo(() => {
+    const init = () => ({
+      bases: { base21: 0, base15: 0, base10: 0, base4: 0, base0: 0 },
+      quotas: { iva21: 0, iva15: 0, iva10: 0, iva4: 0 },
+      recargo: 0,
+      retencion: 0,
+      totalBase: 0,
+      totalIVA: 0,
+      total: 0
+    });
+    const ingresos = init();
+    const gastos = init();
+
+    documentosFiltrados.forEach(doc => {
+      const tipo = doc.tipo_documento.toLowerCase();
+      const isIssued = doc.entidades.some(e =>
+        (e.rol === 'emisor' || e.rol === 'proveedor') &&
+        doc.empresa_cif && e.identificador_fiscal?.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
+      );
+      const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || doc.total < 0;
+      const target = isIssued ? ingresos : gastos;
+      const sign = isAbono ? -1 : 1;
+      const baseDoc = Math.abs(Number(doc.base_imponible) || 0);
+      const ivaDoc = Math.abs(Number(doc.iva) || 0);
+      const totalDoc = Math.abs(Number(doc.total) || 0);
+      target.totalBase += baseDoc * sign;
+      target.totalIVA += ivaDoc * sign;
+      target.total += totalDoc * sign;
+      if (doc.iva_details && Array.isArray(doc.iva_details)) {
+        doc.iva_details.forEach(det => {
+          const rate = Math.round(Number(det.porcentaje));
+          const base = Math.abs(Number(det.base_imponible) || 0);
+          const cuota = Math.abs(Number(det.cuota) || 0);
+          const type = det.tipo_impuesto?.toLowerCase() || '';
+          if (type.includes('recargo') || type.includes('equivalencia')) { target.recargo += cuota * sign; return; }
+          if (type.includes('retencion')) { target.retencion += cuota * sign; return; }
+          if (rate === 21) { target.bases.base21 += base * sign; target.quotas.iva21 += cuota * sign; }
+          else if (rate === 15) { target.bases.base15 += base * sign; target.quotas.iva15 += cuota * sign; }
+          else if (rate === 10) { target.bases.base10 += base * sign; target.quotas.iva10 += cuota * sign; }
+          else if (rate === 4) { target.bases.base4 += base * sign; target.quotas.iva4 += cuota * sign; }
+          else if (rate === 0) { target.bases.base0 += base * sign; }
+        });
+      }
+    });
+    return { ingresosBreakdown: ingresos, gastosBreakdown: gastos };
+  }, [documentosFiltrados]);
+
+  // ── Toggle: las cards reflejan los documentos filtrados ───────────────────
+  const [dinamizarCards, setDinamizarCards] = React.useState(false);
+
+  // Elegir qué breakdown y totales usar en las cards
+  const cardsIngresos = dinamizarCards ? ingresosFiltrado : ingresosBreakdown;
+  const cardsGastos = dinamizarCards ? gastosFiltrado : gastosBreakdown;
+  // Totales calculados desde los docs filtrados (para modo dinámico)
+  const totalIngresosDinamico = ingresosFiltrado.total;
+  const totalGastosDinamico = gastosFiltrado.total;
+  const ivaRepercutidoDinamico = ingresosFiltrado.totalIVA + ingresosFiltrado.recargo;
+  const ivaSoportadoDinamico = gastosFiltrado.totalIVA + gastosFiltrado.recargo;
+  const totalIngresosSinIvaDinamico = ingresosFiltrado.totalBase;
+  const totalGastosSinIvaDinamico = gastosFiltrado.totalBase;
+
+  const numDocsCard = dinamizarCards ? documentosFiltrados.length : (trimestreAgregado?.total_documentos || 0);
+  const totIngresosCard = dinamizarCards ? totalIngresosDinamico : (trimestreAgregado?.total_ingresos || 0);
+  const totGastosCard = dinamizarCards ? totalGastosDinamico : (trimestreAgregado?.total_gastos || 0);
+  const totIngresosBaseCard = dinamizarCards ? totalIngresosSinIvaDinamico : (trimestreAgregado?.total_ingresos_sin_iva || 0);
+  const totGastosBaseCard = dinamizarCards ? totalGastosSinIvaDinamico : (trimestreAgregado?.total_gastos_sin_iva || 0);
+  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : ((trimestreAgregado?.iva_repercutido || 0) + (trimestreAgregado?.recargo_repercutido || 0));
+  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : ((trimestreAgregado?.iva_soportado || 0) + (trimestreAgregado?.recargo_soportado || 0));
+  const beneficioBrutoCard = totIngresosCard - totGastosCard;
+  const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
+  const ivaNetoCard = ivaRepCard - ivaSopCard;
+
   const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
   const puedeEnviarAlSII = trimestreAgregado && trimestreAgregado.cerrado;
 
@@ -588,6 +784,18 @@ function TrimestresPageContent() {
               />
               <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
                 Mostrar vacíos
+              </Label>
+            </div>
+
+            {/* Toggle: Cards dinámicas por filtro */}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="dinamizar-cards"
+                checked={dinamizarCards}
+                onCheckedChange={setDinamizarCards}
+              />
+              <Label htmlFor="dinamizar-cards" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
+                Cards dinámicas
               </Label>
             </div>
 
@@ -712,13 +920,13 @@ function TrimestresPageContent() {
               {/* 1️⃣ Total Documentos - SIN CAMBIOS */}
               <TrimestreStatsCard
                 title="Total Documentos"
-                value={trimestreAgregado.total_documentos}
+                value={numDocsCard}
                 icon={FileText}
                 description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
                 breakdown={[
                   {
                     label: "Facturas del Sistema",
-                    value: formatNumber(trimestreAgregado.total_documentos),
+                    value: formatNumber(numDocsCard),
                     className: "text-foreground"
                   },
                   {
@@ -732,63 +940,63 @@ function TrimestresPageContent() {
               {/* 2️⃣ Ingresos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Ingresos"
-                value={formatCurrency(trimestreAgregado.total_ingresos)}
+                value={formatCurrency(totIngresosCard)}
                 icon={TrendingUp}
                 description="Total CON IVA"
                 trend="up"
                 richTooltip={<StatsHoverTable
-                  {...ingresosBreakdown}
+                  {...cardsIngresos}
                   type="ingresos"
-                  totalBaseOverride={trimestreAgregado.total_ingresos_sin_iva}
-                  totalIvaOverride={(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0))}
-                  totalOverride={trimestreAgregado.total_ingresos}
+                  totalBaseOverride={totIngresosBaseCard}
+                  totalIvaOverride={ivaRepCard}
+                  totalOverride={totIngresosCard}
                 />}
               />
 
               {/* 3️⃣ Gastos - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="Gastos"
-                value={formatCurrency(trimestreAgregado.total_gastos)}
+                value={formatCurrency(totGastosCard)}
                 icon={TrendingDown}
                 description="Total CON IVA"
                 trend="down"
                 richTooltip={<StatsHoverTable
-                  {...gastosBreakdown}
+                  {...cardsGastos}
                   type="gastos"
-                  totalBaseOverride={trimestreAgregado.total_gastos_sin_iva}
-                  totalIvaOverride={(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))}
-                  totalOverride={trimestreAgregado.total_gastos}
+                  totalBaseOverride={totGastosBaseCard}
+                  totalIvaOverride={ivaSopCard}
+                  totalOverride={totGastosCard}
                 />}
               />
 
               {/* 4️⃣ Beneficio Bruto - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="Beneficio Bruto"
-                value={formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos)}
+                value={formatCurrency(beneficioBrutoCard)}
                 icon={DollarSign}
                 description="CON IVA incluido"
                 trend={
-                  (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) > 0
+                  beneficioBrutoCard > 0
                     ? 'up'
-                    : (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) < 0
+                    : beneficioBrutoCard < 0
                       ? 'down'
                       : 'neutral'
                 }
                 breakdown={[
                   {
                     label: "Ingresos CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_ingresos),
+                    value: formatCurrency(totIngresosCard),
                     className: "text-green-600 dark:text-green-500"
                   },
                   {
                     label: "Gastos CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_gastos),
+                    value: formatCurrency(totGastosCard),
                     className: "text-red-600 dark:text-red-500"
                   },
                   {
                     label: "Beneficio CON IVA",
-                    value: formatCurrency(trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos),
-                    className: (trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos) >= 0
+                    value: formatCurrency(beneficioBrutoCard),
+                    className: beneficioBrutoCard >= 0
                       ? 'text-green-600 dark:text-green-500 font-bold'
                       : 'text-red-600 dark:text-red-500 font-bold'
                   },
@@ -799,10 +1007,7 @@ function TrimestresPageContent() {
                   },
                   {
                     label: "Beneficio SIN IVA",
-                    value: formatCurrency(
-                      (trimestreAgregado.total_ingresos_sin_iva || 0) -
-                      (trimestreAgregado.total_gastos_sin_iva || 0)
-                    ),
+                    value: formatCurrency(beneficioBaseCard),
                     className: "text-muted-foreground italic"
                   }
                 ]}
@@ -811,71 +1016,71 @@ function TrimestresPageContent() {
               {/* 5️⃣ IVA REPERCUTIDO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Repercutido"
-                value={formatCurrency(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0))}
+                value={formatCurrency(ivaRepCard)}
                 icon={ArrowUpCircle}
                 description="IVA cobrado (incl. recargo)"
                 trend="neutral"
                 richTooltip={<StatsHoverTable
-                  {...ingresosBreakdown}
+                  {...cardsIngresos}
                   type="ingresos"
                   showBases={false}
                   showTotal={false}
                   retencion={0}
-                  totalIvaOverride={trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)}
+                  totalIvaOverride={ivaRepCard}
                 />}
               />
 
               {/* 6️⃣ IVA SOPORTADO - ✅ MODIFICADO CON BREAKDOWN */}
               <TrimestreStatsCard
                 title="IVA Soportado"
-                value={formatCurrency(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))}
+                value={formatCurrency(ivaSopCard)}
                 icon={ArrowDownCircle}
                 description="IVA pagado (incl. recargo)"
                 trend="neutral"
                 richTooltip={<StatsHoverTable
-                  {...gastosBreakdown}
+                  {...cardsGastos}
                   type="gastos"
                   showBases={false}
                   showTotal={false}
                   retencion={0}
-                  totalIvaOverride={trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)}
+                  totalIvaOverride={ivaSopCard}
                 />}
               />
 
               {/* 7️⃣ IVA NETO - ✅ MODIFICADO CON BREAKDOWN COMPLETO */}
               <TrimestreStatsCard
                 title="IVA Neto"
-                value={formatCurrency((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)))}
+                value={formatCurrency(ivaNetoCard)}
                 icon={Receipt}
                 description={
-                  ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) > 0
+                  ivaNetoCard > 0
                     ? "A pagar a Hacienda"
-                    : ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) < 0
+                    : ivaNetoCard < 0
                       ? "A devolver por Hacienda"
                       : "Sin diferencia"
                 }
                 trend={
-                  ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) > 0
+                  ivaNetoCard > 0
                     ? 'down'
-                    : ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) < 0
+                    : ivaNetoCard < 0
                       ? 'up'
                       : 'neutral'
                 }
                 breakdown={[
                   {
                     label: "IVA Rep. + Recargo",
-                    value: formatCurrency(trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)),
+                    value: formatCurrency(ivaRepCard),
                     className: "text-green-600 dark:text-green-500"
                   },
                   {
                     label: "IVA Sop. + Recargo",
-                    value: formatCurrency(trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
+                    value: formatCurrency(ivaSopCard),
                     className: "text-red-600 dark:text-red-500"
                   },
                   {
                     label: "Resultado IVA",
-                    value: formatCurrency((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))),
-                    className: ((trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0))) >= 0
+                    value: formatCurrency(ivaNetoCard),
+                    className: ivaNetoCard >= 0
                       ? 'text-red-600 dark:text-red-500 font-bold'
                       : 'text-green-600 dark:text-green-500 font-bold'
                   }
@@ -930,13 +1135,25 @@ function TrimestresPageContent() {
             </div>
           ) : (
             <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
+              {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
+              <div className="px-4 pt-3 border-b">
+                <TrimestresFilterBar
+                  documentos={documentos}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  empresaIds={selectedCompanyIds}
+                  año={selectedAño}
+                  trimestre={selectedTrimestre}
+                  mostrarVacios={mostrarVacios}
+                />
+              </div>
               <TrimestreTable
-                documentos={documentos}
+                documentos={documentosFiltrados}
                 footerValues={trimestreAgregado ? {
                   base: (trimestreAgregado.total_ingresos_sin_iva || 0) - (trimestreAgregado.total_gastos_sin_iva || 0),
-                  iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)), // IVA Neto = Repercutido - Soportado
-                  total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos, // Beneficio Bruto
-                  label: "Resultado del Periodo:",
+                  iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
+                  total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos,
+                  label: "Resultado Neto del Periodo:",
                   breakdown: {
                     ingresos: {
                       base: trimestreAgregado.total_ingresos_sin_iva || 0,

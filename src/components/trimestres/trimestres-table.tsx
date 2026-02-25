@@ -101,105 +101,114 @@ export function TrimestreTable({
                 <TableHead className="text-xs sm:text-sm font-semibold">N° Documento</TableHead>
                 <TableHead className="text-xs sm:text-sm font-semibold">Fecha</TableHead>
                 <TableHead className="text-xs sm:text-sm font-semibold">Empresa</TableHead>
-                <TableHead className="text-xs sm:text-sm font-semibold">Proveedor/Cliente</TableHead>
+                <TableHead className="text-xs sm:text-sm font-semibold">Proveedor</TableHead>
+                <TableHead className="text-xs sm:text-sm font-semibold">Cliente</TableHead>
                 <TableHead className="text-right text-xs sm:text-sm font-semibold">Base</TableHead>
                 <TableHead className="text-right text-xs sm:text-sm font-semibold">IVA</TableHead>
                 <TableHead className="text-right text-xs sm:text-sm font-semibold">Total</TableHead>
                 <TableHead className="text-center text-xs sm:text-sm font-semibold">Estado</TableHead>
               </TableRow>
               {/* ✅ TOTALS ROW (Custom or Calculated) */}
-              <TableRow className="bg-muted/50 hover:bg-muted/50 font-bold border-b-2 border-primary/20">
-                <TableHead colSpan={5} className="text-right text-xs sm:text-sm">
-                  {footerValues?.label || "Totales del Periodo:"}
+              <TableRow className="bg-primary/10 hover:bg-primary/20 font-extrabold border-b-2 border-primary/40 transition-all duration-300 group cursor-default h-14">
+                <TableHead colSpan={6} className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300 uppercase tracking-wide">
+                  <div className="inline-block transition-transform duration-500 origin-right group-hover:scale-105 group-hover:rotate-[0.2deg]">
+                    {footerValues?.label || "Resultado Neto del Periodo:"}
+                  </div>
                 </TableHead>
-                <TableHead className="text-right text-xs sm:text-sm text-foreground">
-                  {footerValues?.breakdown ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help decoration-dashed underline decoration-gray-400 underline-offset-4">
-                          {formatCurrency(footerValues.base)}
-                        </TooltipTrigger>
-                        <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <span className="font-semibold text-green-500">Ingresos:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.base)}</span>
-                            <span className="font-semibold text-red-500">Gastos:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.base)}</span>
-                            <div className="col-span-2 h-px bg-border my-1" />
-                            <span className="font-bold">Neto:</span>
-                            <span className="text-right font-bold">{formatCurrency(footerValues.base)}</span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    formatCurrency(footerValues ? footerValues.base : documentos.reduce((sum, doc) => sum + (doc.base_imponible || 0), 0))
-                  )}
+                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                  <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-rotate-[0.2deg]">
+                    {footerValues?.breakdown ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help decoration-dashed underline decoration-primary/50 underline-offset-4">
+                            {formatCurrency(footerValues.base)}
+                          </TooltipTrigger>
+                          <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              <span className="font-semibold text-green-500">Ingresos:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.base)}</span>
+                              <span className="font-semibold text-red-500">Gastos:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.base)}</span>
+                              <div className="col-span-2 h-px bg-border my-1" />
+                              <span className="font-bold">Neto:</span>
+                              <span className="text-right font-bold">{formatCurrency(footerValues.base)}</span>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      formatCurrency(footerValues ? footerValues.base : documentos.reduce((sum, doc) => sum + (doc.base_imponible || 0), 0))
+                    )}
+                  </div>
                 </TableHead>
-                <TableHead className="text-right text-xs sm:text-sm text-foreground">
-                  {footerValues?.breakdown ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help decoration-dashed underline decoration-gray-400 underline-offset-4">
-                          {formatCurrency(footerValues.iva)}
-                        </TooltipTrigger>
-                        <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <span className="font-semibold text-green-500">IVA Rep.:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.iva)}</span>
-                            <span className="font-semibold text-red-500">IVA Sop.:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.iva)}</span>
-                            {((footerValues.breakdown.ingresos.retencion || 0) + (footerValues.breakdown.gastos.retencion || 0)) !== 0 && (
-                              <>
-                                <div className="col-span-2 h-px bg-border my-1" />
-                                {(footerValues.breakdown.ingresos.retencion || 0) !== 0 && (
-                                  <>
-                                    <span className="text-muted-foreground text-[10px]">Ret. Ingresos:</span>
-                                    <span className="text-right text-red-400">{formatCurrency(-(footerValues.breakdown.ingresos.retencion || 0))}</span>
-                                  </>
-                                )}
-                                {(footerValues.breakdown.gastos.retencion || 0) !== 0 && (
-                                  <>
-                                    <span className="text-muted-foreground text-[10px]">Ret. Gastos:</span>
-                                    <span className="text-right text-red-400">{formatCurrency(-(footerValues.breakdown.gastos.retencion || 0))}</span>
-                                  </>
-                                )}
-                              </>
-                            )}
-                            <div className="col-span-2 h-px bg-border my-1" />
-                            <span className="font-bold">Neto:</span>
-                            <span className="text-right font-bold">{formatCurrency(footerValues.iva)}</span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    formatCurrency(footerValues ? footerValues.iva : documentos.reduce((sum, doc) => sum + (doc.iva || 0), 0))
-                  )}
+                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                  <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:rotate-[0.2deg]">
+                    {footerValues?.breakdown ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help decoration-dashed underline decoration-gray-400 underline-offset-4">
+                            {formatCurrency(footerValues.iva)}
+                          </TooltipTrigger>
+                          <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              <span className="font-semibold text-green-500">IVA Rep.:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.iva)}</span>
+                              <span className="font-semibold text-red-500">IVA Sop.:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.iva)}</span>
+                              {((footerValues.breakdown.ingresos.retencion || 0) + (footerValues.breakdown.gastos.retencion || 0)) !== 0 && (
+                                <>
+                                  <div className="col-span-2 h-px bg-border my-1" />
+                                  {(footerValues.breakdown.ingresos.retencion || 0) !== 0 && (
+                                    <>
+                                      <span className="text-muted-foreground text-[10px]">Ret. Ingresos:</span>
+                                      <span className="text-right text-red-400">{formatCurrency(-(footerValues.breakdown.ingresos.retencion || 0))}</span>
+                                    </>
+                                  )}
+                                  {(footerValues.breakdown.gastos.retencion || 0) !== 0 && (
+                                    <>
+                                      <span className="text-muted-foreground text-[10px]">Ret. Gastos:</span>
+                                      <span className="text-right text-red-400">{formatCurrency(-(footerValues.breakdown.gastos.retencion || 0))}</span>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                              <div className="col-span-2 h-px bg-border my-1" />
+                              <span className="font-bold">Neto:</span>
+                              <span className="text-right font-bold">{formatCurrency(footerValues.iva)}</span>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      formatCurrency(footerValues ? footerValues.iva : documentos.reduce((sum, doc) => sum + (doc.iva || 0), 0))
+                    )}
+                  </div>
                 </TableHead>
-                <TableHead className="text-right text-xs sm:text-sm text-primary text-base">
-                  {footerValues?.breakdown ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help decoration-dashed underline decoration-gray-400 underline-offset-4">
-                          {formatCurrency(footerValues.total)}
-                        </TooltipTrigger>
-                        <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <span className="font-semibold text-green-500">Ingresos:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.total)}</span>
-                            <span className="font-semibold text-red-500">Gastos:</span>
-                            <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.total)}</span>
-                            <div className="col-span-2 h-px bg-border my-1" />
-                            <span className="font-bold">Resultado:</span>
-                            <span className="text-right font-bold">{formatCurrency(footerValues.total)}</span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    formatCurrency(footerValues ? footerValues.total : documentos.reduce((sum, doc) => sum + (doc.total || 0), 0))
-                  )}
+                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                  <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-rotate-[0.2deg]">
+                    {footerValues?.breakdown ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help decoration-dashed underline decoration-primary/50 underline-offset-4">
+                            {formatCurrency(footerValues.total)}
+                          </TooltipTrigger>
+                          <TooltipContent className="p-3 bg-popover border border-border shadow-xl">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              <span className="font-semibold text-green-500">Ingresos:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.ingresos.total)}</span>
+                              <span className="font-semibold text-red-500">Gastos:</span>
+                              <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.total)}</span>
+                              <div className="col-span-2 h-px bg-border my-1" />
+                              <span className="font-bold">Resultado:</span>
+                              <span className="text-right font-bold">{formatCurrency(footerValues.total)}</span>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      formatCurrency(footerValues ? footerValues.total : documentos.reduce((sum, doc) => sum + (doc.total || 0), 0))
+                    )}
+                  </div>
                 </TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -257,6 +266,13 @@ export function TrimestreTable({
                     <TableCell className="text-xs sm:text-sm">
                       <span className="truncate max-w-[150px] sm:max-w-[200px] block group-hover:text-foreground transition-colors duration-200" title={doc.proveedor || '-'}>
                         {doc.proveedor || '-'}
+                      </span>
+                    </TableCell>
+
+                    {/* Cliente */}
+                    <TableCell className="text-xs sm:text-sm">
+                      <span className="truncate max-w-[150px] sm:max-w-[200px] block group-hover:text-foreground transition-colors duration-200" title={doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '-'}>
+                        {doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '-'}
                       </span>
                     </TableCell>
 

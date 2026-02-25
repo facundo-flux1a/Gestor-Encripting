@@ -55,6 +55,25 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
         return value ? 'Sí' : 'No';
     }
 
+    // Forzar conversión a número en Excel para columnas conocidas aunque vengan como string
+    if (format === 'excel' && value !== null && value !== undefined && value !== '') {
+        const isColumnNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad'].includes(columnId)
+            || columnId.startsWith('base_')
+            || columnId.startsWith('iva_')
+            || columnId.includes('total')
+            || columnId.includes('ingreso')
+            || columnId.includes('gasto')
+            || columnId.includes('precio')
+            || columnId.includes('importe')
+            || columnId.includes('resultado')
+            || columnId.includes('cantidad');
+
+        if (isColumnNumeric) {
+            const numVal = Number(value);
+            if (!isNaN(numVal)) return numVal;
+        }
+    }
+
     // Formateo de moneda para columnas conocidas
     if (typeof value === 'number') {
         if (format === 'excel') return value;
@@ -225,12 +244,16 @@ export const generateAdvancedExport = (
 
             columns.slice(1).forEach(col => {
                 // Check heuristic for numeric column or tax column
-                const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos'].includes(col.id)
+                const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad'].includes(col.id)
                     || col.id.startsWith('base_')
                     || col.id.startsWith('iva_')
                     || col.id.includes('total')
                     || col.id.includes('ingreso')
-                    || col.id.includes('gasto');
+                    || col.id.includes('gasto')
+                    || col.id.includes('precio')
+                    || col.id.includes('importe')
+                    || col.id.includes('resultado')
+                    || col.id.includes('cantidad');
 
                 if (isNumeric) {
                     if (isExcel) {
@@ -500,14 +523,20 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
         rates.forEach(rate => {
             const key = `base_${rate}`;
-            if (summaryData[key]) rows.push(buildRow(`base ${rate}`, summaryData[key]));
+            if (summaryData[key]) {
+                const hasData = activeQuarters.some(q => summaryData[key][q] !== 0) || summaryData[key].total !== 0;
+                if (hasData) rows.push(buildRow(`Base ${rate}%`, summaryData[key]));
+            }
         });
 
         rows.push([]);
 
         rates.forEach(rate => {
             const key = `iva_${rate}`;
-            if (summaryData[key]) rows.push(buildRow(`iva ${rate}`, summaryData[key]));
+            if (summaryData[key]) {
+                const hasData = activeQuarters.some(q => summaryData[key][q] !== 0) || summaryData[key].total !== 0;
+                if (hasData) rows.push(buildRow(`IVA ${rate}%`, summaryData[key]));
+            }
         });
 
         rows.push([]);
