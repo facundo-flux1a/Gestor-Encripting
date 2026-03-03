@@ -171,8 +171,18 @@ export function ProviderDetailClient({
                             <ProviderFilterBar filters={filters} onFiltersChange={setFilters} />
                         </div>
                         <div className="flex border rounded-md overflow-hidden bg-background">
-                            <button onClick={() => setViewMode('grid')} className={`p-2 ${viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}><Grid className="h-4 w-4" /></button>
-                            <button onClick={() => setViewMode('list')} className={`p-2 ${viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}><List className="h-4 w-4" /></button>
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Gráfico
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`px-4 py-2 text-sm font-medium transition-colors border-l ${viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Tabla
+                            </button>
                         </div>
                     </div>
 

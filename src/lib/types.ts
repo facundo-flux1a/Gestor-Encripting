@@ -255,8 +255,10 @@ export type DashboardAnalytics = {
     beneficioSinIva: number;            // ✅ NUEVO - SIN IVA
     ivaRepercutido: number;
     ivaSoportado: number;
-    recargoRepercutido: number; // ✅ NUEVO
-    recargoSoportado: number;   // ✅ NUEVO
+    recargoRepercutido: number;
+    recargoSoportado: number;
+    retencionRepercutido: number; // ✅ NUEVO
+    retencionSoportado: number;   // ✅ NUEVO
     resultadoIva: number;
     incidenciasAbiertas: number;
     totalProveedores: number;

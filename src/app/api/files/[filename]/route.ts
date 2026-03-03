@@ -4,80 +4,94 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ filename: string }> }
 ) {
+  const requestId = Math.random().toString(36).substring(7);
   try {
-    // ✅ Await params en Next.js 15
     const params = await context.params;
     const filename = params.filename;
-    
+
     if (!filename) {
+      console.error(`[${requestId}] ❌ [serve-file] Sin nombre de archivo`);
       return NextResponse.json(
         { error: 'Nombre de archivo no proporcionado' },
         { status: 400 }
       );
     }
 
-    console.log('📥 [serve-file] Solicitando archivo:', filename);
-    
-    // ✅ Construir URL de MinIO con path correcto: archivos/{filename}
-    const baseUrl = 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000';
-    const bucketName = 'gestor-documental';
-    
-    // Si el filename ya incluye "archivos/", usarlo tal cual
-    // Si no, agregarlo automáticamente
-    const filePath = filename.startsWith('archivos/') 
-      ? filename 
+    // Usar variables de entorno para mayor seguridad y flexibilidad
+    const baseUrl = (process.env.MINIO_ENDPOINT || 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000').replace(/\/$/, '');
+    const bucketName = process.env.MINIO_BUCKET_NAME || 'gestor-documental';
+
+    console.log(`[${requestId}] 📥 [serve-file] Solicitando: ${filename}`);
+
+    const filePath = filename.startsWith('archivos/')
+      ? filename
       : `archivos/${filename}`;
-    
+
     const minioUrl = `${baseUrl}/${bucketName}/${filePath}`;
-    
-    console.log('🔗 [serve-file] Fetching desde MinIO:', minioUrl);
-    
-    // Obtener archivo desde MinIO
+
+    console.log(`[${requestId}] 🔗 [serve-file] Conectando a MinIO: ${minioUrl}`);
+
     const response = await fetch(minioUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/pdf, application/octet-stream',
       },
     });
-    
+
     if (!response.ok) {
-      console.error('❌ [serve-file] Error desde MinIO:', response.status, response.statusText);
+      console.error(`[${requestId}] ❌ [serve-file] Error MinIO:`, response.status, response.statusText);
       return NextResponse.json(
-        { error: 'Archivo no encontrado en el almacenamiento' },
+        { error: `Archivo no encontrado (${response.status})` },
         { status: 404 }
       );
     }
-    
-    // Obtener Content-Type original (puede ser PDF u otro)
+
     const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
-    
-    // Convertir a buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    console.log('✅ [serve-file] Archivo obtenido:', {
-      size: buffer.length,
+    const contentLength = response.headers.get('Content-Length');
+
+    console.log(`[${requestId}] 📦 [serve-file] Headers recibidos:`, {
       type: contentType,
-      filename: filePath
+      length: contentLength
     });
-    
-    // Extraer nombre del archivo para la descarga
+
+    // Extraer nombre limpio para la descarga
     const downloadFilename = filename.split('/').pop() || 'archivo.pdf';
-    
-    // Devolver archivo como respuesta
+
+    // Implementar Streaming si es posible (Next.js 13+)
+    // Esto es más eficiente que cargar todo en memoria
+    if (response.body) {
+      console.log(`[${requestId}] 🚀 [serve-file] Iniciando streaming de respuesta`);
+
+      const headers = new Headers();
+      headers.set('Content-Type', contentType);
+      headers.set('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+      if (contentLength) headers.set('Content-Length', contentLength);
+      headers.set('Cache-Control', 'public, max-age=3600');
+
+      return new NextResponse(response.body, {
+        status: 200,
+        headers,
+      });
+    }
+
+    // Fallback si no hay body readable (poco probable con fetch nativo)
+    console.log(`[${requestId}] ⚠️ [serve-file] Usando fallback de Buffer`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${downloadFilename}"`,
         'Content-Length': buffer.length.toString(),
-        'Cache-Control': 'public, max-age=3600', // Cache por 1 hora
+        'Cache-Control': 'public, max-age=3600',
       },
     });
+
   } catch (error) {
-    console.error('❌ [serve-file] Error inesperado:', error);
+    console.error(`[${requestId}] ❌ [serve-file] Error crítico:`, error);
     return NextResponse.json(
-      { error: 'Error al obtener el archivo' },
+      { error: 'Error interno al procesar el archivo' },
       { status: 500 }
     );
   }

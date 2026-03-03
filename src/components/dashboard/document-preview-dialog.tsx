@@ -61,31 +61,47 @@ export function DocumentPreviewDialog({
   const handleDownload = async () => {
     if (!documentUrl) return;
 
+    console.log("📥 [DocumentPreview] Iniciando flujo de descarga para:", documentName);
+    console.log("🔗 [DocumentPreview] URL original:", documentUrl);
+
     try {
       setIsDownloading(true);
-      toast({ title: "Iniciando descarga..." });
+      toast({ title: "Iniciando descarga segura..." });
 
-      const response = await fetch(documentUrl);
-      if (!response.ok) throw new Error("Network response was not ok");
+      // Extraer el nombre del archivo de la URL
+      const urlParts = documentUrl.split('/');
+      const rawFilename = urlParts[urlParts.length - 1];
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = documentName || 'documento.pdf';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (!rawFilename) throw new Error("No se pudo extraer el nombre del archivo");
 
-      toast({ title: "✅ Descarga completada", duration: 2000 });
+      // Decodificar primero por si ya viene con %20 y luego codificar para la URL de la API
+      const filename = decodeURIComponent(rawFilename);
+      const proxyUrl = `/api/files/${encodeURIComponent(filename)}`;
+      console.log("📡 [DocumentPreview] Usando proxy de descarga:", proxyUrl);
+
+      // Abrir en nueva pestaña para que el navegador gestione la descarga (disparado por Content-Disposition)
+      const win = window.open(proxyUrl, '_blank');
+
+      if (!win) {
+        console.warn("⚠️ [DocumentPreview] El navegador bloqueó el popup");
+        throw new Error("El navegador bloqueó la ventana de descarga");
+      }
+
+      toast({ title: "✅ Descarga iniciada", duration: 2000 });
+      console.log("✅ [DocumentPreview] Pestaña de descarga abierta exitosamente");
+
     } catch (error) {
-      console.error("Download error:", error);
+      console.error("❌ [DocumentPreview] Error en descarga segura:", error);
+
       toast({
-        title: "Error en la descarga",
-        description: "No se pudo descargar el archivo. Intenta de nuevo.",
+        title: "Error en descarga segura",
+        description: "Intentando descarga directa (podría mostrar advertencia)...",
         variant: "destructive"
       });
+
+      // Fallback: Abrir link directo de MinIO (como funcionaba antes)
+      console.log("🔄 [DocumentPreview] Iniciando fallback a link directo");
+      window.open(documentUrl, '_blank');
     } finally {
       setIsDownloading(false);
     }

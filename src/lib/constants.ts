@@ -1,0 +1,1 @@
+export const GOOGLE_PASSWORD_MARKER = 'GOOGLE_AUTH_';

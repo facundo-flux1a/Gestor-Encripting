@@ -1,15 +1,17 @@
-
 'use server';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/services/auth-service";
+import { GOOGLE_PASSWORD_MARKER } from "@/lib/constants";
 import { LogOut } from "lucide-react";
 import { getCurrentUser } from "@/services/user-service";
-
+import { UserProfileForm } from "@/components/settings/UserProfileForm";
+import { PasswordEditDialog } from "@/components/settings/PasswordEditDialog";
+import db from "@/lib/db";
+import type { RowDataPacket } from "mysql2";
+import { redirect } from "next/navigation";
 
 async function handleLogout() {
     'use server';
@@ -19,6 +21,17 @@ async function handleLogout() {
 export default async function SettingsPage() {
     const user = await getCurrentUser();
 
+    if (!user) {
+        return redirect('/auth/login');
+    }
+
+    // Verificar si es cuenta de Google
+    const [rows] = await db.query<RowDataPacket[]>(
+        'SELECT password FROM usuarios WHERE id = ?',
+        [user.id]
+    );
+    const isGoogleAccount = rows[0]?.password?.startsWith(GOOGLE_PASSWORD_MARKER);
+
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
@@ -27,28 +40,13 @@ export default async function SettingsPage() {
                 </MainLayoutHeader>
 
                 <div className="grid gap-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Perfil de Usuario</CardTitle>
-                            <CardDescription>
-                                Esta es la información de tu cuenta.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4 max-w-lg">
-                                <div className="space-y-2">
-                                    <Label htmlFor="companyName">Nombre</Label>
-                                    <Input id="companyName" defaultValue={user?.nombre || ''} disabled />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email de Contacto</Label>
-                                    <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
-                                </div>
-                                <Button type="submit" disabled>Guardar Cambios</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    {/* Perfil de Usuario */}
+                    <UserProfileForm
+                        initialName={user.nombre}
+                        initialEmail={user.email}
+                    />
 
+                    {/* Configuración de Alertas */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Configuración de Alertas</CardTitle>
@@ -68,9 +66,13 @@ export default async function SettingsPage() {
                         </CardContent>
                     </Card>
 
+                    {/* Seguridad / Password */}
+                    <PasswordEditDialog isGoogleAccount={isGoogleAccount} />
+
+                    {/* Sesión */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>Seguridad</CardTitle>
+                            <CardTitle>Sesión</CardTitle>
                             <CardDescription>
                                 Gestiona tu sesión actual.
                             </CardDescription>

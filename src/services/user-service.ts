@@ -2,8 +2,10 @@
 
 import db from '@/lib/db';
 import type { User } from '@/lib/types';
-import { getSession } from './auth-service';
+import { getSession, createSession } from './auth-service';
+import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
 import type { RowDataPacket } from 'mysql2';
+import bcrypt from 'bcryptjs';
 
 /**
  * Retrieves the full user object for the currently authenticated user.
@@ -87,5 +89,92 @@ export async function updateUserConfigOtros(tipos: string[]): Promise<boolean> {
   } catch (e) {
     console.error('Error updating config_otros_tipos:', e);
     return false;
+  }
+}
+
+/**
+ * Actualiza el perfil del usuario (nombre y email) y refresca la sesión.
+ */
+export async function updateUserProfile(nombre: string, email: string): Promise<{ success: boolean; message?: string }> {
+  const session = await getSession();
+  if (!session?.userId) return { success: false, message: 'No autenticado' };
+
+  try {
+    await db.query(
+      'UPDATE usuarios SET nombre = ?, email = ? WHERE id = ?',
+      [nombre, email, session.userId]
+    );
+
+    // Refrescar la sesión con los nuevos datos
+    await createSession(
+      session.userId,
+      email,
+      nombre,
+      session.tutorial || 0,
+      session.tutorialDocumentos || 0,
+      session.tutorialTrimestres || 0,
+      session.tutorialActividad || 0,
+      session.tutorialIndividual || 0,
+      session.tutorialIncidencias || 0,
+      session.tutorialProveedores || 0
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [updateUserProfile] Error:', error);
+    return { success: false, message: 'Error al actualizar el perfil' };
+  }
+}
+
+/**
+ * Actualiza la contraseña del usuario con hasheo y validación de duplicados.
+ */
+export async function updateUserPassword(newPassword: string, currentPassword?: string): Promise<{ success: boolean; message?: string }> {
+  const session = await getSession();
+  if (!session?.userId) return { success: false, message: 'No autenticado' };
+
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT password FROM usuarios WHERE id = ?',
+      [session.userId]
+    );
+
+    if (rows.length === 0) return { success: false, message: 'Usuario no encontrado' };
+
+    const currentPasswordHash = rows[0].password;
+
+    // Verificar si es cuenta de Google
+    if (currentPasswordHash && currentPasswordHash.startsWith(GOOGLE_PASSWORD_MARKER)) {
+      return { success: false, message: 'Esta cuenta está vinculada a Google. La contraseña debe gestionarse desde Google.' };
+    }
+
+    // ✅ NUEVO: Verificar contraseña actual si se proporciona
+    if (currentPassword) {
+      const isCurrentValid = await bcrypt.compare(currentPassword, currentPasswordHash);
+      if (!isCurrentValid) {
+        return { success: false, message: 'La contraseña actual es incorrecta.' };
+      }
+    } else {
+      return { success: false, message: 'Se requiere la contraseña actual para realizar este cambio.' };
+    }
+
+    // Verificar que la nueva contraseña no sea igual a la actual
+    if (currentPasswordHash) {
+      const isSame = await bcrypt.compare(newPassword, currentPasswordHash);
+      if (isSame) {
+        return { success: false, message: 'La nueva contraseña no puede ser igual a la anterior.' };
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.query(
+      'UPDATE usuarios SET password = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ?',
+      [hashedPassword, session.userId]
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [updateUserPassword] Error:', error);
+    return { success: false, message: 'Error al actualizar la contraseña' };
   }
 }

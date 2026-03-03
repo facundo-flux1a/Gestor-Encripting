@@ -13,7 +13,7 @@ import crypto from 'crypto';
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
-const GOOGLE_PASSWORD_MARKER = 'GOOGLE_AUTH_';
+import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)

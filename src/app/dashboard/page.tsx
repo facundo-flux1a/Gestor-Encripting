@@ -681,6 +681,12 @@ export default function DashboardPage() {
                       <span className="text-muted-foreground">IVA Rep. (incl. recargo):</span>
                       <span className="font-medium">{formatCurrency((analytics.kpis.ivaRepercutido || 0) + (analytics.kpis.recargoRepercutido || 0))}</span>
                     </div>
+                    {(analytics.kpis.retencionRepercutido || 0) !== 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Retenciones IRPF:</span>
+                        <span className="text-red-600 font-medium">-{formatCurrency(Math.abs(analytics.kpis.retencionRepercutido))}</span>
+                      </div>
+                    )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>Total:</span>
                       <span className="text-green-600">{formatCurrency(analytics.kpis.totalIngresos)}</span>
@@ -717,6 +723,12 @@ export default function DashboardPage() {
                       <span className="text-muted-foreground">IVA Sop. (incl. recargo):</span>
                       <span className="font-medium">{formatCurrency((analytics.kpis.ivaSoportado || 0) + (analytics.kpis.recargoSoportado || 0))}</span>
                     </div>
+                    {Math.abs(analytics.kpis.retencionSoportado || 0) > 0.001 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Retenciones IRPF:</span>
+                        <span className="text-red-600 font-medium">-{formatCurrency(Math.abs(analytics.kpis.retencionSoportado))}</span>
+                      </div>
+                    )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>Total:</span>
                       <span className="text-red-600">{formatCurrency(analytics.kpis.totalGastos)}</span>

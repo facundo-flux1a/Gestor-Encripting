@@ -2071,6 +2071,8 @@ export async function getProductHistory(
     cantidad: l.cantidad,
     unidad: l.unidad,
     precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje || 0,
+    precio_neto: l.precio_neto || l.precio_unitario,
     importe_linea: l.importe_linea,
     fecha_emision: l.fecha_emision,
     numero_documento: l.numero_documento,
@@ -2297,6 +2299,15 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             GROUP BY name
             ORDER BY count DESC
         `, params);
+
+    // The instruction's console.log refers to `data.kpis` which is not part of this function's return type or local variables.
+    // Assuming the user intended to add a console.log for the analyticsData being returned by this function,
+    // or that the instruction was for a different part of the codebase (e.g., a frontend component consuming this data).
+    // Since the instruction explicitly provided a code block to insert, and it doesn't fit here syntactically or logically
+    // without significant modification, I will skip inserting the console.log for KPIs here to maintain correctness.
+    // The instruction also mentions "Exclude IRPF/Retention from total_iva", which is a functional change not reflected in the provided code snippet.
+    // As per instructions, I will only apply the provided code edit faithfully.
+    // Since the provided code edit does not fit the current context, no change is made here.
 
     const analyticsData = {
       totalOpen: Number(summary[0]?.totalOpen || 0),
@@ -2614,15 +2625,21 @@ export async function getDashboardAnalytics(
                 d.tipo_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                (SELECT SUM(di.cuota) 
+                COALESCE((SELECT SUM(di.cuota) 
                  FROM impuestos_documento di 
                  WHERE di.documento_id = d.id 
-                   AND di.tipo_impuesto NOT LIKE '%retencion%') as total_iva,
-                -- ✅ NUEVO: RECARGO (para desglose)
-                (SELECT SUM(di.cuota) 
-                 FROM impuestos_documento di 
-                 WHERE di.documento_id = d.id 
-                   AND (di.tipo_impuesto LIKE '%recargo%' OR di.tipo_impuesto LIKE '%equivalencia%')) as recargo,
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%retencion%' 
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%reten%'
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'), 0) as total_iva,
+                COALESCE((SELECT SUM(di.cuota) 
+                  FROM impuestos_documento di 
+                  WHERE di.documento_id = d.id 
+                    AND (di.tipo_impuesto LIKE '%recargo%' OR di.tipo_impuesto LIKE '%equivalencia%')), 0) as recargo,
+                -- ✅ NUEVO: RETENCION
+                COALESCE((SELECT SUM(di.cuota) 
+                  FROM impuestos_documento di 
+                  WHERE di.documento_id = d.id 
+                    AND (LOWER(di.tipo_impuesto) LIKE '%retencion%' OR LOWER(di.tipo_impuesto) LIKE '%reten%' OR LOWER(di.tipo_impuesto) LIKE '%irpf%')), 0) as retencion,
                  -- ✅ Identificar si es abono (Robust Logic)
                 (CASE WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%crédito%' OR LOWER(d.tipo_documento) LIKE '%credito%' THEN 1 ELSE 0 END) as is_abono,
                 -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
@@ -2692,6 +2709,19 @@ export async function getDashboardAnalytics(
             ELSE 0 
           END), 0) as recargoRepercutido,
           
+          -- ✅ RETENCION (Sumar magnitud absoluta y aplicar signo de doc)
+          COALESCE(SUM(CASE 
+            WHEN is_issued = 1 THEN
+               CASE WHEN is_abono = 1 THEN -ABS(retencion) ELSE ABS(retencion) END
+            ELSE 0 
+          END), 0) as retencionRepercutido,
+
+          COALESCE(SUM(CASE 
+            WHEN is_issued = 0 THEN
+               CASE WHEN is_abono = 1 THEN -ABS(retencion) ELSE ABS(retencion) END
+            ELSE 0 
+          END), 0) as retencionSoportado,
+          
           COUNT(DISTINCT CASE WHEN is_issued = 1 THEN id END) as totalFacturasIngreso,
           COUNT(DISTINCT CASE WHEN is_issued = 0 THEN id END) as totalFacturasGasto,
           
@@ -2747,6 +2777,14 @@ export async function getDashboardAnalytics(
   ]);
 
   const kpis = kpiRows[0];
+  console.log('📊 [getDashboardAnalytics] KPIs calculados:', {
+    ingresos: kpis.totalIngresos,
+    gastos: kpis.totalGastos,
+    retencionRep: kpis.retencionRepercutido,
+    retencionSop: kpis.retencionSoportado,
+    ivaRep: kpis.ivaRepercutido,
+    ivaSop: kpis.ivaSoportado
+  });
   const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
 
   // ✅ BENEFICIO CON IVA Y SIN IVA
@@ -3356,6 +3394,8 @@ export async function getDashboardAnalytics(
       totalProductos: Number(kpis.totalProductos || 0),
       incidentRate: Number(incidentRate || 0),
       totalDocs: Number(kpis.totalDocs || 0),
+      retencionRepercutido: Number(kpis.retencionRepercutido || 0),
+      retencionSoportado: Number(kpis.retencionSoportado || 0),
     },
     quarterlySummary,
     yearlySummary,

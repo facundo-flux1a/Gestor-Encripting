@@ -122,7 +122,7 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
                 </TableCell>
                 <TableCell className="text-right">
                     <span className="bg-muted px-2 py-1 rounded-md border border-border text-[10px] text-muted-foreground font-medium italic">
-                        Varios precios
+                        Múltiples compras
                     </span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-black text-primary text-lg">
