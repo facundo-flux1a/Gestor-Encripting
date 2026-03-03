@@ -343,6 +343,13 @@ export function TrimestresTutorial() {
       .driver-active-element {
         box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
       }
+
+      /* 🔒 Step 6 (index 5): Tabla de Documentos - filas no clickeables */
+      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr,
+      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr * {
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+      }
       
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;

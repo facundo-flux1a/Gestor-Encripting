@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import ActivityTable from '@/components/ActivityTable';
 import { Activity, Loader2 } from 'lucide-react';
 import { ActividadProvider } from '@/context/ActividadProvider';
-import { ActividadTutorial } from '@/components/actividad/ActividadTutorial';
+import { ActividadTutorialRouter } from '@/components/actividad/ActividadTutorialRouter';
 import { PageHeader } from "@/components/layout/page-header";
 
 export default function ActividadPage() {
@@ -20,7 +20,7 @@ export default function ActividadPage() {
           <ActivityTable />
         </Suspense>
 
-        <ActividadTutorial />
+        <ActividadTutorialRouter />
       </div>
     </ActividadProvider>
   );

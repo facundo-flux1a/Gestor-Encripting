@@ -12,7 +12,7 @@ import { StatsHoverTable } from '@/components/trimestres/stats-hover-table'; // 
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
-import { TrimestresTutorial } from '@/components/trimestres/TrimestresTutorial';
+import { TrimestresTutorialRouter } from '@/components/trimestres/TrimestresTutorialRouter';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -767,7 +767,7 @@ function TrimestresPageContent() {
 
   return (
     <>
-      <TrimestresTutorial />
+      <TrimestresTutorialRouter />
 
       <MainLayout>
         <PageHeader

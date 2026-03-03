@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle } from "lucide-react";
 import { IncidenciasProvider } from "@/context/IncidenciasProvider";
-import { IncidenciasTutorial } from "@/components/incidencias/IncidenciasTutorial";
+import { IncidenciasTutorialRouter } from "@/components/incidencias/IncidenciasTutorialRouter";
 
 function IncidentsPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
@@ -197,7 +197,7 @@ export default function IncidentsPage() {
     return (
         <IncidenciasProvider>
             <IncidentsPageContent />
-            <IncidenciasTutorial />
+            <IncidenciasTutorialRouter />
         </IncidenciasProvider>
     );
 }

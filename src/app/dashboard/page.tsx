@@ -10,7 +10,7 @@ import { FinancialSummary } from '@/components/dashboard/financial-summary';
 import { DocumentStatusChart } from '@/components/dashboard/document-status-chart';
 import { IvaSummary } from '@/components/dashboard/iva-summary';
 import { InsightsWidget } from '@/components/dashboard/insights-widget';
-import { DashboardTutorial } from '@/components/dashboard/dashboard-tutorial';
+import { DashboardTutorialRouter } from '@/components/dashboard/DashboardTutorialRouter';
 import { getDashboardAnalytics } from '@/services/document-service';
 import { type DashboardAnalytics } from '@/lib/types';
 import {
@@ -512,7 +512,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <MainLayout>
-        <DashboardTutorial />
+        <DashboardTutorialRouter />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <PageHeader
             title="Dashboard"
@@ -546,7 +546,7 @@ export default function DashboardPage() {
   if (!analytics) {
     return (
       <MainLayout>
-        <DashboardTutorial />
+        <DashboardTutorialRouter />
         <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
           <PageHeader
             title="Dashboard"
@@ -605,7 +605,7 @@ export default function DashboardPage() {
 
   return (
     <MainLayout>
-      <DashboardTutorial />
+      <DashboardTutorialRouter />
       <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
         <PageHeader
           title="Dashboard"

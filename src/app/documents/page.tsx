@@ -14,7 +14,7 @@ import { useDocumentEvents } from '@/hooks/useDocumentEvents'
 import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { DocumentosTutorial } from '@/components/tutorials/DocumentosTutorial'
+import { DocumentosTutorialRouter } from '@/components/tutorials/DocumentosTutorialRouter'
 import { useTutorial } from '@/context/tutorial-context'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -425,7 +425,7 @@ function DocumentsPageContent() {
   if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
     return (
       <>
-        <DocumentosTutorial />
+        <DocumentosTutorialRouter />
 
         <PageHeader
           title="Documentos"
@@ -468,7 +468,7 @@ function DocumentsPageContent() {
 
   return (
     <>
-      <DocumentosTutorial />
+      <DocumentosTutorialRouter />
 
       <PageHeader
         title="Documentos"

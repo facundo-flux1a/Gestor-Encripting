@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import type { ProviderWithStats } from "@/lib/types";
 import { Building2 } from "lucide-react";
 import { ProveedoresProvider } from "@/context/ProveedoresProvider";
-import { ProveedoresTutorial } from "@/components/proveedores/ProveedoresTutorial";
+import { ProveedoresTutorialRouter } from "@/components/proveedores/ProveedoresTutorialRouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function ProveedoresPageContent() {
@@ -132,7 +132,7 @@ export default function ProveedoresPage() {
     return (
         <ProveedoresProvider>
             <ProveedoresPageContent />
-            <ProveedoresTutorial />
+            <ProveedoresTutorialRouter />
         </ProveedoresProvider>
     );
 }

@@ -21,7 +21,7 @@ import { FinancialDetailsCard } from '@/components/dashboard/financial-details-c
 import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
 import { IndividualProvider } from '@/context/IndividualProvider';
-import { IndividualTutorial } from '@/components/documento/IndividualTutorial';
+import { IndividualTutorialRouter } from '@/components/documento/IndividualTutorialRouter';
 
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
@@ -654,7 +654,7 @@ export default function DocumentoPage() {
   return (
     <IndividualProvider>
       <DocumentoPageContent />
-      <IndividualTutorial />
+      <IndividualTutorialRouter />
     </IndividualProvider>
   );
 }
