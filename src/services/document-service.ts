@@ -2630,7 +2630,9 @@ export async function getDashboardAnalytics(
                  WHERE di.documento_id = d.id 
                    AND LOWER(di.tipo_impuesto) NOT LIKE '%retencion%' 
                    AND LOWER(di.tipo_impuesto) NOT LIKE '%reten%'
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'), 0) as total_iva,
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%recargo%'
+                   AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'), 0) as total_iva,
                 COALESCE((SELECT SUM(di.cuota) 
                   FROM impuestos_documento di 
                   WHERE di.documento_id = d.id 
@@ -3557,7 +3559,7 @@ dt.año_trimestre as año,
             AND dt2.num_trimestre = dt.num_trimestre
             AND dt2.id_de_empresa = dt.id_de_empresa
             AND dt2.is_issued = 1
-            AND(i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
+            AND(i.tipo_impuesto IS NULL OR (LOWER(i.tipo_impuesto) NOT LIKE '%retencion%' AND LOWER(i.tipo_impuesto) NOT LIKE '%reten%' AND LOWER(i.tipo_impuesto) NOT LIKE '%irpf%' AND LOWER(i.tipo_impuesto) NOT LIKE '%recargo%' AND LOWER(i.tipo_impuesto) NOT LIKE '%equivalencia%'))
 ), 0) as iva_repercutido,
 
   -- ✅ IVA Soportado (Abonos restan)
@@ -3574,7 +3576,7 @@ dt.año_trimestre as año,
             AND dt3.num_trimestre = dt.num_trimestre
             AND dt3.id_de_empresa = dt.id_de_empresa
             AND dt3.is_issued = 0
-            AND(i.tipo_impuesto IS NULL OR i.tipo_impuesto NOT LIKE '%retencion%')
+            AND(i.tipo_impuesto IS NULL OR (LOWER(i.tipo_impuesto) NOT LIKE '%retencion%' AND LOWER(i.tipo_impuesto) NOT LIKE '%reten%' AND LOWER(i.tipo_impuesto) NOT LIKE '%irpf%' AND LOWER(i.tipo_impuesto) NOT LIKE '%recargo%' AND LOWER(i.tipo_impuesto) NOT LIKE '%equivalencia%'))
 ), 0) as iva_soportado,
 
   -- ✅ NUEVO: RECARGO REPERCUTIDO

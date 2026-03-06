@@ -10,11 +10,15 @@ export function useDevice() {
 
     useEffect(() => {
         const check = () =>
-            navigator.maxTouchPoints > 1 ||
+            (typeof window !== 'undefined' && window.location.search.includes('mobile=true')) ||
+            navigator.maxTouchPoints > 0 ||
             /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-            window.matchMedia('(pointer: coarse)').matches;
+            window.matchMedia('(pointer: coarse)').matches ||
+            window.matchMedia('(any-pointer: coarse)').matches;
 
-        setIsMobile(check());
+        const val = check();
+        console.log('📱 [useDevice] Detection result:', val, 'UA:', navigator.userAgent);
+        setIsMobile(val);
     }, []);
 
     return { isMobile };

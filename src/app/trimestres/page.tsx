@@ -746,8 +746,8 @@ function TrimestresPageContent() {
   // Totales calculados desde los docs filtrados (para modo dinámico)
   const totalIngresosDinamico = ingresosFiltrado.total;
   const totalGastosDinamico = gastosFiltrado.total;
-  const ivaRepercutidoDinamico = ingresosFiltrado.totalIVA + ingresosFiltrado.recargo;
-  const ivaSoportadoDinamico = gastosFiltrado.totalIVA + gastosFiltrado.recargo;
+  const ivaRepercutidoDinamico = ingresosFiltrado.totalIVA;
+  const ivaSoportadoDinamico = gastosFiltrado.totalIVA;
   const totalIngresosSinIvaDinamico = ingresosFiltrado.totalBase;
   const totalGastosSinIvaDinamico = gastosFiltrado.totalBase;
 
@@ -756,8 +756,8 @@ function TrimestresPageContent() {
   const totGastosCard = dinamizarCards ? totalGastosDinamico : (trimestreAgregado?.total_gastos || 0);
   const totIngresosBaseCard = dinamizarCards ? totalIngresosSinIvaDinamico : (trimestreAgregado?.total_ingresos_sin_iva || 0);
   const totGastosBaseCard = dinamizarCards ? totalGastosSinIvaDinamico : (trimestreAgregado?.total_gastos_sin_iva || 0);
-  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : ((trimestreAgregado?.iva_repercutido || 0) + (trimestreAgregado?.recargo_repercutido || 0));
-  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : ((trimestreAgregado?.iva_soportado || 0) + (trimestreAgregado?.recargo_soportado || 0));
+  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : (trimestreAgregado?.iva_repercutido || 0);
+  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : (trimestreAgregado?.iva_soportado || 0);
   const beneficioBrutoCard = totIngresosCard - totGastosCard;
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;

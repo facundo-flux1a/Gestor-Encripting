@@ -20,6 +20,41 @@ export function IndividualTutorialMobile() {
     const lastStepRef = useRef(0);
     const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
 
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            // Whitelist: Popover
+            const isWhitelisted = target.closest('.driver-popover') ||
+                target.closest('.driver-popover-wrapper') ||
+                target.closest('[data-tutorial="documento-actions"]') ||
+                target.closest('[data-tutorial="documento-analizar"]') ||
+                target.closest('[data-tutorial="documento-archivo"]') ||
+                target.closest('[data-radix-popper-content-wrapper]');
+
+            if (!isWhitelisted) {
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        ['touchstart', 'mousedown', 'click'].forEach(evt => {
+            document.addEventListener(evt, handler, { passive: false, capture: true });
+        });
+        overlayTouchBlockerRef.current = handler as any;
+    };
+
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            ['touchstart', 'mousedown', 'click'].forEach(evt => {
+                document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
+            });
+        }
+        overlayTouchBlockerRef.current = null;
+    };
+
+    const addTouchBlocker = () => { };
+    const removeTouchBlocker = () => { };
+
     useEffect(() => {
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
 
@@ -38,25 +73,9 @@ export function IndividualTutorialMobile() {
                 driverInstanceRef.current.destroy();
                 driverInstanceRef.current = null;
             }
-            removeTouchBlocker();
+            removeGlobalTouchBlocker();
         };
     }, [isLoading, shouldShowTutorial]);
-
-    const addTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (!overlay || overlayTouchBlockerRef.current) return;
-        const handler = (e: TouchEvent) => { e.preventDefault(); e.stopPropagation(); };
-        overlay.addEventListener('touchstart', handler, { passive: false });
-        overlayTouchBlockerRef.current = handler;
-    };
-
-    const removeTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (overlay && overlayTouchBlockerRef.current) {
-            overlay.removeEventListener('touchstart', overlayTouchBlockerRef.current);
-        }
-        overlayTouchBlockerRef.current = null;
-    };
 
     const startTutorial = () => {
         const hasIncidencias = document.querySelector('[data-tutorial="documento-incidencias"]') !== null;
@@ -139,11 +158,11 @@ export function IndividualTutorialMobile() {
         }
 
         steps.push({
-            element: 'body',
+            element: '[data-tutorial="documento-header"]',
             popover: {
                 title: '🎉 ¡Tutorial Completado!',
                 description: '¡Perfecto! Ya conoces todas las herramientas para gestionar documentos. Puedes editar, analizar y validar documentos según tus necesidades.',
-                side: 'over' as const, align: 'center' as const,
+                side: 'bottom' as const, align: 'center' as const,
             },
         });
 
@@ -160,8 +179,16 @@ export function IndividualTutorialMobile() {
             doneBtnText: '¡Entendido!',
 
             onHighlightStarted: (element, step, options) => {
-                lastStepRef.current = options.state.activeIndex ?? 0;
-                setTimeout(() => addTouchBlocker(), 50);
+                const currentStepIndex = options.state.activeIndex ?? 0;
+                lastStepRef.current = currentStepIndex;
+                console.log('🎯 [IndividualTutorialMobile] Paso:', currentStepIndex, element);
+
+                document.body.classList.forEach(cls => {
+                    if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                });
+                document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+                addGlobalTouchBlocker();
             },
 
             onNextClick: (element, step, options) => {
@@ -185,7 +212,7 @@ export function IndividualTutorialMobile() {
             onPrevClick: () => driverInstance.movePrevious(),
 
             onDestroyStarted: () => {
-                removeTouchBlocker();
+                removeGlobalTouchBlocker();
                 document.body.classList.forEach(cls => {
                     if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                 });
@@ -193,6 +220,7 @@ export function IndividualTutorialMobile() {
         });
 
         driverInstanceRef.current = driverInstance;
+        addGlobalTouchBlocker();
         setTimeout(() => driverInstance.drive(), 300);
     };
 
@@ -202,12 +230,20 @@ export function IndividualTutorialMobile() {
         style.textContent = `
       .driver-overlay { pointer-events: auto !important; }
       #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
+
+      body:has(.driver-overlay) * { pointer-events: none !important; }
+      body:has(.driver-overlay) .driver-popover, 
+      body:has(.driver-overlay) .driver-popover * { 
+        pointer-events: auto !important; 
+        z-index: 10000005 !important;
+      }
       .driver-active-element, .driver-active-element *, .driver-active-element button,
       .driver-active-element a, .driver-active-element input, .driver-active-element [role="button"] {
         pointer-events: none !important; cursor: default !important;
       }
       .driver-popover, .driver-popover-wrapper, .driver-popover *, .driver-popover button {
         pointer-events: auto !important; cursor: pointer !important;
+        z-index: 10000005 !important;
         touch-action: manipulation !important;
         -webkit-tap-highlight-color: transparent !important;
       }

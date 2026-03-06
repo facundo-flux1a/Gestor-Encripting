@@ -38,29 +38,39 @@ export function IncidenciasTutorialMobile() {
                 driverInstanceRef.current.destroy();
                 driverInstanceRef.current = null;
             }
-            removeTouchBlocker();
+            removeGlobalTouchBlocker();
         };
     }, [isLoading, shouldShowTutorial]);
 
-    const addTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (!overlay || overlayTouchBlockerRef.current) return;
-
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
         const handler = (e: TouchEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
+            const target = e.target as HTMLElement;
+            const isWhitelisted = target.closest('.driver-popover') ||
+                target.closest('.driver-popover-wrapper') ||
+                target.closest('[data-tutorial="incidencias-analizar"]') ||
+                target.closest('[data-tutorial="incidencias-ai-table"]') ||
+                target.closest('[data-tutorial="incidencias-documentos"]') ||
+                target.closest('[data-radix-popper-content-wrapper]');
+
+            if (!isWhitelisted) {
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+            }
         };
-        overlay.addEventListener('touchstart', handler, { passive: false });
+        document.addEventListener('touchstart', handler, { passive: false, capture: true });
         overlayTouchBlockerRef.current = handler;
     };
 
-    const removeTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (overlay && overlayTouchBlockerRef.current) {
-            overlay.removeEventListener('touchstart', overlayTouchBlockerRef.current);
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            document.removeEventListener('touchstart', overlayTouchBlockerRef.current, { capture: true });
         }
         overlayTouchBlockerRef.current = null;
     };
+
+    const addTouchBlocker = () => { };
+    const removeTouchBlocker = () => { };
 
     const startTutorial = () => {
         const steps: DriveStep[] = [
@@ -110,7 +120,7 @@ export function IncidenciasTutorialMobile() {
                 },
             },
             {
-                element: 'body',
+                element: '[data-tutorial="incidencias-header"]',
                 popover: {
                     title: '🎉 ¡Tutorial Completado!',
                     description: '¡Perfecto! Ahora sabes cómo gestionar incidencias. Puedes analizar, validar y resolver problemas para mantener tus documentos en orden.',
@@ -135,8 +145,14 @@ export function IncidenciasTutorialMobile() {
             onHighlightStarted: (element, step, options) => {
                 const currentStepIndex = options.state.activeIndex ?? 0;
                 lastStepRef.current = currentStepIndex;
-                // Add touch blocker on each step highlight
-                setTimeout(() => addTouchBlocker(), 50);
+                console.log('🎯 [IncidenciasTutorialMobile] Paso:', currentStepIndex, element);
+
+                document.body.classList.forEach(cls => {
+                    if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                });
+                document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+                addGlobalTouchBlocker();
             },
 
             onNextClick: (element, step, options) => {
@@ -161,7 +177,7 @@ export function IncidenciasTutorialMobile() {
             onPrevClick: () => driverInstance.movePrevious(),
 
             onDestroyStarted: () => {
-                removeTouchBlocker();
+                removeGlobalTouchBlocker();
                 document.body.classList.forEach(cls => {
                     if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                 });
@@ -169,6 +185,7 @@ export function IncidenciasTutorialMobile() {
         });
 
         driverInstanceRef.current = driverInstance;
+        addGlobalTouchBlocker();
         setTimeout(() => driverInstance.drive(), 300);
     };
 
@@ -178,13 +195,13 @@ export function IncidenciasTutorialMobile() {
         style.id = 'incidencias-tutorial-mobile-styles';
         style.textContent = `
       /* 🔥 Overlay blocks all touch except popover */
-      .driver-overlay {
-        pointer-events: auto !important;
-      }
+      .driver-overlay { pointer-events: auto !important; }
+      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
 
-      #driver-page-overlay,
-      #driver-highlighted-element-stage {
-        pointer-events: none !important;
+      body:has(.driver-overlay) * { pointer-events: none !important; }
+      body:has(.driver-overlay) .driver-popover, 
+      body:has(.driver-overlay) .driver-popover * { 
+        pointer-events: auto !important; 
       }
 
       /* 🔥 Highlighted elements NOT tappable */
@@ -205,7 +222,7 @@ export function IncidenciasTutorialMobile() {
       .driver-popover button {
         pointer-events: auto !important;
         cursor: pointer !important;
-        /* FIX #3: Prevent double-tap zoom and ensure min touch target */
+        z-index: 10000005 !important;
         touch-action: manipulation !important;
         -webkit-tap-highlight-color: transparent !important;
       }

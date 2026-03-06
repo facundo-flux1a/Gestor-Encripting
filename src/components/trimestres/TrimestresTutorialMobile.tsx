@@ -25,18 +25,80 @@ export function TrimestresTutorialMobile() {
         selectedIdsRef.current = selectedCompanyIds;
     }, [selectedCompanyIds]);
 
-    const addTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (!overlay || overlayTouchBlockerRef.current) return;
-        const handler = (e: TouchEvent) => { e.preventDefault(); e.stopPropagation(); };
-        overlay.addEventListener('touchstart', handler, { passive: false });
-        overlayTouchBlockerRef.current = handler;
+    const blockedEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'pointercancel'];
+
+    const logToTerminal = (msg: string) => {
+        if (process.env.NODE_ENV === 'development') {
+            fetch('/api/mobile-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            }).catch(() => { });
+        }
     };
 
-    const removeTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (overlay && overlayTouchBlockerRef.current) {
-            overlay.removeEventListener('touchstart', overlayTouchBlockerRef.current);
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            const idx = lastStepRef.current;
+
+            if (e.type === 'touchstart' || e.type === 'click') {
+                logToTerminal(`🔍 [TRIMESTRES] Event: ${e.type}, Step Index: ${idx}, Target: ${target.tagName}.${target.className}`);
+            }
+
+            // 1. Popover is ALWAYS allowed
+            const isPopover = target.closest('.driver-popover') || target.closest('.driver-popover-wrapper');
+
+            if (isPopover) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Click en Popover (${target.tagName})`);
+                return;
+            }
+
+            // 2. Step-Specific Surgical Whitelists: Block everything else
+            let isWhitelisted = false;
+            // Step 2 (Index 1): Company Selector and its Radix portals
+            if (idx === 1) {
+                const isCompanySelector = !!target.closest('[data-tutorial="trimestres-company-selector"]');
+                const isGeneralCompanySelector = !!target.closest('[data-tutorial="company-selector"]');
+                const isRadixPortal = !!target.closest('[data-radix-portal]');
+                const isRadixPopper = !!target.closest('[data-radix-popper-content-wrapper]');
+                // Aditional check for specific Radix item roles (checkbox, label)
+                const isRadixItem = target.role === 'checkbox' || !!target.closest('[role="checkbox"]') || !!target.closest('label');
+
+                if (isCompanySelector || isGeneralCompanySelector || isRadixPortal || isRadixPopper || isRadixItem) {
+                    isWhitelisted = true;
+                    if (e.type === 'touchstart' || e.type === 'click') {
+                        logToTerminal(`🔹 Whitelist Step 1 DETALLE: Selector=${isCompanySelector}, Gen=${isGeneralCompanySelector}, Portal=${isRadixPortal}, Item=${isRadixItem}`);
+                    }
+                }
+            } else if (idx === 2 && target.closest('[data-tutorial="trimestres-selector"]')) {
+                isWhitelisted = true;
+            } else if (idx === 3 && target.closest('[data-tutorial="trimestres-toggle"]')) {
+                isWhitelisted = true;
+            }
+
+            if (!isWhitelisted) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName} (${target.className})`);
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            } else {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Pasó Whitelist (${target.tagName})`);
+            }
+        };
+        // Use capture: true to intercept before other handlers
+        blockedEvents.forEach(evt => {
+            document.addEventListener(evt, handler, { passive: false, capture: true });
+        });
+        overlayTouchBlockerRef.current = handler as any;
+    };
+
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            blockedEvents.forEach(evt => {
+                document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
+            });
         }
         overlayTouchBlockerRef.current = null;
     };
@@ -82,6 +144,7 @@ export function TrimestresTutorialMobile() {
                             // FIX: In mobile we can't programmatically open the combobox.
                             // Instruction changed to guide the user to tap manually.
                             description: '📱 Toca el selector para elegir una empresa y luego presiona \'Siguiente\'.',
+                            // Side changed to left and align to center to avoid overlapping with the dropdown on the right
                             side: 'left', align: 'center',
                         },
                     },
@@ -168,30 +231,21 @@ export function TrimestresTutorialMobile() {
                     const currentStepIndex = options.state.activeIndex ?? 0;
                     lastStepRef.current = currentStepIndex;
                     setTutorialState(true, currentStepIndex);
-                    setTimeout(() => addTouchBlocker(), 50);
+
+                    // ✅ Gestionar clases de paso en el body para control CSS preciso
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) {
+                            document.body.classList.remove(cls);
+                        }
+                    });
+                    document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+                    addGlobalTouchBlocker();
 
                     if (currentStepIndex >= 3) setMostrarVacios(true);
 
                     if (currentStepIndex === 1) {
                         document.body.setAttribute('data-tutorial-step', '1');
-                        // FIX #2: No programmatic .click() on mobile—user must tap manually
-                        // We only make the overlay non-blocking so they can interact
-                        setTimeout(() => {
-                            const overlay = document.querySelector('.driver-overlay');
-                            if (overlay) (overlay as HTMLElement).style.pointerEvents = 'none';
-
-                            const popoverContent = document.querySelector('[data-radix-popper-content-wrapper]');
-                            if (popoverContent) {
-                                (popoverContent as HTMLElement).style.pointerEvents = 'auto';
-                                (popoverContent as HTMLElement).style.zIndex = '10000003';
-                                (popoverContent as HTMLElement).style.touchAction = 'manipulation';
-                                const allElements = popoverContent.querySelectorAll('*');
-                                allElements.forEach(el => {
-                                    (el as HTMLElement).style.pointerEvents = 'auto';
-                                    (el as HTMLElement).style.touchAction = 'manipulation';
-                                });
-                            }
-                        }, 100);
                     } else {
                         document.body.removeAttribute('data-tutorial-step');
                     }
@@ -209,6 +263,11 @@ export function TrimestresTutorialMobile() {
                         }
                     } else if (idx === totalStepsCount - 1) {
                         markAsCompleted();
+                        // Clean up blockers before destroying driver to avoid "locking"
+                        removeGlobalTouchBlocker();
+                        document.body.classList.forEach(cls => {
+                            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                        });
                         setTimeout(() => driverInstance.destroy(), 100);
                     } else {
                         driverInstance.moveNext();
@@ -216,6 +275,10 @@ export function TrimestresTutorialMobile() {
                 },
 
                 onCloseClick: () => {
+                    removeGlobalTouchBlocker();
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
                     const idx = driverInstance.getActiveIndex() ?? 0;
                     const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
                     if (idx >= totalStepsCount - 2) markAsCompleted();
@@ -227,10 +290,12 @@ export function TrimestresTutorialMobile() {
                 onDestroyStarted: () => {
                     document.body.removeAttribute('data-tutorial-step');
                     setTutorialState(false, 0);
-                    removeTouchBlocker();
+                    removeGlobalTouchBlocker();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
+                    const styleEl = document.getElementById('trimestres-tutorial-mobile-styles');
+                    if (styleEl) styleEl.remove();
                 },
             });
 
@@ -245,7 +310,7 @@ export function TrimestresTutorialMobile() {
                 driverInstanceRef.current.destroy();
                 driverInstanceRef.current = null;
             }
-            removeTouchBlocker();
+            removeGlobalTouchBlocker();
         };
     }, [isLoading, shouldShowTutorial, markAsCompleted, setTutorialState]);
 
@@ -253,40 +318,36 @@ export function TrimestresTutorialMobile() {
         const style = document.createElement('style');
         style.id = 'trimestres-tutorial-mobile-styles';
         style.textContent = `
-      /* FIX: Overlay non-blocking for touch except in specific steps */
-      .driver-overlay, #driver-page-overlay, #driver-highlighted-element-stage {
-        pointer-events: none !important;
+      /* Robust Mobile Blocking - Interaction strictly managed by JS */
+      .driver-overlay { 
+        pointer-events: none !important; 
+        z-index: 2147483630 !important; 
       }
-
-      .driver-active-element, .driver-active-element * {
-        pointer-events: auto !important; touch-action: manipulation !important;
-      }
+      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
 
       .driver-popover, .driver-popover-wrapper, .driver-popover * {
-        pointer-events: auto !important; touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
+        pointer-events: auto !important; 
+        z-index: 2147483647 !important;
       }
-
       .driver-popover button { min-height: 44px !important; }
 
-      /* Header + company selector always interactive */
-      body:has(.driver-overlay) header,
-      body:has(.driver-overlay) [data-tutorial="trimestres-company-selector"],
-      body:has(.driver-overlay) [data-tutorial="trimestres-company-selector"] * {
-        z-index: 10000001 !important; position: relative !important;
-        pointer-events: auto !important; touch-action: manipulation !important;
+      /* Highlighted active element */
+      .driver-active-element { 
+        z-index: 2147483640 !important; 
+        border: 2px solid white !important;
+        pointer-events: auto !important;
       }
 
-      /* Company selector popover above everything */
-      body[data-tutorial-step="1"] [data-radix-popper-content-wrapper] {
-        z-index: 10000003 !important; pointer-events: auto !important; touch-action: manipulation !important;
-      }
-      body[data-tutorial-step="1"] [data-radix-popper-content-wrapper] * {
-        pointer-events: auto !important; touch-action: manipulation !important;
-      }
-      body[data-tutorial-step="1"] input, body[data-tutorial-step="1"] button,
-      body[data-tutorial-step="1"] label, body[data-tutorial-step="1"] [role="checkbox"] {
-        pointer-events: auto !important; touch-action: manipulation !important;
+      /* Step 2 (Index 1): Company Selector + Portals (Ensure they render ABOVE everything else) */
+      body.tutorial-step-1 [data-tutorial="trimestres-company-selector"],
+      body.tutorial-step-1 [data-tutorial="company-selector"],
+      body.tutorial-step-1 [data-radix-portal],
+      body.tutorial-step-1 [data-radix-popper-content-wrapper],
+      body.tutorial-step-1 [role="checkbox"],
+      body.tutorial-step-1 label {
+        z-index: 2147483648 !important;
+        pointer-events: auto !important;
+        opacity: 1 !important;
       }
 
       .driver-active-element { box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important; }

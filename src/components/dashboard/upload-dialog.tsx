@@ -249,7 +249,7 @@ export function UploadDialog({
         handleClose();
       }
     }}>
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent data-tutorial="upload-modal" className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="px-3 sm:px-6 py-3 sm:py-6">
           <DialogTitle className="text-base sm:text-lg">
             Subir Nuevos Documentos

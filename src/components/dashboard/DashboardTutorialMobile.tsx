@@ -26,61 +26,98 @@ export function DashboardTutorialMobile() {
     const lastStepRef = useRef(0);
     const sidebarBlockerRef = useRef<HTMLDivElement | null>(null);
     const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
+    const blockedEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'pointercancel'];
+
+    const logToTerminal = (msg: string) => {
+        if (process.env.NODE_ENV === 'development') {
+            fetch('/api/mobile-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            }).catch(() => { });
+        }
+    };
 
     useEffect(() => { selectedIdsRef.current = selectedCompanyIds; }, [selectedCompanyIds]);
     useEffect(() => { companiesRef.current = companies; }, [companies]);
 
-    const createSidebarBlocker = () => {
-        if (sidebarBlockerRef.current) {
-            sidebarBlockerRef.current.remove();
-            sidebarBlockerRef.current = null;
-        }
-        const sidebar = document.querySelector('[data-sidebar="sidebar"]');
-        if (!sidebar) return;
-        const blocker = document.createElement('div');
-        blocker.id = 'tutorial-sidebar-blocker-mobile';
-        // FIX #4: use position: fixed instead of absolute for stable z-index in mobile viewports
-        blocker.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 9999999;
-      background: transparent;
-      cursor: not-allowed;
-      touch-action: none;
-    `;
-        // FIX #1: also block touch events on the sidebar blocker
-        blocker.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
-        document.body.appendChild(blocker);
-        sidebarBlockerRef.current = blocker;
-    };
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            const idx = lastStepRef.current;
 
-    const removeSidebarBlocker = () => {
-        if (sidebarBlockerRef.current) {
-            sidebarBlockerRef.current.remove();
-            sidebarBlockerRef.current = null;
-        }
-        const legacyBlocker = document.getElementById('tutorial-sidebar-blocker-mobile');
-        if (legacyBlocker) legacyBlocker.remove();
-    };
+            if (e.type === 'touchstart' || e.type === 'click') {
+                logToTerminal(`🔍 [DASHBOARD] Event: ${e.type}, Step: ${idx}, Target: ${target.tagName}.${target.className}`);
+            }
 
-    const addOverlayTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (!overlay || overlayTouchBlockerRef.current) return;
-        const handler = (e: TouchEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
+            // 0. Programmatic events (like tutorial .click()) are ALWAYS allowed
+            if (e instanceof MouseEvent && !e.isTrusted) return;
+
+            // 1. Popover is ALWAYS allowed
+            const isPopover = target.closest('.driver-popover') || target.closest('.driver-popover-wrapper');
+            if (isPopover) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Popover`);
+                return;
+            }
+
+            // 2. Step-Specific Surgical Whitelists
+            let isWhitelisted = false;
+
+            // Step 2 (Index 1): Company Selector and Creation Modal
+            if (idx === 1) {
+                const isSidebarTrigger = !!target.closest('[data-sidebar="trigger"]');
+                const isCompanySelector = !!target.closest('[data-tutorial="company-selector"]');
+
+                // Sidebar logic: ONLY allow trigger and company selector
+                const isInsideSidebar = !!target.closest('[data-sidebar="sidebar"]') || !!target.closest('.bg-sidebar');
+
+                if (isInsideSidebar) {
+                    isWhitelisted = isSidebarTrigger || isCompanySelector;
+                } else {
+                    // Outside sidebar: Allow the "Create Company" modal
+                    const isRadixPortal = !!target.closest('[data-radix-portal]');
+                    const isRadixPopper = !!target.closest('[data-radix-popper-content-wrapper]');
+                    const isDialog = !!target.closest('[role="dialog"]');
+                    const isRadixOverlay = !!target.closest('.fixed.inset-0.z-50');
+                    const isFormElement = !!target.closest('input') || !!target.closest('button') || !!target.closest('label') || !!target.closest('textarea');
+
+                    if (isRadixPortal || isRadixPopper || isDialog || isRadixOverlay || isFormElement) {
+                        isWhitelisted = true;
+                    }
+                }
+
+                if (isWhitelisted && (e.type === 'touchstart' || e.type === 'click')) {
+                    logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Whitelist Modal/Selector (InsideSide=${isInsideSidebar})`);
+                }
+            } else if (idx >= 2) {
+                // Steps 3+: Allow sidebar trigger for tutorial toggling/interaction
+                if (target.closest('[data-sidebar="trigger"]')) {
+                    isWhitelisted = true;
+                    if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Sidebar Trigger (Whitelist)`);
+                }
+            }
+
+            if (!isWhitelisted) {
+                if (e.type === 'touchstart' || e.type === 'click') {
+                    logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName} (${target.className})`);
+                }
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
         };
-        overlay.addEventListener('touchstart', handler, { passive: false });
-        overlayTouchBlockerRef.current = handler;
+        blockedEvents.forEach(evt => {
+            document.addEventListener(evt, handler, { passive: false, capture: true });
+        });
+        overlayTouchBlockerRef.current = handler as any;
     };
 
-    const removeOverlayTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (overlay && overlayTouchBlockerRef.current) {
-            overlay.removeEventListener('touchstart', overlayTouchBlockerRef.current);
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            blockedEvents.forEach(evt => {
+                document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
+            });
         }
         overlayTouchBlockerRef.current = null;
     };
@@ -126,6 +163,8 @@ export function DashboardTutorialMobile() {
         };
 
         const initDriver = async () => {
+            // START BLOCKING IMMEDIATELY
+            addGlobalTouchBlocker();
             await waitForElement('[data-tutorial="kpis"]');
             const hasCompaniesAtInit = companiesRef.current && companiesRef.current.length > 0;
 
@@ -138,7 +177,7 @@ export function DashboardTutorialMobile() {
                 animate: true,
                 allowClose: true,
                 overlayOpacity: 0.75,
-                disableActiveInteraction: true,
+                disableActiveInteraction: false,
 
                 onHighlightStarted: (element, step, options) => {
                     const currentIndex = options.state.activeIndex ?? 0;
@@ -147,36 +186,23 @@ export function DashboardTutorialMobile() {
                     });
                     document.body.classList.add(`tutorial-step-${currentIndex}`);
 
-                    const overlay = document.querySelector('.driver-overlay');
-                    if (overlay) (overlay as HTMLElement).style.pointerEvents = 'auto';
-
                     setCurrentStep(currentIndex);
                     lastStepRef.current = currentIndex;
 
-                    setTimeout(() => addOverlayTouchBlocker(), 50);
+                    // Ensure blocker is active (redundant but safe)
+                    addGlobalTouchBlocker();
 
-                    if (currentIndex === 1) {
-                        setIsTutorialActive(true);
-                        removeSidebarBlocker();
-                        setTimeout(() => {
-                            const overlay = document.querySelector('.driver-overlay');
-                            if (overlay) (overlay as HTMLElement).style.pointerEvents = 'none';
-                            // FIX #2: No programmatic sidebar .click() on mobile.
-                            // Sidebar interaction is left to the user.
-                            // We ensure the company selector is touch-interactive:
-                            const companySelector = document.querySelector('[data-tutorial="company-selector"]') as HTMLElement | null;
-                            if (companySelector) {
-                                companySelector.style.touchAction = 'manipulation';
-                                companySelector.querySelectorAll('*').forEach(el => {
-                                    (el as HTMLElement).style.touchAction = 'manipulation';
-                                });
-                            }
-                        }, 100);
-                    } else if (currentIndex === 2) {
-                        setTimeout(() => createSidebarBlocker(), 150);
-                    } else {
-                        removeSidebarBlocker();
-                    }
+                    // Sidebar management: Open at step 3 (index 2), Close at step 4+ (index 3+)
+                    setTimeout(() => {
+                        const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+                        const trigger = document.querySelector('[data-sidebar="trigger"]') as HTMLElement | null;
+
+                        if (currentIndex === 2) {
+                            if (!sidebar && trigger) trigger.click();
+                        } else if (currentIndex >= 3) {
+                            if (sidebar && trigger) trigger.click();
+                        }
+                    }, 100);
                 },
 
                 onNextClick: (element, step, options) => {
@@ -216,7 +242,7 @@ export function DashboardTutorialMobile() {
 
                 steps: [
                     {
-                        element: 'body',
+                        element: 'body', // Use body for welcome step like PC version
                         popover: {
                             title: '¡Bienvenido a tu Gestor Documental! 🎉',
                             description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
@@ -279,7 +305,7 @@ export function DashboardTutorialMobile() {
                         element: '[data-tutorial="filters"]',
                         popover: {
                             title: 'Filtros de análisis 🔍',
-                            description: 'Usa estos filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
+                            description: 'Usa los filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
                             side: 'bottom' as any, align: 'start' as any
                         }
                     },
@@ -294,19 +320,17 @@ export function DashboardTutorialMobile() {
                             side: 'bottom' as any, align: 'center' as any
                         }
                     }
-                ].filter(step => {
-                    if (!hasCompaniesAtInit && step.element === '[data-tutorial="iva-chart"]') return false;
-                    return true;
-                }),
+                ],
 
                 onDestroyStarted: () => {
+                    removeGlobalTouchBlocker();
                     setIsTutorialActive(false);
                     setDriverInstance(null);
-                    removeSidebarBlocker();
-                    removeOverlayTouchBlocker();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
+                    const styleEl = document.getElementById('dashboard-tutorial-mobile-styles');
+                    if (styleEl) styleEl.remove();
                 }
             });
 
@@ -317,39 +341,43 @@ export function DashboardTutorialMobile() {
         };
 
         initDriver();
-        return () => { removeSidebarBlocker(); removeOverlayTouchBlocker(); };
+        return () => { removeGlobalTouchBlocker(); };
     }, [shouldShowTutorial]);
 
     useEffect(() => {
         const style = document.createElement('style');
         style.id = 'dashboard-tutorial-mobile-styles';
         style.textContent = `
-      .driver-active-element, .driver-active-element * {
-        pointer-events: auto !important; touch-action: manipulation !important;
+      /* Robust Mobile Blocking - Interaction strictly managed by JS */
+      .driver-overlay { 
+        pointer-events: none !important; 
+        z-index: 2147483630 !important; 
       }
+      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
+
       .driver-popover, .driver-popover-wrapper, .driver-popover * {
-        pointer-events: auto !important; touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
+        pointer-events: auto !important; 
+        z-index: 2147483647 !important;
       }
       .driver-popover button { min-height: 44px !important; }
 
-      body:has(.driver-overlay) [role="dialog"] { z-index: 10000001 !important; }
-      body:has(.driver-overlay) [data-radix-dialog-overlay] { z-index: 10000000 !important; }
-      body:has(.driver-overlay) [role="dialog"] * { pointer-events: auto !important; touch-action: manipulation !important; }
+      /* Highlighted active element */
+      .driver-active-element { 
+        z-index: 2147483640 !important; 
+        border: 2px solid white !important;
+        pointer-events: auto !important;
+      }
 
-      /* Company selector step: always interactive during tutorial */
-      body.tutorial-step-1 header,
+      /* Step 2 (Index 1): Company Selector + Portals (Ensure they render ABOVE everything else) */
+      body.tutorial-step-1 [data-sidebar="trigger"],
       body.tutorial-step-1 [data-tutorial="company-selector"],
-      body.tutorial-step-1 [data-tutorial="company-selector"] * {
-        z-index: 10000001 !important; position: relative !important;
-        pointer-events: auto !important; touch-action: manipulation !important;
-      }
+      body.tutorial-step-1 [data-radix-portal],
+      body.tutorial-step-1 [role="dialog"],
+      body.tutorial-step-1 [role="dialog"] *,
       body.tutorial-step-1 [data-radix-popper-content-wrapper] {
-        z-index: 10000003 !important;
-        pointer-events: auto !important; touch-action: manipulation !important;
-      }
-      body.tutorial-step-1 [data-radix-popper-content-wrapper] * {
-        pointer-events: auto !important; touch-action: manipulation !important;
+        z-index: 2147483648 !important;
+        pointer-events: auto !important;
+        opacity: 1 !important;
       }
 
       /* FIX #5: No backdrop-filter - broken stacking context on Android */

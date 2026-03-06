@@ -124,6 +124,11 @@ export function IncidenciasTutorial() {
         const currentStepIndex = options.state.activeIndex ?? 0;
         lastStepRef.current = currentStepIndex;
         console.log('🎯 [IncidenciasTutorial] Paso:', currentStepIndex, element);
+
+        document.body.classList.forEach(cls => {
+          if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+        });
+        document.body.classList.add(`tutorial-step-${currentStepIndex}`);
       },
 
       onNextClick: (element, step, options) => {

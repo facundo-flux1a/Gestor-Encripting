@@ -129,12 +129,11 @@ export function StatsHoverTable({
         (isActive('base10') ? bases.base10 : 0) +
         (isActive('base4') ? bases.base4 : 0) +
         (isActive('base0') ? bases.base0 : 0);
-    const calculatedTotalImpuestos =
+    const calculatedTotalIVA =
         (isActive('iva21') ? quotas.iva21 : 0) +
         (isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (isActive('iva10') ? quotas.iva10 : 0) +
-        (isActive('iva4') ? quotas.iva4 : 0) +
-        currentRecargo - currentRetencion;
+        (isActive('iva4') ? quotas.iva4 : 0);
 
     // Delta de bases desactivadas (lo que el usuario removió)
     const disabledBasesDelta =
@@ -144,27 +143,25 @@ export function StatsHoverTable({
         (!isActive('base4') ? bases.base4 : 0) +
         (!isActive('base0') ? bases.base0 : 0);
 
-    // Delta de cuotas desactivadas
+    // Delta de cuotas desactivadas (AHORA SOLO IVA)
     const disabledQuotasDelta =
         (!isActive('iva21') ? quotas.iva21 : 0) +
         (!isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (!isActive('iva10') ? quotas.iva10 : 0) +
-        (!isActive('iva4') ? quotas.iva4 : 0) +
-        (!isActive('recargo') ? (recargo || 0) : 0);
+        (!isActive('iva4') ? quotas.iva4 : 0);
 
     // Si hay override del backend, anclar a él y restar exactamente lo desactivado
-    // Esto garantiza que desactivar 2€ reste exactamente 2€ (no cientos)
     const totalBase = totalBaseOverride !== undefined
         ? Math.abs(totalBaseOverride) - Math.abs(disabledBasesDelta)
         : calculatedTotalBase;
 
-    const totalImpuestos = totalIvaOverride !== undefined
+    const totalIVA = totalIvaOverride !== undefined
         ? Math.abs(totalIvaOverride) - Math.abs(disabledQuotasDelta)
-        : Math.abs(calculatedTotalImpuestos);
+        : Math.abs(calculatedTotalIVA);
 
     const grandTotal = totalOverride !== undefined
-        ? Math.abs(totalOverride) - Math.abs(disabledBasesDelta) - Math.abs(disabledQuotasDelta) + (!isActive('retencion') ? Math.abs(retencion || 0) : 0)
-        : (totalBase + totalImpuestos);
+        ? Math.abs(totalOverride) - Math.abs(disabledBasesDelta) - Math.abs(disabledQuotasDelta) - (!isActive('recargo') ? Math.abs(recargo || 0) : 0) + (!isActive('retencion') ? Math.abs(retencion || 0) : 0)
+        : (totalBase + totalIVA + currentRecargo - currentRetencion);
 
     return (
         <div className="min-w-[240px] p-1 space-y-3 select-none">
@@ -243,8 +240,15 @@ export function StatsHoverTable({
                     isActive={isActive('iva4')}
                 />
 
-                {/* Recargo */}
-                {(recargo || 0) > 0 && (
+                <div className="border-t pt-1 mt-1 transition-all">
+                    <TaxRow label="Total IVA" value={totalIVA} isTotal />
+                </div>
+            </div>
+
+            {/* Recargo Equivalencia */}
+            {(recargo || 0) > 0 && (
+                <div className="space-y-0.5">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 mt-2">Recargos</div>
                     <TaxRow
                         label="Recargo Equiv."
                         value={recargo!}
@@ -252,12 +256,8 @@ export function StatsHoverTable({
                         onClick={() => toggleKey('recargo')}
                         isActive={isActive('recargo')}
                     />
-                )}
-
-                <div className="border-t pt-1 mt-1 transition-all">
-                    <TaxRow label="Total Impuestos" value={totalImpuestos} isTotal />
                 </div>
-            </div>
+            )}
 
             {/* Retenciones IRPF — fuera del bloque IVA, explica la diferencia con el total */}
             {(retencion || 0) > 0 && (

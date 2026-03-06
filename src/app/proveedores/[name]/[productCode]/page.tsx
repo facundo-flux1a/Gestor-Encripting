@@ -14,6 +14,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ProductPriceChart } from "./product-price-chart";
 
 const formatCurrency = (amount: number | string | null | undefined, currency: string = 'EUR') => {
@@ -116,22 +122,31 @@ export default async function ProductDetailPage({
                         <CardContent>
                             <div className="text-2xl font-bold">{formatCurrency(currentPrice)}</div>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                                {priceTrend === 'up' ? (
-                                    <>
-                                        <TrendingUp className="h-3 w-3 text-red-500" />
-                                        <span className="text-red-500">+{trendPercentage.toFixed(1)}%</span>
-                                    </>
-                                ) : priceTrend === 'down' ? (
-                                    <>
-                                        <TrendingDown className="h-3 w-3 text-green-500" />
-                                        <span className="text-green-500">{trendPercentage.toFixed(1)}%</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Minus className="h-3 w-3" />
-                                        <span>Sin cambios</span>
-                                    </>
-                                )}
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                                            {priceTrend === 'up' ? (
+                                                <>
+                                                    <TrendingUp className="h-3 w-3 text-red-500" />
+                                                    <span className="text-red-500">+{trendPercentage.toFixed(1)}%</span>
+                                                </>
+                                            ) : priceTrend === 'down' ? (
+                                                <>
+                                                    <TrendingDown className="h-3 w-3 text-green-500" />
+                                                    <span className="text-green-500">{trendPercentage.toFixed(1)}%</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Minus className="h-3 w-3" />
+                                                    <span>Sin cambios</span>
+                                                </>
+                                            )}
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p className="max-w-[200px] text-center">Variación de la última tarifa respecto a la tarifa promedio histórica del proveedor.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                                 <span className="ml-1">vs promedio</span>
                             </div>
                         </CardContent>
@@ -211,9 +226,18 @@ export default async function ProductDetailPage({
                                             <TableCell className="text-right">{formatCurrency(item.importe_linea)}</TableCell>
                                             <TableCell className="text-center">
                                                 {priceChange !== null ? (
-                                                    <Badge variant={priceChange > 0 ? "destructive" : priceChange < 0 ? "default" : "secondary"} className="text-xs">
-                                                        {priceChange > 0 ? '+' : ''}{priceChange.toFixed(1)}%
-                                                    </Badge>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Badge variant={priceChange > 0 ? "destructive" : priceChange < 0 ? "default" : "secondary"} className="text-xs cursor-help">
+                                                                    {priceChange > 0 ? '+' : ''}{priceChange.toFixed(1)}%
+                                                                </Badge>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>Variación respecto a la factura inmediatamente anterior.</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
                                                 ) : <span className="text-xs text-muted-foreground">-</span>}
                                             </TableCell>
                                         </TableRow>

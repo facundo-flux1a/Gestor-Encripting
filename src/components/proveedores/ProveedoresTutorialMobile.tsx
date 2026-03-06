@@ -21,21 +21,65 @@ export function ProveedoresTutorialMobile() {
     const lastStepRef = useRef<number>(0);
     const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
 
-    const addTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (!overlay || overlayTouchBlockerRef.current) return;
-        const handler = (e: TouchEvent) => { e.preventDefault(); e.stopPropagation(); };
-        overlay.addEventListener('touchstart', handler, { passive: false });
-        overlayTouchBlockerRef.current = handler;
+    const blockedEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'pointercancel'];
+
+    const logToTerminal = (msg: string) => {
+        if (process.env.NODE_ENV === 'development') {
+            fetch('/api/mobile-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            }).catch(() => { });
+        }
     };
 
-    const removeTouchBlocker = () => {
-        const overlay = document.querySelector('.driver-overlay') as HTMLElement | null;
-        if (overlay && overlayTouchBlockerRef.current) {
-            overlay.removeEventListener('touchstart', overlayTouchBlockerRef.current);
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            const idx = lastStepRef.current;
+
+            // 1. Popover is ALWAYS allowed
+            const isPopover = target.closest('.driver-popover') || target.closest('.driver-popover-wrapper');
+
+            if (isPopover) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Click en Popover (${target.tagName})`);
+                return;
+            }
+
+            // 2. Step-Specific Surgical Whitelists: Block everything else
+            let isWhitelisted = false;
+            // Strict mode for Proveedores: ONLY popover and critical portals are allowed.
+            // Highlighted elements are kept inclickeable via CSS.
+            if (target.closest('.driver-popover') || target.closest('[data-radix-portal]')) isWhitelisted = true;
+
+            if (!isWhitelisted) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName} (${target.className})`);
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            } else {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Pasó Whitelist (${target.tagName})`);
+            }
+        };
+        // Use capture: true to intercept before other handlers
+        blockedEvents.forEach(evt => {
+            document.addEventListener(evt, handler, { passive: false, capture: true });
+        });
+        overlayTouchBlockerRef.current = handler as any;
+    };
+
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            blockedEvents.forEach(evt => {
+                document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
+            });
         }
         overlayTouchBlockerRef.current = null;
     };
+
+    const addTouchBlocker = () => { };
+    const removeTouchBlocker = () => { };
 
     useEffect(() => {
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
@@ -45,35 +89,35 @@ export function ProveedoresTutorialMobile() {
         const startTextOnlyTutorial = () => {
             const textSteps: DriveStep[] = [
                 {
-                    element: 'body',
+                    element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: '¡Bienvenido a Proveedores! 🏢',
                         description: 'Esta sección te permite gestionar todos tus proveedores de forma centralizada. Aquí puedes analizar gastos, ver documentos, explorar productos y detectar anomalías.\n\nNota: Para ver datos reales, necesitas tener empresas seleccionadas en el sistema.',
-                        side: 'over' as const,
+                        side: 'bottom' as const, align: 'start' as const,
                     },
                 },
                 {
-                    element: 'body',
+                    element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: 'Tabla de Proveedores 📊',
                         description: 'La tabla principal muestra un listado de todos tus proveedores con información básica: nombre, total gastado, cantidad de documentos y productos únicos. Podés ordenar, filtrar y buscar proveedores.',
-                        side: 'over' as const,
+                        side: 'bottom' as const,
                     },
                 },
                 {
-                    element: 'body',
+                    element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: 'Vista de Detalle del Proveedor 🔍',
                         description: 'Al tocar cualquier proveedor de la tabla, entras a su página de detalle donde encontrarás tres pestañas:\n\n• Resumen: Dashboard interactivo con gráficos de gastos\n• Documentos: Acceso completo a todas las facturas\n• Productos: Catálogo completo de productos comprados.',
-                        side: 'over' as const,
+                        side: 'bottom' as const,
                     },
                 },
                 {
-                    element: 'body',
+                    element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: '¡Tutorial Completado! 🎉',
                         description: '¡Selecciona empresas y empieza a gestionar tus proveedores de forma inteligente!\n\n✅ Tabla con listado y métricas\n✅ Vista de detalle con tres pestañas\n✅ Analíticas completas por proveedor',
-                        side: 'over' as const,
+                        side: 'bottom' as const,
                     },
                 },
             ];
@@ -85,29 +129,59 @@ export function ProveedoresTutorialMobile() {
                 prevBtnText: '← Anterior',
                 doneBtnText: '¡Entendido!',
                 allowClose: false,
-                disableActiveInteraction: false,
+                disableActiveInteraction: true,
                 showButtons: ['next', 'previous'],
                 animate: true,
                 overlayOpacity: 0.75,
                 onHighlightStarted: (element, step, options) => {
-                    lastStepRef.current = options.state.activeIndex ?? 0;
-                    setTimeout(() => addTouchBlocker(), 50);
+                    const currentStepIndex = options.state.activeIndex ?? 0;
+                    lastStepRef.current = currentStepIndex;
+                    console.log('🎯 [ProveedoresTutorialMobile-Text] Paso:', currentStepIndex, element);
+
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
+                    document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+                    addGlobalTouchBlocker();
                 },
-                onNextClick: () => driverObj.moveNext(),
+                onNextClick: (element, step, options) => {
+                    const idx = options.state.activeIndex ?? 0;
+                    const total = textSteps.length;
+                    if (idx === total - 1) {
+                        markAsCompleted();
+                        removeGlobalTouchBlocker();
+                        document.body.classList.forEach(cls => {
+                            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                        });
+                        setTimeout(() => driverObj.destroy(), 100);
+                    } else {
+                        driverObj.moveNext();
+                    }
+                },
+                onCloseClick: () => {
+                    removeGlobalTouchBlocker();
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
+                    const idx = driverInstanceRef.current?.getActiveIndex() ?? 0;
+                    const totalStepsCount = textSteps.length;
+                    if (idx >= totalStepsCount - 2) markAsCompleted();
+                    driverInstanceRef.current?.destroy();
+                },
                 onPrevClick: () => driverObj.movePrevious(),
                 onDestroyStarted: async () => {
-                    const finalStep = lastStepRef.current;
-                    const totalSteps = textSteps.length - 1;
-                    if (finalStep >= totalSteps) await markAsCompleted();
-                    removeTouchBlocker();
-                    if (driverInstanceRef.current) {
-                        driverInstanceRef.current.destroy();
-                        driverInstanceRef.current = null;
-                    }
+                    removeGlobalTouchBlocker();
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
+                    const styleEl = document.getElementById('proveedores-tutorial-mobile-styles');
+                    if (styleEl) styleEl.remove();
                 },
             });
 
             driverInstanceRef.current = driverObj;
+            addGlobalTouchBlocker();
             setTimeout(() => driverObj.drive(), 300);
         };
 
@@ -129,13 +203,13 @@ export function ProveedoresTutorialMobile() {
                         side: 'top' as const, align: 'start' as const,
                     },
                 },
-                { element: 'body', popover: { title: 'Vista de Detalle 🔍', description: 'Al tocar un proveedor verás tres pestañas:\n\n• Resumen: Analíticas y gráficos\n• Documentos: Facturas con filtros\n• Productos: Catálogo con historial de precios', side: 'over' as const } },
-                { element: 'body', popover: { title: 'Pestaña Resumen 📈', description: 'Gráficos de gastos mensuales y métricas clave para identificar patrones y optimizar costos.', side: 'over' as const } },
-                { element: 'body', popover: { title: 'Pestaña Documentos 📄', description: 'Todas las facturas ordenadas cronológicamente con filtros avanzados.', side: 'over' as const } },
-                { element: 'body', popover: { title: 'Pestaña Productos 📦', description: 'Catálogo completo de productos con historial de precios y frecuencias de compra.', side: 'over' as const } },
-                { element: 'body', popover: { title: 'Détalle de Producto 🎯', description: 'Al tocar un producto verás estadísticas completas: precio promedio, evolución y alertas sobre variaciones de costos.', side: 'over' as const } },
-                { element: 'body', popover: { title: 'Alertas Inteligentes 🚨', description: 'El sistema detecta automáticamente anomalías como cambios bruscos de precio o cantidades inusuales.', side: 'over' as const } },
-                { element: 'body', popover: { title: '¡Tutorial Completado! 🎉', description: '✅ Tabla con listado y métricas\n✅ Detalle con tres pestañas\n✅ Analíticas completas\n✅ Detección inteligente de anomalías\n\n¡Empieza a gestionar tus compras de forma inteligente!', side: 'over' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Vista de Detalle 🔍', description: 'Al tocar un proveedor verás tres pestañas:\n\n• Resumen: Analíticas y gráficos\n• Documentos: Facturas con filtros\n• Productos: Catálogo con historial de precios', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Pestaña Resumen 📈', description: 'Gráficos de gastos mensuales y métricas clave para identificar patrones y optimizar costos.', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Pestaña Documentos 📄', description: 'Todas las facturas ordenadas cronológicamente con filtros avanzados.', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Pestaña Productos 📦', description: 'Catálogo completo de productos con historial de precios y frecuencias de compra.', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Détalle de Producto 🎯', description: 'Al tocar un producto verás estadísticas completas: precio promedio, evolución y alertas sobre variaciones de costos.', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Alertas Inteligentes 🚨', description: 'El sistema detecta automáticamente anomalías como cambios bruscos de precio o cantidades inusuales.', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: '¡Tutorial Completado! 🎉', description: '✅ Tabla con listado y métricas\n✅ Detalle con tres pestañas\n✅ Analíticas completas\n✅ Detección inteligente de anomalías\n\n¡Empieza a gestionar tus compras de forma inteligente!', side: 'bottom' as const } },
             ];
 
             const driverObj = driver({
@@ -150,35 +224,54 @@ export function ProveedoresTutorialMobile() {
                 animate: true,
                 overlayOpacity: 0.75,
                 onHighlightStarted: (element, step, options) => {
-                    lastStepRef.current = options.state.activeIndex ?? 0;
-                    setTimeout(() => addTouchBlocker(), 50);
+                    const currentStepIndex = options.state.activeIndex ?? 0;
+                    lastStepRef.current = currentStepIndex;
+                    console.log('🎯 [ProveedoresTutorialMobile-Visual] Paso:', currentStepIndex, element);
+
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
+                    document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+                    addGlobalTouchBlocker();
                 },
                 onNextClick: (element, step, options) => {
                     const idx = options.state.activeIndex ?? 0;
-                    const total = driverObj.getConfig().steps?.length ?? 0;
+                    const total = visualSteps.length;
                     if (idx === total - 1) {
                         markAsCompleted();
+                        removeGlobalTouchBlocker();
+                        document.body.classList.forEach(cls => {
+                            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                        });
                         setTimeout(() => driverObj.destroy(), 100);
                     } else {
                         driverObj.moveNext();
                     }
                 },
                 onCloseClick: () => {
-                    const idx = driverObj.getActiveIndex() ?? 0;
-                    const total = driverObj.getConfig().steps?.length ?? 0;
-                    if (idx >= total - 2) markAsCompleted();
-                    driverObj.destroy();
-                },
-                onPrevClick: () => driverObj.movePrevious(),
-                onDestroyStarted: () => {
-                    removeTouchBlocker();
+                    removeGlobalTouchBlocker();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
+                    const idx = driverInstanceRef.current?.getActiveIndex() ?? 0;
+                    const totalStepsCount = visualSteps.length;
+                    if (idx >= totalStepsCount - 2) markAsCompleted();
+                    driverInstanceRef.current?.destroy();
+                },
+                onPrevClick: () => driverObj.movePrevious(),
+                onDestroyStarted: () => {
+                    removeGlobalTouchBlocker();
+                    document.body.classList.forEach(cls => {
+                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                    });
+                    const styleEl = document.getElementById('proveedores-tutorial-mobile-styles');
+                    if (styleEl) styleEl.remove();
                 },
             });
 
             driverInstanceRef.current = driverObj;
+            addGlobalTouchBlocker();
             setTimeout(() => driverObj.drive(), 300);
         };
 
@@ -210,7 +303,11 @@ export function ProveedoresTutorialMobile() {
 
         return () => {
             clearInterval(interval);
-            if (driverInstanceRef.current) { driverInstanceRef.current.destroy(); driverInstanceRef.current = null; }
+            if (driverInstanceRef.current) {
+                driverInstanceRef.current.destroy();
+                driverInstanceRef.current = null;
+            }
+            removeGlobalTouchBlocker();
         };
     }, [shouldShowTutorial, isLoading, markAsCompleted, selectedCompanyIds]);
 
@@ -218,20 +315,26 @@ export function ProveedoresTutorialMobile() {
         const style = document.createElement('style');
         style.id = 'proveedores-tutorial-mobile-styles';
         style.textContent = `
-      .driver-overlay { pointer-events: auto !important; }
-      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
-      .driver-active-element, .driver-active-element *, .driver-active-element button,
-      .driver-active-element a, .driver-active-element input, .driver-active-element [role="button"] {
-        pointer-events: none !important; cursor: default !important;
+      /* Robust Mobile Blocking - Interaction strictly managed by JS */
+      .driver-overlay { 
+        pointer-events: none !important; 
+        z-index: 2147483630 !important; 
       }
-      .driver-popover, .driver-popover-wrapper, .driver-popover *, .driver-popover button {
-        pointer-events: auto !important; cursor: pointer !important;
-        touch-action: manipulation !important; -webkit-tap-highlight-color: transparent !important;
+      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
+
+      .driver-popover, .driver-popover-wrapper, .driver-popover * {
+        pointer-events: auto !important; 
+        z-index: 2147483647 !important;
       }
       .driver-popover button { min-height: 44px !important; }
-      .driver-active-element {
+
+      /* Highlighted active element */
+      .driver-active-element { 
+        z-index: 2147483640 !important; 
+        border: 2px solid white !important;
         outline: 4px solid hsl(var(--primary)) !important;
         box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
+        pointer-events: none !important; /* Strict inclickeable limit */
       }
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
@@ -255,8 +358,6 @@ export function ProveedoresTutorialMobile() {
         color: rgba(255,255,255,0.5) !important; touch-action: manipulation !important;
         min-height: 44px !important; min-width: 44px !important;
       }
-      body:has(.driver-overlay) * { pointer-events: none !important; }
-      body:has(.driver-overlay) .driver-popover, body:has(.driver-overlay) .driver-popover * { pointer-events: auto !important; }
     `;
         document.head.appendChild(style);
         return () => { const el = document.getElementById('proveedores-tutorial-mobile-styles'); if (el) el.remove(); };

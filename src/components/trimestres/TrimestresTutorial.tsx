@@ -170,6 +170,14 @@ export function TrimestresTutorial() {
           // 🔄 Sincronizar estado con el proveedor
           setTutorialState(true, currentStepIndex);
 
+          // ✅ Gestionar clases de paso en el body para control CSS preciso
+          document.body.classList.forEach(cls => {
+            if (cls.startsWith('tutorial-step-')) {
+              document.body.classList.remove(cls);
+            }
+          });
+          document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
           // ✅ FORZAR MOSTRAR VACIOS (Step 4 en adelante = índice 3)
           if (currentStepIndex >= 3) {
             console.log('🔄 [TrimestresTutorial] Forzando mostrarVacios: true');
@@ -265,14 +273,15 @@ export function TrimestresTutorial() {
         },
 
         onDestroyStarted: () => {
-          console.log('🏁 [TrimestresTutorial] onDestroyStarted');
+          console.log('🏁 [TrimestresTutorial] onDestroyStarted invocado');
           document.body.removeAttribute('data-tutorial-step');
-          // 🔄 Limpiar estado en el proveedor
           setTutorialState(false, 0);
 
-          // Limpieza de clases del body
+          // Asegurar que las clases del body se limpien
           document.body.classList.forEach(cls => {
-            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+            if (cls.startsWith('tutorial-step-')) {
+              document.body.classList.remove(cls);
+            }
           });
         },
       });

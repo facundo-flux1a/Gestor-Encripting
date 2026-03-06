@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Folder, TrendingUp, Eye } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, TrendingUp, TrendingDown, Eye } from 'lucide-react';
 import {
     Table,
     TableBody,
@@ -8,6 +8,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import type { DocumentLine } from "@/lib/types";
@@ -41,11 +47,23 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
         const db = b.fecha_emision || '';
         return db.localeCompare(da);
     });
-
     const line = sortedGroup[0];
     const totalQty = group.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
     const totalLineAmount = group.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
     const numberOfPurchases = group.length;
+
+    // 📈 Cálculo de Variación de Precio (Última Compra vs Promedio Histórico)
+    let priceVariation = 0;
+    const isPriceVariation = sortedGroup.length > 1;
+
+    if (isPriceVariation) {
+        const newestPrice = Number(sortedGroup[0].precio_unitario) || 0;
+        const avgPrice = totalQty > 0 ? totalLineAmount / totalQty : 0; // Promedio ponderado
+
+        if (avgPrice > 0) {
+            priceVariation = ((newestPrice - avgPrice) / avgPrice) * 100;
+        }
+    }
 
     // ✅ Lógica de URL igual a la de las cards
     const identifier = line.codigo
@@ -121,9 +139,46 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
                     {totalQty.toLocaleString('es-ES')}
                 </TableCell>
                 <TableCell className="text-right">
-                    <span className="bg-muted px-2 py-1 rounded-md border border-border text-[10px] text-muted-foreground font-medium italic">
-                        Múltiples compras
-                    </span>
+                    <div className="flex flex-col items-end justify-center gap-1">
+                        <span className="tabular-nums font-semibold">{formatCurrency(totalQty > 0 ? totalLineAmount / totalQty : 0)}</span>
+
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-[0.2em] bg-muted/50 px-1.5 py-0.5 rounded-sm">
+                                Evolución
+                            </span>
+
+                            {/* 📈 Badge de Variación */}
+                            {isPriceVariation && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className={`flex items-center px-2 py-0.5 rounded-sm text-xs font-bold cursor-help ${priceVariation > 0
+                                                ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                                : priceVariation < 0
+                                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                                }`}>
+                                                {priceVariation > 0 ? (
+                                                    <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                                                ) : priceVariation < 0 ? (
+                                                    <TrendingDown className="w-3.5 h-3.5 mr-1" />
+                                                ) : (
+                                                    <div className="w-3.5 h-0.5 bg-current rounded-full mr-1" /> // Línea horizontal representativa
+                                                )}
+                                                <span>
+                                                    {priceVariation > 0 ? '+' : ''}
+                                                    {priceVariation !== 0 ? `${priceVariation.toFixed(1)}%` : '0.0%'}
+                                                </span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p className="max-w-[200px] text-center">Variación respecto a tu costo promedio histórico según el volumen comprado.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                        </div>
+                    </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-black text-primary text-lg">
                     {formatCurrency(totalLineAmount)}
@@ -135,13 +190,16 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
 
             {isOpen && sortedGroup.map((child, idx) => (
                 <TableRow key={child.id || idx} className="bg-muted/5 hover:bg-muted/10 border-l-2 border-primary/30">
-                    <TableCell className="pl-12 text-xs py-3" colSpan={3}>
+                    <TableCell className="pl-12 text-xs py-3" colSpan={2}>
                         <div className="flex items-center gap-3">
                             <span className="text-foreground font-medium">{formatDate(child.fecha_emision)}</span>
                             <span className="text-muted-foreground opacity-30">|</span>
                             <span className="text-muted-foreground font-mono text-[10px]">{child.numero_documento || '-'}</span>
                             <span className="text-muted-foreground truncate opacity-70 italic max-w-[250px]">- {child.descripcion}</span>
                         </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium text-xs text-muted-foreground">
+                        {formatCurrency(child.precio_unitario)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-xs text-foreground/80">
                         {formatCurrency(child.importe_linea)}
