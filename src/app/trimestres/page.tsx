@@ -12,6 +12,7 @@ import { StatsHoverTable } from '@/components/trimestres/stats-hover-table'; // 
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
+import { TrimestreExcelView } from '@/components/trimestres/trimestre-excel-view';
 import { TrimestresTutorialRouter } from '@/components/trimestres/TrimestresTutorialRouter';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -87,8 +88,10 @@ function TrimestresPageContent() {
   // Estados
   const [trimestres, setTrimestres] = React.useState<Trimestre[]>([]);
   const [documentos, setDocumentos] = React.useState<Document[]>([]);
+  const [annualDocumentos, setAnnualDocumentos] = React.useState<Document[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
+  const [isLoadingAnnualDocs, setIsLoadingAnnualDocs] = React.useState(false);
 
   // Trimestre seleccionado
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
@@ -221,6 +224,7 @@ function TrimestresPageContent() {
 
     console.log('🔄 [Trimestres] Cargando documentos con empresas:', selectedCompanyIds);
     loadDocumentos();
+    loadAnnualDocumentos();
   }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]);
 
   const loadTrimestres = async () => {
@@ -361,6 +365,38 @@ function TrimestresPageContent() {
     }
   };
 
+  const loadAnnualDocumentos = async () => {
+    try {
+      if (selectedCompanyIds.length === 0) {
+        setAnnualDocumentos([]);
+        return;
+      }
+
+      setIsLoadingAnnualDocs(true);
+
+      const params = new URLSearchParams({
+        año: selectedAño.toString(),
+      });
+
+      selectedCompanyIds.forEach(id => {
+        params.append('empresa_id', id.toString());
+      });
+
+      console.log('📡 [loadAnnualDocumentos] Fetching con params:', params.toString());
+
+      const response = await fetch(`/api/trimestres/documentos?${params}`);
+      if (!response.ok) throw new Error('Error al cargar documentos anuales');
+
+      const data = await response.json();
+      console.log('✅ Documentos anuales cargados:', data.length);
+      setAnnualDocumentos(data);
+    } catch (error) {
+      console.error('❌ Error loading annual documents:', error);
+    } finally {
+      setIsLoadingAnnualDocs(false);
+    }
+  };
+
   const handleSelectAño = (año: number) => {
     console.log('🔄 Año seleccionado:', año);
     setSelectedAño(año);
@@ -479,17 +515,14 @@ function TrimestresPageContent() {
         { id: 'iva_21', header: 'IVA 21%' },
         { id: 'base_10', header: 'Base 10%' },
         { id: 'iva_10', header: 'IVA 10%' },
-        { id: 'base_4', header: 'Base 4%' },
-        { id: 'iva_4', header: 'IVA 4%' },
-        { id: 'base_0', header: 'Base 0%' },
       ];
 
       generateAdvancedExport(processedData, exportColumns, {
-        filename: `Export_Trimestres_${año}${trimestre ? `_T${trimestre}` : '_Anual'}`,
+        filename: `Trimestre_${año}${trimestre ? `_T${trimestre}` : '_Anual'}`,
         format: 'excel',
         includeSummary: true,
-        trimestre, // Nuevo para desglose
         exportContext: 'trimestres',
+        trimestre: trimestre ?? null,
       });
 
       toast({
@@ -1134,42 +1167,52 @@ function TrimestresPageContent() {
               </Button>
             </div>
           ) : (
-            <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
-              {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
-              <div className="px-4 pt-3 border-b">
-                <TrimestresFilterBar
-                  documentos={documentos}
-                  filters={filters}
-                  onFiltersChange={setFilters}
-                  empresaIds={selectedCompanyIds}
-                  año={selectedAño}
-                  trimestre={selectedTrimestre}
-                  mostrarVacios={mostrarVacios}
+            <>
+              {/* 📊 VISTA EXCEL INTERACTIVA (ANUAL) */}
+              <TrimestreExcelView
+                documents={annualDocumentos}
+                isLoading={isLoadingAnnualDocs}
+                año={selectedAño}
+              />
+
+              <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
+                {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
+                <div className="px-4 pt-3 border-b">
+                  <TrimestresFilterBar
+                    documentos={documentos}
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    empresaIds={selectedCompanyIds}
+                    año={selectedAño}
+                    trimestre={selectedTrimestre}
+                    mostrarVacios={mostrarVacios}
+                  />
+                </div>
+                <TrimestreTable
+                  documentos={documentosFiltrados}
+                  footerValues={trimestreAgregado ? {
+                    base: (trimestreAgregado.total_ingresos_sin_iva || 0) - (trimestreAgregado.total_gastos_sin_iva || 0),
+                    iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
+                    total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos,
+                    label: "Resultado Neto del Periodo:",
+                    breakdown: {
+                      ingresos: {
+                        base: trimestreAgregado.total_ingresos_sin_iva || 0,
+                        iva: trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0),
+                        total: trimestreAgregado.total_ingresos,
+                        retencion: ingresosBreakdown.retencion || 0
+                      },
+                      gastos: {
+                        base: trimestreAgregado.total_gastos_sin_iva || 0,
+                        iva: trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0),
+                        total: trimestreAgregado.total_gastos,
+                        retencion: gastosBreakdown.retencion || 0
+                      }
+                    }
+                  } : undefined}
                 />
               </div>
-              <TrimestreTable
-                documentos={documentosFiltrados}
-                footerValues={trimestreAgregado ? {
-                  base: (trimestreAgregado.total_ingresos_sin_iva || 0) - (trimestreAgregado.total_gastos_sin_iva || 0),
-                  iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
-                  total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos,
-                  label: "Resultado Neto del Periodo:",
-                  breakdown: {
-                    ingresos: {
-                      base: trimestreAgregado.total_ingresos_sin_iva || 0,
-                      iva: trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0),
-                      total: trimestreAgregado.total_ingresos,
-                      retencion: ingresosBreakdown.retencion || 0
-                    },
-                    gastos: {
-                      base: trimestreAgregado.total_gastos_sin_iva || 0,
-                      iva: trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0),
-                      total: trimestreAgregado.total_gastos,
-                      retencion: gastosBreakdown.retencion || 0
-                    }
-                  }
-                } : undefined}
-              /></div>
+            </>
           )}
         </div>
 

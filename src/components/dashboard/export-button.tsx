@@ -11,6 +11,8 @@ interface ExportButtonProps {
     columns: Column<any, unknown>[];
     data: Row<any>[];
     filename: string;
+    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+    includeSummary?: boolean;
 }
 
 const getHeaderName = (col: Column<any, unknown>): string => {
@@ -21,7 +23,7 @@ const getHeaderName = (col: Column<any, unknown>): string => {
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
 };
 
-export function ExportButton({ columns, data, filename }: ExportButtonProps) {
+export function ExportButton({ columns, data, filename, exportContext, includeSummary }: ExportButtonProps) {
 
     const handleExport = (format: 'excel' | 'csv' | 'txt') => {
         const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
@@ -35,7 +37,8 @@ export function ExportButton({ columns, data, filename }: ExportButtonProps) {
         generateAdvancedExport(data, utilColumns, {
             filename,
             format,
-            includeSummary: true // Enable by default
+            ...(format === 'excel' && includeSummary ? { includeSummary: true } : {}),
+            ...(format === 'excel' && exportContext ? { exportContext } : {}),
         });
     };
 

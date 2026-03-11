@@ -943,6 +943,7 @@ export function DocumentsTable({
   customTypes = [],
   onMove,
   onDragStart,
+  exportContext = 'documentos',
 }: {
   documents: Document[],
   hiddenColumns?: string[],
@@ -955,6 +956,7 @@ export function DocumentsTable({
   customTypes?: string[],
   onMove?: (docIds: number[], targetTipo: string) => void,
   onDragStart?: (selectedIds: number[]) => void,
+  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -1367,11 +1369,14 @@ export function DocumentsTable({
               onRowClick={handleRowClick}
               viewId={viewId}
               enableColumnPersistence={enableColumnPersistence}
-              // 🆕 Pasar props de selección
+              // Pasar props de selección
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
-              // 🎯 Pasar callback para drag entre tabs
+              // Drag entre tabs
               onDragStart={onDragStart}
+              // Exportación con Resumen IVA
+              exportContext={exportContext}
+              includeSummary={true}
             />
           </div>
 

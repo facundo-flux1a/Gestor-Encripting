@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback, ReactNode } from 'react';
 import type { Company } from '@/lib/types';
 
 type CompanyContextType = {
@@ -19,27 +19,58 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Debounce ref for saving selection to Redis
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Save selection to Redis (debounced 600ms) ────────────────────────────
+  const saveSelectionToRedis = useCallback((ids: number[]) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await fetch('/api/user/selected-companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        console.log('💾 [CompanyProvider] Selección guardada en Redis:', ids);
+      } catch (err) {
+        console.warn('⚠️ [CompanyProvider] No se pudo guardar selección en Redis:', err);
+      }
+    }, 600);
+  }, []);
+
+  // ─── Load companies + restore saved selection ────────────────────────────
   useEffect(() => {
     async function loadCompanies() {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/companies');
-        if (response.ok) {
-          const data = await response.json();
-          
-          console.log('🏢 [CompanyProvider] Empresas obtenidas del servidor:', data.length);
-          
-          setCompanies(data);
-          
-          // ✅ CRÍTICO: SIEMPRE resetear selección al cargar empresas
-          // Esto evita que se mantengan IDs de otras cuentas
-          setSelectedCompanyIds([]);
-          
-          console.log('✅ [CompanyProvider] selectedCompanyIds reseteado a []');
-        }
+
+        // Fetch companies and saved selection in parallel
+        const [companiesRes, selectionRes] = await Promise.all([
+          fetch('/api/companies'),
+          fetch('/api/user/selected-companies'),
+        ]);
+
+        if (!companiesRes.ok) throw new Error('Error al cargar empresas');
+
+        const data: Company[] = await companiesRes.json();
+        const selectionData = selectionRes.ok ? await selectionRes.json() : { ids: [] };
+
+        console.log('🏢 [CompanyProvider] Empresas obtenidas del servidor:', data.length);
+        console.log('🔁 [CompanyProvider] Selección recuperada de Redis:', selectionData.ids);
+
+        setCompanies(data);
+
+        // Restore only valid IDs (prevents stale IDs from a different account)
+        const validIds = data.map((c) => c.id);
+        const restoredIds = (selectionData.ids as number[]).filter((id) =>
+          validIds.includes(id)
+        );
+
+        setSelectedCompanyIds(restoredIds);
+        console.log('✅ [CompanyProvider] Selección restaurada:', restoredIds);
       } catch (error) {
         console.error('❌ [CompanyProvider] Error loading companies:', error);
-        // ✅ En caso de error, también resetear
         setCompanies([]);
         setSelectedCompanyIds([]);
       } finally {
@@ -49,41 +80,39 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
     loadCompanies();
   }, []);
 
-  const toggleCompanyId = (id: number) => {
-    setSelectedCompanyIds(prev => {
-      // ✅ VALIDACIÓN: Solo permitir IDs que existan en companies
-      const validCompanyIds = companies.map(c => c.id);
-      
+  // ─── Toggle + save ────────────────────────────────────────────────────────
+  const toggleCompanyId = useCallback((id: number) => {
+    setSelectedCompanyIds((prev) => {
+      const validCompanyIds = companies.map((c) => c.id);
+
       if (!validCompanyIds.includes(id)) {
         console.warn('⚠️ [CompanyProvider] Intento de toggle con ID inválido:', id);
-        console.warn('⚠️ [CompanyProvider] IDs válidos:', validCompanyIds);
-        return prev; // No cambiar nada si el ID no es válido
+        return prev;
       }
-      
+
       const newSelection = prev.includes(id)
-        ? prev.filter(companyId => companyId !== id)
+        ? prev.filter((companyId) => companyId !== id)
         : [...prev, id];
-      
+
       console.log('🔄 [CompanyProvider] Toggle empresa', id, '- Nueva selección:', newSelection);
+
+      // Persist asynchronously (debounced)
+      saveSelectionToRedis(newSelection);
+
       return newSelection;
     });
-  };
+  }, [companies, saveSelectionToRedis]);
 
-  // ✅ NUEVO: Validar selectedCompanyIds cada vez que cambien las companies
+  // ─── Validate selectedCompanyIds when companies reload ───────────────────
   useEffect(() => {
     if (companies.length > 0 && selectedCompanyIds.length > 0) {
-      const validCompanyIds = companies.map(c => c.id);
-      const invalidIds = selectedCompanyIds.filter(id => !validCompanyIds.includes(id));
-      
+      const validIds = companies.map((c) => c.id);
+      const invalidIds = selectedCompanyIds.filter((id) => !validIds.includes(id));
+
       if (invalidIds.length > 0) {
-        console.warn('🚨 [CompanyProvider] IDs inválidos detectados:', invalidIds);
-        console.warn('🚨 [CompanyProvider] Limpiando selectedCompanyIds...');
-        
-        // Filtrar solo IDs válidos
-        const validSelection = selectedCompanyIds.filter(id => validCompanyIds.includes(id));
+        console.warn('🚨 [CompanyProvider] IDs inválidos detectados y limpiados:', invalidIds);
+        const validSelection = selectedCompanyIds.filter((id) => validIds.includes(id));
         setSelectedCompanyIds(validSelection);
-        
-        console.log('✅ [CompanyProvider] selectedCompanyIds limpiado:', validSelection);
       }
     }
   }, [companies, selectedCompanyIds]);
@@ -96,7 +125,7 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
     toggleCompanyId,
     isLoading,
     setIsLoading,
-  }), [companies, selectedCompanyIds, isLoading]);
+  }), [companies, selectedCompanyIds, isLoading, toggleCompanyId]);
 
   console.log('🏢 [CompanyProvider] Companies:', companies.length, 'Selected:', selectedCompanyIds);
 

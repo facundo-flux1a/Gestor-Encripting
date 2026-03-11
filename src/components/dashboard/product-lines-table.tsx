@@ -52,13 +52,21 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
     const totalLineAmount = group.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
     const numberOfPurchases = group.length;
 
-    // 📈 Cálculo de Variación de Precio (Última Compra vs Promedio Histórico)
+    // 📈 Cálculo de Variación de Precio (Última Compra vs Promedio de Tarifas)
     let priceVariation = 0;
     const isPriceVariation = sortedGroup.length > 1;
 
     if (isPriceVariation) {
         const newestPrice = Number(sortedGroup[0].precio_unitario) || 0;
-        const avgPrice = totalQty > 0 ? totalLineAmount / totalQty : 0; // Promedio ponderado
+
+        // Nueva lógica unificada: Promedio Simple de Precios Unitarios (Ignora cantidades e importes)
+        const validPrices = sortedGroup
+            .map(item => Number(item.precio_unitario))
+            .filter(price => !isNaN(price) && price > 0);
+
+        const avgPrice = validPrices.length > 0
+            ? validPrices.reduce((a, b) => a + b, 0) / validPrices.length
+            : 0;
 
         if (avgPrice > 0) {
             priceVariation = ((newestPrice - avgPrice) / avgPrice) * 100;
@@ -172,7 +180,7 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p className="max-w-[200px] text-center">Variación respecto a tu costo promedio histórico según el volumen comprado.</p>
+                                            <p className="max-w-[200px] text-center">Variación de la última tarifa respecto a la tarifa promedio histórica del proveedor.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -257,7 +265,10 @@ export function ProductLinesTable({ lines, providerFiscalId }: ProductLinesTable
                         <TableRow className="bg-muted/50 border-b">
                             <TableHead className="py-4">Descripción / Producto</TableHead>
                             <TableHead className="text-right">Cantidad Total</TableHead>
-                            <TableHead className="text-right">Precio Unitario</TableHead>
+                            <TableHead className="text-right">
+                                Precio Unitario
+                                <span className="block text-[10px] text-muted-foreground font-normal">(Promedio)</span>
+                            </TableHead>
                             <TableHead className="text-right font-bold">Importe Total</TableHead>
                             <TableHead className="text-center w-[80px]">Ver</TableHead>
                         </TableRow>

@@ -3757,7 +3757,18 @@ d.id,
   d.año_trimestre,
   d.num_trimestre,
   e.nombre_de_empresa as empresa_nombre,
-  e.cif as empresa_cif
+  e.cif as empresa_cif,
+  -- ✅ is_issued: 1=emitida(ingreso), 0=recibida(gasto)
+  (
+    SELECT MAX(CASE
+      WHEN ed2.rol IN ('emisor', 'proveedor')
+        AND ed2.identificador_fiscal = e.cif
+      THEN 1
+      ELSE 0
+    END)
+    FROM entidades_documento ed2
+    WHERE ed2.documento_id = d.id
+  ) as is_issued
       FROM documentos d
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE ${whereClause}

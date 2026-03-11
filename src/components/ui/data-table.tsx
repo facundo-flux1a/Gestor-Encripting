@@ -81,6 +81,9 @@ interface DataTableProps<TData, TValue> {
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
   // 🆕 CALLBACK PARA DRAG ENTRE TABS
   onDragStart?: (selectedIds: number[]) => void;
+  // 🆕 PROPS PARA EXPORTACIÓN CON RESUMEN IVA
+  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+  includeSummary?: boolean;
 }
 
 
@@ -403,6 +406,8 @@ export function DataTable<TData extends object, TValue>({
   rowSelection: externalRowSelection, // 🆕 SELECCIÓN EXTERNA
   onRowSelectionChange: setExternalRowSelection, // 🆕 CALLBACK EXTERNO
   onDragStart, // 🎯 NUEVO - Drag callback
+  exportContext, // 🆕 EXPORTACIÓN CON CONTEXTO
+  includeSummary, // 🆕 EXPORTACIÓN CON RESUMEN
 }: DataTableProps<TData, TValue>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
@@ -737,6 +742,8 @@ export function DataTable<TData extends object, TValue>({
             columns={table.getVisibleFlatColumns()}
             data={table.getRowModel().rows}
             filename={filename}
+            exportContext={exportContext}
+            includeSummary={includeSummary}
           />
         </div>
       </div>
