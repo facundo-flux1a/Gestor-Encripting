@@ -1,22 +1,32 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Document } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, ChevronDown, ChevronUp, LayoutGrid } from 'lucide-react';
+import { ChevronDown, ChevronUp, LayoutGrid, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
-// Dynamic import with SSR disabled for FortuneSheet
-const Workbook = dynamic(
-    () => import('@fortune-sheet/react').then((mod) => mod.Workbook),
-    { ssr: false }
-);
+// AG Grid Imports
+import { AgGridReact } from 'ag-grid-react';
+import {
+    ColDef,
+    ValueFormatterParams,
+    ValueParserParams,
+    ModuleRegistry,
+    AllCommunityModule,
+    themeQuartz,
+    colorSchemeDark
+} from 'ag-grid-community';
 
-// Import FortuneSheet styles
-import '@fortune-sheet/react/dist/index.css';
+// Register AG Grid Modules
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+// Define the Quartz Dark theme
+const darkTheme = themeQuartz.withPart(colorSchemeDark);
 
 interface TrimestreExcelViewProps {
     documents: Document[];
@@ -33,40 +43,42 @@ const createEmptySummary = () => {
     const sum: any = {
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
-        total_real: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 }
+        total_real: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        iva_db: {} as any,
+        iva_docs: {} as any
     };
     types.forEach(type => {
         rates.forEach(rate => {
             if (type === 'iva' && rate === 0) return;
-            sum[`${type}_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+            const key = `${type}_${rate}`;
+            sum[key] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+            if (type === 'iva') {
+                sum.iva_db[rate] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                sum.iva_docs[rate] = { 1: [], 2: [], 3: [], 4: [] };
+            }
         });
     });
     return sum;
 };
 
 const calculateAnnualSummary = (data: Document[]) => {
-    const ingresosSum = createEmptySummary();
-    const gastosSum = createEmptySummary();
-    const totalNetoSum = createEmptySummary();
+    const ingresosSum = { ...createEmptySummary(), traces: [] as any[] };
+    const gastosSum = { ...createEmptySummary(), traces: [] as any[] };
+    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[] };
 
-
-    data.forEach((doc, index) => {
+    data.forEach((doc) => {
         let q = doc.num_trimestre;
         if (!q && doc.fecha_emision) {
             const month = new Date(doc.fecha_emision).getMonth() + 1;
             q = Math.ceil(month / 3);
         }
 
-        // Usar importe_total como fallback de total
         const docTotalVal = Number(doc.total ?? (doc as any).importe_total ?? 0);
 
-        // DETERMINAR SI ES EMITIDO (INGRESO) O RECIBIDO (GASTO)
-        // Priorizar is_issued del backend (0 o 1)
         let isIssued = false;
         if (doc.is_issued !== undefined && doc.is_issued !== null) {
             isIssued = Number(doc.is_issued) === 1;
         } else {
-            // Heurística de respaldo
             isIssued = doc.entidades?.some(e =>
                 (e.rol === 'emisor' || e.rol === 'proveedor') &&
                 doc.empresa_cif && e.identificador_fiscal?.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
@@ -91,16 +103,23 @@ const calculateAnnualSummary = (data: Document[]) => {
         totalNetoSum.total_real[q] += docTotalNeto;
         totalNetoSum.total_real.total += docTotalNeto;
 
-        let hasIvaDetails = false;
-        if (doc.iva_details && Array.isArray(doc.iva_details) && doc.iva_details.length > 0) {
-            hasIvaDetails = true;
-            doc.iva_details.forEach((detail: any) => {
+        const ivaDetails = (doc as any).iva_details || [];
+        const hasIvaDetails = ivaDetails.length > 0;
+
+        let docBaseSum = 0;
+        let docIvaSum = 0;
+        let docRecSum = 0;
+        let docRetSum = 0;
+
+        if (hasIvaDetails) {
+            ivaDetails.forEach((detail: any) => {
                 const tipoIva = (detail.tipo_impuesto || '').toLowerCase();
-                const cuota = Math.abs(Number(detail.cuota) || 0);
+                const cuota = Math.round(Math.abs(Number(detail.cuota) || 0) * 100) / 100;
                 const cuotaAbs = cuota * absSign;
                 const cuotaNeto = cuota * netoSign;
 
                 if (tipoIva.includes('retencion')) {
+                    docRetSum += cuota;
                     targetSum.retenciones[q] += cuotaAbs;
                     targetSum.retenciones.total += cuotaAbs;
                     totalNetoSum.retenciones[q] += cuotaNeto;
@@ -109,6 +128,7 @@ const calculateAnnualSummary = (data: Document[]) => {
                 }
 
                 if (tipoIva.includes('recargo') || tipoIva.includes('equivalencia')) {
+                    docRecSum += cuota;
                     targetSum.recargos[q] += cuotaAbs;
                     targetSum.recargos.total += cuotaAbs;
                     totalNetoSum.recargos[q] += cuotaNeto;
@@ -117,39 +137,84 @@ const calculateAnnualSummary = (data: Document[]) => {
                 }
 
                 const rate = Math.round(Number(detail.porcentaje));
+                const base = Math.round(Math.abs(Number(detail.base_imponible) || 0) * 100) / 100;
+
+                docBaseSum += base;
+                docIvaSum += cuota;
+
+                const theoreticalIva = Math.round(base * rate) / 100;
+                if (Math.abs(cuota - theoreticalIva) > 0.01) {
+                    const docId = doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`;
+                    const info = `${docId} (${cuota.toFixed(2)}€ vs teor. ${theoreticalIva.toFixed(2)}€)`;
+                    targetSum.iva_docs[rate][q].push(info);
+                    totalNetoSum.iva_docs[rate][q].push(info);
+                }
+
+                targetSum.iva_db[rate][q] += cuotaAbs;
+                targetSum.iva_db[rate].total += cuotaAbs;
+                totalNetoSum.iva_db[rate][q] += cuotaNeto;
+                totalNetoSum.iva_db[rate].total += cuotaNeto;
+
                 const keyBase = `base_${rate}`;
                 if (targetSum[keyBase]) {
-                    const base = Math.abs(Number(detail.base_imponible) || 0);
                     const baseAbs = base * absSign;
                     const baseNeto = base * netoSign;
-
                     targetSum[keyBase][q] += baseAbs;
                     targetSum[keyBase].total += baseAbs;
-
                     totalNetoSum[keyBase][q] += baseNeto;
                     totalNetoSum[keyBase].total += baseNeto;
+                }
+                else {
+                    targetSum['base_0'][q] += base * absSign;
+                    targetSum['base_0'].total += base * absSign;
                 }
 
                 const keyIva = `iva_${rate}`;
                 if (targetSum[keyIva]) {
-                    targetSum[keyIva][q] += cuotaAbs;
-                    targetSum[keyIva].total += cuotaAbs;
-
-                    totalNetoSum[keyIva][q] += cuotaNeto;
-                    totalNetoSum[keyIva].total += cuotaNeto;
+                    const theorAbs = theoreticalIva * absSign;
+                    const theorNeto = theoreticalIva * netoSign;
+                    targetSum[keyIva][q] += theorAbs;
+                    targetSum[keyIva].total += theorAbs;
+                    totalNetoSum[keyIva][q] += theorNeto;
+                    totalNetoSum[keyIva].total += theorNeto;
                 }
             });
         }
 
-        // Si no hay detalles de IVA, imputar todo a Base 21% para que no desaparezca de la tabla
         if (!hasIvaDetails) {
             const baseAbs = Math.abs(docTotalVal) * absSign;
             const baseNeto = Math.abs(docTotalVal) * netoSign;
-
             targetSum['base_21'][q] += baseAbs;
             targetSum['base_21'].total += baseAbs;
             totalNetoSum['base_21'][q] += baseNeto;
             totalNetoSum['base_21'].total += baseNeto;
+        }
+
+        // Trace for developer level
+        const theoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum;
+        const diff = Math.abs(Math.abs(docTotalVal) - theoreticalTotal);
+        if (diff > 0.01) {
+            // Diagnostic patterns
+            const isNoTaxesCandidate = !hasIvaDetails && Math.abs(diff - (Math.abs(docTotalVal) * 0.21)) < 1;
+            const isSignCandidate = Math.abs(diff - (Math.abs(docTotalVal) * 2)) < 0.1;
+
+            targetSum.traces.push({
+                doc_id: doc.id_documento || (doc as any).id || (doc as any)._id,
+                fecha: doc.fecha_emision,
+                num_doc: doc.numero_documento,
+                total_db: docTotalVal,
+                total_calc: theoreticalTotal * absSign,
+                diff: diff.toFixed(4),
+                sum_bases: docBaseSum.toFixed(2),
+                sum_iva: docIvaSum.toFixed(2),
+                sum_rec: docRecSum.toFixed(2),
+                sum_ret: docRetSum.toFixed(2),
+                has_details: hasIvaDetails,
+                analysis: hasIvaDetails
+                    ? `Mismatch: Bases(${docBaseSum.toFixed(2)}) + IVA(${docIvaSum.toFixed(2)}) + Rec(${docRecSum.toFixed(2)}) - Ret(${docRetSum.toFixed(2)}) = ${theoreticalTotal.toFixed(2)} != DB(${Math.abs(docTotalVal).toFixed(2)})`
+                    : `No tax details found in DB. System interpolated 21% IVA over total.`,
+                diagnostic: isSignCandidate ? 'SIGN_INVERSION' : (isNoTaxesCandidate ? 'MISSING_TAX_DETAILS' : 'MATH_MISMATCH')
+            });
         }
     });
 
@@ -157,234 +222,272 @@ const calculateAnnualSummary = (data: Document[]) => {
 };
 
 export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExcelViewProps) {
-    const renderCount = React.useRef(0);
-    const workbookRef = React.useRef<any>(null);
-    const isProcessingRef = React.useRef(false);
+    const { toast } = useToast();
     const [isExpanded, setIsExpanded] = useState(false);
+    const [viewType, setViewType] = useState<'separate' | 'unified'>('separate');
 
-    renderCount.current++;
-    console.log(`🔄 [TrimestreExcelView] Render #${renderCount.current}`);
+    // --- AG GRID CONFIGURATION ---
 
-    const excelHooks = useMemo(() => ({
-        beforeUpdateCell: (r: number, c: number, value: any) => {
-            if (isProcessingRef.current) {
-                console.log(`🚫 [FortuneSheet] Skipping beforeUpdateCell [${r},${c}] (Recursive call)`);
-                return true;
+    const currencyFormatter = (params: ValueFormatterParams) => {
+        if (params.value == null) return '';
+        return new Intl.NumberFormat('es-ES', {
+            style: 'currency',
+            currency: 'EUR',
+            useGrouping: true,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(params.value);
+    };
+
+    const valueParser = (params: ValueParserParams) => {
+        const newValue = params.newValue;
+        if (typeof newValue === 'string' && newValue.startsWith('=')) {
+            try {
+                // Basic formula support: remove = and evaluate
+                // eslint-disable-next-line no-eval
+                const result = eval(newValue.substring(1));
+                return Number(result);
+            } catch (e) {
+                return newValue;
             }
-
-            console.log(`🧪 [FortuneSheet] beforeUpdateCell [${r},${c}]:`, {
-                value,
-                type: typeof value,
-                isString: typeof value === 'string',
-                startsWithEquals: typeof value === 'string' && value.startsWith('=')
-            });
-
-            // ROBUST SANITIZER: Detect and fix ANY doubling patterns (e.g. "=SUM=SUM(A1:B1)" or "=A1-B1=A1-B1")
-            if (typeof value === 'string' && value.startsWith('=') && value.indexOf('=', 1) !== -1) {
-                const parts = value.split('=').filter(p => p.trim().length > 0);
-                console.log(`🧩 [FortuneSheet] Sanitizer splitting parts:`, parts);
-
-                if (parts.length >= 2) {
-                    const lastPart = parts[parts.length - 1];
-                    // STRIP NEWLINES AND WHITESPACE
-                    const fixed = `=${lastPart.replace(/[\n\r]/g, '').trim()}`;
-
-                    console.warn(`⚠️ [FortuneSheet] Doubling with newlines detected! Sanitizing: "${value.replace(/\n/g, '\\n')}" -> "${fixed}"`);
-
-                    if (workbookRef.current) {
-                        // Use setTimeout to avoid race conditions with FortuneSheet's internal state (ChildNodes error)
-                        setTimeout(() => {
-                            if (!workbookRef.current) return;
-                            isProcessingRef.current = true;
-                            console.log(`📡 [FortuneSheet] (Delayed) Manually setting cell [${r},${c}] to: ${fixed}`);
-                            try {
-                                workbookRef.current.setCellValue(r, c, fixed);
-                                if (workbookRef.current.calculateFormula) {
-                                    workbookRef.current.calculateFormula();
-                                }
-                            } catch (err) {
-                                console.error(`❌ [FortuneSheet] Error during delayed manual update:`, err);
-                            } finally {
-                                isProcessingRef.current = false;
-                            }
-                        }, 0);
-                    } else {
-                        console.error(`❌ [FortuneSheet] workbookRef is NULL, cannot fix manually!`);
-                    }
-                    return false; // Intercept and cancel the corrupted original update
-                }
-            }
-            return true;
-        },
-        afterUpdateCell: (r: number, c: number, oldVal: any, newVal: any) => {
-            console.log(`✅ [FortuneSheet] afterUpdateCell [${r},${c}]:`, {
-                oldVal,
-                newVal,
-                newValV: newVal?.v,
-                newValF: newVal?.f,
-                newValM: newVal?.m
-            });
         }
+        return Number(newValue);
+    };
+
+    const defaultColDef = useMemo<ColDef>(() => ({
+        flex: 1,
+        minWidth: 120,
+        resizable: true,
+        editable: true,
+        valueParser: valueParser,
+        sortable: false,
+        filter: false,
     }), []);
 
-    const excelData = useMemo(() => {
+    const columnDefs = useMemo<any[]>(() => [
+        {
+            headerName: 'Concepto',
+            field: 'concepto',
+            pinned: 'left',
+            width: 180,
+            editable: false,
+            cellStyle: (p: any) => ({
+                fontWeight: p.data?.isSectionHeader ? '900' : 'bold',
+                backgroundColor: p.data?.isSectionHeader ? 'rgba(71, 85, 105, 0.9)' : 'rgba(51, 65, 85, 0.4)',
+                textAlign: p.data?.isSectionHeader ? 'center' : 'left'
+            })
+        },
+        {
+            headerName: '1º Trimestre',
+            field: 'q1',
+            valueFormatter: currencyFormatter,
+            cellStyle: { textAlign: 'right' }
+        },
+        {
+            headerName: '2º Trimestre',
+            field: 'q2',
+            valueFormatter: currencyFormatter,
+            cellStyle: { textAlign: 'right' }
+        },
+        {
+            headerName: '3º Trimestre',
+            field: 'q3',
+            valueFormatter: currencyFormatter,
+            cellStyle: { textAlign: 'right' }
+        },
+        {
+            headerName: '4º Trimestre',
+            field: 'q4',
+            valueFormatter: currencyFormatter,
+            cellStyle: { textAlign: 'right' }
+        },
+        {
+            headerName: 'TOTAL',
+            field: 'total',
+            valueFormatter: currencyFormatter,
+            cellStyle: (p: any) => ({
+                fontWeight: '900',
+                backgroundColor: p.data?.isMainTotal ? (p.data?.finalMismatch ? '#991b1b' : p.data?.accentColor) : '',
+                color: p.data?.isMainTotal ? '#ffffff' : '',
+                opacity: p.data?.isMainTotal ? 1 : 0.9,
+                textAlign: 'right'
+            }),
+            tooltipValueGetter: (p: any) => p.data?.finalMismatch ? '🚫 Descuadre FINAL: La suma de (Base + IVA + Recargo - Retención) no coincide con el total registrado.' : undefined
+        },
+    ], []);
 
-        if (isLoading || documents.length === 0) {
-            return null;
-        }
+    const gridData = useMemo(() => {
+        if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [] };
 
         const { ingresosSum, gastosSum, totalNetoSum } = calculateAnnualSummary(documents);
 
-        const quarters = [1, 2, 3, 4];
+        const buildRows = (summary: any, accentColor: string) => {
+            const rows: any[] = [];
+            const quarters = [1, 2, 3, 4];
 
-        const formatValue = (val: number, customStyle: any = {}) => ({
-            v: val,
-            m: new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val),
-            ct: { fa: '#,##0.00', t: 'n' },
-            ...customStyle
-        });
-
-        // REVERSIÓN: Estilos claros para máxima legibilidad
-        // PREMIUM DARK THEME STYLES
-        const headerStyle = { ht: 1, vt: 1, bg: '#1e293b', fc: '#f8fafc', b: 1 };
-        const titleStyle = { ht: 0, vt: 1, bg: '#0f172a', fc: '#ffffff', b: 1 };
-        const rowHeaderStyle = { ht: 0, vt: 1, bg: '#334155', fc: '#f1f5f9' };
-        const normalCellStyle = { ht: 1, vt: 1, bg: '#1e293b', fc: '#cbd5e1' };
-
-        // --- CONVERT TO CELLDATA (Sparse format) ---
-        const celldata: any[] = [];
-        let currentRow = 0;
-
-        const addTableToCelldata = (title: string, summary: any, accentColor: string) => {
-            // Title Row
-            celldata.push({
-                r: currentRow,
-                c: 0,
-                v: {
-                    v: title.toUpperCase(),
-                    ...titleStyle,
-                    fc: accentColor,
-                    mc: { r: currentRow, c: 0, rs: 1, cs: 6 }
-                }
-            });
-            currentRow++;
-
-            // Header Row
-            const headers = ['Concepto', '1º Trimestre', '2º Trimestre', '3º Trimestre', '4º Trimestre', 'TOTAL'];
-            headers.forEach((h, i) => {
-                celldata.push({ r: currentRow, c: i, v: { v: h, ...headerStyle } });
-            });
-            currentRow++;
-
-            // Data Rows (Bases)
+            // BASES
             rates.forEach(rate => {
                 const key = `base_${rate}`;
                 if (summary[key] && (summary[key].total !== 0 || quarters.some(q => summary[key][q] !== 0))) {
-                    celldata.push({ r: currentRow, c: 0, v: { v: `Base ${rate}%`, ...rowHeaderStyle } });
-                    quarters.forEach((q, i) => {
-                        celldata.push({ r: currentRow, c: i + 1, v: formatValue(summary[key][q], normalCellStyle) });
+                    rows.push({
+                        concepto: `Base ${rate}%`,
+                        q1: summary[key][1], q2: summary[key][2], q3: summary[key][3], q4: summary[key][4],
+                        total: summary[key].total
                     });
-                    celldata.push({ r: currentRow, c: 5, v: formatValue(summary[key].total, { ...normalCellStyle, b: 1, fc: '#ffffff' }) });
-                    currentRow++;
                 }
             });
 
-            // Data Rows (IVA)
+            // IVA
             rates.forEach(rate => {
-                const key = `iva_${rate}`;
-                if (summary[key] && (summary[key].total !== 0 || quarters.some(q => summary[key][q] !== 0))) {
-                    celldata.push({ r: currentRow, c: 0, v: { v: `IVA ${rate}%`, ...rowHeaderStyle } });
-                    quarters.forEach((q, i) => {
-                        celldata.push({ r: currentRow, c: i + 1, v: formatValue(summary[key][q], normalCellStyle) });
-                    });
-                    celldata.push({ r: currentRow, c: 5, v: formatValue(summary[key].total, { ...normalCellStyle, b: 1, fc: '#ffffff' }) });
-                    currentRow++;
+                const keyIva = `iva_${rate}`;
+                const keyBase = `base_${rate}`;
+                if (summary[keyIva] && (summary[keyIva].total !== 0 || quarters.some(q => summary[keyBase]?.[q] !== 0))) {
+                    const row: any = {
+                        concepto: `IVA ${rate}%`,
+                        q1: Math.round((summary[keyBase]?.[1] || 0) * rate) / 100,
+                        q2: Math.round((summary[keyBase]?.[2] || 0) * rate) / 100,
+                        q3: Math.round((summary[keyBase]?.[3] || 0) * rate) / 100,
+                        q4: Math.round((summary[keyBase]?.[4] || 0) * rate) / 100,
+                        total: Math.round((summary[keyBase]?.total || 0) * rate) / 100
+                    };
+
+                    rows.push(row);
                 }
             });
 
-            // Totals
-            celldata.push({ r: currentRow, c: 0, v: { v: 'Total Bases', ...rowHeaderStyle, b: 1, fc: '#94a3b8' } });
-            quarters.forEach((q, i) => {
-                let sum = 0;
-                rates.forEach(r => sum += summary[`base_${r}`]?.[q] || 0);
-                celldata.push({ r: currentRow, c: i + 1, v: formatValue(sum, { ...normalCellStyle, b: 1 }) });
-            });
-            const totalBases = rates.reduce((acc, r) => acc + (summary[`base_${r}`]?.total || 0), 0);
-            celldata.push({ r: currentRow, c: 5, v: formatValue(totalBases, { ...normalCellStyle, bg: '#0f172a', b: 1, fc: '#ffffff' }) });
-            currentRow++;
+            // TOTALES
+            const totalBasesRow: any = { concepto: 'Total Bases', q1: 0, q2: 0, q3: 0, q4: 0, total: 0 };
+            const totalIvaRow: any = { concepto: 'Total IVA', q1: 0, q2: 0, q3: 0, q4: 0, total: 0 };
 
-            celldata.push({ r: currentRow, c: 0, v: { v: 'Total IVA', ...rowHeaderStyle, b: 1, fc: '#94a3b8' } });
-            quarters.forEach((q, i) => {
-                let sum = 0;
-                rates.forEach(r => sum += summary[`iva_${r}`]?.[q] || 0);
-                celldata.push({ r: currentRow, c: i + 1, v: formatValue(sum, { ...normalCellStyle, b: 1 }) });
-            });
-            const totalIva = rates.reduce((acc, r) => acc + (summary[`iva_${r}`]?.total || 0), 0);
-            celldata.push({ r: currentRow, c: 5, v: formatValue(totalIva, { ...normalCellStyle, bg: '#0f172a', b: 1, fc: '#ffffff' }) });
-            currentRow++;
-
-            if (summary.recargos.total !== 0) {
-                celldata.push({ r: currentRow, c: 0, v: { v: 'Total Recargos', ...rowHeaderStyle } });
-                quarters.forEach((q, i) => {
-                    celldata.push({ r: currentRow, c: i + 1, v: formatValue(summary.recargos[q], normalCellStyle) });
+            quarters.forEach(q => {
+                rates.forEach(r => {
+                    totalBasesRow[`q${q}`] += (summary[`base_${r}`]?.[q] || 0);
+                    // FIXED: Total IVA must sum the theoretical row values for consistency
+                    totalIvaRow[`q${q}`] += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100;
                 });
-                celldata.push({ r: currentRow, c: 5, v: formatValue(summary.recargos.total, { ...normalCellStyle, b: 1, fc: '#ffffff' }) });
-                currentRow++;
-            }
-            if (summary.retenciones.total !== 0) {
-                celldata.push({ r: currentRow, c: 0, v: { v: 'Total Retenciones', ...rowHeaderStyle } });
-                quarters.forEach((q, i) => {
-                    celldata.push({ r: currentRow, c: i + 1, v: formatValue(summary.retenciones[q], normalCellStyle) });
-                });
-                celldata.push({ r: currentRow, c: 5, v: formatValue(summary.retenciones.total, { ...normalCellStyle, b: 1, fc: '#ffffff' }) });
-                currentRow++;
-            }
-
-            // Facturado Final
-            celldata.push({ r: currentRow, c: 0, v: { v: 'Total Gral. Facturado', ...rowHeaderStyle, bg: '#334155', fc: '#ffffff', b: 1 } });
-            quarters.forEach((q, i) => {
-                celldata.push({ r: currentRow, c: i + 1, v: formatValue(summary.total_real[q], { ...normalCellStyle, b: 1, bg: '#1e293b', fc: '#ffffff' }) });
             });
-            celldata.push({ r: currentRow, c: 5, v: formatValue(summary.total_real.total, { bg: accentColor, fc: '#ffffff', b: 1 }) });
-            currentRow++;
+            totalBasesRow.total = rates.reduce((acc, r) => acc + (summary[`base_${r}`]?.total || 0), 0);
+            totalIvaRow.total = rates.reduce((acc, r) => acc + (Math.round((summary[`base_${r}`]?.total || 0) * r) / 100), 0);
 
-            currentRow += 2; // Spacer
+            rows.push(totalBasesRow);
+            rows.push(totalIvaRow);
+
+            if (summary.recargos.total !== 0) rows.push({ concepto: 'Total Recargos', ...summary.recargos });
+            if (summary.retenciones.total !== 0) rows.push({ concepto: 'Total Retenciones', ...summary.retenciones });
+
+            // FACTURADO FINAL (Theoretical Model for consistency)
+            const facturadoRow: any = {
+                concepto: 'Total Gral. Facturado',
+                q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
+                isMainTotal: true,
+                accentColor
+            };
+
+            quarters.forEach(q => {
+                let bSum = 0; rates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
+                // FIXED: iSum must use the theoretical rounded IVA for consistency
+                let iSum = 0; rates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
+
+                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
+                facturadoRow[`q${q}`] = theoreticalQ;
+
+                const delta = Math.abs(summary.total_real[q] - theoreticalQ);
+                if (delta > 0.05) {
+                    facturadoRow[`mismatchQ${q}`] = `⚠️ Diferencia detectada: DB ${summary.total_real[q].toFixed(2)}€ vs Calc. ${theoreticalQ.toFixed(2)}€ (Dif: ${delta.toFixed(2)}€).`;
+                }
+            });
+
+            // Total Anual
+            let tBSum = 0; rates.forEach(r => tBSum += summary[`base_${r}`]?.total || 0);
+            let tISum = 0; rates.forEach(r => tISum += Math.round((summary[`base_${r}`]?.total || 0) * r) / 100);
+            const theoreticalTotal = tBSum + tISum + summary.recargos.total - summary.retenciones.total;
+            facturadoRow.total = theoreticalTotal;
+
+            if (Math.abs(summary.total_real.total - theoreticalTotal) > 0.05) {
+                facturadoRow.finalMismatch = true;
+            }
+
+            rows.push(facturadoRow);
+            return rows;
         };
 
-        addTableToCelldata(`Resumen Anual (Ingresos) - ${año}`, ingresosSum, '#10b981');
-        addTableToCelldata(`Resumen Anual (Gastos) - ${año}`, gastosSum, '#ef4444');
-        addTableToCelldata(`Balance Anual (Total Neto) - ${año}`, totalNetoSum, '#3b82f6');
+        return {
+            rowDataIngresos: buildRows(ingresosSum, '#10b981'),
+            rowDataGastos: buildRows(gastosSum, '#ef4444'),
+            rowDataNeto: buildRows(totalNetoSum, '#3b82f6'),
+            ingresosTraces: ingresosSum.traces,
+            gastosTraces: gastosSum.traces,
+            rowDataUnified: [
+                { concepto: '--- INGRESOS (EMITIDAS) ---', isSectionHeader: true, q1: null, q2: null, q3: null, q4: null, total: null },
+                ...buildRows(ingresosSum, '#10b981'),
+                { concepto: ' ', isSectionHeader: false, q1: null, q2: null, q3: null, q4: null, total: null },
+                { concepto: '--- GASTOS (RECIBIDAS) ---', isSectionHeader: true, q1: null, q2: null, q3: null, q4: null, total: null },
+                ...buildRows(gastosSum, '#ef4444'),
+                { concepto: ' ', isSectionHeader: false, q1: null, q2: null, q3: null, q4: null, total: null },
+                { concepto: '--- BALANCE NETO ANUAL ---', isSectionHeader: true, q1: null, q2: null, q3: null, q4: null, total: null },
+                ...buildRows(totalNetoSum, '#3b82f6')
+            ]
+        };
+    }, [documents, isLoading]);
 
+    const handleDebugLog = useCallback(() => {
+        console.group('%c 🕵️ AG Grid Deep Debug Trace ', 'background: #0f172a; color: #10b981; font-weight: bold; padding: 6px; border-radius: 4px; border: 1px solid #10b981;');
+        console.log('%c🔍 Objetivo: Localizar el origen exacto de las discrepancias matemáticas.', 'color: #94a3b8; font-style: italic;');
 
-        return [{
-            name: "Resumen Anual",
-            celldata: celldata,
-            status: 1,
-            order: 0,
-            column: 6,
-            row: currentRow,
-            addRows: 0,
-            defaultColWidth: 150,
-            config: {
-                gridlineColor: '#1e293b'
-            } as any
-        }];
-    }, [documents, isLoading, año]);
+        const processTraces = (title: string, traces: any[]) => {
+            if (traces.length > 0) {
+                console.group(`📂 ${title} (${traces.length} discrepancias):`);
+                console.table(traces.map(t => ({
+                    'DocID': t.doc_id,
+                    'Factura': t.num_doc || 'S/N',
+                    'Total DB': t.total_db,
+                    'Base Sum': t.sum_bases,
+                    'IVA Sum': t.sum_iva,
+                    'Rec Sum': t.sum_rec,
+                    'Ret Sum': t.sum_ret,
+                    'Total Calc': t.total_calc,
+                    'Delta': t.diff,
+                    'Diagnostic': t.diagnostic,
+                    'Análisis': t.analysis
+                })));
+                console.group('🧪 Resumen de Patrones:');
+                traces.forEach(t => {
+                    const d = parseFloat(t.diff);
+                    if (!t.has_details) {
+                        console.log(`%c[ID ${t.doc_id}] ⚠️ FALTA DATA: Este documento no tiene desglose de IVA en DB. Se forzó un 21% sobre el total. El descuadre es esperado si la factura real no era al 21%.`, 'color: #f59e0b;');
+                    } else if (d < 0.05) {
+                        console.log(`%c[ID ${t.doc_id}] ✅ REDONDEO: Diferencia de ${d}€ (Mínima). Es aceptable por acumulación de decimales en líneas de factura.`, 'color: #10b981;');
+                    } else {
+                        console.log(`%c[ID ${t.doc_id}] 🚫 ERROR MATEMÁTICO: Diferencia de ${d}€ significativa. La sumatoria de las líneas de impuestos en DB no cuadra con el total del documento. Revisar tabla 'iva_details' para esta ID.`, 'color: #ef4444; font-weight: bold;');
+                    }
+                });
+                console.groupEnd();
+                console.groupEnd();
+            } else {
+                console.log(`%c✅ ${title}: Sin descuadres detectados.`, 'color: #10b981;');
+            }
+        };
+
+        processTraces('Ingresos (Emitidas)', gridData.ingresosTraces);
+        processTraces('Gastos (Recibidas)', gridData.gastosTraces);
+
+        console.log('%c💡 Pex (Explicación para Developer): Si el Total Calc != Total DB, el problema está en los datos de origen (Base de Datos). Esta herramienta te permite ver EXACTAMENTE qué sumatoria de la base de datos está fallando.', 'background: #334155; color: #f8fafc; padding: 4px;');
+        console.groupEnd();
+
+        toast({
+            title: "Traces detallados generados",
+            description: "Revisá la consola (F12) para ver el desglose matemático por documento.",
+        });
+    }, [gridData, toast]);
 
     if (isLoading) {
         return (
             <Card className="w-full mb-6 bg-slate-900 border-slate-800">
-                <CardHeader>
-                    <Skeleton className="h-4 w-48 bg-slate-800" />
-                </CardHeader>
-                <CardContent>
-                    <Skeleton className="h-[400px] w-full bg-slate-800" />
-                </CardContent>
+                <CardHeader><Skeleton className="h-4 w-48 bg-slate-800" /></CardHeader>
+                <CardContent><Skeleton className="h-[400px] w-full bg-slate-800" /></CardContent>
             </Card>
         );
     }
-
-    if (!excelData || documents.length === 0) return null;
 
     return (
         <Card className="w-full mb-8 overflow-hidden border-slate-800 bg-slate-900 shadow-2xl transition-all duration-300">
@@ -396,22 +499,11 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
                     <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
                         <LayoutGrid className="h-5 w-5" />
                     </div>
-                    Cuadro de Mando Interactivo {año}
+                    Cuadro de Mando Interactivo AG Grid {año}
                 </CardTitle>
-                <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex items-center gap-3 mr-2">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter bg-slate-800/50 px-2 py-1 rounded">
-                            Ejercicio Consolidado
-                        </span>
-                        <div className="h-4 w-px bg-slate-800" />
-                        <span className="text-[10px] text-blue-400 font-medium">Auto-calculado vía API</span>
-                    </div>
-                    <button
-                        className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-blue-500 text-white rotate-0' : 'bg-slate-800 text-slate-400 rotate-180'}`}
-                    >
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-                </div>
+                <button className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
             </CardHeader>
             <AnimatePresence>
                 {isExpanded && (
@@ -419,106 +511,133 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }}
+                        transition={{ duration: 0.4 }}
                     >
                         <CardContent className="p-0">
-                            <div className="h-[700px] w-full relative bg-[#0f172a]">
-                                <style dangerouslySetInnerHTML={{
-                                    __html: `
-                        .fortune-container { background: #0f172a !important; font-family: 'Inter', system-ui, -apple-system, sans-serif !important; }
-                        .fortune-workbook-content { background: #0f172a !important; color: #cbd5e1 !important; }
-                        .fortune-sheet-area { background: #0f172a !important; }
-                        .fortune-toolbar { background: #1e293b !important; border-bottom: 1px solid #334155 !important; }
-                        
-                        /* Formula Bar Modernization */
-                        .fortune-formula-bar { background: #0f172a !important; border-bottom: 1px solid #1e293b !important; color: #fff !important; padding: 6px 12px !important; }
-                        .fortune-formula-help-size { background: #0f172a !important; color: #64748b !important; border: none !important; }
-                        .fortune-formula-input { 
-                            background: #1e293b !important; 
-                            border: 1px solid #334155 !important; 
-                            color: #ffffff !important; 
-                            border-radius: 6px !important; 
-                            padding: 2px 10px !important;
-                            font-family: 'Inter', sans-serif !important;
-                            font-size: 13px !important;
-                        }
-                        .fortune-formula-bar-icon { color: #3b82f6 !important; font-size: 14px !important; }
-                        
-                        .fortune-grid-window { background: #0f172a !important; }
-                        .fortune-sheet-selection-item { border-color: #3b82f6 !important; background: rgba(59, 130, 246, 0.1) !important; }
-                        
-                        /* CRITICAL: High-contrast Row/Col Headers - Fully Transparent to avoid overlapping */
-                        .fortune-row-header, .fortune-col-header { 
-                            background: transparent !important; 
-                            border-color: #334155 !important; 
-                        }
-                        
-                        .fortune-row-header > div, 
-                        .fortune-col-header > div,
-                        .luckysheet-rows-h-idx, 
-                        .luckysheet-cols-h-idx,
-                        .fortune-header-cell-text {
-                            color: #ffffff !important; 
-                            font-weight: 700 !important;
-                            font-size: 11px !important;
-                            text-shadow: 0 1px 2px rgba(0,0,0,1) !important;
-                        }
+                            {/* Control Bar: Legend + Toggle */}
+                            <div className="bg-slate-950 p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800">
+                                <div className="text-xs text-slate-400">
+                                    Bases + IVA + Recargos - Retenciones = <span className="text-blue-500 font-bold text-sm">TOTAL</span>
+                                </div>
 
-                        .fortune-row-header:hover, .fortune-col-header:hover { background: #334155 !important; }
-                        .fortune-sheet-tabs { background: #1e293b !important; border-top: 1px solid #334155 !important; padding: 4px !important; }
-                        .fortune-sheet-tabs-item-active { background: #3b82f6 !important; color: #fff !important; border-radius: 4px !important; border: none !important; }
-                        
-                        /* SHARPNESS & ANTI-BLURRY */
-                        .fortune-cell, .fortune-container, canvas { 
-                            text-rendering: optimizeLegibility !important; 
-                            -webkit-font-smoothing: antialiased !important; 
-                            -moz-osx-font-smoothing: grayscale !important;
-                            transform: translateZ(0); /* Force hardware acceleration */
-                        }
-                        
-                        canvas { 
-                            image-rendering: -webkit-optimize-contrast !important; 
-                            image-rendering: crisp-edges !important;
-                            image-rendering: -moz-crisp-edges !important;
-                        }
-                        
-                        .fortune-workbook { 
-                            border-radius: 0 0 12px 12px !important; 
-                            overflow: hidden !important; 
-                            border: 1px solid #1e293b !important;
-                            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
-                        }
+                                <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800 px-4">
+                                    <Switch
+                                        id="view-mode"
+                                        checked={viewType === 'unified'}
+                                        onCheckedChange={(checked) => setViewType(checked ? 'unified' : 'separate')}
+                                    />
+                                    <Label htmlFor="view-mode" className="text-sm font-bold text-slate-300 cursor-pointer select-none">
+                                        {viewType === 'unified' ? 'Vista Unificada' : 'Vista en Tablas'}
+                                    </Label>
+                                </div>
+                            </div>
 
-                        /* Cell Editor Visibility Fix - Ensure text is dark and background is light while editing */
-                        .luckysheet-input-box, .fortune-cell-editor {
-                            color: #0f172a !important; 
-                            background: white !important;
-                        }
-                    `}} />
-                                <Workbook
-                                    ref={workbookRef}
-                                    data={excelData}
-                                    lang="es"
-                                    showToolbar={false}
-                                    showFormulaBar={true}
-                                    rowHeaderWidth={64}
-                                    columnHeaderHeight={32}
-                                    devicePixelRatio={typeof window !== 'undefined' ? window.devicePixelRatio : 1}
-                                    addRows={0}
-                                    forceCalculation={true}
-                                    hooks={excelHooks}
-                                    onChange={(data) => {
-                                        console.log('📊 [FortuneSheet] Data Changed (onChange)');
-                                    }}
-                                    onOp={(ops) => {
-                                        console.log('📑 [FortuneSheet] Operations (onOp)');
-                                    }}
-                                />
+                            {/* AG Grids */}
+                            <div className="flex flex-col gap-8 p-6 bg-[#0f172a]">
+                                <AnimatePresence mode="wait">
+                                    {viewType === 'unified' ? (
+                                        <motion.div
+                                            key="unified"
+                                            initial={{ opacity: 0, x: 20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -20 }}
+                                            className="space-y-2"
+                                        >
+                                            <h3 className="text-sm font-bold text-blue-400 mb-2 uppercase tracking-tight flex items-center gap-2">
+                                                <div className="p-1.5 bg-blue-500/20 rounded text-blue-400"><LayoutGrid size={14} /></div>
+                                                VISTA UNIFICADA (ANÁLISIS GLOBAL)
+                                            </h3>
+                                            <div className="h-[800px] w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800">
+                                                <AgGridReact
+                                                    theme={darkTheme}
+                                                    rowData={gridData.rowDataUnified}
+                                                    columnDefs={columnDefs}
+                                                    defaultColDef={defaultColDef}
+                                                    enableBrowserTooltips={true}
+                                                    getRowStyle={(params) => params.data?.isSectionHeader ? {
+                                                        backgroundColor: 'rgba(30, 41, 59, 1)',
+                                                        pointerEvents: 'none',
+                                                        borderBottom: '2px solid #334155'
+                                                    } : undefined}
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div
+                                            key="separate"
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: 20 }}
+                                            className="flex flex-col gap-8"
+                                        >
+                                            <div className="space-y-2">
+                                                <h3 className="text-sm font-bold text-emerald-500 mb-2 uppercase tracking-tight">Recaudación de Ingresos (Emitidas)</h3>
+                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                    <AgGridReact
+                                                        theme={darkTheme}
+                                                        rowData={gridData.rowDataIngresos}
+                                                        columnDefs={columnDefs}
+                                                        defaultColDef={defaultColDef}
+                                                        enableBrowserTooltips={true}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <h3 className="text-sm font-bold text-rose-500 mb-2 uppercase tracking-tight">Registro de Gastos (Recibidas)</h3>
+                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                    <AgGridReact
+                                                        theme={darkTheme}
+                                                        rowData={gridData.rowDataGastos}
+                                                        columnDefs={columnDefs}
+                                                        defaultColDef={defaultColDef}
+                                                        enableBrowserTooltips={true}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <h3 className="text-sm font-bold text-blue-500 mb-2 uppercase tracking-tight">Balance Neto Anual</h3>
+                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                    <AgGridReact
+                                                        theme={darkTheme}
+                                                        rowData={gridData.rowDataNeto}
+                                                        columnDefs={columnDefs}
+                                                        defaultColDef={defaultColDef}
+                                                        enableBrowserTooltips={true}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         </CardContent>
                     </motion.div>
                 )}
             </AnimatePresence>
+            <style jsx global>{`
+                .ag-theme-quartz-dark {
+                    --ag-background-color: #0f172a;
+                    --ag-header-background-color: #1e293b;
+                    --ag-odd-row-background-color: #1e293b55;
+                    --ag-header-foreground-color: #f8fafc;
+                    --ag-foreground-color: #cbd5e1;
+                    --ag-border-color: #334155;
+                    --ag-row-hover-color: #33415588;
+                    --ag-selected-row-background-color: #3b82f633;
+                    --ag-font-family: 'Inter', sans-serif;
+                    --ag-font-size: 13px;
+                }
+                .ag-tooltip-custom {
+                    background-color: #1e293b !important;
+                    color: #f8fafc !important;
+                    border: 1px solid #475569 !important;
+                    border-radius: 6px !important;
+                    padding: 8px !important;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+                }
+            `}</style>
         </Card>
     );
 }

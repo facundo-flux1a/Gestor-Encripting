@@ -18,7 +18,57 @@ export function IncidenciasTutorialMobile() {
     const driverInstanceRef = useRef<ReturnType<typeof driver> | null>(null);
     const hasRunRef = useRef(false);
     const lastStepRef = useRef(0);
-    const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
+    const overlayTouchBlockerRef = useRef<((e: Event) => void) | null>(null);
+
+    const blockedEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'pointercancel'];
+
+    const logToTerminal = (msg: string) => {
+        if (process.env.NODE_ENV === 'development') {
+            fetch('/api/mobile-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            }).catch(() => { });
+        }
+    };
+
+    const addGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) return;
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            const idx = lastStepRef.current;
+
+            const isPopover = target.closest('.driver-popover') || target.closest('.driver-popover-wrapper');
+            if (isPopover) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Popover`);
+                return;
+            }
+
+            let isWhitelisted = false;
+            if (target.closest('[data-radix-portal]')) isWhitelisted = true;
+
+            if (!isWhitelisted) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName}`);
+                if (e.cancelable) e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
+        };
+
+        blockedEvents.forEach(evt => {
+            document.addEventListener(evt, handler, { passive: false, capture: true });
+        });
+        overlayTouchBlockerRef.current = handler;
+    };
+
+    const removeGlobalTouchBlocker = () => {
+        if (overlayTouchBlockerRef.current) {
+            blockedEvents.forEach(evt => {
+                document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
+            });
+        }
+        overlayTouchBlockerRef.current = null;
+    };
 
     useEffect(() => {
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
@@ -42,36 +92,6 @@ export function IncidenciasTutorialMobile() {
         };
     }, [isLoading, shouldShowTutorial]);
 
-    const addGlobalTouchBlocker = () => {
-        if (overlayTouchBlockerRef.current) return;
-        const handler = (e: TouchEvent) => {
-            const target = e.target as HTMLElement;
-            const isWhitelisted = target.closest('.driver-popover') ||
-                target.closest('.driver-popover-wrapper') ||
-                target.closest('[data-tutorial="incidencias-analizar"]') ||
-                target.closest('[data-tutorial="incidencias-ai-table"]') ||
-                target.closest('[data-tutorial="incidencias-documentos"]') ||
-                target.closest('[data-radix-popper-content-wrapper]');
-
-            if (!isWhitelisted) {
-                if (e.cancelable) e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-        document.addEventListener('touchstart', handler, { passive: false, capture: true });
-        overlayTouchBlockerRef.current = handler;
-    };
-
-    const removeGlobalTouchBlocker = () => {
-        if (overlayTouchBlockerRef.current) {
-            document.removeEventListener('touchstart', overlayTouchBlockerRef.current, { capture: true });
-        }
-        overlayTouchBlockerRef.current = null;
-    };
-
-    const addTouchBlocker = () => { };
-    const removeTouchBlocker = () => { };
-
     const startTutorial = () => {
         const steps: DriveStep[] = [
             {
@@ -79,53 +99,47 @@ export function IncidenciasTutorialMobile() {
                 popover: {
                     title: '⚠️ Gestión de Incidencias',
                     description: '¡Bienvenido! Aquí puedes gestionar todos los problemas detectados en tus documentos: duplicados, errores de cálculo y más.',
-                    side: 'bottom' as const,
-                    align: 'start' as const,
+                    side: 'bottom' as const, align: 'start' as const,
                 },
             },
             {
                 element: '[data-tutorial="incidencias-analytics"]',
                 popover: {
                     title: '📊 Panel de Métricas',
-                    description: 'Este panel te muestra un resumen de todas las incidencias: cuántas están abiertas, cuántas resueltas, y qué proveedores tienen más problemas.',
-                    side: 'right' as const,
-                    align: 'start' as const,
+                    description: 'Resumen de incidencias: abiertas, resueltas y qué proveedores tienen más problemas.',
+                    side: 'bottom' as const, align: 'start' as const,
                 },
             },
             {
                 element: '[data-tutorial="incidencias-analizar"]',
                 popover: {
                     title: '🔍 Análisis Automático',
-                    description: 'Usa esta herramienta para revisar todos tus documentos de una vez. El sistema comparará datos automáticamente para detectar duplicados, errores de cálculo y documentos incompletos.',
-                    side: 'left' as const,
-                    align: 'start' as const,
+                    description: 'Usa esta herramienta para detectar automáticamente anomalías en todos tus documentos.',
+                    side: 'bottom' as const, align: 'start' as const,
                 },
             },
             {
                 element: '[data-tutorial="incidencias-ai-table"]',
                 popover: {
-                    title: '🤖 Incidencias del Análisis Individual',
-                    description: 'Aquí aparecen las incidencias detectadas cuando analizas un documento individualmente desde su vista de detalle. Son análisis manuales e individuales que has iniciado tú.',
-                    side: 'top' as const,
-                    align: 'center' as const,
+                    title: '🤖 Análisis Individual',
+                    description: 'Aquí aparecen las incidencias detectadas al analizar documentos uno a uno.',
+                    side: 'top' as const, align: 'center' as const,
                 },
             },
             {
                 element: '[data-tutorial="incidencias-documentos"]',
                 popover: {
-                    title: '📄 Incidencias de Subida Original',
-                    description: 'Esta tabla muestra los documentos con incidencias detectadas durante la subida inicial al sistema. Son problemas encontrados automáticamente al procesar los documentos por primera vez.',
-                    side: 'top' as const,
-                    align: 'center' as const,
+                    title: '📄 Subida Original',
+                    description: 'Documentos con incidencias detectadas durante la carga inicial.',
+                    side: 'top' as const, align: 'center' as const,
                 },
             },
             {
                 element: '[data-tutorial="incidencias-header"]',
                 popover: {
                     title: '🎉 ¡Tutorial Completado!',
-                    description: '¡Perfecto! Ahora sabes cómo gestionar incidencias. Puedes analizar, validar y resolver problemas para mantener tus documentos en orden.',
-                    side: 'over' as const,
-                    align: 'center' as const,
+                    description: '¡Listo! Ya podés gestionar todas las incidencias de tu sistema.',
+                    side: 'over' as const, align: 'center' as const,
                 },
             },
         ];
@@ -151,31 +165,26 @@ export function IncidenciasTutorialMobile() {
                     if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                 });
                 document.body.classList.add(`tutorial-step-${currentStepIndex}`);
-
                 addGlobalTouchBlocker();
             },
-
             onNextClick: (element, step, options) => {
                 const idx = options.state.activeIndex ?? 0;
-                const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-
-                if (idx === totalStepsCount - 1) {
+                const total = steps.length;
+                if (idx === total - 1) {
                     markAsCompleted();
+                    removeGlobalTouchBlocker();
                     setTimeout(() => driverInstance.destroy(), 100);
                 } else {
                     driverInstance.moveNext();
                 }
             },
-
             onCloseClick: () => {
+                removeGlobalTouchBlocker();
                 const idx = driverInstance.getActiveIndex() ?? 0;
-                const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-                if (idx >= totalStepsCount - 2) markAsCompleted();
+                if (idx >= steps.length - 2) markAsCompleted();
                 driverInstance.destroy();
             },
-
             onPrevClick: () => driverInstance.movePrevious(),
-
             onDestroyStarted: () => {
                 removeGlobalTouchBlocker();
                 document.body.classList.forEach(cls => {
@@ -189,127 +198,45 @@ export function IncidenciasTutorialMobile() {
         setTimeout(() => driverInstance.drive(), 300);
     };
 
-    // 🔥 MOBILE-SPECIFIC STYLES
     useEffect(() => {
         const style = document.createElement('style');
         style.id = 'incidencias-tutorial-mobile-styles';
         style.textContent = `
-      /* 🔥 Overlay blocks all touch except popover */
-      .driver-overlay { pointer-events: auto !important; }
-      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
+          .driver-overlay { 
+            pointer-events: none !important; 
+            z-index: 2147483630 !important;
+          }
+          #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
 
-      body:has(.driver-overlay) * { pointer-events: none !important; }
-      body:has(.driver-overlay) .driver-popover, 
-      body:has(.driver-overlay) .driver-popover * { 
-        pointer-events: auto !important; 
-      }
+          .driver-popover, .driver-popover-wrapper, .driver-popover * {
+            pointer-events: auto !important;
+            z-index: 2147483647 !important;
+            touch-action: manipulation !important;
+          }
 
-      /* 🔥 Highlighted elements NOT tappable */
-      .driver-active-element,
-      .driver-active-element *,
-      .driver-active-element button,
-      .driver-active-element a,
-      .driver-active-element input,
-      .driver-active-element [role="button"] {
-        pointer-events: none !important;
-        cursor: default !important;
-      }
+          .driver-active-element {
+            z-index: 2147483640 !important;
+            pointer-events: none !important; 
+            box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
+          }
 
-      /* 🔥 Only the popover is interactive */
-      .driver-popover,
-      .driver-popover-wrapper,
-      .driver-popover *,
-      .driver-popover button {
-        pointer-events: auto !important;
-        cursor: pointer !important;
-        z-index: 10000005 !important;
-        touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
-      }
+          .driver-popover {
+            border: 1px solid hsla(var(--primary) / 0.5) !important;
+            background-color: rgba(15, 23, 42, 0.95) !important;
+            border-radius: 12px !important;
+            color: white !important;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
+          }
 
-      .driver-popover button {
-        min-height: 44px !important;
-      }
-
-      /* Visual feedback */
-      .driver-active-element {
-        box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
-      }
-
-      /* FIX #5: No backdrop-filter - causes broken stacking context on Android */
-      .driver-popover {
-        border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.95) !important;
-        /* backdrop-filter REMOVED for Android */
-        border-radius: 12px !important;
-        color: white !important;
-        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.2) !important;
-      }
-
-      .driver-popover-title {
-        color: white !important;
-        font-weight: 700 !important;
-        font-size: 1.1rem !important;
-      }
-
-      .driver-popover-description {
-        color: rgba(255, 255, 255, 0.9) !important;
-        font-weight: 500 !important;
-        line-height: 1.5 !important;
-      }
-
-      .driver-popover-progress-text {
-        color: rgba(255, 255, 255, 0.5) !important;
-      }
-
-      .driver-popover-next-btn {
-        background-color: hsl(var(--primary)) !important;
-        color: white !important;
-        border: none !important;
-        text-shadow: none !important;
-        font-weight: 600 !important;
-        border-radius: 6px !important;
-        touch-action: manipulation !important;
-      }
-
-      .driver-popover-prev-btn {
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        background: transparent !important;
-        text-shadow: none !important;
-        font-weight: 500 !important;
-        border-radius: 6px !important;
-        touch-action: manipulation !important;
-      }
-
-      .driver-popover-close-btn {
-        color: rgba(255, 255, 255, 0.5) !important;
-        touch-action: manipulation !important;
-        min-height: 44px !important;
-        min-width: 44px !important;
-      }
-
-      .driver-popover-arrow {
-        border-bottom-color: rgba(15, 23, 42, 0.95) !important;
-        border-top-color: rgba(15, 23, 42, 0.95) !important;
-      }
-
-      /* FIX #1: Block all touch outside popover */
-      body:has(.driver-overlay) * {
-        pointer-events: none !important;
-      }
-
-      body:has(.driver-overlay) .driver-popover,
-      body:has(.driver-overlay) .driver-popover * {
-        pointer-events: auto !important;
-      }
-    `;
+          .driver-popover button { min-height: 44px !important; }
+          .driver-popover-title { color: white !important; font-weight: 700 !important; }
+          .driver-popover-description { color: rgba(255, 255, 255, 0.9) !important; line-height: 1.5 !important; }
+          .driver-popover-next-btn { background-color: hsl(var(--primary)) !important; color: white !important; border: none !important; border-radius: 6px !important; }
+          .driver-popover-prev-btn { color: white !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; background: transparent !important; border-radius: 6px !important; }
+          .driver-popover-close-btn { color: rgba(255, 255, 255, 0.5) !important; }
+        `;
         document.head.appendChild(style);
-
-        return () => {
-            const el = document.getElementById('incidencias-tutorial-mobile-styles');
-            if (el) el.remove();
-        };
+        return () => { const el = document.getElementById('incidencias-tutorial-mobile-styles'); if (el) el.remove(); };
     }, []);
 
     return null;

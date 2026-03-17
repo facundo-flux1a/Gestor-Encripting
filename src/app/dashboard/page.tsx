@@ -657,8 +657,11 @@ export default function DashboardPage() {
                 <HoverCardTrigger asChild>
                   <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Ingresos (con IVA)
+                        {analytics.kpis.hasMismatches && (
+                          <span title="Diferencia detectada entre el total real y la suma de impuestos en algunos documentos" className="cursor-help">⚠️</span>
+                        )}
                       </CardTitle>
                       <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
@@ -678,9 +681,15 @@ export default function DashboardPage() {
                       <span className="font-medium">{formatCurrency(analytics.kpis.totalIngresosSinIva)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IVA Rep. (incl. recargo):</span>
-                      <span className="font-medium">{formatCurrency((analytics.kpis.ivaRepercutido || 0) + (analytics.kpis.recargoRepercutido || 0))}</span>
+                      <span className="text-muted-foreground">IVA Repercutido:</span>
+                      <span className="font-medium text-green-600">+{formatCurrency(analytics.kpis.ivaRepercutido)}</span>
                     </div>
+                    {Number(analytics.kpis.recargoRepercutido) !== 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Recargo de Equiv.:</span>
+                        <span className="font-medium text-green-600">+{formatCurrency(analytics.kpis.recargoRepercutido)}</span>
+                      </div>
+                    )}
                     {(analytics.kpis.retencionRepercutido || 0) !== 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Retenciones IRPF:</span>
@@ -688,8 +697,8 @@ export default function DashboardPage() {
                       </div>
                     )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                      <span>Total:</span>
-                      <span className="text-green-600">{formatCurrency(analytics.kpis.totalIngresos)}</span>
+                      <span>Total (con IVA):</span>
+                      <span className="text-foreground">{formatCurrency(analytics.kpis.totalIngresos)}</span>
                     </div>
                   </div>
                 </HoverCardContent>
@@ -699,8 +708,11 @@ export default function DashboardPage() {
                 <HoverCardTrigger asChild>
                   <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Gastos (con IVA)
+                        {analytics.kpis.hasMismatches && (
+                          <span title="Diferencia detectada entre el total real y la suma de impuestos en algunos documentos" className="cursor-help">⚠️</span>
+                        )}
                       </CardTitle>
                       <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
@@ -720,18 +732,24 @@ export default function DashboardPage() {
                       <span className="font-medium">{formatCurrency(analytics.kpis.totalGastosSinIva)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IVA Sop. (incl. recargo):</span>
-                      <span className="font-medium">{formatCurrency((analytics.kpis.ivaSoportado || 0) + (analytics.kpis.recargoSoportado || 0))}</span>
+                      <span className="text-muted-foreground">IVA Soportado:</span>
+                      <span className="font-medium text-red-600">-{formatCurrency(analytics.kpis.ivaSoportado)}</span>
                     </div>
+                    {Number(analytics.kpis.recargoSoportado) !== 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Recargo de Equiv.:</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(analytics.kpis.recargoSoportado)}</span>
+                      </div>
+                    )}
                     {Math.abs(analytics.kpis.retencionSoportado || 0) > 0.001 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Retenciones IRPF:</span>
-                        <span className="text-red-600 font-medium">-{formatCurrency(Math.abs(analytics.kpis.retencionSoportado))}</span>
+                        <span className="text-green-600 font-medium">+{formatCurrency(Math.abs(analytics.kpis.retencionSoportado))}</span>
                       </div>
                     )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                      <span>Total:</span>
-                      <span className="text-red-600">{formatCurrency(analytics.kpis.totalGastos)}</span>
+                      <span>Total (con IVA):</span>
+                      <span className="text-foreground">{formatCurrency(analytics.kpis.totalGastos)}</span>
                     </div>
                   </div>
                 </HoverCardContent>
@@ -795,17 +813,23 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold">Desglose de IVA</h4>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Repercutido + Recargo:</span>
-                      <span className="text-green-600 font-medium">+{formatCurrency((analytics.kpis.ivaRepercutido || 0) + (analytics.kpis.recargoRepercutido || 0))}</span>
+                      <span className="text-muted-foreground">IVA Neto:</span>
+                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-red-600 font-medium"}>
+                        {analytics.kpis.resultadoIva >= 0 ? '+' : ''}{formatCurrency(analytics.kpis.resultadoIva)}
+                      </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Soportado + Recargo:</span>
-                      <span className="text-red-600 font-medium">-{formatCurrency((analytics.kpis.ivaSoportado || 0) + (analytics.kpis.recargoSoportado || 0))}</span>
-                    </div>
+                    {(Number(analytics.kpis.recargoRepercutido) !== 0 || Number(analytics.kpis.recargoSoportado) !== 0) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Recargos Netos:</span>
+                        <span className={(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)) >= 0 ? "text-green-600" : "text-red-600 font-medium"}>
+                          {(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)) >= 0 ? '+' : ''}{formatCurrency(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado))}
+                        </span>
+                      </div>
+                    )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                      <span>A liquidar:</span>
-                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-green-600"}>
-                        {formatCurrency(analytics.kpis.resultadoIva)}
+                      <span>Total Liquidación:</span>
+                      <span className={(analytics.kpis.resultadoIva + (Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado))) >= 0 ? "text-green-600" : "text-red-600 font-bold"}>
+                        {formatCurrency(analytics.kpis.resultadoIva + (Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)))}
                       </span>
                     </div>
                   </div>

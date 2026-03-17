@@ -50,6 +50,8 @@
     "@types/three": "^0.182.0",
     "@upstash/redis": "^1.35.6",
     "adm-zip": "^0.5.16",
+    "ag-grid-community": "^35.1.0",
+    "ag-grid-react": "^35.1.0",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",

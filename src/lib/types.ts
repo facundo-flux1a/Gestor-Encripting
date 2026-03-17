@@ -265,6 +265,7 @@ export type DashboardAnalytics = {
     totalProductos: number;
     incidentRate: number;
     totalDocs: number;
+    hasMismatches: boolean; // 🆕 NUEVO: Indica si hay descuadres para mostrar el icono ⚠️
   };
   quarterlySummary: {
     [key: string]: { ingresos: number; gastos: number };

@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-export function FilteringPreferences() {
+export function FilteringPreferences({ minimal }: { minimal?: boolean }) {
   const { preferences, loading, updatePreferences } = usePreferences();
   const [updating, setUpdating] = useState(false);
   const { toast } = useToast();
@@ -54,13 +54,76 @@ export function FilteringPreferences() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-10">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center py-10">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
     );
   }
+
+  const content = (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="dinamizar-actividad" className="text-sm font-medium">
+              Dinamizar Actividad
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Filtrar por empresa seleccionada
+            </p>
+          </div>
+          <Switch
+            id="dinamizar-actividad"
+            checked={preferences?.dinamizar_actividad ?? true}
+            onCheckedChange={(checked) => handleToggle('dinamizar_actividad', checked)}
+            disabled={updating}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="dinamizar-incidencias" className="text-sm font-medium">
+              Dinamizar Incidencias
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Filtrar por empresa seleccionada
+            </p>
+          </div>
+          <Switch
+            id="dinamizar-incidencias"
+            checked={preferences?.dinamizar_incidencias ?? true}
+            onCheckedChange={(checked) => handleToggle('dinamizar_incidencias', checked)}
+            disabled={updating}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Sin selección, mostrar:</Label>
+        <RadioGroup
+          value={preferences?.sin_seleccion_mostrar_todo ? 'all' : 'none'}
+          onValueChange={handleEmptySelectionChange}
+          disabled={updating}
+          className="flex gap-4"
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="all" id="show-all" />
+            <Label htmlFor="show-all" className="text-xs font-normal cursor-pointer">
+              Todo
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="none" id="show-none" />
+            <Label htmlFor="show-none" className="text-xs font-normal cursor-pointer">
+              Nada
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+    </div>
+  );
+
+  if (minimal) return content;
 
   return (
     <>

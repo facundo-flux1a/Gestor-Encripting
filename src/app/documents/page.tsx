@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { useCompanyContext } from '@/context/CompanyProvider'
 import { Document } from '@/lib/types'
+import { calculateFinancials } from '@/lib/financial-engine'
 import { MainLayout } from '@/components/layout/main-layout'
 import { PageHeader } from '@/components/layout/page-header'
 import { DocumentsTable } from '@/components/dashboard/documents-table'
@@ -164,6 +165,64 @@ function DocumentsPageContent() {
 
     return { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar };
   }, [documents]);
+
+  const computedFooters = React.useMemo(() => {
+    const computeForDocs = (docs: Document[]) => {
+      const { ingresos, gastos } = calculateFinancials(docs, null);
+
+      const VAT_RATES = [21, 15, 10, 4, 0];
+
+      // Sum components for the breakdown
+      const iBase = VAT_RATES.reduce((acc, rate) => acc + (ingresos.bases[rate]?.total || 0), 0);
+      const gBase = VAT_RATES.reduce((acc, rate) => acc + (gastos.bases[rate]?.total || 0), 0);
+
+      // Sum real taxes (IVA + Recargo)
+      const iIvaReal = VAT_RATES.reduce((acc, rate) => acc + (ingresos.ivaDB[rate]?.total || 0), 0);
+      const gIvaReal = VAT_RATES.reduce((acc, rate) => acc + (gastos.ivaDB[rate]?.total || 0), 0);
+
+      // Sum theoretical taxes
+      const iIvaTeo = VAT_RATES.reduce((acc, rate) => acc + (ingresos.ivaTeorico[rate]?.total || 0), 0);
+      const gIvaTeo = VAT_RATES.reduce((acc, rate) => acc + (gastos.ivaTeorico[rate]?.total || 0), 0);
+
+      const totalBase = iBase + gBase;
+      const totalIva = iIvaTeo + gIvaTeo;
+      const totalRecargo = ingresos.recargos.total + gastos.recargos.total;
+      const totalGeneral = ingresos.totalReal.total + gastos.totalReal.total;
+
+      // Adjustment for theoretical total: Base + IvaTeo + Recargos - Retenciones
+      const totalTeorico = totalBase + totalIva + totalRecargo - (ingresos.retenciones.total + gastos.retenciones.total);
+
+      return {
+        base: Number(totalBase.toFixed(2)),
+        iva: Number(totalIva.toFixed(2)),
+        recargo: Number(totalRecargo.toFixed(2)),
+        total: Number(totalTeorico.toFixed(2)),
+        breakdown: {
+          ingresos: {
+            base: Number(iBase.toFixed(2)),
+            iva: Number(iIvaReal.toFixed(2)),
+            recargo: Number(ingresos.recargos.total.toFixed(2)),
+            retencion: Number(ingresos.retenciones.total.toFixed(2)),
+            total: Number(ingresos.totalReal.total.toFixed(2))
+          },
+          gastos: {
+            base: Number(gBase.toFixed(2)),
+            iva: Number(gIvaReal.toFixed(2)),
+            recargo: Number(gastos.recargos.total.toFixed(2)),
+            retencion: Number(gastos.retenciones.total.toFixed(2)),
+            total: Number(gastos.totalReal.total.toFixed(2))
+          }
+        }
+      };
+    };
+
+    return {
+      sinConfirmar: computeForDocs(sinConfirmar),
+      emitidas: computeForDocs(facturasEmitidas),
+      recibidas: computeForDocs(facturasRecibidas),
+      otros: computeForDocs(otrosDocumentos)
+    };
+  }, [sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos]);
 
   const otherDocsHiddenColumns = [
     'base_21', 'iva_21', 'base_10', 'iva_10', 'base_4', 'iva_4', 'base_0', 'iva_0',
@@ -648,11 +707,11 @@ function DocumentsPageContent() {
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
                     onDragStart={handleDragStart}
+                    footerValues={computedFooters.sinConfirmar}
                   />
                 </div>
               )}
             </TabsContent>
-
             {/* Facturas Emitidas */}
             <TabsContent value="emitidas" className="space-y-4 animate-in fade-in duration-300">
               {isTabChanging ? (
@@ -685,6 +744,7 @@ function DocumentsPageContent() {
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
                     onDragStart={handleDragStart}
+                    footerValues={computedFooters.emitidas}
                   />
                 </div>
               )}
@@ -722,6 +782,7 @@ function DocumentsPageContent() {
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
                     onDragStart={handleDragStart}
+                    footerValues={computedFooters.recibidas}
                   />
                 </div>
               )}
@@ -763,13 +824,16 @@ function DocumentsPageContent() {
             </TabsContent>
           </Tabs>
         )}
-      </div><UploadDialog
+      </div>
+
+      <UploadDialog
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         companies={companiesForUpload}
         onUploadComplete={handleUploadComplete}
       />
-    </>);
+    </>
+  );
 }
 export default function DocumentsPage() {
   return (

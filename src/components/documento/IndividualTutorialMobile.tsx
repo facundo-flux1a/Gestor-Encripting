@@ -18,42 +18,58 @@ export function IndividualTutorialMobile() {
     const driverInstanceRef = useRef<ReturnType<typeof driver> | null>(null);
     const hasRunRef = useRef(false);
     const lastStepRef = useRef(0);
-    const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
+    const overlayTouchBlockerRef = useRef<((e: Event) => void) | null>(null);
+
+    const blockedEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'pointercancel'];
+
+    const logToTerminal = (msg: string) => {
+        if (process.env.NODE_ENV === 'development') {
+            fetch('/api/mobile-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            }).catch(() => { });
+        }
+    };
 
     const addGlobalTouchBlocker = () => {
         if (overlayTouchBlockerRef.current) return;
         const handler = (e: Event) => {
             const target = e.target as HTMLElement;
-            // Whitelist: Popover
-            const isWhitelisted = target.closest('.driver-popover') ||
-                target.closest('.driver-popover-wrapper') ||
-                target.closest('[data-tutorial="documento-actions"]') ||
-                target.closest('[data-tutorial="documento-analizar"]') ||
-                target.closest('[data-tutorial="documento-archivo"]') ||
-                target.closest('[data-radix-popper-content-wrapper]');
+            const idx = lastStepRef.current;
+
+            const isPopover = target.closest('.driver-popover') || target.closest('.driver-popover-wrapper');
+            if (isPopover) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`✅ PERMITIDO [Paso ${idx}]: Popover`);
+                return;
+            }
+
+            let isWhitelisted = false;
+            // Surgical whitelisting for portals (dropdowns, dialogs)
+            if (target.closest('[data-radix-portal]')) isWhitelisted = true;
 
             if (!isWhitelisted) {
+                if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName}`);
                 if (e.cancelable) e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
             }
         };
-        ['touchstart', 'mousedown', 'click'].forEach(evt => {
+
+        blockedEvents.forEach(evt => {
             document.addEventListener(evt, handler, { passive: false, capture: true });
         });
-        overlayTouchBlockerRef.current = handler as any;
+        overlayTouchBlockerRef.current = handler;
     };
 
     const removeGlobalTouchBlocker = () => {
         if (overlayTouchBlockerRef.current) {
-            ['touchstart', 'mousedown', 'click'].forEach(evt => {
+            blockedEvents.forEach(evt => {
                 document.removeEventListener(evt, overlayTouchBlockerRef.current as any, { capture: true });
             });
         }
         overlayTouchBlockerRef.current = null;
     };
-
-    const addTouchBlocker = () => { };
-    const removeTouchBlocker = () => { };
 
     useEffect(() => {
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
@@ -86,24 +102,24 @@ export function IndividualTutorialMobile() {
                 element: '[data-tutorial="documento-header"]',
                 popover: {
                     title: '📄 Vista de Documento',
-                    description: '¡Bienvenido! Aquí puedes ver todos los detalles de un documento, editarlo, validar incidencias y más.',
+                    description: '¡Bienvenido! Aquí puedes ver todos los detalles de un documento, editarlo y validar incidencias.',
                     side: 'bottom' as const, align: 'start' as const,
                 },
             },
             {
                 element: '[data-tutorial="documento-actions"]',
                 popover: {
-                    title: '⚡ Acciones del Documento',
-                    description: 'Desde aquí puedes: Ver el PDF original, Editar el documento, Validar incidencias, Eliminar y Exportar. Ten en cuenta que si el trimestre está cerrado, no podrás editar.',
+                    title: '⚡ Acciones',
+                    description: 'Desde aquí puedes: Ver el PDF, Editar, Validar incidencias y Exportar.',
                     side: 'bottom' as const, align: 'end' as const,
                 },
             },
             {
                 element: '[data-tutorial="documento-view"]',
                 popover: {
-                    title: '📋 Información del Documento',
-                    description: 'Aquí podrás ver datos como: número de documento, fechas, tipo, estado de verificación y todas las líneas de productos/servicios.',
-                    side: 'right' as const, align: 'start' as const,
+                    title: '📋 Información',
+                    description: 'Datos del documento, fechas, estado y líneas de servicios.',
+                    side: 'top' as const, align: 'start' as const,
                 },
             },
         ];
@@ -112,8 +128,8 @@ export function IndividualTutorialMobile() {
             steps.push({
                 element: '[data-tutorial="documento-incidencias"]',
                 popover: {
-                    title: '⚠️ Incidencias Detectadas',
-                    description: 'Este documento tiene incidencias sin resolver. Puedes analizarlo de nuevo o validarlas manualmente si ya las resolviste.',
+                    title: '⚠️ Incidencias',
+                    description: 'Este documento tiene avisos sin resolver. Podés validarlas si ya las revisaste.',
                     side: 'left' as const, align: 'start' as const,
                 },
             });
@@ -122,8 +138,8 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-analizar"]',
             popover: {
-                title: '🔍 Análisis Inteligente con IA',
-                description: 'Usa ésta herramienta para que el sistema analice automáticamente el documento y detecte posibles errores o duplicados.',
+                title: '🔍 Análisis IA',
+                description: 'Detecta errores o duplicados automáticamente con inteligencia artificial.',
                 side: 'left' as const, align: 'start' as const,
             },
         });
@@ -131,18 +147,18 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-entidades"]',
             popover: {
-                title: '🏢 Entidades del Documento',
-                description: 'Aquí ves la información del proveedor o cliente, como: nombre, CIF, dirección y datos de contacto.',
-                side: 'left' as const, align: 'start' as const,
+                title: '🏢 Entidades',
+                description: 'Información del proveedor o cliente: nombre, CIF y dirección.',
+                side: 'top' as const, align: 'center' as const,
             },
         });
 
         steps.push({
             element: '[data-tutorial="documento-financiero"]',
             popover: {
-                title: '💰 Resumen Financiero',
-                description: 'Resumen de importes: Base imponible, IVA desglosado por tipo, retenciones (si aplica) y total del documento.',
-                side: 'left' as const, align: 'start' as const,
+                title: '💰 Financiero',
+                description: 'Base imponible, IVA desglosado y total del documento.',
+                side: 'top' as const, align: 'center' as const,
             },
         });
 
@@ -150,8 +166,8 @@ export function IndividualTutorialMobile() {
             steps.push({
                 element: '[data-tutorial="documento-archivo"]',
                 popover: {
-                    title: '📎 Archivo Original',
-                    description: 'Puedes tocar "Ver" para abrir el PDF original del documento en una vista previa.',
+                    title: '📎 Archivo',
+                    description: 'Acceso directo a la vista previa del PDF original.',
                     side: 'bottom' as const, align: 'center' as const,
                 },
             });
@@ -161,8 +177,8 @@ export function IndividualTutorialMobile() {
             element: '[data-tutorial="documento-header"]',
             popover: {
                 title: '🎉 ¡Tutorial Completado!',
-                description: '¡Perfecto! Ya conoces todas las herramientas para gestionar documentos. Puedes editar, analizar y validar documentos según tus necesidades.',
-                side: 'bottom' as const, align: 'center' as const,
+                description: '¡Listo! Ya podés gestionar tus documentos de forma avanzada.',
+                side: 'over' as const, align: 'center' as const,
             },
         });
 
@@ -187,30 +203,26 @@ export function IndividualTutorialMobile() {
                     if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                 });
                 document.body.classList.add(`tutorial-step-${currentStepIndex}`);
-
                 addGlobalTouchBlocker();
             },
-
             onNextClick: (element, step, options) => {
                 const idx = options.state.activeIndex ?? 0;
-                const total = driverInstance.getConfig().steps?.length ?? 0;
+                const total = steps.length;
                 if (idx === total - 1) {
                     markAsCompleted();
+                    removeGlobalTouchBlocker();
                     setTimeout(() => driverInstance.destroy(), 100);
                 } else {
                     driverInstance.moveNext();
                 }
             },
-
             onCloseClick: () => {
+                removeGlobalTouchBlocker();
                 const idx = driverInstance.getActiveIndex() ?? 0;
-                const total = driverInstance.getConfig().steps?.length ?? 0;
-                if (idx >= total - 2) markAsCompleted();
+                if (idx >= steps.length - 2) markAsCompleted();
                 driverInstance.destroy();
             },
-
             onPrevClick: () => driverInstance.movePrevious(),
-
             onDestroyStarted: () => {
                 removeGlobalTouchBlocker();
                 document.body.classList.forEach(cls => {
@@ -228,58 +240,40 @@ export function IndividualTutorialMobile() {
         const style = document.createElement('style');
         style.id = 'individual-tutorial-mobile-styles';
         style.textContent = `
-      .driver-overlay { pointer-events: auto !important; }
-      #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
+          .driver-overlay { 
+            pointer-events: none !important; 
+            z-index: 2147483630 !important;
+          }
+          #driver-page-overlay, #driver-highlighted-element-stage { pointer-events: none !important; }
 
-      body:has(.driver-overlay) * { pointer-events: none !important; }
-      body:has(.driver-overlay) .driver-popover, 
-      body:has(.driver-overlay) .driver-popover * { 
-        pointer-events: auto !important; 
-        z-index: 10000005 !important;
-      }
-      .driver-active-element, .driver-active-element *, .driver-active-element button,
-      .driver-active-element a, .driver-active-element input, .driver-active-element [role="button"] {
-        pointer-events: none !important; cursor: default !important;
-      }
-      .driver-popover, .driver-popover-wrapper, .driver-popover *, .driver-popover button {
-        pointer-events: auto !important; cursor: pointer !important;
-        z-index: 10000005 !important;
-        touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
-      }
-      .driver-popover button { min-height: 44px !important; }
-      .driver-active-element {
-        outline: 4px solid hsl(var(--primary)) !important;
-        box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
-      }
-      .driver-popover {
-        border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.95) !important;
-        border-radius: 12px !important;
-        color: white !important;
-        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
-      }
-      .driver-popover-title { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; }
-      .driver-popover-description { color: rgba(255,255,255,0.9) !important; font-weight: 500 !important; line-height: 1.5 !important; }
-      .driver-popover-progress-text { color: rgba(255,255,255,0.5) !important; }
-      .driver-popover-next-btn {
-        background-color: hsl(var(--primary)) !important; color: white !important;
-        border: none !important; font-weight: 600 !important; border-radius: 6px !important;
-        touch-action: manipulation !important;
-      }
-      .driver-popover-prev-btn {
-        color: white !important; border: 1px solid rgba(255,255,255,0.2) !important;
-        background: transparent !important; font-weight: 500 !important; border-radius: 6px !important;
-        touch-action: manipulation !important;
-      }
-      .driver-popover-close-btn {
-        color: rgba(255,255,255,0.5) !important; touch-action: manipulation !important;
-        min-height: 44px !important; min-width: 44px !important;
-      }
-      .driver-popover-arrow { border-bottom-color: rgba(15,23,42,0.95) !important; border-top-color: rgba(15,23,42,0.95) !important; }
-      body:has(.driver-overlay) * { pointer-events: none !important; }
-      body:has(.driver-overlay) .driver-popover, body:has(.driver-overlay) .driver-popover * { pointer-events: auto !important; }
-    `;
+          .driver-popover, .driver-popover-wrapper, .driver-popover * {
+            pointer-events: auto !important;
+            z-index: 2147483647 !important;
+            touch-action: manipulation !important;
+          }
+
+          .driver-active-element {
+            z-index: 2147483640 !important;
+            pointer-events: none !important; 
+            border: 2px solid white !important;
+            box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
+          }
+
+          .driver-popover {
+            border: 1px solid hsla(var(--primary) / 0.5) !important;
+            background-color: rgba(15, 23, 42, 0.95) !important;
+            border-radius: 12px !important;
+            color: white !important;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
+          }
+
+          .driver-popover button { min-height: 44px !important; }
+          .driver-popover-title { color: white !important; font-weight: 700 !important; }
+          .driver-popover-description { color: rgba(255, 255, 255, 0.9) !important; line-height: 1.5 !important; }
+          .driver-popover-next-btn { background-color: hsl(var(--primary)) !important; color: white !important; border: none !important; border-radius: 6px !important; }
+          .driver-popover-prev-btn { color: white !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; background: transparent !important; border-radius: 6px !important; }
+          .driver-popover-close-btn { color: rgba(255, 255, 255, 0.5) !important; }
+        `;
         document.head.appendChild(style);
         return () => { const el = document.getElementById('individual-tutorial-mobile-styles'); if (el) el.remove(); };
     }, []);

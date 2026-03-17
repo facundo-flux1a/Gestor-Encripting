@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { type Document } from '@/lib/types';
+import { type Document, type IvaDetail } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DocumentPreviewDialog } from './document-preview-dialog';
 import { CleanDuplicatesButton } from './clean-duplicates-button';
@@ -81,7 +81,17 @@ const getColumns = (
   isIncidentsPage: boolean = false,
   duplicates: Set<number> = new Set(),
   customTypes: string[] = [],
-  onMove?: (docIds: number[], targetTipo: string) => void
+  onMove?: (docIds: number[], targetTipo: string) => void,
+  footerValues?: { // 🆕 Optional custom footer values
+    base: number;
+    iva: number;
+    total: number;
+    label?: string;
+    breakdown?: {
+      ingresos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
+      gastos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
+    };
+  }
 ): ColumnDef<Document>[] => {
   const columns: ColumnDef<Document>[] = [
     {
@@ -698,9 +708,9 @@ const getColumns = (
             </div>
           );
         },
-        footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-            const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
+        footer: ({ table }: { table: TanstackTable<Document> }) => {
+          const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+            const detail = row.original.iva_details.find((d: IvaDetail) => Number(d.porcentaje) === rate);
             return sum + (Number(detail?.base_imponible) || 0);
           }, 0);
           const formatted = formatCurrency(total);
@@ -724,9 +734,9 @@ const getColumns = (
             </div>
           );
         },
-        footer: ({ table }) => {
-          const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-            const detail = row.original.iva_details.find(d => Number(d.porcentaje) === rate);
+        footer: ({ table }: { table: TanstackTable<Document> }) => {
+          const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+            const detail = row.original.iva_details.find((d: IvaDetail) => Number(d.porcentaje) === rate);
             return sum + (Number(detail?.cuota) || 0);
           }, 0);
           const formatted = formatCurrency(total);
@@ -752,9 +762,9 @@ const getColumns = (
           </div>
         );
       },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-          const detail = row.original.iva_details.find(d => d.tipo_impuesto?.toLowerCase() === 'retencion');
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+          const detail = row.original.iva_details.find((d: IvaDetail) => d.tipo_impuesto?.toLowerCase() === 'retencion');
           return sum + (Number(detail?.cuota) || 0);
         }, 0);
         const formatted = formatCurrency(total);
@@ -820,12 +830,11 @@ const getColumns = (
           </div>
         );
       },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.base_imponible) || 0), 0);
-        const formatted = formatCurrency(total);
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => sum + (Number(row.original.base_imponible) || 0), 0);
         return (
-          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
-            {formatted}
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted inline-block">
+            {formatCurrency(total)}
           </div>
         );
       }
@@ -851,64 +860,32 @@ const getColumns = (
           </div>
         );
       },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
           const totalImpuestos = Number(row.original.iva) || 0;
           const recargoSum = row.original.iva_details
-            .filter(i =>
+            .filter((i: IvaDetail) =>
               i.tipo_impuesto?.toLowerCase().includes('recargo') ||
               i.tipo_impuesto?.toLowerCase().includes('equivalencia')
             )
-            .reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+            .reduce((acc: number, curr: IvaDetail) => acc + (Number(curr.cuota) || 0), 0);
           return sum + (totalImpuestos - recargoSum);
         }, 0);
-        const formatted = formatCurrency(total);
         return (
-          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
-            {formatted}
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted inline-block">
+            {formatCurrency(total)}
           </div>
         );
       }
     },
 
-    {
-      accessorKey: 'iva',
-      header: () => (
-        <div className="text-right">
-          <div>Imp. Netos</div>
-          <div className="text-[10px] text-muted-foreground font-normal leading-tight opacity-80 flex flex-col items-end">
-            <span>(IVA</span>
-            <span>+ Recargos</span>
-            <span>Retenciones</span>
-            <span>etc.)</span>
-          </div>
-        </div>
-      ),
-      cell: ({ row }) => {
-        const value = row.getValue('iva');
-        const formatted = formatCurrency(value);
-        return (
-          <div className="text-right font-semibold transition-colors duration-300 hover:text-primary">
-            {formatted}
-          </div>
-        );
-      },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.iva) || 0), 0);
-        const formatted = formatCurrency(total);
-        return (
-          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
-            {formatted}
-          </div>
-        );
-      }
-    },
+
 
     {
       accessorKey: 'total',
       header: 'Total',
-      cell: ({ row }) => {
-        const value = row.getValue('total');
+      cell: ({ row }: { row: any }) => {
+        const value = Number(row.original.total) || 0;
         const formatted = formatCurrency(value);
         return (
           <div className="text-right font-bold transition-colors duration-300 hover:text-primary">
@@ -916,12 +893,11 @@ const getColumns = (
           </div>
         );
       },
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => sum + (Number(row.original.total) || 0), 0);
-        const formatted = formatCurrency(total);
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => sum + (Number(row.original.total) || 0), 0);
         return (
-          <div className="text-right font-bold text-base bg-muted/50 px-3 py-1.5 rounded-lg transition-colors duration-300 hover:bg-muted">
-            {formatted}
+          <div className="text-right font-bold text-base bg-muted/50 px-3 py-1.5 rounded-lg transition-colors duration-300 hover:bg-muted inline-block">
+            {formatCurrency(total)}
           </div>
         );
       }
@@ -944,6 +920,7 @@ export function DocumentsTable({
   onMove,
   onDragStart,
   exportContext = 'documentos',
+  footerValues,
 }: {
   documents: Document[],
   hiddenColumns?: string[],
@@ -956,7 +933,18 @@ export function DocumentsTable({
   customTypes?: string[],
   onMove?: (docIds: number[], targetTipo: string) => void,
   onDragStart?: (selectedIds: number[]) => void,
-  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros',
+  footerValues?: {
+    base: number;
+    iva: number;
+    recargo: number;
+    total: number;
+    label?: string;
+    breakdown?: {
+      ingresos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
+      gastos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
+    };
+  };
 }) {
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
@@ -1313,7 +1301,8 @@ export function DocumentsTable({
       isIncidentsPage,
       duplicates,
       customTypes,
-      onMove
+      onMove,
+      footerValues
     );
     // 🔧 FIX Z-INDEX: Ajustar columna de acciones
     if (cols.length > 0 && cols[0].id === 'actions') {

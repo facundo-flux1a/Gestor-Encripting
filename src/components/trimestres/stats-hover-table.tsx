@@ -73,6 +73,7 @@ interface StatsHoverTableProps {
     totalBaseOverride?: number;
     totalIvaOverride?: number;
     totalOverride?: number;
+    mismatchDocs?: string[]; // 🆕 Lista de documentos con descuadres
 }
 
 export function StatsHoverTable({
@@ -85,7 +86,8 @@ export function StatsHoverTable({
     showTotal = true,
     totalBaseOverride,
     totalIvaOverride,
-    totalOverride
+    totalOverride,
+    mismatchDocs
 }: StatsHoverTableProps) {
     // Estado para claves desactivadas
     const [disabledKeys, setDisabledKeys] = React.useState<Set<string>>(new Set());
@@ -290,6 +292,26 @@ export function StatsHoverTable({
                             {formatCurrency(grandTotal)}
                         </span>
                     </div>
+                </div>
+            )}
+
+            {/* ⚠️ Alerta de Trazabilidad */}
+            {mismatchDocs && mismatchDocs.length > 0 && (
+                <div className="mt-4 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-2">
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500 font-bold text-[10px] uppercase tracking-wider">
+                        <span className="text-sm">⚠️</span>
+                        <span>Documentos con Descuadre</span>
+                    </div>
+                    <ul className="space-y-1">
+                        {mismatchDocs.map((doc, i) => (
+                            <li key={i} className="text-[10px] text-amber-700 dark:text-amber-400 font-medium list-disc list-inside">
+                                {doc}
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="text-[9px] text-muted-foreground italic">
+                        * Estos documentos tienen diferencias entre el total real y la suma de sus impuestos.
+                    </p>
                 </div>
             )}
         </div>

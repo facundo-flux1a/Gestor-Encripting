@@ -37,6 +37,7 @@ import type { Document, Trimestre } from '@/lib/types';
 import { generateAdvancedExport } from '@/lib/export-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrimestresFilterBar, type TrimestresFilterState } from '@/components/trimestres/trimestres-filter-bar';
+import { calculateFinancials } from '@/lib/financial-engine';
 
 // Valor inicial de filtros — declarado fuera del componente para ser estable
 const EMPTY_FILTERS: TrimestresFilterState = {
@@ -645,130 +646,79 @@ function TrimestresPageContent() {
     return Array.from(unique.values());
   }, [trimestres]);
 
-  // 🆕 CÁLCULO DE DESGLOSES PARA HOVERS ESTILO EXCEL
-  const { ingresosBreakdown, gastosBreakdown } = React.useMemo(() => {
-    const init = () => ({
-      bases: { base21: 0, base15: 0, base10: 0, base4: 0, base0: 0 },
-      quotas: { iva21: 0, iva15: 0, iva10: 0, iva4: 0 },
-      recargo: 0,
-      retencion: 0,
-      totalBase: 0,
-      totalIVA: 0,
-      total: 0
-    });
-
-    const ingresos = init();
-    const gastos = init();
-
-    documentos.forEach(doc => {
-      // 1️⃣ DETERMINAR SI ES EMITIDA (INGRESO) O RECIBIDA (GASTO)
-      // Lógica espejo FINAL del SQL en getTrimestresList:
-      // Si la empresa emisora tiene nuestro CIF, entonces lo emitimos nosotros.
-      const tipo = doc.tipo_documento.toLowerCase();
-      const isIssued = doc.entidades.some(e =>
-        (e.rol === 'emisor' || e.rol === 'proveedor') &&
-        doc.empresa_cif && e.identificador_fiscal?.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
-      );
-
-      // 2️⃣ DETERMINAR SI ES ABONO (RESTA)
-      // SQL: WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 THEN 1
-      const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || doc.total < 0;
-
-      const target = isIssued ? ingresos : gastos;
-
-      // Si es abono, RESTAMOS los valores absolutos. Si es factura normal, SUMAMOS.
-      const sign = isAbono ? -1 : 1;
-
-      // Valores base (usar absoluto para controlar el signo explícitamente)
-      const baseDoc = Math.abs(Number(doc.base_imponible) || 0);
-      const ivaDoc = Math.abs(Number(doc.iva) || 0);
-      const totalDoc = Math.abs(Number(doc.total) || 0);
-
-      target.totalBase += baseDoc * sign;
-      target.totalIVA += ivaDoc * sign;
-      target.total += totalDoc * sign;
-
-      // Sumar detalles de IVA
-      if (doc.iva_details && Array.isArray(doc.iva_details)) {
-        doc.iva_details.forEach(det => {
-          const rate = Math.round(Number(det.porcentaje));
-          const base = Math.abs(Number(det.base_imponible) || 0);
-          const cuota = Math.abs(Number(det.cuota) || 0);
-          const type = det.tipo_impuesto?.toLowerCase() || '';
-
-          // Recargo
-          if (type.includes('recargo') || type.includes('equivalencia')) {
-            target.recargo += cuota * sign;
-            return;
-          }
-          // Retención (La retención resta al total a pagar, pero en desglose impositivo se suele sumar aparte o restar)
-          // SQL: i.tipo_impuesto NOT LIKE '%retencion%' para el IVA.
-          // Aquí la sumamos al acumulado de retenciones.
-          if (type.includes('retencion')) {
-            target.retencion += cuota * sign;
-            return;
-          }
-
-          // Bases y Cuotas
-          if (rate === 21) { target.bases.base21 += base * sign; target.quotas.iva21 += cuota * sign; }
-          else if (rate === 15) { target.bases.base15 += base * sign; target.quotas.iva15 += cuota * sign; }
-          else if (rate === 10) { target.bases.base10 += base * sign; target.quotas.iva10 += cuota * sign; }
-          else if (rate === 4) { target.bases.base4 += base * sign; target.quotas.iva4 += cuota * sign; }
-          else if (rate === 0) { target.bases.base0 += base * sign; }
-        });
-      }
-    });
-
-    return { ingresosBreakdown: ingresos, gastosBreakdown: gastos };
+  // ── NUEVO: CÁLCULO UNIFICADO USANDO EL MOTOR FINANCIERO ────────────────────
+  const auditedResults = React.useMemo(() => {
+    // Usamos el CIF de la primera empresa seleccionada como referencia principal
+    // (Opcional: el motor ya usa d.empresa_cif si lo detecta en el documento)
+    return calculateFinancials(documentos, null);
   }, [documentos]);
 
-  // ── Breakdown para DOCUMENTOS FILTRADOS (usado cuando dinamizarCards=true) ──
-  const { ingresosBreakdown: ingresosFiltrado, gastosBreakdown: gastosFiltrado } = React.useMemo(() => {
-    const init = () => ({
-      bases: { base21: 0, base15: 0, base10: 0, base4: 0, base0: 0 },
-      quotas: { iva21: 0, iva15: 0, iva10: 0, iva4: 0 },
-      recargo: 0,
-      retencion: 0,
-      totalBase: 0,
-      totalIVA: 0,
-      total: 0
-    });
-    const ingresos = init();
-    const gastos = init();
-
-    documentosFiltrados.forEach(doc => {
-      const tipo = doc.tipo_documento.toLowerCase();
-      const isIssued = doc.entidades.some(e =>
-        (e.rol === 'emisor' || e.rol === 'proveedor') &&
-        doc.empresa_cif && e.identificador_fiscal?.trim().toLowerCase() === doc.empresa_cif.trim().toLowerCase()
-      );
-      const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || doc.total < 0;
-      const target = isIssued ? ingresos : gastos;
-      const sign = isAbono ? -1 : 1;
-      const baseDoc = Math.abs(Number(doc.base_imponible) || 0);
-      const ivaDoc = Math.abs(Number(doc.iva) || 0);
-      const totalDoc = Math.abs(Number(doc.total) || 0);
-      target.totalBase += baseDoc * sign;
-      target.totalIVA += ivaDoc * sign;
-      target.total += totalDoc * sign;
-      if (doc.iva_details && Array.isArray(doc.iva_details)) {
-        doc.iva_details.forEach(det => {
-          const rate = Math.round(Number(det.porcentaje));
-          const base = Math.abs(Number(det.base_imponible) || 0);
-          const cuota = Math.abs(Number(det.cuota) || 0);
-          const type = det.tipo_impuesto?.toLowerCase() || '';
-          if (type.includes('recargo') || type.includes('equivalencia')) { target.recargo += cuota * sign; return; }
-          if (type.includes('retencion')) { target.retencion += cuota * sign; return; }
-          if (rate === 21) { target.bases.base21 += base * sign; target.quotas.iva21 += cuota * sign; }
-          else if (rate === 15) { target.bases.base15 += base * sign; target.quotas.iva15 += cuota * sign; }
-          else if (rate === 10) { target.bases.base10 += base * sign; target.quotas.iva10 += cuota * sign; }
-          else if (rate === 4) { target.bases.base4 += base * sign; target.quotas.iva4 += cuota * sign; }
-          else if (rate === 0) { target.bases.base0 += base * sign; }
-        });
-      }
-    });
-    return { ingresosBreakdown: ingresos, gastosBreakdown: gastos };
+  const auditedFiltrado = React.useMemo(() => {
+    return calculateFinancials(documentosFiltrados, null);
   }, [documentosFiltrados]);
+
+  // Adaptadores para mantener compatibilidad con StatsHoverTable
+  const mapToStatsBreakdown = (summary: any) => {
+    const totalBase = Object.values(summary.bases).reduce((acc: number, b: any) => acc + b.total, 0);
+
+    // ✅ MODELO TEÓRICO AGREGADO (Paridad absoluta con Excel)
+    // Redondeamos sobre el total sumado de bases por tasa, no por cada documento.
+    const quotas = {
+      iva21: Math.round((summary.bases[21]?.total || 0) * 21) / 100,
+      iva15: Math.round((summary.bases[15]?.total || 0) * 15) / 100,
+      iva10: Math.round((summary.bases[10]?.total || 0) * 10) / 100,
+      iva4: Math.round((summary.bases[4]?.total || 0) * 4) / 100,
+    };
+
+    const totalIVA = Object.values(quotas).reduce((acc, v) => acc + v, 0);
+    const totalRecargo = summary.recargos.total;
+    const totalRetencion = summary.retenciones.total;
+
+    // Calculamos el total de la card como suma de sus partes teóricas para consistencia visual
+    const totalTeorico = totalBase + totalIVA + totalRecargo - totalRetencion;
+
+    return {
+      bases: {
+        base21: summary.bases[21].total,
+        base15: summary.bases[15].total,
+        base10: summary.bases[10].total,
+        base4: summary.bases[4].total,
+        base0: summary.bases[0].total,
+      },
+      quotas,
+      recargo: totalRecargo,
+      retencion: totalRetencion,
+      totalBase,
+      totalIVA,
+      total: totalTeorico,
+      mismatchDocs: [
+        ...(summary.mismatchDocs.total[selectedTrimestre] || []),
+        ...Object.values(summary.mismatchDocs.iva[selectedTrimestre] || {}).flat()
+      ]
+    };
+  };
+
+  const { ingresosBreakdown, gastosBreakdown, mismatchDocsIngresos, mismatchDocsGastos } = React.useMemo(() => {
+    const ing = mapToStatsBreakdown(auditedResults.ingresos);
+    const gas = mapToStatsBreakdown(auditedResults.gastos);
+    return {
+      ingresosBreakdown: ing,
+      gastosBreakdown: gas,
+      mismatchDocsIngresos: ing.mismatchDocs,
+      mismatchDocsGastos: gas.mismatchDocs
+    };
+  }, [auditedResults, selectedTrimestre]);
+
+  const { ingresosFiltrado, gastosFiltrado, mismatchFiltradoIngresos, mismatchFiltradoGastos } = React.useMemo(() => {
+    const ing = mapToStatsBreakdown(auditedFiltrado.ingresos);
+    const gas = mapToStatsBreakdown(auditedFiltrado.gastos);
+    return {
+      ingresosFiltrado: ing,
+      gastosFiltrado: gas,
+      mismatchFiltradoIngresos: ing.mismatchDocs,
+      mismatchFiltradoGastos: gas.mismatchDocs
+    };
+  }, [auditedFiltrado, selectedTrimestre]);
 
   // ── Toggle: las cards reflejan los documentos filtrados ───────────────────
   const [dinamizarCards, setDinamizarCards] = React.useState(false);
@@ -776,6 +726,9 @@ function TrimestresPageContent() {
   // Elegir qué breakdown y totales usar en las cards
   const cardsIngresos = dinamizarCards ? ingresosFiltrado : ingresosBreakdown;
   const cardsGastos = dinamizarCards ? gastosFiltrado : gastosBreakdown;
+  const mismatchDocsIng = dinamizarCards ? mismatchFiltradoIngresos : mismatchDocsIngresos;
+  const mismatchDocsGas = dinamizarCards ? mismatchFiltradoGastos : mismatchDocsGastos;
+
   // Totales calculados desde los docs filtrados (para modo dinámico)
   const totalIngresosDinamico = ingresosFiltrado.total;
   const totalGastosDinamico = gastosFiltrado.total;
@@ -785,12 +738,12 @@ function TrimestresPageContent() {
   const totalGastosSinIvaDinamico = gastosFiltrado.totalBase;
 
   const numDocsCard = dinamizarCards ? documentosFiltrados.length : (trimestreAgregado?.total_documentos || 0);
-  const totIngresosCard = dinamizarCards ? totalIngresosDinamico : (trimestreAgregado?.total_ingresos || 0);
-  const totGastosCard = dinamizarCards ? totalGastosDinamico : (trimestreAgregado?.total_gastos || 0);
-  const totIngresosBaseCard = dinamizarCards ? totalIngresosSinIvaDinamico : (trimestreAgregado?.total_ingresos_sin_iva || 0);
-  const totGastosBaseCard = dinamizarCards ? totalGastosSinIvaDinamico : (trimestreAgregado?.total_gastos_sin_iva || 0);
-  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : (trimestreAgregado?.iva_repercutido || 0);
-  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : (trimestreAgregado?.iva_soportado || 0);
+  const totIngresosCard = dinamizarCards ? totalIngresosDinamico : ingresosBreakdown.total;
+  const totGastosCard = dinamizarCards ? totalGastosDinamico : gastosBreakdown.total;
+  const totIngresosBaseCard = dinamizarCards ? totalIngresosSinIvaDinamico : ingresosBreakdown.totalBase;
+  const totGastosBaseCard = dinamizarCards ? totalGastosSinIvaDinamico : gastosBreakdown.totalBase;
+  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : ingresosBreakdown.totalIVA;
+  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : gastosBreakdown.totalIVA;
   const beneficioBrutoCard = totIngresosCard - totGastosCard;
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;
@@ -983,6 +936,7 @@ function TrimestresPageContent() {
                   totalBaseOverride={totIngresosBaseCard}
                   totalIvaOverride={ivaRepCard}
                   totalOverride={totIngresosCard}
+                  mismatchDocs={mismatchDocsIng}
                 />}
               />
 
@@ -999,6 +953,7 @@ function TrimestresPageContent() {
                   totalBaseOverride={totGastosBaseCard}
                   totalIvaOverride={ivaSopCard}
                   totalOverride={totGastosCard}
+                  mismatchDocs={mismatchDocsGas}
                 />}
               />
 
@@ -1189,27 +1144,41 @@ function TrimestresPageContent() {
                   />
                 </div>
                 <TrimestreTable
-                  documentos={documentosFiltrados}
-                  footerValues={trimestreAgregado ? {
-                    base: (trimestreAgregado.total_ingresos_sin_iva || 0) - (trimestreAgregado.total_gastos_sin_iva || 0),
-                    iva: (trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0)) - (trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0)),
-                    total: trimestreAgregado.total_ingresos - trimestreAgregado.total_gastos,
+                  documentos={documentosFiltrados.map(doc => {
+                    let rec = 0;
+                    let ret = 0;
+                    doc.iva_details?.forEach(det => {
+                      const t = (det.tipo_impuesto || '').toLowerCase();
+                      const val = Math.round(Math.abs(Number(det.cuota) || 0) * 100) / 100;
+                      if (t.includes('recargo') || t.includes('equivalencia')) rec += val;
+                      if (t.includes('retencion') || t.includes('irpf')) ret += val;
+                    });
+                    const esAbono = (doc.tipo_documento || '').toLowerCase().includes('abono') || (doc.total || 0) < 0;
+                    const sign = esAbono ? -1 : 1;
+                    return { ...doc, recargo: rec * sign, retencion: ret * sign };
+                  })}
+                  footerValues={{
+                    base: totIngresosBaseCard - totGastosBaseCard,
+                    iva: ivaRepCard - ivaSopCard,
+                    total: totIngresosCard - totGastosCard,
                     label: "Resultado Neto del Periodo:",
                     breakdown: {
                       ingresos: {
-                        base: trimestreAgregado.total_ingresos_sin_iva || 0,
-                        iva: trimestreAgregado.iva_repercutido + (trimestreAgregado.recargo_repercutido || 0),
-                        total: trimestreAgregado.total_ingresos,
-                        retencion: ingresosBreakdown.retencion || 0
+                        base: totIngresosBaseCard,
+                        iva: ivaRepCard,
+                        total: totIngresosCard,
+                        retencion: cardsIngresos.retencion || 0,
+                        recargo: (cardsIngresos as any).recargo || 0
                       },
                       gastos: {
-                        base: trimestreAgregado.total_gastos_sin_iva || 0,
-                        iva: trimestreAgregado.iva_soportado + (trimestreAgregado.recargo_soportado || 0),
-                        total: trimestreAgregado.total_gastos,
-                        retencion: gastosBreakdown.retencion || 0
+                        base: totGastosBaseCard,
+                        iva: ivaSopCard,
+                        total: totGastosCard,
+                        retencion: cardsGastos.retencion || 0,
+                        recargo: (cardsGastos as any).recargo || 0
                       }
                     }
-                  } : undefined}
+                  }}
                 />
               </div>
             </>

@@ -3,9 +3,16 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
 import { useCompanyContext } from '@/context/CompanyProvider';
-import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, X } from 'lucide-react';
+import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, Lock, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTutorial } from '@/context/tutorial-context';
+import { getSession } from '@/services/auth-service';
+import { type User as UserType } from '@/lib/types';
+
+import { UserProfileForm } from './settings/UserProfileForm';
+import { PasswordEditDialog } from './settings/PasswordEditDialog';
+import { FilteringPreferences } from './settings/filtering-preferences';
+import { cn } from '@/lib/utils';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -383,6 +390,8 @@ export function CompaniesSelector() {
   const [editingCompany, setEditingCompany] = React.useState<Company | null>(null);
   const [originalCompany, setOriginalCompany] = React.useState<Company | null>(null);
   const [isEmailValid, setIsEmailValid] = React.useState(true);
+  const [activeTab, setActiveTab] = React.useState<'empresa' | 'usuario'>('empresa');
+  const [currentUser, setCurrentUser] = React.useState<UserType | null>(null);
 
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -407,6 +416,17 @@ export function CompaniesSelector() {
       }
     }
     loadCompanies();
+
+    // Cargar usuario para la pestaña de ajustes
+    getSession().then(session => {
+      if (session) {
+        setCurrentUser({
+          id: session.userId,
+          email: session.email,
+          nombre: session.nombre,
+        });
+      }
+    });
   }, [setCompanies]);
 
   React.useEffect(() => {
@@ -545,6 +565,7 @@ export function CompaniesSelector() {
     setOriginalCompany({ ...company });
     setIsEditDialogOpen(true);
     setIsEmailValid(true);
+    setActiveTab('empresa');
   };
 
   const handleSaveCompany = async () => {
@@ -1053,54 +1074,118 @@ export function CompaniesSelector() {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Configurar empresa</DialogTitle>
+              <DialogTitle>Configuración</DialogTitle>
               <DialogDescription>
-                Modifica los datos de la empresa o elimínala
+                Gestiona los datos de la empresa y tu perfil de usuario
               </DialogDescription>
             </DialogHeader>
-            {editingCompany && (
-              <EditCompanyFormComponent
-                key={editingCompany.id}
-                company={editingCompany}
-                onEmailValidation={setIsEmailValid}
-              />
-            )}
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button
-                variant="destructive"
-                className="w-full sm:w-auto sm:mr-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (editingCompany) {
-                    handleDeleteClick(editingCompany.id, editingCompany.name);
-                  }
-                }}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar Empresa
-              </Button>
-              <div className="flex gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  className="flex-1 sm:flex-none"
-                  onClick={() => {
-                    setIsEditDialogOpen(false);
-                    setEditingCompany(null);
-                    setOriginalCompany(null);
-                  }}
+
+            {/* Selector de Pestañas Estilo Slider */}
+            <div className="flex justify-center my-4">
+              <div className="bg-muted/50 p-1 rounded-full flex relative w-64 border border-border/50">
+                {/* Animated Background Slider */}
+                <div
+                  className={cn(
+                    "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
+                    activeTab === 'empresa' ? "left-1" : "left-[calc(50%+2px)]"
+                  )}
+                />
+                <button
+                  onClick={() => setActiveTab('empresa')}
+                  className={cn(
+                    "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                    activeTab === 'empresa' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1 sm:flex-none"
-                  onClick={handleSaveCompany}
-                  disabled={isCreating || !isEmailValid}
+                  Empresa
+                </button>
+                <button
+                  onClick={() => setActiveTab('usuario')}
+                  className={cn(
+                    "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                    activeTab === 'usuario' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  {isCreating ? 'Guardando...' : 'Guardar Cambios'}
-                </Button>
+                  Usuario
+                </button>
               </div>
-            </DialogFooter>
+            </div>
+
+            <div className="mt-2 min-h-[400px]">
+              {activeTab === 'empresa' ? (
+                <>
+                  {editingCompany && (
+                    <EditCompanyFormComponent
+                      key={editingCompany.id}
+                      company={editingCompany}
+                      onEmailValidation={setIsEmailValid}
+                    />
+                  )}
+                  <DialogFooter className="flex-col sm:flex-row gap-2 mt-6 pt-4 border-t">
+                    <Button
+                      variant="destructive"
+                      className="w-full sm:w-auto sm:mr-auto"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (editingCompany) {
+                          handleDeleteClick(editingCompany.id, editingCompany.name);
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar Empresa
+                    </Button>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <Button
+                        variant="outline"
+                        className="flex-1 sm:flex-none"
+                        onClick={() => {
+                          setIsEditDialogOpen(false);
+                          setEditingCompany(null);
+                          setOriginalCompany(null);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="button"
+                        className="flex-1 sm:flex-none"
+                        onClick={handleSaveCompany}
+                        disabled={isCreating || !isEmailValid}
+                      >
+                        {isCreating ? 'Guardando...' : 'Guardar Cambios'}
+                      </Button>
+                    </div>
+                  </DialogFooter>
+                </>
+              ) : (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {currentUser && (
+                    <UserProfileForm
+                      initialName={currentUser.nombre || ''}
+                      initialEmail={currentUser.email || ''}
+                      minimal
+                    />
+                  )}
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-violet-500" />
+                      Seguridad
+                    </h4>
+                    <PasswordEditDialog minimal />
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-violet-500" />
+                      Alertas
+                    </h4>
+                    <FilteringPreferences minimal />
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -1351,54 +1436,118 @@ export function CompaniesSelector() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Configurar empresa</DialogTitle>
+            <DialogTitle>Configuración</DialogTitle>
             <DialogDescription>
-              Modifica los datos de la empresa o elimínala
+              Gestiona los datos de la empresa y tu perfil de usuario
             </DialogDescription>
           </DialogHeader>
-          {editingCompany && (
-            <EditCompanyFormComponent
-              key={editingCompany.id}
-              company={editingCompany}
-              onEmailValidation={setIsEmailValid}
-            />
-          )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="destructive"
-              className="w-full sm:w-auto sm:mr-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (editingCompany) {
-                  handleDeleteClick(editingCompany.id, editingCompany.name);
-                }
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar Empresa
-            </Button>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={() => {
-                  setIsEditDialogOpen(false);
-                  setEditingCompany(null);
-                  setOriginalCompany(null);
-                }}
+
+          {/* Selector de Pestañas Estilo Slider */}
+          <div className="flex justify-center my-4">
+            <div className="bg-muted/50 p-1 rounded-full flex relative w-64 border border-border/50">
+              {/* Animated Background Slider */}
+              <div
+                className={cn(
+                  "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
+                  activeTab === 'empresa' ? "left-1" : "left-[calc(50%+2px)]"
+                )}
+              />
+              <button
+                onClick={() => setActiveTab('empresa')}
+                className={cn(
+                  "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                  activeTab === 'empresa' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="flex-1 sm:flex-none"
-                onClick={handleSaveCompany}
-                disabled={isCreating || !isEmailValid}
+                Empresa
+              </button>
+              <button
+                onClick={() => setActiveTab('usuario')}
+                className={cn(
+                  "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                  activeTab === 'usuario' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                {isCreating ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
+                Usuario
+              </button>
             </div>
-          </DialogFooter>
+          </div>
+
+          <div className="mt-2 min-h-[400px]">
+            {activeTab === 'empresa' ? (
+              <>
+                {editingCompany && (
+                  <EditCompanyFormComponent
+                    key={editingCompany.id}
+                    company={editingCompany}
+                    onEmailValidation={setIsEmailValid}
+                  />
+                )}
+                <DialogFooter className="flex-col sm:flex-row gap-2 mt-6 pt-4 border-t">
+                  <Button
+                    variant="destructive"
+                    className="w-full sm:w-auto sm:mr-auto"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (editingCompany) {
+                        handleDeleteClick(editingCompany.id, editingCompany.name);
+                      }
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar Empresa
+                  </Button>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        setIsEditDialogOpen(false);
+                        setEditingCompany(null);
+                        setOriginalCompany(null);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1 sm:flex-none"
+                      onClick={handleSaveCompany}
+                      disabled={isCreating || !isEmailValid}
+                    >
+                      {isCreating ? 'Guardando...' : 'Guardar Cambios'}
+                    </Button>
+                  </div>
+                </DialogFooter>
+              </>
+            ) : (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {currentUser && (
+                  <UserProfileForm
+                    initialName={currentUser.nombre || ''}
+                    initialEmail={currentUser.email || ''}
+                    minimal
+                  />
+                )}
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-violet-500" />
+                    Seguridad
+                  </h4>
+                  <PasswordEditDialog minimal />
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-violet-500" />
+                    Alertas
+                  </h4>
+                  <FilteringPreferences minimal />
+                </div>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -2580,7 +2580,6 @@ export async function getDashboardAnalytics(
         OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
@@ -2625,104 +2624,87 @@ export async function getDashboardAnalytics(
                 d.tipo_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
+                -- ✅ IVA PURO (Sin Recargos)
                 COALESCE((SELECT SUM(di.cuota) 
                  FROM impuestos_documento di 
                  WHERE di.documento_id = d.id 
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%retencion%' 
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%reten%'
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%recargo%'
-                   AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'), 0) as total_iva,
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%retencion%' 
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%reten%'
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%recargo%'
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'), 0) as total_iva,
+                -- ✅ RECARGO SEPARADO
                 COALESCE((SELECT SUM(di.cuota) 
                   FROM impuestos_documento di 
                   WHERE di.documento_id = d.id 
-                    AND (di.tipo_impuesto LIKE '%recargo%' OR di.tipo_impuesto LIKE '%equivalencia%')), 0) as recargo,
-                -- ✅ NUEVO: RETENCION
-                COALESCE((SELECT SUM(di.cuota) 
-                  FROM impuestos_documento di 
-                  WHERE di.documento_id = d.id 
-                    AND (LOWER(di.tipo_impuesto) LIKE '%retencion%' OR LOWER(di.tipo_impuesto) LIKE '%reten%' OR LOWER(di.tipo_impuesto) LIKE '%irpf%')), 0) as retencion,
-                 -- ✅ Identificar si es abono (Robust Logic)
-                (CASE WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%crédito%' OR LOWER(d.tipo_documento) LIKE '%credito%' THEN 1 ELSE 0 END) as is_abono,
-                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
-                MAX(CASE 
-                    WHEN ed.rol IN('emisor', 'proveedor') 
-                      AND ed.identificador_fiscal IN(${cifPlaceholders}) 
+                    AND (di.tipo_impuesto LIKE '%recargo%' OR di.tipo_impuesto LIKE '%equivalencia%')), 0) as recargo_cuota,
+                -- ✅ RETENCION SEPARADA
+                COALESCE((SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id AND (di.tipo_impuesto LIKE '%reten%' OR di.tipo_impuesto LIKE '%irpf%')), 0) as retencion_cuota,
+                
+                -- ✅ DETECCIÓN DE ABONO (Igual a Trimestres)
+                CASE 
+                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 
                     THEN 1 
                     ELSE 0 
-                END) as is_issued
+                END as is_abono,
+                
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued,
+
+                -- ✅ BASES POR TASA PARA CÁLCULO TEÓRICO RIGUROSO
+                COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 21) < 1), 0) as b21,
+                COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 10) < 1), 0) as b10,
+                COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 4) < 1), 0) as b4,
+                COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 15) < 1), 0) as b15,
+
+                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€)
+                (CASE WHEN ABS(d.importe_total - (d.importe_sin_impuestos + 
+                    COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+                )) > 0.05 THEN 1 ELSE 0 END) as doc_mismatch
             FROM documentos d
-            LEFT JOIN entidades_documento ed ON d.id = ed.documento_id
             WHERE 1=1 ${whereDocType}
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             ${wherePeriodFilter}
-            GROUP BY d.id
         )
         SELECT
-          -- ✅ TOTALES CON IVA
+          -- ✅ TOTALES CON IVA (Ajuste de signo inteligente)
           COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN
-              CASE WHEN is_abono = 1 THEN -ABS(importe_total) ELSE importe_total END
+            WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND importe_total > 0 THEN -importe_total ELSE importe_total END) 
             ELSE 0 
           END), 0) as totalIngresos,
           
           COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(importe_total) ELSE importe_total END
+            WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND importe_total > 0 THEN -importe_total ELSE importe_total END) 
             ELSE 0 
           END), 0) as totalGastos,
           
           -- ✅ TOTALES SIN IVA
           COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(importe_sin_impuestos) ELSE importe_sin_impuestos END
+            WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND importe_sin_impuestos > 0 THEN -importe_sin_impuestos ELSE importe_sin_impuestos END) 
             ELSE 0 
           END), 0) as totalIngresosSinIva,
           
           COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(importe_sin_impuestos) ELSE importe_sin_impuestos END
+            WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND importe_sin_impuestos > 0 THEN -importe_sin_impuestos ELSE importe_sin_impuestos END) 
             ELSE 0 
           END), 0) as totalGastosSinIva,
           
-          -- ✅ IVA
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(total_iva) ELSE total_iva END
-            ELSE 0 
-          END), 0) as ivaRepercutido,
+          -- ✅ IMPUESTOS DESGLOSADOS
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -total_iva ELSE total_iva END) ELSE 0 END), 0) as ivaRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -total_iva ELSE total_iva END) ELSE 0 END), 0) as ivaSoportado,
           
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(total_iva) ELSE total_iva END
-            ELSE 0 
-          END), 0) as ivaSoportado,
-
-          -- ✅ RECARGO
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(recargo) ELSE recargo END
-            ELSE 0 
-          END), 0) as recargoSoportado,
-
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(recargo) ELSE recargo END
-            ELSE 0 
-          END), 0) as recargoRepercutido,
+          -- ✅ RETENCIONES: Siempre positivo para el KPI, el signo lo manejamos en la fórmula
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 THEN -ABS(retencion_cuota) ELSE ABS(retencion_cuota) END) ELSE 0 END), 0) as retencionRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 THEN -ABS(retencion_cuota) ELSE ABS(retencion_cuota) END) ELSE 0 END), 0) as retencionSoportado,
           
-          -- ✅ RETENCION (Sumar magnitud absoluta y aplicar signo de doc)
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(retencion) ELSE ABS(retencion) END
-            ELSE 0 
-          END), 0) as retencionRepercutido,
-
-          COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN
-               CASE WHEN is_abono = 1 THEN -ABS(retencion) ELSE ABS(retencion) END
-            ELSE 0 
-          END), 0) as retencionSoportado,
+          -- ✅ RECARGOS
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 THEN -ABS(recargo_cuota) ELSE ABS(recargo_cuota) END) ELSE 0 END), 0) as recargoRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 THEN -ABS(recargo_cuota) ELSE ABS(recargo_cuota) END) ELSE 0 END), 0) as recargoSoportado,
           
           COUNT(DISTINCT CASE WHEN is_issued = 1 THEN id END) as totalFacturasIngreso,
           COUNT(DISTINCT CASE WHEN is_issued = 0 THEN id END) as totalFacturasGasto,
@@ -2761,6 +2743,18 @@ export async function getDashboardAnalytics(
            ${hasEmpresaFilter ? 'AND d4.id_de_empresa IN (?)' : ''}
            ${wherePeriodFilter.replace(/d\./g, 'd4.')}) as totalProductos,
           
+          -- ✅ SUMA DE BASES PARA CÁLCULO TEÓRICO AGREGADO
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND b21 > 0 THEN -b21 ELSE b21 END) ELSE 0 END), 0) as ing_b21,
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND b10 > 0 THEN -b10 ELSE b10 END) ELSE 0 END), 0) as ing_b10,
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND b4 > 0 THEN -b4 ELSE b4 END) ELSE 0 END), 0) as ing_b4,
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND b15 > 0 THEN -b15 ELSE b15 END) ELSE 0 END), 0) as ing_b15,
+          
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND b21 > 0 THEN -b21 ELSE b21 END) ELSE 0 END), 0) as gas_b21,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND b10 > 0 THEN -b10 ELSE b10 END) ELSE 0 END), 0) as gas_b10,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND b4 > 0 THEN -b4 ELSE b4 END) ELSE 0 END), 0) as gas_b4,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND b15 > 0 THEN -b15 ELSE b15 END) ELSE 0 END), 0) as gas_b15,
+          
+          MAX(doc_mismatch) as hasMismatches,
           COUNT(DISTINCT id) as totalDocs
         FROM DocTypes
     `, [
@@ -2789,10 +2783,28 @@ export async function getDashboardAnalytics(
   });
   const incidentRate = kpis.totalDocs > 0 ? (kpis.incidenciasAbiertas / kpis.totalDocs) * 100 : 0;
 
-  // ✅ BENEFICIO CON IVA Y SIN IVA
-  const beneficioConIva = (kpis.totalIngresos || 0) - (kpis.totalGastos || 0);
-  const beneficioSinIva = (kpis.totalIngresosSinIva || 0) - (kpis.totalGastosSinIva || 0);
-  const resultadoIva = Number(kpis.ivaRepercutido || 0) + Number(kpis.recargoRepercutido || 0) - Number(kpis.ivaSoportado || 0) - Number(kpis.recargoSoportado || 0);
+  // ✅ REDONDEO TEÓRICO AGREGADO (Sincronizado con Excel y Trimestres)
+  const ivaRep21 = Math.round(Number(kpis.ing_b21) * 21) / 100;
+  const ivaRep10 = Math.round(Number(kpis.ing_b10) * 10) / 100;
+  const ivaRep4 = Math.round(Number(kpis.ing_b4) * 4) / 100;
+  const ivaRep15 = Math.round(Number(kpis.ing_b15) * 15) / 100;
+  const totalIvaRepTeorico = ivaRep21 + ivaRep10 + ivaRep4 + ivaRep15;
+
+  const ivaSop21 = Math.round(Number(kpis.gas_b21) * 21) / 100;
+  const ivaSop10 = Math.round(Number(kpis.gas_b10) * 10) / 100;
+  const ivaSop4 = Math.round(Number(kpis.gas_b4) * 4) / 100;
+  const ivaSop15 = Math.round(Number(kpis.gas_b15) * 15) / 100;
+  const totalIvaSopTeorico = ivaSop21 + ivaSop10 + ivaSop4 + ivaSop15;
+
+  // Recalcular Totales CON IVA (Netos de retención para paridad con Trimestres)
+  const totalIngresosTeorico = Number(kpis.totalIngresosSinIva) + totalIvaRepTeorico + Number(kpis.recargoRepercutido) - Number(kpis.retencionRepercutido);
+  const totalGastosTeorico = Number(kpis.totalGastosSinIva) + totalIvaSopTeorico + Number(kpis.recargoSoportado) - Number(kpis.retencionSoportado);
+
+  const beneficioSinIva = Number(kpis.totalIngresosSinIva) - Number(kpis.totalGastosSinIva);
+  const beneficioConIva = totalIngresosTeorico - totalGastosTeorico;
+
+  // ✅ RESULTADO IVA PURO (Sin Recargos, como pidió el usuario)
+  const resultadoIva = totalIvaRepTeorico - totalIvaSopTeorico;
 
   // ✅ QUARTERLY SUMMARY con importe_total (CON IVA)
   const [quarterlyRows] = await db.query<RowDataPacket[]>(`
@@ -2806,40 +2818,25 @@ export async function getDashboardAnalytics(
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    -- REGLA 3: Albaranes sin especificar → Verificar si tiene Cliente/Receptor
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1  -- Tiene cliente → EMITIDA
-                            ELSE 0    -- Sin cliente → RECIBIDA
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT e2.identificador_fiscal 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             WHERE 1=1
               AND (
                   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-                  OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+                  OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+                  OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               ${wherePeriodFilter}
+            GROUP BY d.id -- ✅ Necesario para la subquery de is_issued
         )
         SELECT
           CONCAT('T', QUARTER(fecha_emision)) as quarter,
@@ -2929,7 +2926,8 @@ export async function getDashboardAnalytics(
               AND (
                   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
                   OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-                  OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+                  OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+                  OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
@@ -2986,29 +2984,13 @@ export async function getDashboardAnalytics(
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT e2.identificador_fiscal 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             WHERE 1=1
               AND (
@@ -3084,30 +3066,13 @@ export async function getDashboardAnalytics(
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    -- REGLA 3: Albaranes sin especificar → Verificar si tiene Cliente/Receptor
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1  -- Tiene cliente → EMITIDA
-                            ELSE 0    -- Sin cliente → RECIBIDA
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT e2.identificador_fiscal 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
             WHERE i.tipo_impuesto NOT LIKE '%retencion%'
@@ -3378,14 +3343,14 @@ export async function getDashboardAnalytics(
 
   const analyticsData = {
     kpis: {
-      totalIngresos: Number(kpis.totalIngresos || 0),
-      totalGastos: Number(kpis.totalGastos || 0),
+      totalIngresos: Number(totalIngresosTeorico),
+      totalGastos: Number(totalGastosTeorico),
       totalIngresosSinIva: Number(kpis.totalIngresosSinIva || 0),
       totalGastosSinIva: Number(kpis.totalGastosSinIva || 0),
       beneficio: Number(beneficioConIva),
       beneficioSinIva: Number(beneficioSinIva),
-      ivaRepercutido: Number(kpis.ivaRepercutido || 0),
-      ivaSoportado: Number(kpis.ivaSoportado || 0),
+      ivaRepercutido: Number(totalIvaRepTeorico),
+      ivaSoportado: Number(totalIvaSopTeorico),
       recargoRepercutido: Number(kpis.recargoRepercutido || 0),
       recargoSoportado: Number(kpis.recargoSoportado || 0),
       resultadoIva: Number(resultadoIva),
@@ -3398,6 +3363,7 @@ export async function getDashboardAnalytics(
       totalDocs: Number(kpis.totalDocs || 0),
       retencionRepercutido: Number(kpis.retencionRepercutido || 0),
       retencionSoportado: Number(kpis.retencionSoportado || 0),
+      hasMismatches: !!kpis.hasMismatches, // ✅ Nuevo campo
     },
     quarterlySummary,
     yearlySummary,
