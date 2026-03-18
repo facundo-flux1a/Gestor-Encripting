@@ -123,12 +123,12 @@ const UserProfile = React.memo(function UserProfile({ user }: { user: User | nul
             <span>Ajustes</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
+        {/* <DropdownMenuItem asChild>
           <Link href="/settings/tax-validation">
             <ShieldCheck className="mr-2 h-4 w-4" />
             <span>Impuestos</span>
           </Link>
-        </DropdownMenuItem>
+        </DropdownMenuItem> */}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" />

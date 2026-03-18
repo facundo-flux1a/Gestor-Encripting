@@ -11,14 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 const formatDate = (dateString: string) => {
     try {
@@ -43,8 +44,8 @@ async function createRuleAction(formData: FormData) {
         porcentaje: parseFloat(formData.get('porcentaje') as string),
     };
     if (payload.date_init && payload.date_finish && payload.tipo_impuesto && !isNaN(payload.porcentaje)) {
-      await createTaxValidationRule(payload);
-      revalidatePath('/settings/tax-validation');
+        await createTaxValidationRule(payload);
+        revalidatePath('/settings/tax-validation');
     }
 }
 
@@ -62,6 +63,9 @@ async function deleteRuleAction(id: number) {
 
 
 export default async function TaxValidationPage() {
+    // Redirigir ya que la funcionalidad no está en uso
+    redirect('/dashboard');
+
     const rules = await getTaxValidationRules();
 
     return (
@@ -70,8 +74,8 @@ export default async function TaxValidationPage() {
                 <MainLayoutHeader>
                     <div className="flex-1">
                         <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                           <ShieldCheck className="h-8 w-8" />
-                           Validación de Impuestos
+                            <ShieldCheck className="h-8 w-8" />
+                            Validación de Impuestos
                         </h2>
                         <p className="text-muted-foreground">
                             Gestiona las reglas para la validación de impuestos en los documentos.
@@ -82,7 +86,7 @@ export default async function TaxValidationPage() {
                 <div className="grid gap-8 lg:grid-cols-3">
                     <div className="lg:col-span-1">
                         <Card>
-                             <CardHeader>
+                            <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <PlusCircle className="h-5 w-5" />
                                     Crear Nueva Regla
@@ -135,7 +139,7 @@ export default async function TaxValidationPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                           {rules && rules.length > 0 ? (
+                                            {rules && rules.length > 0 ? (
                                                 rules.map((rule) => (
                                                     <TableRow key={rule.id}>
                                                         <TableCell>
