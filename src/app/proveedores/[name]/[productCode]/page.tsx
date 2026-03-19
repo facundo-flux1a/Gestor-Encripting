@@ -39,13 +39,17 @@ const formatDate = (date: string | null | undefined) => {
 };
 
 export default async function ProductDetailPage({
-    params
+    params,
+    searchParams
 }: {
-    params: Promise<{ name: string; productCode: string }>
+    params: Promise<{ name: string; productCode: string }>,
+    searchParams: Promise<{ desc?: string, view?: 'grid' | 'list' }>
 }) {
     const resolvedParams = await params;
+    const resolvedSearchParams = await searchParams;
     const providerFiscalId = decodeURIComponent(resolvedParams.name);
     let identifier = decodeURIComponent(resolvedParams.productCode);
+    const descriptionFilter = resolvedSearchParams.desc;
     let searchBy: 'code' | 'description' = 'code';
 
     if (identifier.startsWith('DESC_')) {
@@ -54,7 +58,7 @@ export default async function ProductDetailPage({
     }
 
     const [productData, provider] = await Promise.all([
-        getProductHistory(providerFiscalId, identifier, searchBy),
+        getProductHistory(providerFiscalId, identifier, searchBy, descriptionFilter),
         getProviderByFiscalId(providerFiscalId)
     ]);
 
@@ -93,7 +97,7 @@ export default async function ProductDetailPage({
         <MainLayout>
             <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
                 <div className="flex items-center gap-4">
-                    <Link href={`/proveedores/${encodeURIComponent(providerFiscalId)}`}>
+                    <Link href={`/proveedores/${encodeURIComponent(providerFiscalId)}?tab=products&view=${resolvedSearchParams.view || 'list'}`}>
                         <Button variant="outline" size="sm">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Volver a {provider.nombre}

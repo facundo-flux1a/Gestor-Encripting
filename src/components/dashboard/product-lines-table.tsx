@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import type { DocumentLine } from "@/lib/types";
+import { normalizeProductDescription } from "@/lib/utils";
 
 interface ProductLinesTableProps {
     lines: DocumentLine[];
@@ -73,11 +74,12 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
         }
     }
 
-    // ✅ Lógica de URL igual a la de las cards
+    // ✅ Lógica de URL: Si hay código, lo usamos como base, pero añadimos la descripción normalizada para evitar mezcla si el código es compartido
+    const normDesc = normalizeProductDescription(line.descripcion || '');
     const identifier = line.codigo
-        ? encodeURIComponent(line.codigo)
-        : `DESC_${encodeURIComponent(line.descripcion || '')}`;
-    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}`;
+        ? `${encodeURIComponent(line.codigo)}?desc=${encodeURIComponent(normDesc)}`
+        : `DESC_${encodeURIComponent(normDesc)}`;
+    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}${identifier.includes('?') ? '&' : '?'}view=list`;
 
     // Componente de botón de ver detalle
     const ViewDetailButton = () => (
@@ -226,7 +228,11 @@ export function ProductLinesTable({ lines, providerFiscalId }: ProductLinesTable
     const groupedLines = React.useMemo(() => {
         const map = new Map<string, DocumentLine[]>();
         lines.forEach(line => {
-            const key = line.codigo || line.descripcion || 'unknown';
+            // ✅ Agrupamos por Código + Descripción NORMALIZADA para unificar lotes pero separar productos distintos
+            const normDesc = normalizeProductDescription(line.descripcion || '');
+            const key = line.codigo
+                ? `${line.codigo}::${normDesc}`
+                : (normDesc || 'unknown');
             if (!map.has(key)) map.set(key, []);
             map.get(key)!.push(line);
         });

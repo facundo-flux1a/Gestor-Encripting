@@ -32,6 +32,7 @@ interface TrimestreExcelViewProps {
     documents: Document[];
     isLoading: boolean;
     año: number;
+    selectedTrimestre?: number | null;
 }
 
 // --- INTERNAL HELPERS ---
@@ -49,7 +50,6 @@ const createEmptySummary = () => {
     };
     types.forEach(type => {
         rates.forEach(rate => {
-            if (type === 'iva' && rate === 0) return;
             const key = `${type}_${rate}`;
             sum[key] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
             if (type === 'iva') {
@@ -61,12 +61,18 @@ const createEmptySummary = () => {
     return sum;
 };
 
-const calculateAnnualSummary = (data: Document[]) => {
+const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
+    const foundRatesSet = new Set<number>([21, 15, 10, 4, 0]);
     const ingresosSum = { ...createEmptySummary(), traces: [] as any[] };
     const gastosSum = { ...createEmptySummary(), traces: [] as any[] };
     const totalNetoSum = { ...createEmptySummary(), traces: [] as any[] };
 
     data.forEach((doc) => {
+        // ✅ FILTRO DE SEGURIDAD: Evitar que documentos de otros años se sumen si se colaron en el array
+        if (targetYear && doc.año_trimestre && doc.año_trimestre !== targetYear) {
+            return;
+        }
+
         let q = doc.num_trimestre;
         if (!q && doc.fecha_emision) {
             const month = new Date(doc.fecha_emision).getMonth() + 1;
@@ -138,6 +144,21 @@ const calculateAnnualSummary = (data: Document[]) => {
 
                 const rate = Math.round(Number(detail.porcentaje));
                 const base = Math.round(Math.abs(Number(detail.base_imponible) || 0) * 100) / 100;
+                foundRatesSet.add(rate);
+
+                // ✅ SEGURIDAD: Inicializar si el tipo de IVA no existe (p. ej. IVA 5% o tipos raros)
+                if (!targetSum.iva_db[rate]) {
+                    targetSum.iva_db[rate] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                    targetSum.iva_docs[rate] = { 1: [], 2: [], 3: [], 4: [] };
+                    targetSum[`iva_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                    targetSum[`base_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                }
+                if (!totalNetoSum.iva_db[rate]) {
+                    totalNetoSum.iva_db[rate] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                    totalNetoSum.iva_docs[rate] = { 1: [], 2: [], 3: [], 4: [] };
+                    totalNetoSum[`iva_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                    totalNetoSum[`base_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                }
 
                 docBaseSum += base;
                 docIvaSum += cuota;
@@ -218,13 +239,35 @@ const calculateAnnualSummary = (data: Document[]) => {
         }
     });
 
-    return { ingresosSum, gastosSum, totalNetoSum };
+    return {
+        ingresosSum,
+        gastosSum,
+        totalNetoSum,
+        foundRates: Array.from(foundRatesSet).sort((a, b) => b - a)
+    };
 };
 
-export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExcelViewProps) {
+export function TrimestreExcelView({ documents, isLoading, año, selectedTrimestre }: TrimestreExcelViewProps) {
     const { toast } = useToast();
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(true);
     const [viewType, setViewType] = useState<'separate' | 'unified'>('separate');
+
+    // 🧪 NUCLEAR DEBUG: Log data to console for the user
+    React.useEffect(() => {
+        console.group(`📊 [TrimestreExcelView] Debug Trace (${año})`);
+        console.log(`- Recibidos ${documents.length} documentos`);
+        console.log(`- Prop año: ${año}, Prop selectedTrimestre: ${selectedTrimestre}`);
+        if (documents.length > 0) {
+            console.log('- Primeros 3 docs:', documents.slice(0, 3).map(d => ({
+                id: d.id_documento || (d as any).id,
+                num: d.numero_documento,
+                fecha: d.fecha_emision,
+                trimestre_db: d.num_trimestre,
+                año_db: d.año_trimestre
+            })));
+        }
+        console.groupEnd();
+    }, [documents, año, selectedTrimestre]);
 
     // --- AG GRID CONFIGURATION ---
 
@@ -281,25 +324,45 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             headerName: '1º Trimestre',
             field: 'q1',
             valueFormatter: currencyFormatter,
-            cellStyle: { textAlign: 'right' }
+            cellStyle: (p: any) => ({
+                textAlign: 'right',
+                backgroundColor: selectedTrimestre === 1 ? 'rgba(59, 130, 246, 0.15)' : '',
+                borderLeft: selectedTrimestre === 1 ? '2px solid #3b82f6' : '',
+                borderRight: selectedTrimestre === 1 ? '2px solid #3b82f6' : ''
+            })
         },
         {
             headerName: '2º Trimestre',
             field: 'q2',
             valueFormatter: currencyFormatter,
-            cellStyle: { textAlign: 'right' }
+            cellStyle: (p: any) => ({
+                textAlign: 'right',
+                backgroundColor: selectedTrimestre === 2 ? 'rgba(59, 130, 246, 0.15)' : '',
+                borderLeft: selectedTrimestre === 2 ? '2px solid #3b82f6' : '',
+                borderRight: selectedTrimestre === 2 ? '2px solid #3b82f6' : ''
+            })
         },
         {
             headerName: '3º Trimestre',
             field: 'q3',
             valueFormatter: currencyFormatter,
-            cellStyle: { textAlign: 'right' }
+            cellStyle: (p: any) => ({
+                textAlign: 'right',
+                backgroundColor: selectedTrimestre === 3 ? 'rgba(59, 130, 246, 0.15)' : '',
+                borderLeft: selectedTrimestre === 3 ? '2px solid #3b82f6' : '',
+                borderRight: selectedTrimestre === 3 ? '2px solid #3b82f6' : ''
+            })
         },
         {
             headerName: '4º Trimestre',
             field: 'q4',
             valueFormatter: currencyFormatter,
-            cellStyle: { textAlign: 'right' }
+            cellStyle: (p: any) => ({
+                textAlign: 'right',
+                backgroundColor: selectedTrimestre === 4 ? 'rgba(59, 130, 246, 0.15)' : '',
+                borderLeft: selectedTrimestre === 4 ? '2px solid #3b82f6' : '',
+                borderRight: selectedTrimestre === 4 ? '2px solid #3b82f6' : ''
+            })
         },
         {
             headerName: 'TOTAL',
@@ -314,19 +377,20 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             }),
             tooltipValueGetter: (p: any) => p.data?.finalMismatch ? '🚫 Descuadre FINAL: La suma de (Base + IVA + Recargo - Retención) no coincide con el total registrado.' : undefined
         },
-    ], []);
+    ], [selectedTrimestre]);
 
     const gridData = useMemo(() => {
-        if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [] };
+        if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [], rowDataUnified: [] };
 
-        const { ingresosSum, gastosSum, totalNetoSum } = calculateAnnualSummary(documents);
+        const { ingresosSum, gastosSum, totalNetoSum, foundRates } = calculateAnnualSummary(documents, año);
 
         const buildRows = (summary: any, accentColor: string) => {
             const rows: any[] = [];
             const quarters = [1, 2, 3, 4];
+            const currentRates = foundRates;
 
             // BASES
-            rates.forEach(rate => {
+            currentRates.forEach(rate => {
                 const key = `base_${rate}`;
                 if (summary[key] && (summary[key].total !== 0 || quarters.some(q => summary[key][q] !== 0))) {
                     rows.push({
@@ -338,7 +402,7 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             });
 
             // IVA
-            rates.forEach(rate => {
+            currentRates.forEach(rate => {
                 const keyIva = `iva_${rate}`;
                 const keyBase = `base_${rate}`;
                 if (summary[keyIva] && (summary[keyIva].total !== 0 || quarters.some(q => summary[keyBase]?.[q] !== 0))) {
@@ -360,14 +424,14 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             const totalIvaRow: any = { concepto: 'Total IVA', q1: 0, q2: 0, q3: 0, q4: 0, total: 0 };
 
             quarters.forEach(q => {
-                rates.forEach(r => {
+                currentRates.forEach(r => {
                     totalBasesRow[`q${q}`] += (summary[`base_${r}`]?.[q] || 0);
                     // FIXED: Total IVA must sum the theoretical row values for consistency
                     totalIvaRow[`q${q}`] += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100;
                 });
             });
-            totalBasesRow.total = rates.reduce((acc, r) => acc + (summary[`base_${r}`]?.total || 0), 0);
-            totalIvaRow.total = rates.reduce((acc, r) => acc + (Math.round((summary[`base_${r}`]?.total || 0) * r) / 100), 0);
+            totalBasesRow.total = currentRates.reduce((acc, r) => acc + (summary[`base_${r}`]?.total || 0), 0);
+            totalIvaRow.total = currentRates.reduce((acc, r) => acc + (Math.round((summary[`base_${r}`]?.total || 0) * r) / 100), 0);
 
             rows.push(totalBasesRow);
             rows.push(totalIvaRow);
@@ -384,9 +448,9 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             };
 
             quarters.forEach(q => {
-                let bSum = 0; rates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
+                let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
                 // FIXED: iSum must use the theoretical rounded IVA for consistency
-                let iSum = 0; rates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
+                let iSum = 0; currentRates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
 
                 const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
                 facturadoRow[`q${q}`] = theoreticalQ;
@@ -398,8 +462,8 @@ export function TrimestreExcelView({ documents, isLoading, año }: TrimestreExce
             });
 
             // Total Anual
-            let tBSum = 0; rates.forEach(r => tBSum += summary[`base_${r}`]?.total || 0);
-            let tISum = 0; rates.forEach(r => tISum += Math.round((summary[`base_${r}`]?.total || 0) * r) / 100);
+            let tBSum = 0; currentRates.forEach(r => tBSum += summary[`base_${r}`]?.total || 0);
+            let tISum = 0; currentRates.forEach(r => tISum += Math.round((summary[`base_${r}`]?.total || 0) * r) / 100);
             const theoreticalTotal = tBSum + tISum + summary.recargos.total - summary.retenciones.total;
             facturadoRow.total = theoreticalTotal;
 

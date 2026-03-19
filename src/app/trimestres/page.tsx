@@ -9,6 +9,8 @@ import { PageHeader } from '@/components/layout/page-header';
 import { TrimestreStatsCard } from '@/components/trimestres/trimestre-stats-card';
 import { TrimestreTable } from '@/components/trimestres/trimestres-table';
 import { StatsHoverTable } from '@/components/trimestres/stats-hover-table'; // 🆕 IMPORT
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CloseQuarterDialog } from '@/components/trimestres/close-quarter-dialog';
 import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
@@ -97,6 +99,7 @@ function TrimestresPageContent() {
   // Trimestre seleccionado
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
   const [selectedTrimestre, setSelectedTrimestre] = React.useState<number>(1);
+  const [isTableExpanded, setIsTableExpanded] = React.useState(false);
 
   // ─── FILTROS DE LA TABLA DE DOCUMENTOS ─────────────────────────────────────
   const [filters, setFilters] = React.useState<TrimestresFilterState>(EMPTY_FILTERS);
@@ -110,12 +113,13 @@ function TrimestresPageContent() {
   // NOTA: `footerValues` usa siempre `documentos` (trimestre completo, sin filtrar).
   // Si en el futuro se quiere que los totales reflejen el filtro activo,
   // reemplaza `documentos` por `documentosFiltrados` en el bloque `footerValues`.
-  const documentosFiltrados = React.useMemo(() => {
+  // Función auxiliar para aplicar los filtros de la barra lateral
+  const applySidebarFilters = (docs: Document[], currentFilters: any) => {
     const {
       searchText, selectedTipos, selectedProveedores, selectedClientes, selectedEmpresas,
       fechaDesde, fechaHasta,
       baseMin, baseMax, ivaMin, ivaMax, totalMin, totalMax,
-    } = filters;
+    } = currentFilters;
 
     const noFilters =
       !searchText &&
@@ -128,14 +132,10 @@ function TrimestresPageContent() {
       !ivaMin && !ivaMax &&
       !totalMin && !totalMax;
 
-    // Atajo: si no hay filtros activos, devolvemos el array original directamente
-    if (noFilters) return documentos;
+    if (noFilters) return docs;
 
-    // Parsear límites de fecha una sola vez
     const desde = fechaDesde ? new Date(fechaDesde) : null;
     const hasta = fechaHasta ? new Date(fechaHasta) : null;
-
-    // Parsear límites numéricos una sola vez
     const baseMinN = baseMin !== '' ? parseFloat(baseMin) : null;
     const baseMaxN = baseMax !== '' ? parseFloat(baseMax) : null;
     const ivaMinN = ivaMin !== '' ? parseFloat(ivaMin) : null;
@@ -143,8 +143,7 @@ function TrimestresPageContent() {
     const totalMinN = totalMin !== '' ? parseFloat(totalMin) : null;
     const totalMaxN = totalMax !== '' ? parseFloat(totalMax) : null;
 
-    return documentos.filter(doc => {
-      // Búsqueda de texto libre
+    return docs.filter(doc => {
       if (searchText) {
         const q = searchText.toLowerCase();
         const haystack = [
@@ -156,51 +155,55 @@ function TrimestresPageContent() {
         ].filter(Boolean).join(' ').toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-
-      // Tipo de documento (multi-select)
       if (selectedTipos.length > 0 && !selectedTipos.includes(doc.tipo_documento)) return false;
-
-      // Proveedor (multi-select)
       if (selectedProveedores.length > 0 && !selectedProveedores.includes(doc.proveedor || '')) return false;
-
-      // Cliente (multi-select)
       if (selectedClientes.length > 0) {
-        const cliente =
-          doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '';
+        const cliente = doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '';
         if (!selectedClientes.includes(cliente)) return false;
       }
-
-      // Empresa del sistema (multi-select)
       if (selectedEmpresas.length > 0 && !selectedEmpresas.includes(doc.empresa_nombre || '')) return false;
 
-      // Fecha desde/hasta (por fecha_emision)
       if (desde || hasta) {
         const fechaDoc = doc.fecha_emision ? new Date(doc.fecha_emision) : null;
         if (!fechaDoc) return false;
         if (desde && fechaDoc < desde) return false;
         if (hasta) {
-          // Comparar hasta fin del día
           const hastaFinDia = new Date(hasta);
           hastaFinDia.setHours(23, 59, 59, 999);
           if (fechaDoc > hastaFinDia) return false;
         }
       }
 
-      // Rangos numéricos
       const base = parseFloat(String(doc.base_imponible)) || 0;
-      const iva = parseFloat(String(doc.iva)) || 0;
       const total = parseFloat(String(doc.total)) || 0;
-
       if (baseMinN !== null && base < baseMinN) return false;
       if (baseMaxN !== null && base > baseMaxN) return false;
-      if (ivaMinN !== null && iva < ivaMinN) return false;
-      if (ivaMaxN !== null && iva > ivaMaxN) return false;
       if (totalMinN !== null && total < totalMinN) return false;
       if (totalMaxN !== null && total > totalMaxN) return false;
 
       return true;
     });
+  };
+
+  const documentosFiltrados = React.useMemo(() => {
+    return applySidebarFilters(documentos, filters);
   }, [documentos, filters]);
+
+  // ✅ NUEVO: Documentos anuales con filtros de barra lateral
+  const annualDocumentosFiltrados = React.useMemo(() => {
+    return applySidebarFilters(annualDocumentos, filters);
+  }, [annualDocumentos, filters]);
+
+  // ✅ NUEVO: Documentos finales para el Excel
+  const docsForExcel = React.useMemo(() => {
+    if (selectedTrimestre) {
+      // Si hay un trimestre seleccionado, usamos los documentos YA filtrados por trimestre (y barra lateral)
+      return documentosFiltrados;
+    }
+    // Si no hay trimestre (vista anual), usamos los anuales con filtros de barra lateral
+    return annualDocumentosFiltrados;
+  }, [selectedTrimestre, documentosFiltrados, annualDocumentosFiltrados]);
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Dialog de cierre
@@ -299,19 +302,16 @@ function TrimestresPageContent() {
       if (trimestresFinales.length > 0) {
         const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
 
-        if (!tieneAñoActual) {
+        // ✅ MEJORA: Solo auto-seleccionar si NO hay un año seleccionado o si el actual no existe Y no estamos mostrando vacíos
+        if (!tieneAñoActual && !mostrarVacios) {
           const reciente = trimestresFinales[0];
-          console.log('🔄 [loadTrimestres] Año actual sin datos, seleccionando trimestre más reciente:', reciente);
+          console.log('🔄 [loadTrimestres] Año seleccionado sin datos, seleccionando el más reciente con contenido:', reciente);
           setSelectedAño(reciente.año);
           setSelectedTrimestre(reciente.trimestre);
         }
       } else {
-        console.log('⚠️ [loadTrimestres] No hay trimestres con datos');
-        const now = new Date();
-        const añoActual = now.getFullYear();
-        const trimestreActual = Math.ceil((now.getMonth() + 1) / 3);
-        setSelectedAño(añoActual);
-        setSelectedTrimestre(trimestreActual);
+        // Solo resetear si realmente no hay nada de nada
+        console.log('⚠️ [loadTrimestres] No se encontraron trimestres');
       }
     } catch (error) {
       console.error('❌ Error loading trimestres:', error);
@@ -328,12 +328,13 @@ function TrimestresPageContent() {
   const loadDocumentos = async () => {
     try {
       setIsLoadingDocs(true);
+      setDocumentos([]); // 🔄 RESET INMEDIATO PARA EVITAR DATOS STALE
 
       console.log('🔍 [loadDocumentos] Empresas seleccionadas:', selectedCompanyIds);
 
       if (selectedCompanyIds.length === 0) {
         console.log('⚠️ [loadDocumentos] No hay empresas seleccionadas, limpiando documentos');
-        setDocumentos([]);
+        // setDocumentos([]) ya se hizo arriba
         return;
       }
 
@@ -368,12 +369,12 @@ function TrimestresPageContent() {
 
   const loadAnnualDocumentos = async () => {
     try {
+      setIsLoadingAnnualDocs(true);
+      setAnnualDocumentos([]); // 🔄 RESET INMEDIATO PARA EVITAR DATOS STALE
+
       if (selectedCompanyIds.length === 0) {
-        setAnnualDocumentos([]);
         return;
       }
-
-      setIsLoadingAnnualDocs(true);
 
       const params = new URLSearchParams({
         año: selectedAño.toString(),
@@ -389,7 +390,15 @@ function TrimestresPageContent() {
       if (!response.ok) throw new Error('Error al cargar documentos anuales');
 
       const data = await response.json();
-      console.log('✅ Documentos anuales cargados:', data.length);
+      console.log('✅ [loadAnnualDocumentos] Documentos anuales cargados:', data.length);
+      if (data.length > 0) {
+        console.log('🧐 [loadAnnualDocumentos] Ejemplo doc[0]:', {
+          id: data[0].id,
+          num: data[0].numero_documento,
+          año_db: data[0].año_trimestre,
+          fecha: data[0].fecha_emision
+        });
+      }
       setAnnualDocumentos(data);
     } catch (error) {
       console.error('❌ Error loading annual documents:', error);
@@ -1122,66 +1131,103 @@ function TrimestresPageContent() {
               </Button>
             </div>
           ) : (
-            <>
-              {/* 📊 VISTA EXCEL INTERACTIVA (ANUAL) */}
+            <div className="space-y-8 animate-fade-in">
               <TrimestreExcelView
-                documents={annualDocumentos}
+                documents={docsForExcel}
                 isLoading={isLoadingAnnualDocs}
                 año={selectedAño}
+                selectedTrimestre={selectedTrimestre}
               />
 
-              <div className="rounded-lg border bg-card" data-tutorial="trimestres-table">
-                {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
-                <div className="px-4 pt-3 border-b">
-                  <TrimestresFilterBar
-                    documentos={documentos}
-                    filters={filters}
-                    onFiltersChange={setFilters}
-                    empresaIds={selectedCompanyIds}
-                    año={selectedAño}
-                    trimestre={selectedTrimestre}
-                    mostrarVacios={mostrarVacios}
-                  />
+              <div className="rounded-lg border bg-card overflow-hidden" data-tutorial="trimestres-table">
+                {/* Cabecera Colapsable de la Tabla */}
+                <div
+                  className="px-6 py-4 border-b flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => setIsTableExpanded(!isTableExpanded)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-violet-100 dark:bg-violet-900/20 rounded-lg">
+                      <FileText className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold">Listado de Documentos</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {documentosFiltrados.length} documentos encontrados para este periodo
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground mr-2">
+                      {isTableExpanded ? 'Ocultar listado' : 'Ver listado detallado'}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                      {isTableExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
-                <TrimestreTable
-                  documentos={documentosFiltrados.map(doc => {
-                    let rec = 0;
-                    let ret = 0;
-                    doc.iva_details?.forEach(det => {
-                      const t = (det.tipo_impuesto || '').toLowerCase();
-                      const val = Math.round(Math.abs(Number(det.cuota) || 0) * 100) / 100;
-                      if (t.includes('recargo') || t.includes('equivalencia')) rec += val;
-                      if (t.includes('retencion') || t.includes('irpf')) ret += val;
-                    });
-                    const esAbono = (doc.tipo_documento || '').toLowerCase().includes('abono') || (doc.total || 0) < 0;
-                    const sign = esAbono ? -1 : 1;
-                    return { ...doc, recargo: rec * sign, retencion: ret * sign };
-                  })}
-                  footerValues={{
-                    base: totIngresosBaseCard - totGastosBaseCard,
-                    iva: ivaRepCard - ivaSopCard,
-                    total: totIngresosCard - totGastosCard,
-                    label: "Resultado Neto del Periodo:",
-                    breakdown: {
-                      ingresos: {
-                        base: totIngresosBaseCard,
-                        iva: ivaRepCard,
-                        total: totIngresosCard,
-                        retencion: cardsIngresos.retencion || 0,
-                        recargo: (cardsIngresos as any).recargo || 0
-                      },
-                      gastos: {
-                        base: totGastosBaseCard,
-                        iva: ivaSopCard,
-                        total: totGastosCard,
-                        retencion: cardsGastos.retencion || 0,
-                        recargo: (cardsGastos as any).recargo || 0
-                      }
-                    }
-                  }}
-                />
+
+                <AnimatePresence>
+                  {isTableExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
+                      <div className="px-4 pt-3 border-b">
+                        <TrimestresFilterBar
+                          documentos={documentos}
+                          filters={filters}
+                          onFiltersChange={setFilters}
+                          empresaIds={selectedCompanyIds}
+                          año={selectedAño}
+                          trimestre={selectedTrimestre}
+                          mostrarVacios={mostrarVacios}
+                        />
+                      </div>
+                      <TrimestreTable
+                        documentos={documentosFiltrados.map(doc => {
+                          let rec = 0;
+                          let ret = 0;
+                          doc.iva_details?.forEach(det => {
+                            const t = (det.tipo_impuesto || '').toLowerCase();
+                            const val = Math.round(Math.abs(Number(det.cuota) || 0) * 100) / 100;
+                            if (t.includes('recargo') || t.includes('equivalencia')) rec += val;
+                            if (t.includes('retencion') || t.includes('irpf')) ret += val;
+                          });
+                          const esAbono = (doc.tipo_documento || '').toLowerCase().includes('abono') || (doc.total || 0) < 0;
+                          const sign = esAbono ? -1 : 1;
+                          return { ...doc, recargo: rec * sign, retencion: ret * sign };
+                        })}
+                        footerValues={{
+                          base: totIngresosBaseCard - totGastosBaseCard,
+                          iva: ivaRepCard - ivaSopCard,
+                          total: totIngresosCard - totGastosCard,
+                          label: "Resultado Neto del Periodo:",
+                          breakdown: {
+                            ingresos: {
+                              base: totIngresosBaseCard,
+                              iva: ivaRepCard,
+                              total: totIngresosCard,
+                              retencion: cardsIngresos.retencion || 0,
+                              recargo: (cardsIngresos as any).recargo || 0
+                            },
+                            gastos: {
+                              base: totGastosBaseCard,
+                              iva: ivaSopCard,
+                              total: totGastosCard,
+                              retencion: cardsGastos.retencion || 0,
+                              recargo: (cardsGastos as any).recargo || 0
+                            }
+                          }
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </>
+            </div>
           )}
         </div>
 

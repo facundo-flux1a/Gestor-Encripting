@@ -9,6 +9,7 @@ import type { IncidentAnalysisResult } from '@/lib/types';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
+import { normalizeProductDescription } from "@/lib/utils";
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
@@ -48,9 +49,9 @@ interface DocumentPacket extends RowDataPacket {
   datos_extra: any | null;
   fecha_creacion: string;
   id_de_empresa: number | null;
-  empresa_nombre?: string | null;  // ⬅️ AGREGAR
+  empresa_nombre?: string | null;
   empresa_cif?: string | null;
-  is_new: number; // ⬅️ AGREGAR ESTA LÍNEA
+  is_new: number;
   trimestre_cerrado: number;
   año_trimestre?: number;
   num_trimestre?: number;
@@ -272,7 +273,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       empresa_cif: doc.empresa_cif || null,
       is_new: doc.is_new || 0, // ⬅️ LÍNEA AGREGADA
       trimestre_cerrado: doc.trimestre_cerrado || false,
-      año_trimestre: doc.año_trimestre || null,      // ✅ AGREGAR
+      año_trimestre: doc.año_trimestre || null,
       num_trimestre: doc.num_trimestre || null,
       is_issued: doc.is_issued !== undefined ? Number(doc.is_issued) : undefined,  // ✅ clasificación backend
     };
@@ -441,41 +442,37 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
     }
 
     let query = `
-            SELECT 
-                d.id,
-                d.tipo_documento,
-                d.numero_documento,
-                d.fecha_emision,
-                d.fecha_vencimiento,
-                d.importe_total,
-                d.importe_sin_impuestos,
-                d.moneda,
-                d.observaciones,
-                d.datos_extra,
-                d.fecha_creacion,
-                d.id_de_empresa,
-                d.is_new,
-                d.trimestre_cerrado,  -- ⬅️ AGREGADO
-                d.año_trimestre,        
-                d.num_trimestre,  
-                e.nombre_de_empresa as empresa_nombre,
-                e.cif as empresa_cif,
-                -- ✅ is_issued: 1=emitida(ingreso), 0=recibida(gasto).
-                -- Compara el CIF del emisor contra el CIF de la empresa propietaria del doc (igual que Trimestres).
-                (
-                  SELECT MAX(CASE
-                    WHEN ed2.rol IN ('emisor', 'proveedor')
-                      AND ed2.identificador_fiscal = e.cif
-                    THEN 1
-                    ELSE 0
-                  END)
-                  FROM entidades_documento ed2
-                  WHERE ed2.documento_id = d.id
-                ) as is_issued
-            FROM documentos d
-            LEFT JOIN empresas e ON d.id_de_empresa = e.id
-            WHERE e.id_de_usuario = ?
-        `;
+      SELECT 
+        d.id, 
+        d.tipo_documento, 
+        d.numero_documento, 
+        d.fecha_emision, 
+        d.fecha_vencimiento, 
+        d.importe_total, 
+        d.importe_sin_impuestos, 
+        d.moneda, 
+        d.observaciones, 
+        d.datos_extra, 
+        d.fecha_creacion, 
+        d.id_de_empresa, 
+        d.is_new,
+        d.trimestre_cerrado,
+        d.año_trimestre, 
+        d.num_trimestre,
+        e.nombre_de_empresa as empresa_nombre, 
+        e.cif as empresa_cif,
+        (
+          SELECT MAX(CASE 
+            WHEN ed2.rol IN ('emisor', 'proveedor') AND ed2.identificador_fiscal = e.cif THEN 1 
+            ELSE 0 
+          END)
+          FROM entidades_documento ed2
+          WHERE ed2.documento_id = d.id
+        ) as is_issued
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE e.id_de_usuario = ?
+    `;
 
     const params: any[] = [user.id];
 
@@ -486,7 +483,7 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
 
     // ✅ NUEVO: Filtro para excluir documentos con incidencias pendientes
     if (excludeIncidents) {
-      query += ` AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+      query += ` AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
     }
 
     query += ' ORDER BY d.fecha_emision DESC';
@@ -530,29 +527,29 @@ export async function getDocumentById(id: number): Promise<Document | null> {
     }
 
     const query = `
-            SELECT 
-                d.id,
-                d.tipo_documento,
-                d.numero_documento,
-                d.fecha_emision,
-                d.fecha_vencimiento,
-                d.importe_total,
-                d.importe_sin_impuestos,
-                d.moneda,
-                d.observaciones,
-                d.datos_extra,
-                d.fecha_creacion,
-                d.id_de_empresa,
-                d.is_new,
-                d.trimestre_cerrado,  -- ⬅️ AGREGADO
-                d.año_trimestre,        -- ✅ AGREGAR
-                d.num_trimestre,  
-                e.nombre_de_empresa as empresa_nombre,
-                e.cif as empresa_cif
-            FROM documentos d
-            LEFT JOIN empresas e ON d.id_de_empresa = e.id
-            WHERE d.id = ? AND e.id_de_usuario = ?
-        `;
+      SELECT 
+        d.id, 
+        d.tipo_documento, 
+        d.numero_documento, 
+        d.fecha_emision, 
+        d.fecha_vencimiento, 
+        d.importe_total, 
+        d.importe_sin_impuestos, 
+        d.moneda, 
+        d.observaciones, 
+        d.datos_extra, 
+        d.fecha_creacion, 
+        d.id_de_empresa, 
+        d.is_new,
+        d.trimestre_cerrado, 
+        d.año_trimestre, 
+        d.num_trimestre,
+        e.nombre_de_empresa as empresa_nombre, 
+        e.cif as empresa_cif
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE d.id = ? AND e.id_de_usuario = ?
+    `;
 
     console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
 
@@ -593,15 +590,15 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
 
     let query = `
             SELECT DISTINCT d.*,
-                e.nombre_de_empresa as empresa_nombre,
-                e.cif as empresa_cif
+  e.nombre_de_empresa as empresa_nombre,
+  e.cif as empresa_cif
             FROM documentos d
             JOIN incidencias_documento i ON d.id = i.documento_id
             LEFT JOIN empresas e ON d.id_de_empresa = e.id
             WHERE i.validado = 0 
               AND e.id_de_usuario = ?
-              AND d.id_de_empresa IS NOT NULL
-              AND d.id_de_empresa IN (?)
+  AND d.id_de_empresa IS NOT NULL
+              AND d.id_de_empresa IN(?)
         `;
 
     const params: any[] = [user.id, empresaIds];
@@ -658,19 +655,19 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     // ═══════════════════════════════════════════════════════════
     if (data.año_trimestre !== undefined && data.num_trimestre !== undefined) {
       console.log('🔄 [updateDocument] Validando cambio de trimestre...');
-      console.log(`   Nuevo trimestre: ${data.año_trimestre}-T${data.num_trimestre}`);
+      console.log(`   Nuevo trimestre: ${data.año_trimestre} -T${data.num_trimestre} `);
 
       // ✅ Verificar si el trimestre de destino existe
       const [trimestreExistente] = await connection.query<RowDataPacket[]>(
-        `SELECT DISTINCT 
-                   año_trimestre, 
-                   num_trimestre,
-                   MAX(trimestre_cerrado) as cerrado
+        `SELECT DISTINCT
+año_trimestre,
+  num_trimestre,
+  MAX(trimestre_cerrado) as cerrado
                  FROM documentos 
-                 WHERE id_de_empresa = ? 
-                   AND año_trimestre = ? 
-                   AND num_trimestre = ?
-                 GROUP BY año_trimestre, num_trimestre`,
+                 WHERE id_de_empresa = ?
+  AND año_trimestre = ?
+    AND num_trimestre = ?
+      GROUP BY año_trimestre, num_trimestre`,
         [empresaId, data.año_trimestre, data.num_trimestre]
       );
 
@@ -684,9 +681,9 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         // ✅ Trimestre NO existe - verificar que no exista en tabla trimestres cerrado
         const [trimestreTabla] = await connection.query<RowDataPacket[]>(
           `SELECT cerrado FROM trimestres 
-                     WHERE id_de_empresa = ? 
-                       AND año = ? 
-                       AND num_trimestre = ?`,
+                     WHERE id_de_empresa = ?
+  AND año = ?
+    AND num_trimestre = ? `,
           [empresaId, data.año_trimestre, data.num_trimestre]
         );
 
@@ -697,9 +694,9 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         // ✅ Crear entrada en tabla trimestres (abierto por defecto)
         console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
         await connection.query(
-          `INSERT INTO trimestres 
-                     (año, num_trimestre, id_de_empresa, cerrado, total_documentos, total_ingresos, total_gastos, iva_repercutido, iva_soportado, fecha_creacion, fecha_actualizacion) 
-                     VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
+          `INSERT INTO trimestres
+  (año, num_trimestre, id_de_empresa, cerrado, total_documentos, total_ingresos, total_gastos, iva_repercutido, iva_soportado, fecha_creacion, fecha_actualizacion)
+VALUES(?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
                      ON DUPLICATE KEY UPDATE fecha_actualizacion = NOW()`,
           [data.año_trimestre, data.num_trimestre, empresaId]
         );
@@ -726,7 +723,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
         // Obtener valores actuales del documento
         const [currentDoc] = await connection.query<RowDataPacket[]>(
           `SELECT importe_total, importe_sin_impuestos
-           FROM documentos WHERE id = ?`,
+           FROM documentos WHERE id = ? `,
           [id]
         );
 
@@ -739,7 +736,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             data.total = current.importe_total != null ? -Math.abs(current.importe_total) : current.importe_total;
             data.base_imponible = current.importe_sin_impuestos != null ? -Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
 
-            console.log(`   💰 Total: ${current.importe_total} → ${data.total}`);
+            console.log(`   💰 Total: ${current.importe_total} → ${data.total} `);
 
             // Convertir líneas de documento DIRECTAMENTE EN LA BD
             const [existingLines] = await connection.query<RowDataPacket[]>(
@@ -753,7 +750,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                 await connection.query(
                   `UPDATE lineas_documento 
                    SET precio_unitario = ?, importe_linea = ?
-                   WHERE id = ?`,
+  WHERE id = ? `,
                   [
                     line.precio_unitario != null ? -Math.abs(line.precio_unitario) : line.precio_unitario,
                     line.importe_linea != null ? -Math.abs(line.importe_linea) : line.importe_linea,
@@ -779,7 +776,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
             data.total = current.importe_total != null ? Math.abs(current.importe_total) : current.importe_total;
             data.base_imponible = current.importe_sin_impuestos != null ? Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
 
-            console.log(`   💰 Total: ${current.importe_total} → ${data.total}`);
+            console.log(`   💰 Total: ${current.importe_total} → ${data.total} `);
 
             // Convertir líneas de documento DIRECTAMENTE EN LA BD
             const [existingLinesPos] = await connection.query<RowDataPacket[]>(
@@ -793,7 +790,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
                 await connection.query(
                   `UPDATE lineas_documento 
                    SET precio_unitario = ?, importe_linea = ?
-                   WHERE id = ?`,
+  WHERE id = ? `,
                   [
                     line.precio_unitario != null ? Math.abs(line.precio_unitario) : line.precio_unitario,
                     line.importe_linea != null ? Math.abs(line.importe_linea) : line.importe_linea,
@@ -822,12 +819,12 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
           );
 
           if (existingTaxes.length > 0) {
-            console.log(`   💰 Convirtiendo ${existingTaxes.length} impuestos en BD a ${isAbono ? 'negativo' : 'positivo'}`);
+            console.log(`   💰 Convirtiendo ${existingTaxes.length} impuestos en BD a ${isAbono ? 'negativo' : 'positivo'} `);
             for (const tax of existingTaxes) {
               await connection.query(
                 `UPDATE impuestos_documento 
                  SET base_imponible = ?, cuota = ?
-                 WHERE id = ?`,
+  WHERE id = ? `,
                 [
                   isAbono
                     ? (tax.base_imponible != null ? -Math.abs(tax.base_imponible) : tax.base_imponible)
@@ -843,7 +840,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
 
           // CRÍTICO: Convertir payload iva_details para que persista
           if (data.iva_details && data.iva_details.length > 0) {
-            console.log(`   💰 Convirtiendo ${data.iva_details.length} impuestos en payload a ${isAbono ? 'negativo' : 'positivo'}`);
+            console.log(`   💰 Convirtiendo ${data.iva_details.length} impuestos en payload a ${isAbono ? 'negativo' : 'positivo'} `);
             data.iva_details = data.iva_details.map((iva: any) => ({
               ...iva,
               base_imponible: iva.base_imponible != null
@@ -926,7 +923,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     updateValues.push(id);
 
     await connection.query(
-      `UPDATE documentos SET ${updateFields.join(', ')} WHERE id = ?`,
+      `UPDATE documentos SET ${updateFields.join(', ')} WHERE id = ? `,
       updateValues
     );
 
@@ -1023,18 +1020,18 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
       if (lineaExistente && lineaNueva) {
         // UPDATE
         await connection.query(
-          `UPDATE lineas_documento SET 
-                        codigo = ?,
-                        descripcion = ?,
-                        cantidad = ?,
-                        unidad = ?,
-                        precio_unitario = ?,
-                        descuento_porcentaje = ?,
-                        precio_neto = ?,
-                        importe_linea = ?,
-                        datos_extra = ?,
-                        id_de_empresa = ?
-                    WHERE id = ?`,
+          `UPDATE lineas_documento SET
+codigo = ?,
+  descripcion = ?,
+  cantidad = ?,
+  unidad = ?,
+  precio_unitario = ?,
+  descuento_porcentaje = ?,
+  precio_neto = ?,
+  importe_linea = ?,
+  datos_extra = ?,
+  id_de_empresa = ?
+    WHERE id = ? `,
           [
             lineaNueva.codigo || '',
             lineaNueva.descripcion,
@@ -1194,7 +1191,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
         fieldName === 'total' ? 'importe_total' :
           fieldName;
-      await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ?`, [dbFieldName, value, id]);
+      await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ? `, [dbFieldName, value, id]);
     } else if (fieldName === 'cif') {
       // 🆕 Editar CIF en datos_extra
       const [docRows] = await connection.query<RowDataPacket[]>(
@@ -1243,7 +1240,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
 
       if (existing.length > 0) {
-        await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+        await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ? `, [fieldToUpdate, value, existing[0].id]);
       } else {
         await connection.query('INSERT INTO entidades_documento (documento_id, rol, ??) VALUES (?, ?, ?)', [fieldToUpdate, id, 'proveedor', value]);
       }
@@ -1256,7 +1253,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [id, percentage, '%retencion%']);
 
       if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ?`, [fieldToUpdate, value, existing[0].id]);
+        await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ? `, [fieldToUpdate, value, existing[0].id]);
       } else {
         const base = type === 'base' ? value : 0;
         const cuota = type === 'cuota' ? value : 0;
@@ -1266,14 +1263,14 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
     } else if (fieldName === 'retencion') {
       const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%retencion%']);
       if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
+        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ? `, [value, existing[0].id]);
       } else {
         await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
       }
     } else if (fieldName === 'recargo') {
       const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%recargo%']);
       if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ?`, [value, existing[0].id]);
+        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ? `, [value, existing[0].id]);
       } else {
         await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Recargo de Equivalencia', 0, 0, value]);
       }
@@ -1327,9 +1324,9 @@ export async function createDocument(payload: CreateDocumentPayload): Promise<{ 
     } = payload;
 
     const [result] = await db.query<OkPacket>(
-      `INSERT INTO documentos 
-             (tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, id_de_empresa) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO documentos
+  (tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, id_de_empresa)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, empresa_id]
     );
 
@@ -1359,7 +1356,7 @@ export async function moveDocument(
       `SELECT d.id, d.id_de_empresa, e.id_de_usuario 
          FROM documentos d
          JOIN empresas e ON d.id_de_empresa = e.id
-         WHERE d.id = ? AND e.id_de_usuario = ?`,
+         WHERE d.id = ? AND e.id_de_usuario = ? `,
       [documentId, userId]
     );
 
@@ -1458,7 +1455,7 @@ export async function deleteDocument(
       `SELECT d.id 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
-             WHERE d.id = ? AND e.id_de_usuario = ?`,
+             WHERE d.id = ? AND e.id_de_usuario = ? `,
       [documentId, user.id]
     );
 
@@ -1523,7 +1520,7 @@ export async function deleteCompany(
     );
 
     const documentsToDelete = docCount[0]?.count || 0;
-    console.log(`📄 [deleteCompany] Se eliminarán ${documentsToDelete} documento(s)`);
+    console.log(`📄[deleteCompany] Se eliminarán ${documentsToDelete} documento(s)`);
 
     // Eliminar todos los documentos de la empresa
     if (documentsToDelete > 0) {
@@ -1531,7 +1528,7 @@ export async function deleteCompany(
         'DELETE FROM documentos WHERE id_de_empresa = ?',
         [empresaId]
       );
-      console.log(`✅ [deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
+      console.log(`✅[deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
     }
 
     // Eliminar la empresa
@@ -1569,9 +1566,9 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
   // ✅ Marcar documento como confirmado (is_new = 0)
   await db.query<OkPacket>(
     `UPDATE documentos 
-     SET is_new = 0, 
-         tipo_documento = TRIM(REPLACE(tipo_documento, '(SIN CONFIRMAR)', ''))
-     WHERE id = ?`,
+     SET is_new = 0,
+  tipo_documento = TRIM(REPLACE(tipo_documento, '(SIN CONFIRMAR)', ''))
+     WHERE id = ? `,
     [documentId]
   );
 
@@ -1582,27 +1579,27 @@ export async function getUniqueProvidersCount(): Promise<number> {
   const [providerRows] = await db.query<RowDataPacket[]>(`
        SELECT COUNT(DISTINCT identificador_fiscal) as count
        FROM entidades_documento
-       WHERE (rol = 'proveedor' OR rol = 'emisor')
+WHERE(rol = 'proveedor' OR rol = 'emisor')
          AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
-    `);
+  `);
 
   return providerRows[0].count || 0;
 }
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
   const [providerRows] = await db.query<EntidadPacket[]>(`
-        SELECT 
-            identificador_fiscal, 
-            nombre,
-            MAX(id) as id,
-            MAX(rol) as rol,
-            MAX(direccion) as direccion,
-            MAX(telefono) as telefono,
-            MAX(email) as email,
-            MAX(datos_extra) as datos_extra,
-            MAX(fecha_creacion) as fecha_creacion
+SELECT
+identificador_fiscal,
+  nombre,
+  MAX(id) as id,
+  MAX(rol) as rol,
+  MAX(direccion) as direccion,
+  MAX(telefono) as telefono,
+  MAX(email) as email,
+  MAX(datos_extra) as datos_extra,
+  MAX(fecha_creacion) as fecha_creacion
         FROM entidades_documento
-        WHERE (rol = 'proveedor' OR rol = 'emisor')
+WHERE(rol = 'proveedor' OR rol = 'emisor')
           AND identificador_fiscal IS NOT NULL 
           AND identificador_fiscal != ''
         GROUP BY identificador_fiscal, nombre
@@ -1631,33 +1628,33 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   const showCompanyName = companyIds.length > 1;
 
   // ✅ ARREGLADO: Filtro de tipo de documento (FACTURAS Y ABONOS)
-  const whereDocType = `AND (
-        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+  const whereDocType = `AND(
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ PASO 1: Obtener proveedores y documentos
   const [providerRows] = await db.query<any[]>(`
-      SELECT 
-          e.nombre,
-          e.rol,
-          e.identificador_fiscal,
-          e.direccion,
-          e.telefono,
-          e.email,
-          e.datos_extra,
-          e.fecha_creacion,
-          emp.nombre_de_empresa AS empresaNombre,
-          d.id as documento_id,
-          d.importe_total
+SELECT
+e.nombre,
+  e.rol,
+  e.identificador_fiscal,
+  e.direccion,
+  e.telefono,
+  e.email,
+  e.datos_extra,
+  e.fecha_creacion,
+  emp.nombre_de_empresa AS empresaNombre,
+    d.id as documento_id,
+    d.importe_total
       FROM entidades_documento e
       JOIN documentos d ON e.documento_id = d.id
       JOIN empresas emp ON d.id_de_empresa = emp.id
-      WHERE e.rol IN ('proveedor', 'emisor')
-        AND d.id_de_empresa IN (${placeholders})
+      WHERE e.rol IN('proveedor', 'emisor')
+        AND d.id_de_empresa IN(${placeholders})
         ${whereDocType}
-    `, companyIds);
+`, companyIds);
 
   console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
 
@@ -1666,13 +1663,13 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
 
   const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
       SELECT DISTINCT
-          documento_id,
-          codigo
+documento_id,
+  codigo
       FROM lineas_documento
-      WHERE documento_id IN (${docIds.map(() => '?').join(',')})
+      WHERE documento_id IN(${docIds.map(() => '?').join(',')})
         AND codigo IS NOT NULL
         AND codigo != ''
-    `, docIds) : [[]];
+  `, docIds) : [[]];
 
   console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
 
@@ -1733,7 +1730,7 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
       provider.totalSpent += Number(row.importe_total || 0);
       provider.documentos.add(row.documento_id);
 
-      console.log(`💰 [${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR (Total: ${provider.totalSpent.toFixed(2)})`);
+      console.log(`💰[${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR(Total: ${provider.totalSpent.toFixed(2)})`);
     }
 
     // Agregar productos de este documento
@@ -1778,7 +1775,7 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
 
   console.log('✅ [getProvidersWithStats] Proveedores procesados:', providers.length);
   providers.slice(0, 5).forEach(p => {
-    console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR (${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
+    console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR(${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
   });
 
   return providers;
@@ -1789,7 +1786,7 @@ export async function getAllProducts(): Promise<number> {
         SELECT COUNT(DISTINCT codigo) as count
         FROM lineas_documento
         WHERE codigo IS NOT NULL AND codigo != ''
-    `);
+  `);
 
   return lineaRows[0].count || 0;
 }
@@ -1803,14 +1800,14 @@ export async function getDocumentsByProviderName(
 
   let query = `
         SELECT DISTINCT d.*,
-               e.nombre_de_empresa as empresa_nombre,
-               e.cif as empresa_cif
+  e.nombre_de_empresa as empresa_nombre,
+  e.cif as empresa_cif
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
         LEFT JOIN empresas e ON d.id_de_empresa = e.id
-        WHERE ed.identificador_fiscal = ? 
-          AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
+          AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     `;
 
   const params: any[] = [fiscalId];
@@ -1818,7 +1815,7 @@ export async function getDocumentsByProviderName(
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    query += ` AND d.id_de_empresa IN (${placeholders})`;
+    query += ` AND d.id_de_empresa IN(${placeholders})`;
     params.push(...empresaIds);
   }
 
@@ -1836,11 +1833,11 @@ export async function getDocumentsByProviderName(
 
 export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
   const [providerRows] = await db.query<EntidadPacket[]>(`
-        SELECT *
-        FROM entidades_documento
-        WHERE identificador_fiscal = ? AND (rol = 'proveedor' OR rol = 'emisor')
+SELECT *
+  FROM entidades_documento
+        WHERE identificador_fiscal = ? AND(rol = 'proveedor' OR rol = 'emisor')
         LIMIT 1
-    `, [fiscalId]);
+  `, [fiscalId]);
 
   if (providerRows.length === 0) {
     return null;
@@ -1869,71 +1866,71 @@ export async function getProductsByProviderName(
 
   // 🛠️ Subquery para limpiar duplicados del JOIN antes de aplicar Window Functions
   let baseQuery = `
-        WITH FilteredLines AS (
-            SELECT DISTINCT
+        WITH FilteredLines AS(
+    SELECT DISTINCT
                 ld.id as line_id,
-                ld.documento_id,
-                ld.codigo,
-                ld.descripcion,
-                ld.cantidad,
-                ld.unidad,
-                ld.precio_unitario,
-                ld.descuento_porcentaje,
-                ld.precio_neto,
-                ld.importe_linea,
-                ld.datos_extra,
-                d.fecha_emision
+    ld.documento_id,
+    ld.codigo,
+    ld.descripcion,
+    ld.cantidad,
+    ld.unidad,
+    ld.precio_unitario,
+    ld.descuento_porcentaje,
+    ld.precio_neto,
+    ld.importe_linea,
+    ld.datos_extra,
+    d.fecha_emision
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
             JOIN entidades_documento ed ON d.id = ed.documento_id
-            WHERE ed.identificador_fiscal = ? 
-              AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-              AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-              AND (
-                (ld.codigo IS NOT NULL AND ld.codigo != '') 
-                OR 
-                (ld.descripcion IS NOT NULL AND ld.descripcion != '')
-              )
+            WHERE ed.identificador_fiscal = ?
+    AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
+              AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+              AND(
+      (ld.codigo IS NOT NULL AND ld.codigo != '') 
+                OR
+      (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+  )
     `;
 
   const params: any[] = [fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    baseQuery += ` AND d.id_de_empresa IN(${placeholders})`;
     params.push(...empresaIds);
   }
 
   baseQuery += `
         ),
-        RankedLines AS (
-            SELECT 
-                *,
-                -- ✅ Ahora el COUNT funciona bien porque FilteredLines ya no tiene duplicados de JOIN
+        RankedLines AS(
+    SELECT
+    *,
+    -- ✅ Ahora el COUNT funciona bien porque FilteredLines ya no tiene duplicados de JOIN
                 COUNT(*) OVER(
-                    PARTITION BY (CASE 
+      PARTITION BY(CASE 
                         WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
                         ELSE descripcion 
                     END)
-                ) as veces_comprado,
-                SUM(cantidad) OVER(
-                    PARTITION BY (CASE 
+    ) as veces_comprado,
+    SUM(cantidad) OVER(
+      PARTITION BY(CASE 
                         WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
                         ELSE descripcion 
                     END)
-                ) as total_cantidad_comprada,
-                ROW_NUMBER() OVER(
-                    PARTITION BY (CASE 
+    ) as total_cantidad_comprada,
+    ROW_NUMBER() OVER(
+      PARTITION BY(CASE 
                         WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
                         ELSE descripcion 
                     END) 
                     ORDER BY fecha_emision DESC
-                ) as rn
+    ) as rn
             FROM FilteredLines
-        )
-        SELECT * FROM RankedLines WHERE rn = 1
+  )
+SELECT * FROM RankedLines WHERE rn = 1
         ORDER BY descripcion ASC
-    `;
+  `;
 
   const [lineaRows] = await db.query<any[]>(baseQuery, params);
 
@@ -1964,33 +1961,33 @@ export async function getAllProductLinesByProviderName(
   console.log('🔍 [getAllProductLinesByProviderName] Iniciando:', { fiscalId, empresaIds });
 
   let baseQuery = `
-      SELECT 
-          ld.*, 
-          d.fecha_emision,
-          d.numero_documento
+SELECT
+ld.*,
+  d.fecha_emision,
+  d.numero_documento
       FROM lineas_documento ld
       JOIN documentos d ON ld.documento_id = d.id
       JOIN entidades_documento ed ON d.id = ed.documento_id
-      WHERE ed.identificador_fiscal = ? 
-        AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-        AND (
-          (ld.codigo IS NOT NULL AND ld.codigo != '') 
-          OR 
-          (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+      WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+AND(
+  (ld.codigo IS NOT NULL AND ld.codigo != '')
+OR
+  (ld.descripcion IS NOT NULL AND ld.descripcion != '')
         )
-  `;
+`;
 
   const params: any[] = [fiscalId];
 
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    baseQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    baseQuery += ` AND d.id_de_empresa IN(${placeholders})`;
     params.push(...empresaIds);
   }
 
-  baseQuery += ` ORDER BY d.fecha_emision DESC `;
+  baseQuery += ` ORDER BY d.fecha_emision DESC`;
 
   console.log('📝 [getAllProductLinesByProviderName] Query:', baseQuery);
 
@@ -2021,64 +2018,80 @@ export async function getAllProductLinesByProviderName(
 export async function getProductHistory(
   providerFiscalId: string,
   identifier: string,
-  searchBy: 'code' | 'description' = 'code'
+  searchBy: 'code' | 'description' = 'code',
+  descriptionFilter?: string
 ): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
 
   // ✅ Usamos ROW_NUMBER con PARTITION BY d.numero_documento
   // Esto elige solo UNA fila por cada número de factura repetido
   let query = `
-    WITH UniqueHistory AS (
-        SELECT 
+    WITH UniqueHistory AS(
+  SELECT 
             ld.id,
-            ld.documento_id,
-            ld.codigo,
-            ld.descripcion,
-            ld.cantidad,
-            ld.unidad,
-            ld.precio_unitario,
-            ld.importe_linea,
-            d.fecha_emision,
-            d.numero_documento,
-            ROW_NUMBER() OVER(
-                PARTITION BY d.numero_documento 
-                ORDER BY d.fecha_emision DESC, ld.id DESC
-            ) as rn
+  ld.documento_id,
+  ld.codigo,
+  ld.descripcion,
+  ld.cantidad,
+  ld.unidad,
+  ld.precio_unitario,
+  ld.importe_linea,
+  d.fecha_emision,
+  d.numero_documento,
+  ROW_NUMBER() OVER(
+    PARTITION BY ld.id 
+                ORDER BY d.fecha_emision DESC
+  ) as rn
         FROM lineas_documento ld
         JOIN documentos d ON ld.documento_id = d.id
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ? 
-          AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
+          AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
           AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
-          ${searchBy === 'code' ? 'AND ld.codigo = ?' : 'AND ld.descripcion = ?'}
-    )
-    SELECT * FROM UniqueHistory 
+          ${searchBy === 'code' ? 'AND ld.codigo = ?' : 'AND ld.descripcion LIKE ?'}
+)
+SELECT * FROM UniqueHistory 
     WHERE rn = 1 
     ORDER BY fecha_emision DESC;
-  `;
+`;
 
-  const [lineaRows] = await db.query<any[]>(query, [providerFiscalId, identifier]);
+  const queryParams: any[] = [providerFiscalId];
+  if (searchBy === 'code') {
+    queryParams.push(identifier);
+  } else {
+    queryParams.push(`%${identifier}%`);
+  }
+
+  const [lineaRows] = await db.query<any[]>(query, queryParams);
 
   if (lineaRows.length === 0) {
     return { productInfo: null, history: [] };
   }
 
-  const history: DocumentLine[] = lineaRows.map(l => ({
-    id: l.id,
-    documento_id: l.documento_id,
-    codigo: l.codigo,
-    descripcion: l.descripcion,
-    cantidad: l.cantidad,
-    unidad: l.unidad,
-    precio_unitario: l.precio_unitario,
-    descuento_porcentaje: l.descuento_porcentaje || 0,
-    precio_neto: l.precio_neto || l.precio_unitario,
-    importe_linea: l.importe_linea,
-    fecha_emision: l.fecha_emision,
-    numero_documento: l.numero_documento,
-    datos_extra: {},
-    fecha_creacion: null,
-  }));
+  const history: DocumentLine[] = lineaRows
+    .filter(l => {
+      // ✅ Filtro semántico: usamos descriptionFilter si viene por URL (?desc=), 
+      // o el identifier si estamos en una ruta de búsqueda por descripción (/DESC_...)
+      const filterToUse = descriptionFilter || (searchBy === 'description' ? identifier : null);
+      if (!filterToUse) return true;
+      return normalizeProductDescription(l.descripcion) === filterToUse;
+    })
+    .map(l => ({
+      id: l.id,
+      documento_id: l.documento_id,
+      codigo: l.codigo,
+      descripcion: l.descripcion,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precio_unitario: l.precio_unitario,
+      descuento_porcentaje: l.descuento_porcentaje || 0,
+      precio_neto: l.precio_neto || l.precio_unitario,
+      importe_linea: l.importe_linea,
+      fecha_emision: l.fecha_emision,
+      numero_documento: l.numero_documento,
+      datos_extra: {},
+      fecha_creacion: null,
+    }));
 
   const productInfo = history[0];
 
@@ -2100,30 +2113,30 @@ export async function getProviderAnalytics(
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    whereEmpresa = `AND d.id_de_empresa IN (${placeholders})`;
+    whereEmpresa = `AND d.id_de_empresa IN(${placeholders})`;
     params.push(...empresaIds);
   }
 
   // ✅ Filtro de tipo de documento (FACTURAS Y ABONOS)
-  const whereDocType = `AND (
-        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+  const whereDocType = `AND(
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
   const [docs] = await db.query<DocumentPacket[]>(`
         SELECT DISTINCT d.*
-        FROM documentos d
+  FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ? 
-          AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           ${whereDocType}
           ${whereEmpresa}
-    `, params);
+`, params);
 
-  console.log(`📊 [getProviderAnalytics] Documentos encontrados para ${fiscalId}:`, docs.length);
-  console.log(`🏢 [getProviderAnalytics] Empresas filtradas:`, empresaIds);
+  console.log(`📊[getProviderAnalytics] Documentos encontrados para ${fiscalId}: `, docs.length);
+  console.log(`🏢[getProviderAnalytics] Empresas filtradas: `, empresaIds);
 
   // ✅ FIX: Aplicar el mismo filtro de empresaIds a la query de líneas
   let lineQuery = `
@@ -2131,20 +2144,20 @@ export async function getProviderAnalytics(
     FROM lineas_documento ld
     JOIN documentos d ON ld.documento_id = d.id
     JOIN entidades_documento ed ON d.id = ed.documento_id
-    WHERE ed.identificador_fiscal = ? 
-      AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
-      AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-      AND (
-        (ld.codigo IS NOT NULL AND ld.codigo != '') 
-        OR 
-        (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+    WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
+      AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+AND(
+  (ld.codigo IS NOT NULL AND ld.codigo != '')
+OR
+  (ld.descripcion IS NOT NULL AND ld.descripcion != '')
       )
-  `;
+`;
   let lineParams: any[] = [fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    lineQuery += ` AND d.id_de_empresa IN (${placeholders})`;
+    lineQuery += ` AND d.id_de_empresa IN(${placeholders})`;
     lineParams.push(...empresaIds);
   }
 
@@ -2158,7 +2171,7 @@ export async function getProviderAnalytics(
 
   // ✅ Top Products (filtro de Facturas/Abonos para consistencia financiera)
   const docIds = docs.map(d => d.id);
-  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]) : [[]];
+  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN(?)`, [docIds]) : [[]];
 
   const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
   lines.forEach(line => {
@@ -2207,9 +2220,9 @@ export async function getProviderAnalytics(
     }
   }
 
-  console.log(`💰 [getProviderAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
-  console.log(`💰 [getProviderAnalytics] Total productos: ${totalProductsSpent.toFixed(2)} EUR`);
-  console.log(`📈 [getProviderAnalytics] Meses con compras: ${monthlySpend.length}`);
+  console.log(`💰[getProviderAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
+  console.log(`💰[getProviderAnalytics] Total productos: ${totalProductsSpent.toFixed(2)} EUR`);
+  console.log(`📈[getProviderAnalytics] Meses con compras: ${monthlySpend.length} `);
 
   const analyticsData = {
     provider,
@@ -2257,14 +2270,14 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
     const params: any[] = [user.id, empresaIds];
 
     const [summary] = await db.query<RowDataPacket[]>(`
-            SELECT 
-                SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
-                SUM(CASE WHEN i.validado = 1 THEN 1 ELSE 0 END) as totalValidated
+SELECT
+SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
+  SUM(CASE WHEN i.validado = 1 THEN 1 ELSE 0 END) as totalValidated
             FROM incidencias_documento i
             JOIN documentos d ON i.documento_id = d.id
             JOIN empresas e2 ON d.id_de_empresa = e2.id
-            WHERE 1=1 ${whereDocType} ${whereEmpresa}
-        `, params);
+            WHERE 1 = 1 ${whereDocType} ${whereEmpresa}
+`, params);
 
     const [byProvider] = await db.query<RowDataPacket[]>(`
             SELECT e.nombre, COUNT(i.id) as count
@@ -2272,24 +2285,24 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
             JOIN documentos d ON i.documento_id = d.id
             JOIN entidades_documento e ON i.documento_id = e.documento_id
             JOIN empresas e2 ON d.id_de_empresa = e2.id
-            WHERE i.validado = 0 
-              AND (e.rol = 'proveedor' OR e.rol = 'emisor')
+            WHERE i.validado = 0
+AND(e.rol = 'proveedor' OR e.rol = 'emisor')
               ${whereDocType}
               ${whereEmpresa}
             GROUP BY e.nombre
             ORDER BY count DESC
             LIMIT 5
-        `, params);
+  `, params);
 
     const [byType] = await db.query<RowDataPacket[]>(`
-            SELECT 
-                CASE 
+SELECT
+CASE 
                     WHEN i.descripcion LIKE '%duplicado%' THEN 'Duplicado'
                     WHEN i.descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
                     WHEN i.descripcion LIKE '%incompletos%' THEN 'Datos Incompletos'
                     ELSE 'Otro'
-                END as name,
-                COUNT(i.id) as count
+END as name,
+  COUNT(i.id) as count
             FROM incidencias_documento i
             JOIN documentos d ON i.documento_id = d.id
             JOIN empresas e2 ON d.id_de_empresa = e2.id
@@ -2352,18 +2365,18 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
 
     // ⬅️ CAMBIO: Ahora también obtenemos id_de_empresa
     const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
-            SELECT 
-                d.id,
-                d.id_de_empresa,
-                d.numero_documento,
-                d.importe_total,
-                d.importe_sin_impuestos,
-                (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND (rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
-                (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
-                (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
-                (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota_iva
+SELECT
+d.id,
+  d.id_de_empresa,
+  d.numero_documento,
+  d.importe_total,
+  d.importe_sin_impuestos,
+  (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
+    (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
+      (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
+        (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota_iva
             FROM documentos d
-            WHERE d.id IN (?)
+            WHERE d.id IN(?)
         `, [docIds]);
 
     // Check for incomplete documents
@@ -2390,9 +2403,9 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
     // Check for duplicates (solo DENTRO de cada empresa)
     const docMap = new Map<string, Array<{ id: number, id_de_empresa: number }>>();
     for (const doc of validDocsForAnalysis) {
-      // ✅ ANTES: const key = `${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+      // ✅ ANTES: const key = `${ doc.provider_cif }| ${ doc.numero_documento }| ${ doc.importe_total } `;
       // ✅ AHORA: Incluir empresa en la clave
-      const key = `${doc.id_de_empresa}|${doc.provider_cif}|${doc.numero_documento}|${doc.importe_total}`;
+      const key = `${doc.id_de_empresa}| ${doc.provider_cif}| ${doc.numero_documento}| ${doc.importe_total} `;
 
       if (!docMap.has(key)) {
         docMap.set(key, []);
@@ -2404,7 +2417,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
       if (docs.length > 1) {
         duplicates += docs.length;
         const ids = docs.map(d => d.id);
-        const description = `Documento duplicado detectado. Clave: ${key.split('|').slice(1, 3).join(' - ')}. IDs: ${ids.join(', ')}`;
+        const description = `Documento duplicado detectado.Clave: ${key.split('|').slice(1, 3).join(' - ')}.IDs: ${ids.join(', ')} `;
 
         for (const doc of docs) {
           const [existing] = await connection.query<RowDataPacket[]>(
@@ -2428,7 +2441,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
       if (doc.sum_line_items !== null) {
         if (Math.abs(Number(doc.sum_line_items) - Number(doc.importe_sin_impuestos)) > 0.02) {
           calculationErrors++;
-          const description = `Error de cálculo en el subtotal. La suma de las líneas (${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento (${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
+          const description = `Error de cálculo en el subtotal.La suma de las líneas(${Number(doc.sum_line_items).toFixed(2)}) no coincide con la base imponible del documento(${Number(doc.importe_sin_impuestos).toFixed(2)}).`;
           const [existing] = await connection.query<RowDataPacket[]>(
             'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
             [doc.id, 'Error de cálculo en el subtotal%']
@@ -2448,7 +2461,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
         const calculatedTotal = (Number(doc.importe_sin_impuestos) || 0) + (Number(doc.sum_cuota_iva) || 0);
         if (Math.abs(calculatedTotal - (Number(doc.importe_total) || 0)) > 0.02) {
           calculationErrors++;
-          const description = `Error de cálculo en el total. Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
+          const description = `Error de cálculo en el total.Base: ${doc.importe_sin_impuestos}, Impuestos: ${doc.sum_cuota_iva}, Total Doc: ${doc.importe_total}, Total Calc: ${calculatedTotal.toFixed(2)}.`;
           const [existing] = await connection.query<RowDataPacket[]>(
             'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
             [doc.id, 'Error de cálculo en el total%']
@@ -2476,7 +2489,7 @@ async function analyzeDocuments(docIds: number[]): Promise<IncidentAnalysisResul
       newIncidentsFound,
       duplicates,
       calculationErrors,
-      message: `Análisis completo. Se encontraron ${newIncidentsFound} nuevas incidencias.`
+      message: `Análisis completo.Se encontraron ${newIncidentsFound} nuevas incidencias.`
     };
 
   } catch (error) {
@@ -2519,21 +2532,21 @@ export async function runDocumentAnalysis(empresaIds?: number[]): Promise<Incide
 
   // ✅ NUEVO: Filtro de tipo de documento (facturas Y abonos)
   const conditions: string[] = [`(
-        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`];
 
   // ✅ NUEVO: Filtrar por empresas si se especifican
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
-    conditions.push(`d.id_de_empresa IN (${placeholders})`);
+    conditions.push(`d.id_de_empresa IN(${placeholders})`);
     params.push(...empresaIds);
   }
 
   if (conditions.length > 0) {
-    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ` WHERE ${conditions.join(' AND ')} `;
   }
 
   console.log('🔍 [runDocumentAnalysis] Query:', query);
@@ -2542,7 +2555,7 @@ export async function runDocumentAnalysis(empresaIds?: number[]): Promise<Incide
   const [allDocIds] = await db.query<RowDataPacket[]>(query, params);
   const docIds = allDocIds.map(row => row.id);
 
-  console.log(`📊 [runDocumentAnalysis] Analizando ${docIds.length} documentos`);
+  console.log(`📊[runDocumentAnalysis] Analizando ${docIds.length} documentos`);
 
   return analyzeDocuments(docIds);
 }
@@ -2575,13 +2588,13 @@ export async function getDashboardAnalytics(
 
   console.log('🎯 [getDashboardAnalytics] Filtros:', { hasEmpresaFilter, hasTrimestreFilter: año !== undefined && trimestre !== undefined, añoOnly: año !== undefined });
 
-  const whereDocType = `AND (
-        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+  const whereDocType = `AND(
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
   // ✅ CONSTRUCCIÓN DINÁMICA DE FILTRO TEMPORAL
   let wherePeriodFilter = '';
@@ -3383,9 +3396,6 @@ export async function getDashboardAnalytics(
 
   return JSON.parse(JSON.stringify(analyticsData));
 }
-// =====================================
-// 🆕 AGREGAR AL FINAL DE src/services/document-service.ts
-// =====================================
 
 
 /**

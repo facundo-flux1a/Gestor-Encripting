@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { FileText, Package, Loader2, List, Grid } from "lucide-react";
 import type { Document, DocumentLine, DocumentEntity } from "@/lib/types";
 import { DocumentsTable } from "@/components/dashboard/documents-table";
@@ -35,6 +36,10 @@ export function ProviderDetailClient({
 }: ProviderDetailClientProps) {
     const { selectedCompanyIds, companies } = useCompanyContext();
 
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+
     const [documents, setDocuments] = useState(initialDocuments);
     const [products, setProducts] = useState(initialProducts);
     const [allProducts, setAllProducts] = useState(initialAllProducts);
@@ -52,7 +57,35 @@ export function ProviderDetailClient({
         tipoPrecio: 'unitario' // ✅ Valor inicial
     });
 
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    // ✅ ESTADO PERSISTENTE EN URL (Pestaña y Modo de Vista)
+    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'summary');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>((searchParams.get('view') as 'grid' | 'list') || 'grid');
+
+    // Sincronizar estado cuando la URL cambia (ej. botón atrás)
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && tab !== activeTab) setActiveTab(tab);
+
+        const view = searchParams.get('view');
+        if (view && (view === 'grid' || view === 'list') && view !== viewMode) setViewMode(view as any);
+    }, [searchParams]);
+
+    const updateUrl = (tab: string, view: string) => {
+        const params = new URLSearchParams(searchParams);
+        params.set('tab', tab);
+        params.set('view', view);
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    };
+
+    const handleTabChange = (val: string) => {
+        setActiveTab(val);
+        updateUrl(val, viewMode);
+    };
+
+    const handleViewModeChange = (val: 'grid' | 'list') => {
+        setViewMode(val);
+        updateUrl(activeTab, val);
+    };
 
     useEffect(() => {
         async function reloadData() {
@@ -70,7 +103,7 @@ export function ProviderDetailClient({
                 setDocuments(newDocs);
                 setProducts(newProds);
                 setAllProducts(newAllProds);
-                setAnalyticsData(newAnalytics);
+                if (newAnalytics) setAnalyticsData(newAnalytics);
             } catch (error) {
                 console.error('❌ Error recargando datos:', error);
             } finally {
@@ -150,7 +183,7 @@ export function ProviderDetailClient({
                 </div>
             )}
 
-            <Tabs defaultValue="summary" className="space-y-6">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3 gap-2">
                     <TabsTrigger value="summary">Resumen</TabsTrigger>
                     <TabsTrigger value="documents" disabled={isLoadingData}>Documentos ({documents.length})</TabsTrigger>
@@ -172,13 +205,13 @@ export function ProviderDetailClient({
                         </div>
                         <div className="flex border rounded-md overflow-hidden bg-background">
                             <button
-                                onClick={() => setViewMode('grid')}
+                                onClick={() => handleViewModeChange('grid')}
                                 className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 Gráfico
                             </button>
                             <button
-                                onClick={() => setViewMode('list')}
+                                onClick={() => handleViewModeChange('list')}
                                 className={`px-4 py-2 text-sm font-medium transition-colors border-l ${viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 Tabla

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import type { DocumentLine } from "@/lib/types";
 import { Euro, Calendar, ArrowRight, Package, ShoppingCart } from "lucide-react";
+import { normalizeProductDescription } from "@/lib/utils";
 
 interface ProductCardProps {
     product: DocumentLine;
@@ -46,11 +47,14 @@ const formatDate = (date: string | null | undefined) => {
 export function ProductCard({ product, providerFiscalId }: ProductCardProps) {
     if (!product.descripcion) return null;
 
-    const identifier = product.codigo
-        ? encodeURIComponent(product.codigo)
-        : `DESC_${encodeURIComponent(product.descripcion || '')}`;
+    const normDesc = normalizeProductDescription(product.descripcion || '');
+    const encodedDesc = encodeURIComponent(normDesc);
 
-    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}`;
+    const identifier = product.codigo
+        ? `${encodeURIComponent(product.codigo)}?desc=${encodedDesc}`
+        : `DESC_${encodedDesc}`;
+
+    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}${identifier.includes('?') ? '&' : '?'}view=grid`;
 
     const vecesComprado = product.veces_comprado ? Number(product.veces_comprado) : 1;
     const isFolder = vecesComprado > 1;
