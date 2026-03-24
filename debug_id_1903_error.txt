@@ -1,0 +1,4 @@
+Error: Unknown column 'num_factura' in 'field list'
+    at PromiseConnection.execute (/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/node_modules/mysql2/lib/promise/connection.js:47:22)
+    at run (/home/flux1a/Descargas/gestor-antigravity/FluxDocsERPProd/fetch_doc_1903.js:8:41)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)

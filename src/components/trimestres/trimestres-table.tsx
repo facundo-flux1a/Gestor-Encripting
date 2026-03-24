@@ -72,14 +72,20 @@ export function TrimestreTable({
     }
   };
 
-  // ✅ CÁLCULO DE SUMAS REALES (Fila por fila)
+  // ✅ CÁLCULO DE SUMAS REALES (Fila por fila, respetando Abonos)
   const totalsReales = React.useMemo(() => {
     return documentos.reduce((acc, doc) => {
-      acc.base += (doc.base_imponible || 0);
-      acc.iva += (doc.iva || 0);
-      acc.total += (doc.total || 0);
-      acc.recargo += ((doc as any).recargo || 0);
-      acc.retencion += ((doc as any).retencion || 0);
+      const tipoLower = (doc.tipo_documento || '').toLowerCase();
+      const valTotal = Number(doc.total || doc.base_imponible || 0);
+      const isAbono = tipoLower.includes('abono') || tipoLower.includes('crédito') || tipoLower.includes('credito') || valTotal < 0;
+      const sign = isAbono ? -1 : 1;
+
+      const ivaRealVal = Math.abs(doc.iva || 0) || Math.abs((doc.total || 0) - (doc.base_imponible || 0));
+      acc.base += (Math.abs(doc.base_imponible || 0) * sign);
+      acc.iva += (ivaRealVal * sign);
+      acc.total += (Math.abs(doc.total || 0) * sign);
+      acc.recargo += (Math.abs((doc as any).recargo || 0) * sign);
+      acc.retencion += (Math.abs((doc as any).retencion || 0) * sign);
       return acc;
     }, { base: 0, iva: 0, total: 0, recargo: 0, retencion: 0 });
   }, [documentos]);
@@ -208,17 +214,8 @@ export function TrimestreTable({
                                   <span className="text-red-500">IVA Sop.:</span>
                                   <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.iva)}</span>
                                   <div className="col-span-2 h-px bg-border my-1" />
-                                  <span className="font-bold">Cálculo Teórico:</span>
-                                  <span className="text-right font-bold">{formatCurrency(footerValues.iva)}</span>
-                                  {Math.abs(footerValues.iva - totalsReales.iva) > 0.011 && (
-                                    <>
-                                      <span className="text-muted-foreground italic">Suma Real Docs:</span>
-                                      <span className="text-right text-muted-foreground italic">{formatCurrency(totalsReales.iva)}</span>
-                                      <div className="col-span-2 mt-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-200 leading-tight">
-                                        ⚠️ Desajuste de {(footerValues.iva - totalsReales.iva).toFixed(2)}€ por redondeo acumulado en las facturas.
-                                      </div>
-                                    </>
-                                  )}
+                                  <span className="font-bold border-t pt-1">Total Absoluto:</span>
+                                  <span className="text-right font-bold border-t pt-1">{formatCurrency(footerValues.iva)}</span>
                                 </>
                               ) : (
                                 <>
@@ -257,17 +254,8 @@ export function TrimestreTable({
                                   <span className="text-red-500">Total Gastos:</span>
                                   <span className="text-right">{formatCurrency(footerValues.breakdown.gastos.total)}</span>
                                   <div className="col-span-2 h-px bg-border my-1" />
-                                  <span className="font-bold text-primary">Resultado T.:</span>
-                                  <span className="text-right font-bold text-primary">{formatCurrency(footerValues.total)}</span>
-                                  {Math.abs(footerValues.total - totalsReales.total) > 0.011 && (
-                                    <>
-                                      <span className="text-muted-foreground italic text-[10px]">Resultado Real:</span>
-                                      <span className="text-right text-muted-foreground italic text-[10px]">{formatCurrency(totalsReales.total)}</span>
-                                      <div className="col-span-2 mt-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded text-[10px] text-blue-200 leading-tight">
-                                        💡 La diferencia de {(footerValues.total - totalsReales.total).toFixed(2)}€ se debe a que las tarjetas superiores usan un modelo matemático global, mientras que la tabla suma los céntimos reales de cada documento.
-                                      </div>
-                                    </>
-                                  )}
+                                  <span className="font-bold text-primary border-t pt-1">Resultado Neto:</span>
+                                  <span className="text-right font-bold text-primary border-t pt-1">{formatCurrency(footerValues.total)}</span>
                                 </>
                               ) : (
                                 <>
@@ -287,9 +275,13 @@ export function TrimestreTable({
             </TableHeader>
             <TableBody>
               {documentos.map((doc, index) => {
-                const baseImponible = doc.base_imponible || 0;
-                const ivaTotal = doc.iva || 0;
-                const total = doc.total || 0;
+                const tipoLower = (doc.tipo_documento || '').toLowerCase();
+                const sign = tipoLower.includes('abono') || tipoLower.includes('crédito') ? -1 : 1;
+
+                const baseImponible = (Math.abs(doc.base_imponible || 0)) * sign;
+                const ivaRealVal = Math.abs(doc.iva || 0) || Math.abs((doc.total || 0) - (doc.base_imponible || 0));
+                const ivaTotal = ivaRealVal * sign;
+                const total = Math.abs(doc.total || 0); // we apply sign visually in the cell later or right here
 
                 const fechaEmision = doc.fecha_emision
                   ? new Date(doc.fecha_emision).toLocaleDateString('es-ES')
@@ -299,7 +291,8 @@ export function TrimestreTable({
                   <TableRow
                     key={doc.id_documento}
                     className={cn(
-                      'cursor-pointer hover:bg-accent/50 hover:shadow-md transition-all duration-200 group animate-fade-in'
+                      'cursor-pointer hover:bg-accent/50 hover:shadow-md transition-all duration-200 group animate-fade-in',
+                      tipoLower.includes('abono') && 'bg-red-500/5 hover:bg-red-500/10'
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => handleRowClick(doc)}
@@ -368,9 +361,9 @@ export function TrimestreTable({
                       {formatCurrency(ivaTotal)}
                     </TableCell>
 
-                    {/* Total - CON FORMATO */}
-                    <TableCell className="text-right font-semibold text-xs sm:text-sm tabular-nums group-hover:text-primary group-hover:scale-110 transition-all duration-200">
-                      {formatCurrency(total)}
+                    {/* Total - CON FORMATO y COLOR PARA ABONOS */}
+                    <TableCell className={cn("text-right font-semibold text-xs sm:text-sm tabular-nums group-hover:text-primary group-hover:scale-110 transition-all duration-200", tipoLower.includes('abono') ? 'text-red-500' : '')}>
+                      {formatCurrency(total * (tipoLower.includes('abono') ? -1 : 1))}
                     </TableCell>
 
                     {/* Estado */}

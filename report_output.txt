@@ -1,0 +1,23 @@
+=== REPORTE DE DIAGNÓSTICO (USUARIOS 5 Y 6) ===
+
+📌 CUBO A: MULTI-BASE (0 documentos)
+-> El código las procesa mal por leer solo una base, pero las líneas legales suman bien.
+┌─────────┐
+│ (index) │
+├─────────┤
+└─────────┘
+
+📌 CUBO B: REDONDEO (0 documentos)
+-> Diferencias menores a 10 céntimos.
+
+📌 CUBO C: DESCONOCIDO / DESCUADRE PROFUNDO (2 documentos)
+-> La cabecera NO coincide con la suma de las líneas de impuestos.
+┌─────────┬──────┬───────────┬──────────────────────────────┬───────────┬────────────┬───────────┐
+│ (index) │ ID   │ Documento │ Empresa                      │ Dash      │ Lineas     │ Diff      │
+├─────────┼──────┼───────────┼──────────────────────────────┼───────────┼────────────┼───────────┤
+│ 0       │ 1852 │ '9214031' │ 'Valentia Alimentación S.L.' │ '1807.72' │ '-1378.55' │ '3186.27' │
+│ 1       │ 1853 │ '92'      │ 'Valentia Alimentación S.L.' │ '952.09'  │ '841.64'   │ '110.45'  │
+└─────────┴──────┴───────────┴──────────────────────────────┴───────────┴────────────┴───────────┘
+
+🎯 COINCIDENCIAS EXACTAS (10.93€ o 6.62€)
+-> Ningún documento individual tiene este descuadre exacto. Es probable que sea el ACUMULADO de varios documentos redondeados o de tasas no detectadas.

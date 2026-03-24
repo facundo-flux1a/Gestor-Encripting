@@ -4,6 +4,8 @@ export const VAT_RATES = [21, 15, 10, 4, 0];
 
 export interface FinancialSummary {
     totalReal: Record<number | string, number>;
+    baseReal: Record<number | string, number>;
+    ivaReal: Record<number | string, number>;
     retenciones: Record<number | string, number>;
     recargos: Record<number | string, number>;
     bases: Record<number, Record<number | string, number>>;
@@ -30,6 +32,8 @@ export interface EngineResult {
 const createEmptySummary = (): FinancialSummary => {
     const summary: FinancialSummary = {
         totalReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        baseReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        ivaReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         bases: {},
@@ -98,12 +102,27 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
 
         // 4. Totales Reales (BD)
         const valReal = Math.abs(docTotalVal);
+        const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0));
+        // Si no hay iva explícito, aproximamos por diferencia para la estadística global
+        const ivaRealVal = Math.abs(Number(doc.iva || 0)) || (valReal - baseRealVal);
+
         if (hasValidQ) {
             target.totalReal[q!] += valReal * absSign;
+            target.baseReal[q!] += baseRealVal * absSign;
+            target.ivaReal[q!] += ivaRealVal * absSign;
+
             totalNeto.totalReal[q!] += valReal * netoSign;
+            totalNeto.baseReal[q!] += baseRealVal * netoSign;
+            totalNeto.ivaReal[q!] += ivaRealVal * netoSign;
         }
+
         target.totalReal.total += valReal * absSign;
+        target.baseReal.total += baseRealVal * absSign;
+        target.ivaReal.total += ivaRealVal * absSign;
+
         totalNeto.totalReal.total += valReal * netoSign;
+        totalNeto.baseReal.total += baseRealVal * netoSign;
+        totalNeto.ivaReal.total += ivaRealVal * netoSign;
 
         // 5. Procesar Impuestos
         const ivaDetails = doc.iva_details || [];
@@ -179,18 +198,34 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
                 }
             });
         } else {
-            // Si no tiene desgloses, asumimos 21 % (misma lógica que Trimestres)
-            const base = valReal / 1.21;
-            const theorIva = valReal - base;
-            if (hasValidQ) {
-                target.bases[21][q!] += base * absSign;
-                target.ivaTeorico[21][q!] += theorIva * absSign;
-            }
-            target.bases[21].total += base * absSign;
-            target.ivaTeorico[21].total += theorIva * absSign;
+            // ✅ MEJORA: Deducir el porcentaje si no hay desgloses (Evitar asumir 21% siempre)
+            const diff = valReal - baseRealVal;
+            let deducedRate = 21; // Default fallback
 
-            // Marcar como documento sin detalles si es relevante
-            // (Opcional: añadir a mismatchDocs si detectamos que falta información)
+            if (baseRealVal > 0) {
+                const pct = (diff / baseRealVal) * 100;
+                // Buscar la tasa estándar más cercana (margen 0.5%)
+                if (Math.abs(pct - 4) < 0.5) deducedRate = 4;
+                else if (Math.abs(pct - 10) < 0.5) deducedRate = 10;
+                else if (Math.abs(pct - 21) < 0.5) deducedRate = 21;
+                else if (Math.abs(pct - 15) < 0.5) deducedRate = 15;
+                else if (Math.abs(pct - 0) < 0.5) deducedRate = 0;
+            }
+
+            if (hasValidQ) {
+                if (target.bases[deducedRate]) target.bases[deducedRate][q!] += baseRealVal * absSign;
+                if (target.ivaTeorico[deducedRate]) target.ivaTeorico[deducedRate][q!] += diff * absSign;
+
+                // También en totalNeto para paridad
+                if (totalNeto.bases[deducedRate]) totalNeto.bases[deducedRate][q!] += baseRealVal * netoSign;
+                if (totalNeto.ivaTeorico[deducedRate]) totalNeto.ivaTeorico[deducedRate][q!] += diff * netoSign;
+            }
+
+            if (target.bases[deducedRate]) target.bases[deducedRate].total += baseRealVal * absSign;
+            if (target.ivaTeorico[deducedRate]) target.ivaTeorico[deducedRate].total += diff * absSign;
+
+            if (totalNeto.bases[deducedRate]) totalNeto.bases[deducedRate].total += baseRealVal * netoSign;
+            if (totalNeto.ivaTeorico[deducedRate]) totalNeto.ivaTeorico[deducedRate].total += diff * netoSign;
         }
 
         // Auditoría de Total del Documento

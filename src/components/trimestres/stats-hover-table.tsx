@@ -137,29 +137,39 @@ export function StatsHoverTable({
         (isActive('iva10') ? quotas.iva10 : 0) +
         (isActive('iva4') ? quotas.iva4 : 0);
 
+    // ✅ Cálculo de diferencias entre suma teórica y Total Real de Facturas
+    const diffBases = totalBaseOverride !== undefined ? (Math.abs(totalBaseOverride) - calculatedTotalBase) : 0;
+    const diffIvas = totalIvaOverride !== undefined ? (Math.abs(totalIvaOverride) - Math.abs(calculatedTotalIVA)) : 0;
+
+    // Si la diferencia es de céntimos o tasas raras, permitimos toggle
+    const currentOtrasBases = isActive('otrasBases') ? diffBases : 0;
+    const currentOtrosIvas = isActive('otrosIvas') ? diffIvas : 0;
+
     // Delta de bases desactivadas (lo que el usuario removió)
     const disabledBasesDelta =
         (!isActive('base21') ? bases.base21 : 0) +
         (!isActive('base15') ? (bases.base15 || 0) : 0) +
         (!isActive('base10') ? bases.base10 : 0) +
         (!isActive('base4') ? bases.base4 : 0) +
-        (!isActive('base0') ? bases.base0 : 0);
+        (!isActive('base0') ? bases.base0 : 0) +
+        (!isActive('otrasBases') ? diffBases : 0);
 
     // Delta de cuotas desactivadas (AHORA SOLO IVA)
     const disabledQuotasDelta =
         (!isActive('iva21') ? quotas.iva21 : 0) +
         (!isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (!isActive('iva10') ? quotas.iva10 : 0) +
-        (!isActive('iva4') ? quotas.iva4 : 0);
+        (!isActive('iva4') ? quotas.iva4 : 0) +
+        (!isActive('otrosIvas') ? diffIvas : 0);
 
     // Si hay override del backend, anclar a él y restar exactamente lo desactivado
     const totalBase = totalBaseOverride !== undefined
         ? Math.abs(totalBaseOverride) - Math.abs(disabledBasesDelta)
-        : calculatedTotalBase;
+        : calculatedTotalBase + currentOtrasBases;
 
     const totalIVA = totalIvaOverride !== undefined
         ? Math.abs(totalIvaOverride) - Math.abs(disabledQuotasDelta)
-        : Math.abs(calculatedTotalIVA);
+        : Math.abs(calculatedTotalIVA) + Math.abs(currentOtrosIvas);
 
     const grandTotal = totalOverride !== undefined
         ? Math.abs(totalOverride) - Math.abs(disabledBasesDelta) - Math.abs(disabledQuotasDelta) - (!isActive('recargo') ? Math.abs(recargo || 0) : 0) + (!isActive('retencion') ? Math.abs(retencion || 0) : 0)
@@ -205,6 +215,7 @@ export function StatsHoverTable({
                         isActive={isActive('base0')}
                     />
 
+
                     <div className="border-t pt-1 mt-1 transition-all">
                         <TaxRow label="Total Bases" value={totalBase} isTotal />
                     </div>
@@ -241,6 +252,7 @@ export function StatsHoverTable({
                     onClick={() => toggleKey('iva4')}
                     isActive={isActive('iva4')}
                 />
+
 
                 <div className="border-t pt-1 mt-1 transition-all">
                     <TaxRow label="Total IVA" value={totalIVA} isTotal />
@@ -295,25 +307,6 @@ export function StatsHoverTable({
                 </div>
             )}
 
-            {/* ⚠️ Alerta de Trazabilidad */}
-            {mismatchDocs && mismatchDocs.length > 0 && (
-                <div className="mt-4 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-2">
-                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500 font-bold text-[10px] uppercase tracking-wider">
-                        <span className="text-sm">⚠️</span>
-                        <span>Documentos con Descuadre</span>
-                    </div>
-                    <ul className="space-y-1">
-                        {mismatchDocs.map((doc, i) => (
-                            <li key={i} className="text-[10px] text-amber-700 dark:text-amber-400 font-medium list-disc list-inside">
-                                {doc}
-                            </li>
-                        ))}
-                    </ul>
-                    <p className="text-[9px] text-muted-foreground italic">
-                        * Estos documentos tienen diferencias entre el total real y la suma de sus impuestos.
-                    </p>
-                </div>
-            )}
         </div>
     );
 }

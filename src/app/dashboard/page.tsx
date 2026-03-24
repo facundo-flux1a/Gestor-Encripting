@@ -79,6 +79,7 @@ import {
 } from "@/components/ui/card";
 import { TopProviders } from '@/components/dashboard/top-providers';
 
+
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
@@ -530,6 +531,7 @@ export default function DashboardPage() {
                 <FileText className="h-4 w-4 mr-2" />
                 <span className="hidden lg:inline">Exportar</span>
               </Button>
+
               <CleanButton />
             </div>
           </PageHeader>
@@ -642,6 +644,7 @@ export default function DashboardPage() {
                 <SelectItem value="4">T4</SelectItem>
               </SelectContent>
             </Select>
+
             <CleanButton />
           </div>
         </PageHeader>
@@ -659,9 +662,6 @@ export default function DashboardPage() {
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Ingresos (con IVA)
-                        {analytics.kpis.hasMismatches && (
-                          <span title="Diferencia detectada entre el total real y la suma de impuestos en algunos documentos" className="cursor-help">⚠️</span>
-                        )}
                       </CardTitle>
                       <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
@@ -710,9 +710,6 @@ export default function DashboardPage() {
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Gastos (con IVA)
-                        {analytics.kpis.hasMismatches && (
-                          <span title="Diferencia detectada entre el total real y la suma de impuestos en algunos documentos" className="cursor-help">⚠️</span>
-                        )}
                       </CardTitle>
                       <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>

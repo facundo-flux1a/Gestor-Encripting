@@ -2591,8 +2591,8 @@ export async function getDashboardAnalytics(
   const whereDocType = `AND(
   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-OR(LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
@@ -2637,15 +2637,20 @@ OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT
                 d.tipo_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
-                -- ✅ IVA PURO (Sin Recargos)
-                COALESCE((SELECT SUM(di.cuota) 
-                 FROM impuestos_documento di 
-                 WHERE di.documento_id = d.id 
+                -- ✅ IVA (Con Fallback si no hay desgloses: Total - Base)
+                COALESCE((
+                  SELECT CASE 
+                    WHEN SUM(di.cuota) > 0 THEN SUM(di.cuota)
+                    ELSE ABS(d.importe_total - d.importe_sin_impuestos) 
+                  END
+                  FROM impuestos_documento di 
+                  WHERE di.documento_id = d.id 
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%retencion%' 
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%reten%'
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%recargo%'
-                    AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'), 0) as total_iva,
+                    AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'
+                ), ABS(d.importe_total - d.importe_sin_impuestos)) as total_iva,
                 -- ✅ RECARGO SEPARADO
                 COALESCE((SELECT SUM(di.cuota) 
                   FROM impuestos_documento di 
@@ -2707,9 +2712,9 @@ OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT
             ELSE 0 
           END), 0) as totalGastosSinIva,
           
-          -- ✅ IMPUESTOS DESGLOSADOS
-          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -total_iva ELSE total_iva END) ELSE 0 END), 0) as ivaRepercutido,
-          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -total_iva ELSE total_iva END) ELSE 0 END), 0) as ivaSoportado,
+          -- ✅ IMPUESTOS DESGLOSADOS (Incluyendo Recargo para paridad con Trimestres)
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva + recargo_cuota) ELSE (total_iva + recargo_cuota) END) ELSE 0 END), 0) as ivaRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva + recargo_cuota) ELSE (total_iva + recargo_cuota) END) ELSE 0 END), 0) as ivaSoportado,
           
           -- ✅ RETENCIONES: Siempre positivo para el KPI, el signo lo manejamos en la fórmula
           COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 THEN -ABS(retencion_cuota) ELSE ABS(retencion_cuota) END) ELSE 0 END), 0) as retencionRepercutido,
@@ -2728,6 +2733,7 @@ OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT
              AND (
                  (LOWER(d2.tipo_documento) LIKE '%factura%' AND LOWER(d2.tipo_documento) NOT LIKE '%(sin confirmar)%')
                  OR (LOWER(d2.tipo_documento) LIKE '%abono%' AND LOWER(d2.tipo_documento) NOT LIKE '%(sin confirmar)%')
+                OR (LOWER(d2.tipo_documento) LIKE '%crédito%' AND LOWER(d2.tipo_documento) NOT LIKE '%(sin confirmar)%')
              )
            ${hasEmpresaFilter ? 'AND d2.id_de_empresa IN (?)' : ''}
            ${wherePeriodFilter.replace(/d\./g, 'd2.')}) as incidenciasAbiertas,
@@ -2810,14 +2816,14 @@ OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT
   const totalIvaSopTeorico = ivaSop21 + ivaSop10 + ivaSop4 + ivaSop15;
 
   // Recalcular Totales CON IVA (Netos de retención para paridad con Trimestres)
-  const totalIngresosTeorico = Number(kpis.totalIngresosSinIva) + totalIvaRepTeorico + Number(kpis.recargoRepercutido) - Number(kpis.retencionRepercutido);
-  const totalGastosTeorico = Number(kpis.totalGastosSinIva) + totalIvaSopTeorico + Number(kpis.recargoSoportado) - Number(kpis.retencionSoportado);
+  const totalIngresosReal = Number(kpis.totalIngresosSinIva) + Number(kpis.ivaRepercutido) + Number(kpis.recargoRepercutido) - Number(kpis.retencionRepercutido);
+  const totalGastosReal = Number(kpis.totalGastosSinIva) + Number(kpis.ivaSoportado) + Number(kpis.recargoSoportado) - Number(kpis.retencionSoportado);
 
   const beneficioSinIva = Number(kpis.totalIngresosSinIva) - Number(kpis.totalGastosSinIva);
-  const beneficioConIva = totalIngresosTeorico - totalGastosTeorico;
+  const beneficioConIva = totalIngresosReal - totalGastosReal;
 
-  // ✅ RESULTADO IVA PURO (Sin Recargos, como pidió el usuario)
-  const resultadoIva = totalIvaRepTeorico - totalIvaSopTeorico;
+  // ✅ RESULTADO IVA PURO REAL (Sin Recargos)
+  const resultadoIva = Number(kpis.ivaRepercutido) - Number(kpis.ivaSoportado);
 
   // ✅ QUARTERLY SUMMARY con importe_total (CON IVA)
   const [quarterlyRows] = await db.query<RowDataPacket[]>(`
@@ -3356,14 +3362,15 @@ OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT
 
   const analyticsData = {
     kpis: {
-      totalIngresos: Number(totalIngresosTeorico),
-      totalGastos: Number(totalGastosTeorico),
+      // ✅ Usamos los valores exactos extraídos de BDD, en lugar del cálculo teórico del redondeo.
+      totalIngresos: Number(kpis.totalIngresos || 0),
+      totalGastos: Number(kpis.totalGastos || 0),
       totalIngresosSinIva: Number(kpis.totalIngresosSinIva || 0),
       totalGastosSinIva: Number(kpis.totalGastosSinIva || 0),
-      beneficio: Number(beneficioConIva),
+      beneficio: Number(kpis.totalIngresos || 0) - Number(kpis.totalGastos || 0),
       beneficioSinIva: Number(beneficioSinIva),
-      ivaRepercutido: Number(totalIvaRepTeorico),
-      ivaSoportado: Number(totalIvaSopTeorico),
+      ivaRepercutido: Number(kpis.ivaRepercutido),
+      ivaSoportado: Number(kpis.ivaSoportado),
       recargoRepercutido: Number(kpis.recargoRepercutido || 0),
       recargoSoportado: Number(kpis.recargoSoportado || 0),
       resultadoIva: Number(resultadoIva),

@@ -668,10 +668,9 @@ function TrimestresPageContent() {
 
   // Adaptadores para mantener compatibilidad con StatsHoverTable
   const mapToStatsBreakdown = (summary: any) => {
-    const totalBase = Object.values(summary.bases).reduce((acc: number, b: any) => acc + b.total, 0);
+    const totalBaseTeorica = Object.values(summary.bases).reduce((acc: number, b: any) => acc + b.total, 0);
 
-    // ✅ MODELO TEÓRICO AGREGADO (Paridad absoluta con Excel)
-    // Redondeamos sobre el total sumado de bases por tasa, no por cada documento.
+    // ✅ MODELO TEÓRICO AGREGADO (Solo informativo para el desglose)
     const quotas = {
       iva21: Math.round((summary.bases[21]?.total || 0) * 21) / 100,
       iva15: Math.round((summary.bases[15]?.total || 0) * 15) / 100,
@@ -679,12 +678,14 @@ function TrimestresPageContent() {
       iva4: Math.round((summary.bases[4]?.total || 0) * 4) / 100,
     };
 
-    const totalIVA = Object.values(quotas).reduce((acc, v) => acc + v, 0);
+    const totalIvaTeorico = Object.values(quotas).reduce((acc, v) => acc + v, 0);
     const totalRecargo = summary.recargos.total;
     const totalRetencion = summary.retenciones.total;
 
-    // Calculamos el total de la card como suma de sus partes teóricas para consistencia visual
-    const totalTeorico = totalBase + totalIVA + totalRecargo - totalRetencion;
+    // ✅ VALORES REALES (Extraídos literalmente del documento por el engine)
+    const totalBaseReal = summary.baseReal?.total || totalBaseTeorica;
+    const totalIVAReal = summary.ivaReal?.total || totalIvaTeorico;
+    const totalDocumentoReal = summary.totalReal?.total || (totalBaseTeorica + totalIvaTeorico + totalRecargo - totalRetencion);
 
     return {
       bases: {
@@ -697,9 +698,11 @@ function TrimestresPageContent() {
       quotas,
       recargo: totalRecargo,
       retencion: totalRetencion,
-      totalBase,
-      totalIVA,
-      total: totalTeorico,
+
+      // ✅ Las cards y tablas usarán los reales directamente
+      totalBase: totalBaseReal,
+      totalIVA: totalIVAReal,
+      total: totalDocumentoReal,
       mismatchDocs: [
         ...(summary.mismatchDocs.total[selectedTrimestre] || []),
         ...Object.values(summary.mismatchDocs.iva[selectedTrimestre] || {}).flat()

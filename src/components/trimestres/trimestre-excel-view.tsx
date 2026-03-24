@@ -63,9 +63,9 @@ const createEmptySummary = () => {
 
 const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
     const foundRatesSet = new Set<number>([21, 15, 10, 4, 0]);
-    const ingresosSum = { ...createEmptySummary(), traces: [] as any[] };
-    const gastosSum = { ...createEmptySummary(), traces: [] as any[] };
-    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[] };
+    const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
+    const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
+    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
 
     data.forEach((doc) => {
         // ✅ FILTRO DE SEGURIDAD: Evitar que documentos de otros años se sumen si se colaron en el array
@@ -203,12 +203,66 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
         }
 
         if (!hasIvaDetails) {
-            const baseAbs = Math.abs(docTotalVal) * absSign;
-            const baseNeto = Math.abs(docTotalVal) * netoSign;
-            targetSum['base_21'][q] += baseAbs;
-            targetSum['base_21'].total += baseAbs;
-            totalNetoSum['base_21'][q] += baseNeto;
-            totalNetoSum['base_21'].total += baseNeto;
+            const baseImponible = Number(doc.base_imponible || docTotalVal);
+
+            let deducedRate = 21; // Default fallback
+            if (baseImponible > 0 && Math.abs(docTotalVal) > 0) {
+                const ratio = Math.abs(docTotalVal) / Math.abs(baseImponible);
+
+                if (Math.abs(ratio - 1.04) < 0.02) deducedRate = 4;
+                else if (Math.abs(ratio - 1.10) < 0.02) deducedRate = 10;
+                else if (Math.abs(ratio - 1.21) < 0.02) deducedRate = 21;
+                else if (Math.abs(ratio - 1.00) < 0.02) deducedRate = 0; // Exento
+            }
+
+            const deducedIva = Math.round(Math.abs(Math.abs(docTotalVal) - Math.abs(baseImponible)) * 100) / 100;
+
+            docBaseSum += Math.abs(baseImponible);
+            docIvaSum += deducedIva;
+
+            foundRatesSet.add(deducedRate);
+
+            if (!targetSum.iva_db[deducedRate]) {
+                targetSum.iva_db[deducedRate] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                targetSum.iva_docs[deducedRate] = { 1: [], 2: [], 3: [], 4: [] };
+                targetSum[`iva_${deducedRate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                targetSum[`base_${deducedRate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+            }
+            if (!totalNetoSum.iva_db[deducedRate]) {
+                totalNetoSum.iva_db[deducedRate] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                totalNetoSum.iva_docs[deducedRate] = { 1: [], 2: [], 3: [], 4: [] };
+                totalNetoSum[`iva_${deducedRate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                totalNetoSum[`base_${deducedRate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+            }
+
+            const baseAbs = Math.abs(baseImponible) * absSign;
+            const baseNeto = Math.abs(baseImponible) * netoSign;
+            const ivaAbs = deducedIva * absSign;
+            const ivaNeto = deducedIva * netoSign;
+
+            targetSum[`base_${deducedRate}`][q] += baseAbs;
+            targetSum[`base_${deducedRate}`].total += baseAbs;
+            totalNetoSum[`base_${deducedRate}`][q] += baseNeto;
+            totalNetoSum[`base_${deducedRate}`].total += baseNeto;
+
+            targetSum[`iva_${deducedRate}`][q] += ivaAbs;
+            targetSum[`iva_${deducedRate}`].total += ivaAbs;
+            totalNetoSum[`iva_${deducedRate}`][q] += ivaNeto;
+            totalNetoSum[`iva_${deducedRate}`].total += ivaNeto;
+
+            targetSum.iva_db[deducedRate][q] += ivaAbs;
+            targetSum.iva_db[deducedRate].total += ivaAbs;
+            totalNetoSum.iva_db[deducedRate][q] += ivaNeto;
+            totalNetoSum.iva_db[deducedRate].total += ivaNeto;
+
+            // ✅ COLLECT METADATA FOR TOOLTIP
+            targetSum.deduced_docs.push({
+                num_doc: doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`,
+                base: baseImponible,
+                deduced_iva: deducedIva,
+                deduced_rate: deducedRate,
+                q: q
+            });
         }
 
         // Trace for developer level
@@ -318,7 +372,21 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 fontWeight: p.data?.isSectionHeader ? '900' : 'bold',
                 backgroundColor: p.data?.isSectionHeader ? 'rgba(71, 85, 105, 0.9)' : 'rgba(51, 65, 85, 0.4)',
                 textAlign: p.data?.isSectionHeader ? 'center' : 'left'
-            })
+            }),
+            tooltipValueGetter: (p: any) => {
+                if (p.data?.concepto === 'Diferencia (Redondeo / Otros)') {
+                    let baseMsg = 'ℹ️ Ajuste técnico: Refleja pequeñas diferencias por centavos de redondeo entre las sumatorias y el total, ajustes personalizados o casos específicos.';
+
+                    if (p.data.deduced_docs && p.data.deduced_docs.length > 0) {
+                        const docsList = p.data.deduced_docs
+                            .map((d: any) => `• ${d.num_doc}: IVA deducido al ${d.deduced_rate}% (${d.deduced_iva.toFixed(2)}€)`)
+                            .join('\n');
+                        return `${baseMsg}\n\nDocumentos con IVA deducido por falta de desglose:\n${docsList}`;
+                    }
+                    return baseMsg;
+                }
+                return undefined;
+            }
         },
         {
             headerName: '1º Trimestre',
@@ -439,7 +507,37 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             if (summary.recargos.total !== 0) rows.push({ concepto: 'Total Recargos', ...summary.recargos });
             if (summary.retenciones.total !== 0) rows.push({ concepto: 'Total Retenciones', ...summary.retenciones });
 
-            // FACTURADO FINAL (Theoretical Model for consistency)
+            // OTRAS BASES / IVA (DIFERENCIA) - Para cuadrar matemáticamente la tabla
+            const diffRow: any = {
+                concepto: 'Diferencia (Redondeo / Otros)',
+                q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
+            };
+            let hasDifferences = false;
+
+            quarters.forEach(q => {
+                let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
+                let iSum = 0; currentRates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
+
+                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
+                const realQ = summary.total_real[q];
+                const delta = realQ - theoreticalQ;
+
+                if (Math.abs(delta) > 0.05) {
+                    hasDifferences = true;
+                    diffRow[`q${q}`] = delta;
+                }
+            });
+
+            // ✅ ATTACH DATA FOR TOOLTIP
+            diffRow.deduced_docs = summary.deduced_docs;
+
+            diffRow.total = quarters.reduce((acc, q) => acc + (diffRow[`q${q}`] || 0), 0);
+
+            if (hasDifferences) {
+                rows.push(diffRow);
+            }
+
+            // FACTURADO FINAL (REAL TOTAL - Sincronizado con Cards)
             const facturadoRow: any = {
                 concepto: 'Total Gral. Facturado',
                 q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
@@ -448,28 +546,10 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             };
 
             quarters.forEach(q => {
-                let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
-                // FIXED: iSum must use the theoretical rounded IVA for consistency
-                let iSum = 0; currentRates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
-
-                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
-                facturadoRow[`q${q}`] = theoreticalQ;
-
-                const delta = Math.abs(summary.total_real[q] - theoreticalQ);
-                if (delta > 0.05) {
-                    facturadoRow[`mismatchQ${q}`] = `⚠️ Diferencia detectada: DB ${summary.total_real[q].toFixed(2)}€ vs Calc. ${theoreticalQ.toFixed(2)}€ (Dif: ${delta.toFixed(2)}€).`;
-                }
+                facturadoRow[`q${q}`] = summary.total_real[q];
             });
 
-            // Total Anual
-            let tBSum = 0; currentRates.forEach(r => tBSum += summary[`base_${r}`]?.total || 0);
-            let tISum = 0; currentRates.forEach(r => tISum += Math.round((summary[`base_${r}`]?.total || 0) * r) / 100);
-            const theoreticalTotal = tBSum + tISum + summary.recargos.total - summary.retenciones.total;
-            facturadoRow.total = theoreticalTotal;
-
-            if (Math.abs(summary.total_real.total - theoreticalTotal) > 0.05) {
-                facturadoRow.finalMismatch = true;
-            }
+            facturadoRow.total = summary.total_real.total;
 
             rows.push(facturadoRow);
             return rows;
