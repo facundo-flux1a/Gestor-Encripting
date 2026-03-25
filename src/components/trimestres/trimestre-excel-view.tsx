@@ -63,9 +63,9 @@ const createEmptySummary = () => {
 
 const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
     const foundRatesSet = new Set<number>([21, 15, 10, 4, 0]);
-    const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
-    const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
-    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[] };
+    const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
+    const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
+    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
 
     data.forEach((doc) => {
         // ✅ FILTRO DE SEGURIDAD: Evitar que documentos de otros años se sumen si se colaron en el array
@@ -120,12 +120,12 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
         if (hasIvaDetails) {
             ivaDetails.forEach((detail: any) => {
                 const tipoIva = (detail.tipo_impuesto || '').toLowerCase();
-                const cuota = Math.round(Math.abs(Number(detail.cuota) || 0) * 100) / 100;
-                const cuotaAbs = cuota * absSign;
-                const cuotaNeto = cuota * netoSign;
+                const cuotaVal = Number(detail.cuota || 0);
+                const cuotaAbs = cuotaVal * absSign;
+                const cuotaNeto = cuotaVal * netoSign;
 
                 if (tipoIva.includes('retencion')) {
-                    docRetSum += cuota;
+                    docRetSum += cuotaVal;
                     targetSum.retenciones[q] += cuotaAbs;
                     targetSum.retenciones.total += cuotaAbs;
                     totalNetoSum.retenciones[q] += cuotaNeto;
@@ -134,7 +134,7 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 }
 
                 if (tipoIva.includes('recargo') || tipoIva.includes('equivalencia')) {
-                    docRecSum += cuota;
+                    docRecSum += cuotaVal;
                     targetSum.recargos[q] += cuotaAbs;
                     targetSum.recargos.total += cuotaAbs;
                     totalNetoSum.recargos[q] += cuotaNeto;
@@ -143,7 +143,8 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 }
 
                 const rate = Math.round(Number(detail.porcentaje));
-                const base = Math.round(Math.abs(Number(detail.base_imponible) || 0) * 100) / 100;
+                const base = Number(detail.base_imponible || 0);
+                const cuota = Number(detail.cuota || 0);
                 foundRatesSet.add(rate);
 
                 // ✅ SEGURIDAD: Inicializar si el tipo de IVA no existe (p. ej. IVA 5% o tipos raros)
@@ -171,10 +172,10 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                     totalNetoSum.iva_docs[rate][q].push(info);
                 }
 
-                targetSum.iva_db[rate][q] += cuotaAbs;
-                targetSum.iva_db[rate].total += cuotaAbs;
-                totalNetoSum.iva_db[rate][q] += cuotaNeto;
-                totalNetoSum.iva_db[rate].total += cuotaNeto;
+                targetSum.iva_db[rate][q] += Number(detail.cuota || 0) * absSign;
+                targetSum.iva_db[rate].total += Number(detail.cuota || 0) * absSign;
+                totalNetoSum.iva_db[rate][q] += Number(detail.cuota || 0) * netoSign;
+                totalNetoSum.iva_db[rate].total += Number(detail.cuota || 0) * netoSign;
 
                 const keyBase = `base_${rate}`;
                 if (targetSum[keyBase]) {
@@ -192,12 +193,12 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
 
                 const keyIva = `iva_${rate}`;
                 if (targetSum[keyIva]) {
-                    const theorAbs = theoreticalIva * absSign;
-                    const theorNeto = theoreticalIva * netoSign;
-                    targetSum[keyIva][q] += theorAbs;
-                    targetSum[keyIva].total += theorAbs;
-                    totalNetoSum[keyIva][q] += theorNeto;
-                    totalNetoSum[keyIva].total += theorNeto;
+                    const realIvaAbs = cuota * absSign;
+                    const realIvaNeto = cuota * netoSign;
+                    targetSum[keyIva][q] += realIvaAbs;
+                    targetSum[keyIva].total += realIvaAbs;
+                    totalNetoSum[keyIva][q] += realIvaNeto;
+                    totalNetoSum[keyIva].total += realIvaNeto;
                 }
             });
         }
@@ -206,18 +207,28 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
             const baseImponible = Number(doc.base_imponible || docTotalVal);
 
             let deducedRate = 21; // Default fallback
-            if (baseImponible > 0 && Math.abs(docTotalVal) > 0) {
-                const ratio = Math.abs(docTotalVal) / Math.abs(baseImponible);
+            let refinedBase = Math.abs(baseImponible);
+            let refinedIva = Math.abs(docTotalVal) - refinedBase;
+
+            if (refinedBase > 0 && Math.abs(docTotalVal) > 0) {
+                const ratio = Math.abs(docTotalVal) / refinedBase;
 
                 if (Math.abs(ratio - 1.04) < 0.02) deducedRate = 4;
                 else if (Math.abs(ratio - 1.10) < 0.02) deducedRate = 10;
                 else if (Math.abs(ratio - 1.21) < 0.02) deducedRate = 21;
-                else if (Math.abs(ratio - 1.00) < 0.02) deducedRate = 0; // Exento
+                else if (Math.abs(ratio - 1.00) < 0.01) {
+                    // ✅ CASO SATURADO: El usuario sugiere que se maneje como IVA.
+                    // Si Base == Total, probablemente la base incluya el IVA (ej. tickets de restaurante)
+                    // Asumimos 21% por defecto para extraer la base real.
+                    deducedRate = 21;
+                    refinedBase = Math.round((Math.abs(docTotalVal) / 1.21) * 100) / 100;
+                    refinedIva = Math.abs(docTotalVal) - refinedBase;
+                }
+                else deducedRate = 0; // Exento u otros casos
             }
 
-            const deducedIva = Math.round(Math.abs(Math.abs(docTotalVal) - Math.abs(baseImponible)) * 100) / 100;
-
-            docBaseSum += Math.abs(baseImponible);
+            const deducedIva = refinedIva;
+            docBaseSum += refinedBase;
             docIvaSum += deducedIva;
 
             foundRatesSet.add(deducedRate);
@@ -263,6 +274,34 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 deduced_rate: deducedRate,
                 q: q
             });
+        }
+
+        // ✅ DETECCIÓN DE DESCUADRE DE BASE (Cabecera vs Líneas)
+        const headerBase = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0));
+        const baseDelta = headerBase - docBaseSum;
+
+        // Si hay una diferencia de base, chequear si suma al total exacto como un 0% (ej. Suplidos)
+        const docTheoreticalTotal = headerBase + docIvaSum + docRecSum - docRetSum;
+        const totalMatchesWithHeader = Math.abs(Math.abs(docTotalVal) - docTheoreticalTotal) < 0.02;
+
+        if (Math.abs(baseDelta) > 0.01) {
+            if (totalMatchesWithHeader) {
+                // Es Base 0% (Exento/Suplido) omitido en los desgloses
+                const b0Abs = baseDelta * absSign;
+                const b0Neto = baseDelta * netoSign;
+                targetSum['base_0'][q] += b0Abs;
+                targetSum['base_0'].total += b0Abs;
+                totalNetoSum['base_0'][q] += b0Neto;
+                totalNetoSum['base_0'].total += b0Neto;
+            } else {
+                targetSum.base_mismatches.push({
+                    num_doc: doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`,
+                    header_base: headerBase,
+                    lines_base: docBaseSum,
+                    diff: baseDelta * absSign,
+                    q: q
+                });
+            }
         }
 
         // Trace for developer level
@@ -374,16 +413,26 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 textAlign: p.data?.isSectionHeader ? 'center' : 'left'
             }),
             tooltipValueGetter: (p: any) => {
-                if (p.data?.concepto === 'Diferencia (Redondeo / Otros)') {
-                    let baseMsg = 'ℹ️ Ajuste técnico: Refleja pequeñas diferencias por centavos de redondeo entre las sumatorias y el total, ajustes personalizados o casos específicos.';
+                if (p.data?.concepto === 'Otras Bases (Sin desglose)') {
+                    let baseMsg = 'ℹ️ Ajuste técnico: Refleja diferencias entre el total de base imponible declarado en cabecera y la suma de sus desgloses de impuestos.';
+
+                    let tooltipLines = [baseMsg];
 
                     if (p.data.deduced_docs && p.data.deduced_docs.length > 0) {
                         const docsList = p.data.deduced_docs
-                            .map((d: any) => `• ${d.num_doc}: IVA deducido al ${d.deduced_rate}% (${d.deduced_iva.toFixed(2)}€)`)
+                            .map((d: any) => `• ${d.num_doc}: Sin desglose. IVA deducido (${d.deduced_rate}%: ${d.deduced_iva.toFixed(2)}€)`)
                             .join('\n');
-                        return `${baseMsg}\n\nDocumentos con IVA deducido por falta de desglose:\n${docsList}`;
+                        tooltipLines.push(`\nDocumentos sin desglose fiscal:\n${docsList}`);
                     }
-                    return baseMsg;
+
+                    if (p.data.base_mismatches && p.data.base_mismatches.length > 0) {
+                        const mismatchList = p.data.base_mismatches
+                            .map((d: any) => `• ${d.num_doc}: Base cabecera ${d.header_base.toFixed(2)}€ vs líneas ${d.lines_base.toFixed(2)}€ (Dif: ${d.diff.toFixed(2)}€)`)
+                            .join('\n');
+                        tooltipLines.push(`\nDiscrepancias en base de datos (Cabecera vs Líneas):\n${mismatchList}`);
+                    }
+
+                    return tooltipLines.join('\n');
                 }
                 return undefined;
             }
@@ -476,16 +525,58 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 if (summary[keyIva] && (summary[keyIva].total !== 0 || quarters.some(q => summary[keyBase]?.[q] !== 0))) {
                     const row: any = {
                         concepto: `IVA ${rate}%`,
-                        q1: Math.round((summary[keyBase]?.[1] || 0) * rate) / 100,
-                        q2: Math.round((summary[keyBase]?.[2] || 0) * rate) / 100,
-                        q3: Math.round((summary[keyBase]?.[3] || 0) * rate) / 100,
-                        q4: Math.round((summary[keyBase]?.[4] || 0) * rate) / 100,
-                        total: Math.round((summary[keyBase]?.total || 0) * rate) / 100
+                        q1: summary.iva_db[rate]?.[1] || 0,
+                        q2: summary.iva_db[rate]?.[2] || 0,
+                        q3: summary.iva_db[rate]?.[3] || 0,
+                        q4: summary.iva_db[rate]?.[4] || 0,
+                        total: summary.iva_db[rate]?.total || 0
                     };
 
                     rows.push(row);
                 }
             });
+
+            // OTRAS BASES (DIFERENCIA / REDONDEO) - Para cuadrar con las Cards
+            const adjustmentRow: any = {
+                concepto: 'Otras Bases (Sin desglose)',
+                q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
+                isAdjustment: true
+            };
+
+            // IVA 0% / REDONDEOS - Para cuadrar con las Cards
+            const ivaAdjustmentRow: any = {
+                concepto: 'IVA 0% / Redondeos',
+                q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
+                isAdjustment: true
+            };
+            let hasAdjustments = false;
+            let hasIvaAdjustments = false;
+
+            quarters.forEach(q => {
+                let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
+                let iSum = 0; currentRates.forEach(r => iSum += summary.iva_db[r]?.[q] || 0);
+
+                // ✅ CORRECCIÓN CRÍTICA: Las retenciones ya son negativas, usarlas algebraicamente
+                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) + (summary.retenciones[q] || 0);
+                const realQ = summary.total_real[q];
+                const delta = realQ - theoreticalQ;
+
+                if (Math.abs(delta) > 0.05) {
+                    hasAdjustments = true;
+                    adjustmentRow[`q${q}`] = delta;
+                }
+
+                // También verificar si hay descuadre en la suma de IVA vs Total IVA (incl. recargos) de las Cards
+                // totalIvaRow ya tiene recargos
+            });
+            adjustmentRow.total = quarters.reduce((acc, q) => acc + (adjustmentRow[`q${q}`] || 0), 0);
+            adjustmentRow.deduced_docs = summary.deduced_docs;
+            adjustmentRow.base_mismatches = summary.base_mismatches;
+
+            // Nota: En esta versión simplificada de Excel, el delta total va a Bases Ajuste.
+            // Para paridad absoluta con la Card, podríamos separar el IVA Delta, pero el usuario 
+            // pidió principalmente el nombre del label en la Card. Mantendremos la lógica de bases 
+            // para el Excel por ahora para no romper la suma de Total Gastado que ya es perfecta.
 
             // TOTALES
             const totalBasesRow: any = { concepto: 'Total Bases', q1: 0, q2: 0, q3: 0, q4: 0, total: 0 };
@@ -494,48 +585,38 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             quarters.forEach(q => {
                 currentRates.forEach(r => {
                     totalBasesRow[`q${q}`] += (summary[`base_${r}`]?.[q] || 0);
-                    // FIXED: Total IVA must sum the theoretical row values for consistency
-                    totalIvaRow[`q${q}`] += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100;
+                    totalIvaRow[`q${q}`] += (summary.iva_db[r]?.[q] || 0);
                 });
-            });
-            totalBasesRow.total = currentRates.reduce((acc, r) => acc + (summary[`base_${r}`]?.total || 0), 0);
-            totalIvaRow.total = currentRates.reduce((acc, r) => acc + (Math.round((summary[`base_${r}`]?.total || 0) * r) / 100), 0);
+                // ✅ IMPORTANTE: Las Cards incluyen recargos en el total de IVA
+                totalIvaRow[`q${q}`] += (summary.recargos[q] || 0);
 
+                // INTEGRAR AJUSTE EN TOTAL BASES
+                totalBasesRow[`q${q}`] += adjustmentRow[`q${q}`];
+            });
+
+            totalBasesRow.total = quarters.reduce((acc, q) => acc + totalBasesRow[`q${q}`], 0);
+            totalIvaRow.total = quarters.reduce((acc, q) => acc + totalIvaRow[`q${q}`], 0);
+
+            if (hasAdjustments) rows.push(adjustmentRow);
             rows.push(totalBasesRow);
             rows.push(totalIvaRow);
 
-            if (summary.recargos.total !== 0) rows.push({ concepto: 'Total Recargos', ...summary.recargos });
-            if (summary.retenciones.total !== 0) rows.push({ concepto: 'Total Retenciones', ...summary.retenciones });
-
-            // OTRAS BASES / IVA (DIFERENCIA) - Para cuadrar matemáticamente la tabla
-            const diffRow: any = {
-                concepto: 'Diferencia (Redondeo / Otros)',
-                q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
-            };
-            let hasDifferences = false;
-
-            quarters.forEach(q => {
-                let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
-                let iSum = 0; currentRates.forEach(r => iSum += Math.round((summary[`base_${r}`]?.[q] || 0) * r) / 100);
-
-                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
-                const realQ = summary.total_real[q];
-                const delta = realQ - theoreticalQ;
-
-                if (Math.abs(delta) > 0.05) {
-                    hasDifferences = true;
-                    diffRow[`q${q}`] = delta;
-                }
-            });
-
-            // ✅ ATTACH DATA FOR TOOLTIP
-            diffRow.deduced_docs = summary.deduced_docs;
-
-            diffRow.total = quarters.reduce((acc, q) => acc + (diffRow[`q${q}`] || 0), 0);
-
-            if (hasDifferences) {
-                rows.push(diffRow);
+            if (summary.recargos.total !== 0) {
+                rows.push({
+                    concepto: 'Total Recargos',
+                    q1: summary.recargos[1], q2: summary.recargos[2], q3: summary.recargos[3], q4: summary.recargos[4],
+                    total: summary.recargos.total
+                });
             }
+            if (summary.retenciones.total !== 0) {
+                rows.push({
+                    concepto: 'Total Retenciones',
+                    q1: summary.retenciones[1], q2: summary.retenciones[2], q3: summary.retenciones[3], q4: summary.retenciones[4],
+                    total: summary.retenciones.total
+                });
+            }
+
+
 
             // FACTURADO FINAL (REAL TOTAL - Sincronizado con Cards)
             const facturadoRow: any = {

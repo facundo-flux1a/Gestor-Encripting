@@ -215,6 +215,16 @@ export function StatsHoverTable({
                         isActive={isActive('base0')}
                     />
 
+                    {Math.abs(diffBases) > 0.01 && (
+                        <TaxRow
+                            label="Otras Bases (Sin desglose)"
+                            value={diffBases}
+                            className="italic text-muted-foreground/70"
+                            onClick={() => toggleKey('otrasBases')}
+                            isActive={isActive('otrasBases')}
+                        />
+                    )}
+
 
                     <div className="border-t pt-1 mt-1 transition-all">
                         <TaxRow label="Total Bases" value={totalBase} isTotal />
@@ -252,6 +262,16 @@ export function StatsHoverTable({
                     onClick={() => toggleKey('iva4')}
                     isActive={isActive('iva4')}
                 />
+
+                {Math.abs(diffIvas) > 0.01 && (
+                    <TaxRow
+                        label="IVA 0% / Redondeos"
+                        value={diffIvas}
+                        className="italic text-muted-foreground/70"
+                        onClick={() => toggleKey('otrosIvas')}
+                        isActive={isActive('otrosIvas')}
+                    />
+                )}
 
 
                 <div className="border-t pt-1 mt-1 transition-all">

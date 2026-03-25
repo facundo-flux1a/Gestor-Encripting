@@ -228,6 +228,27 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
             if (totalNeto.ivaTeorico[deducedRate]) totalNeto.ivaTeorico[deducedRate].total += diff * netoSign;
         }
 
+        // ✅ DETECCIÓN INTELIGENTE DE SUPLIDOS / EXENTOS (Base 0%)
+        // Si hay una diferencia entre la base de cabecera y la suma de líneas,
+        // pero la cabecera + impuestos cuadra con el total real, entonces la diferencia es Base 0%.
+        const headerBaseVal = Math.abs(Number(doc.importe_sin_impuestos || doc.base_imponible || 0));
+        const baseGap = headerBaseVal - docBaseSum;
+        const theoreticalTotalWithHeader = headerBaseVal + docIvaSum + docRecSum - docRetSum;
+
+        if (Math.abs(baseGap) > 0.01 && Math.abs(valReal - theoreticalTotalWithHeader) < 0.02) {
+            // Es Base 0% omitida en los desgloses
+            if (target.bases[0]) {
+                if (hasValidQ) {
+                    target.bases[0][q!] += baseGap * absSign;
+                    totalNeto.bases[0][q!] += baseGap * netoSign;
+                }
+                target.bases[0].total += baseGap * absSign;
+                totalNeto.bases[0].total += baseGap * netoSign;
+            }
+            // Actualizamos docBaseSum para que no genere alerta de mismatch de total después
+            docBaseSum += baseGap;
+        }
+
         // Auditoría de Total del Documento
         const docTheoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum;
         if (hasValidQ && Math.abs(valReal - docTheoreticalTotal) > 0.01 && ivaDetails.length > 0) {
