@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder, Lock } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, type IvaDetail } from '@/lib/types';
@@ -184,26 +184,33 @@ const getColumns = (
 
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(doc);
-                  }}
-                >
-                  <span className="sr-only">Eliminar</span>
-                  <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                </Button>
+                <span>
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(doc);
+                    }}
+                    disabled={doc.trimestre_cerrado === 1}
+                  >
+                    <span className="sr-only">Eliminar</span>
+                    {doc.trimestre_cerrado === 1 ? (
+                      <Lock className="h-4 w-4 text-muted-foreground/50" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+                    )}
+                  </Button>
+                </span>
               </TooltipTrigger>
               <TooltipContent
-                side="bottom"
+                side={doc.trimestre_cerrado === 1 ? "top" : "bottom"}
                 sideOffset={5}
-                className="z-[99999]"
+                className={doc.trimestre_cerrado === 1 ? "z-[99999] bg-destructive text-destructive-foreground border-none" : "z-[99999]"}
                 avoidCollisions={true}
                 collisionPadding={10}
               >
-                <p>Eliminar documento</p>
+                <p>{doc.trimestre_cerrado === 1 ? `No se puede eliminar: Trimestre ${doc.año_trimestre}Q${doc.num_trimestre} cerrado` : 'Eliminar documento'}</p>
               </TooltipContent>
             </Tooltip>
 
@@ -1123,6 +1130,14 @@ export function DocumentsTable({
       .filter(id => id !== undefined);
   }, [rowSelection, documents]);
 
+  // ✅ Detectar si hay documentos bloqueados en la selección
+  const hasLockedSelected = useMemo(() => {
+    return Object.keys(rowSelection).some(key => {
+      const doc = documents[parseInt(key)];
+      return doc && doc.trimestre_cerrado === 1;
+    });
+  }, [rowSelection, documents]);
+
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleteDialogOpen(true);
@@ -1405,20 +1420,34 @@ export function DocumentsTable({
                 )}
               </Button>
 
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-                disabled={isBulkDeleting || isBulkValidating}
-                className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all"
-              >
-                {isBulkDeleting ? (
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting || isBulkValidating || hasLockedSelected}
+                      className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+                    >
+                      {isBulkDeleting ? (
+                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      Eliminar {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {hasLockedSelected && (
+                  <TooltipContent side="top" className="bg-destructive text-destructive-foreground border-none">
+                    <p className="flex items-center gap-2 text-xs font-bold">
+                      <Lock className="h-3 w-3" />
+                      No se puede eliminar: Selección contiene trimestres cerrados
+                    </p>
+                  </TooltipContent>
                 )}
-                Eliminar {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
-              </Button>
+              </Tooltip>
 
               {customTypes.length > 0 && onMove && (
                 <DropdownMenu>

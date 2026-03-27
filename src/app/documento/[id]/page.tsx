@@ -139,7 +139,7 @@ function DocumentoPageContent() {
 
   useEffect(() => {
     const idParam = params.id;
-    const id = parseInt(Array.isArray(idParam) ? idParam[0] : idParam, 10);
+    const id = parseInt(Array.isArray(idParam) ? idParam[0] as string : idParam as string, 10);
 
     if (isNaN(id)) {
       notFound();
@@ -438,21 +438,34 @@ function DocumentoPageContent() {
                   )}
                 </Tooltip>
 
-                <Button
-                  variant="destructive"
-                  type="button"
-                  size="sm"
-                  onClick={() => setIsDeleteDialogOpen(true)}
-                  disabled={isDeleting}
-                  className="hidden lg:flex hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
-                >
-                  {isDeleting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="hidden lg:block">
+                      <Button
+                        variant="destructive"
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        disabled={isDeleting || !isEditable}
+                        className="hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group disabled:opacity-50 disabled:scale-100"
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : !isEditable ? (
+                          <Lock className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                        )}
+                        Eliminar
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  {!isEditable && (
+                    <TooltipContent side="bottom" className="bg-destructive text-destructive-foreground border-none">
+                      <p>No se puede eliminar: Trimestre cerrado</p>
+                    </TooltipContent>
                   )}
-                  Eliminar
-                </Button>
+                </Tooltip>
 
                 <div className="hidden lg:block">
                   <ExportButton
@@ -570,15 +583,17 @@ function DocumentoPageContent() {
                 type="button"
                 size="sm"
                 onClick={() => setIsDeleteDialogOpen(true)}
-                disabled={isDeleting}
-                className="w-full hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group"
+                disabled={isDeleting || !isEditable}
+                className="w-full hover:bg-destructive/90 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 group disabled:opacity-50"
               >
                 {isDeleting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : !isEditable ? (
+                  <Lock className="mr-2 h-4 w-4" />
                 ) : (
                   <Trash2 className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
                 )}
-                Eliminar Documento
+                {isEditable ? 'Eliminar Documento' : 'Documento Bloqueado'}
               </Button>
 
               <ExportButton

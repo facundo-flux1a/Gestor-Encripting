@@ -35,9 +35,7 @@ function DocumentsPageContent() {
   const [key, setKey] = React.useState(0);
   const [isExportingPdf, setIsExportingPdf] = React.useState(false);
 
-  // 🔄 URL STATE SYNC
-  const currentTab = searchParams.get('tab') || 'sin-confirmar';
-  const [activeTab, setActiveTab] = React.useState(currentTab);
+  const tabFromUrl = searchParams.get('tab');
   const [isTabChanging, setIsTabChanging] = React.useState(false);
   const { toast } = useToast();
 
@@ -45,11 +43,6 @@ function DocumentsPageContent() {
   const [draggedDocs, setDraggedDocs] = React.useState<number[]>([]);
   const [dragOverTab, setDragOverTab] = React.useState<string | null>(null);
 
-  // Sincronizar estado local con URL si cambia externamente (back/forward)
-  React.useEffect(() => {
-    const tabFromUrl = searchParams.get('tab') || 'sin-confirmar';
-    setActiveTab(tabFromUrl);
-  }, [searchParams]);
 
   useDocumentEvents(() => {
     setKey(prevKey => prevKey + 1);
@@ -236,6 +229,20 @@ function DocumentsPageContent() {
     }));
   }, [companies]);
 
+  // ✅ REDIRECCIÓN DINÁMICA: Usar el tab de la URL o calcular el más relevante
+  const activeTab = React.useMemo(() => {
+    if (tabFromUrl) return tabFromUrl;
+
+    // Si entramos a /documents seco, priorizamos la que tenga chicha (datos)
+    if (loading || documents.length === 0) return 'sin-confirmar';
+
+    if (facturasRecibidas.length > 0) return 'recibidas';
+    if (facturasEmitidas.length > 0) return 'emitidas';
+    if (otrosDocumentos.length > 0) return 'otros';
+
+    return 'sin-confirmar';
+  }, [tabFromUrl, loading, documents.length, facturasRecibidas.length, facturasEmitidas.length, otrosDocumentos.length]);
+
   const currentDocuments = React.useMemo(() => {
     switch (activeTab) {
       case 'sin-confirmar':
@@ -253,7 +260,6 @@ function DocumentsPageContent() {
 
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
-      setActiveTab(value);
       setIsTabChanging(true);
 
       // Actualizar URL sin recargar

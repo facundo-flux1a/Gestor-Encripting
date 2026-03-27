@@ -740,7 +740,9 @@ export function DataTable<TData extends object, TValue>({
           </DropdownMenu>
           <ExportButton
             columns={table.getVisibleFlatColumns()}
-            data={table.getRowModel().rows}
+            data={table.getFilteredSelectedRowModel().rows.length > 0
+              ? table.getFilteredSelectedRowModel().rows
+              : table.getFilteredRowModel().rows}
             filename={filename}
             exportContext={exportContext}
             includeSummary={includeSummary}

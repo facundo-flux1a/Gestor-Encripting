@@ -121,8 +121,8 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
                 <TableCell className="max-w-[400px] font-semibold py-4" title={line.descripcion || ''}>
                     <div className="flex items-center gap-3">
                         <div className="relative flex-shrink-0">
-                            <Folder className={`w-6 h-6 ${isOpen ? 'text-primary' : 'text-muted-foreground'} fill-current opacity-20 transition-colors`} />
-                            <div className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[9px] font-bold px-1 rounded-sm min-w-[15px] h-[15px] flex items-center justify-center shadow-sm border border-background">
+                            <Folder className={`w-10 h-10 ${isOpen ? 'text-primary' : 'text-muted-foreground'} fill-current opacity-40 transition-colors`} />
+                            <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-sm font-black px-1.5 rounded-sm min-w-[26px] h-[26px] flex items-center justify-center shadow-xl border-2 border-background">
                                 {numberOfPurchases}
                             </div>
                         </div>
@@ -200,13 +200,16 @@ function ProductLineGroup({ group, providerFiscalId }: { group: DocumentLine[], 
 
             {isOpen && sortedGroup.map((child, idx) => (
                 <TableRow key={child.id || idx} className="bg-muted/5 hover:bg-muted/10 border-l-2 border-primary/30">
-                    <TableCell className="pl-12 text-xs py-3" colSpan={2}>
+                    <TableCell className="pl-12 text-xs py-3">
                         <div className="flex items-center gap-3">
                             <span className="text-foreground font-medium">{formatDate(child.fecha_emision)}</span>
                             <span className="text-muted-foreground opacity-30">|</span>
                             <span className="text-muted-foreground font-mono text-[10px]">{child.numero_documento || '-'}</span>
                             <span className="text-muted-foreground truncate opacity-70 italic max-w-[250px]">- {child.descripcion}</span>
                         </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-bold text-xs text-foreground/80">
+                        {Number(child.cantidad).toLocaleString('es-ES')}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium text-xs text-muted-foreground">
                         {formatCurrency(child.precio_unitario)}

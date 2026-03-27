@@ -577,6 +577,30 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
         rows.push([]);
 
+        const totalRowLabel = 'Total Gral. Facturado';
+        const totalRow: (string | number)[] = [totalRowLabel];
+
+        activeQuarters.forEach(q => {
+            const val = summaryData.total_real[q];
+            if (options?.format === 'excel') totalRow.push(val);
+            else totalRow.push(formatCurrency(val));
+        });
+
+        let sumTotalReal = 0;
+        if (options?.trimestre) {
+            sumTotalReal = summaryData.total_real[options.trimestre!];
+        } else {
+            sumTotalReal = summaryData.total_real.total;
+        }
+
+        if (options?.format === 'excel') totalRow.push(sumTotalReal);
+        else totalRow.push(formatCurrency(sumTotalReal));
+
+        rows.push(totalRow);
+
+        // SEPARATOR
+        rows.push([]);
+
         const hasRecargos = summaryData.recargos.total !== 0 || [1, 2, 3, 4].some(q => summaryData.recargos[q] !== 0);
         const hasRetenciones = summaryData.retenciones.total !== 0 || [1, 2, 3, 4].some(q => summaryData.retenciones[q] !== 0);
 
@@ -599,28 +623,6 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             rows.push(rowR);
         }
 
-        if (hasRecargos || hasRetenciones) rows.push([]);
-
-        const totalRowLabel = 'Total Gral. Facturado';
-        const totalRow: (string | number)[] = [totalRowLabel];
-
-        activeQuarters.forEach(q => {
-            const val = summaryData.total_real[q];
-            if (options?.format === 'excel') totalRow.push(val);
-            else totalRow.push(formatCurrency(val));
-        });
-
-        let sumTotalReal = 0;
-        if (options?.trimestre) {
-            sumTotalReal = summaryData.total_real[options.trimestre!];
-        } else {
-            sumTotalReal = summaryData.total_real.total;
-        }
-
-        if (options?.format === 'excel') totalRow.push(sumTotalReal);
-        else totalRow.push(formatCurrency(sumTotalReal));
-
-        rows.push(totalRow);
 
         // Espaciador entre tablas si hay varias
         rows.push([]);

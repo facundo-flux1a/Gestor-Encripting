@@ -1353,7 +1353,7 @@ export async function moveDocument(
 
     // Verificar que el documento existe y pertenece a una empresa del usuario
     const [docRows] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.id_de_empresa, e.id_de_usuario 
+      `SELECT d.id, d.id_de_empresa, e.id_de_usuario, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
          FROM documentos d
          JOIN empresas e ON d.id_de_empresa = e.id
          WHERE d.id = ? AND e.id_de_usuario = ? `,
@@ -1365,6 +1365,14 @@ export async function moveDocument(
       return {
         success: false,
         error: 'Documento no encontrado o no tienes permisos para moverlo'
+      };
+    }
+
+    if (docRows[0].trimestre_cerrado === 1) {
+      console.warn(`⚠️ [moveDocument] Intento de mover documento en trimestre cerrado: ${docRows[0].año_trimestre}Q${docRows[0].num_trimestre}`);
+      return {
+        success: false,
+        error: `No se puede mover el documento porque pertenece al trimestre ${docRows[0].año_trimestre}Q${docRows[0].num_trimestre}, el cual ya está cerrado.`
       };
     }
 
@@ -1450,9 +1458,9 @@ export async function deleteDocument(
       return { success: false, error: 'Usuario no autenticado' };
     }
 
-    // Verificar que el documento pertenece a una empresa del usuario
+    // Verificar que el documento pertenece a una empresa del usuario y si está cerrado
     const [docCheck] = await db.query<RowDataPacket[]>(
-      `SELECT d.id 
+      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
              WHERE d.id = ? AND e.id_de_usuario = ? `,
@@ -1462,6 +1470,15 @@ export async function deleteDocument(
     if (docCheck.length === 0) {
       console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
       return { success: false, error: 'Documento no encontrado' };
+    }
+
+    const docData = docCheck[0];
+    if (docData.trimestre_cerrado === 1) {
+      console.warn(`⚠️ [deleteDocument] Intento de borrar documento en trimestre cerrado: ${docData.año_trimestre}Q${docData.num_trimestre}`);
+      return {
+        success: false,
+        error: `No se puede eliminar el documento porque pertenece al trimestre ${docData.año_trimestre}Q${docData.num_trimestre}, el cual ya está cerrado.`
+      };
     }
 
     // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
@@ -2570,15 +2587,16 @@ export async function getDashboardAnalytics(
 ): Promise<DashboardAnalytics> {
   console.log('🔥 [getDashboardAnalytics] Parámetros recibidos:', { empresaIds, año, trimestre });
 
-  // Obtener CIFs dinámicamente
   let MY_COMPANY_FISCAL_IDS: string[] = [];
+  let MY_COMPANY_NAMES: string[] = [];
 
   if (empresaIds && empresaIds.length > 0) {
     const [empresasInfo] = await db.query<RowDataPacket[]>(
-      'SELECT cif FROM empresas WHERE id IN (?)',
+      'SELECT cif, nombre_de_empresa as nombre, nombre_fiscal FROM empresas WHERE id IN (?)',
       [empresaIds]
     );
     MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+    MY_COMPANY_NAMES = empresasInfo.flatMap(e => [e.nombre, e.nombre_fiscal]).filter(Boolean);
   }
 
   console.log('🏢 [getDashboardAnalytics] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
@@ -2627,6 +2645,10 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
 
   const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
     ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+    : "'NEVER_MATCH'";
+
+  const namePlaceholders = MY_COMPANY_NAMES.length > 0
+    ? MY_COMPANY_NAMES.map(() => '?').join(',')
     : "'NEVER_MATCH'";
 
   // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) en lugar de importe_sin_impuestos
@@ -3337,6 +3359,8 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE e.rol IN ('proveedor', 'emisor')
+          AND e.identificador_fiscal NOT IN (${cifPlaceholders})
+          AND e.nombre NOT IN (${namePlaceholders})
           AND d.importe_total > 0 -- Solo gastos positivos
           AND (
               (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -3350,6 +3374,8 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         ORDER BY totalSpent DESC
         LIMIT 5
     `, [
+    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_NAMES,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams
   ]);
@@ -4400,6 +4426,25 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
     await connection.beginTransaction();
 
     console.log(`🗑️[deleteDocuments] Eliminando ${ids.length} documentos para usuario ${userId} `);
+
+    // ✅ BLOQUEO DE TRIMESTRE CERRADO
+    const [closedCheck] = await connection.query<RowDataPacket[]>(`
+      SELECT d.id, d.num_trimestre, d.año_trimestre 
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE d.id IN (?) 
+        AND d.trimestre_cerrado = 1
+        AND (e.id_de_usuario = ? OR d.id_de_empresa IS NULL)
+    `, [ids, userId]);
+
+    if (closedCheck.length > 0) {
+      const firstLocked = closedCheck[0];
+      console.warn(`⚠️ [deleteDocuments] Bloqueo masivo: ${closedCheck.length} documentos en trimestres cerrados.`);
+      return {
+        success: false,
+        error: `No se pueden eliminar los documentos seleccionados porque ${closedCheck.length} de ellos pertenecen a trimestres cerrados (ej: ${firstLocked.año_trimestre}Q${firstLocked.num_trimestre}).`
+      };
+    }
 
     // Primero borramos dependencias
     await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (?)', [ids]);

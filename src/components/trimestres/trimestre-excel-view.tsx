@@ -601,23 +601,6 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             rows.push(totalBasesRow);
             rows.push(totalIvaRow);
 
-            if (summary.recargos.total !== 0) {
-                rows.push({
-                    concepto: 'Total Recargos',
-                    q1: summary.recargos[1], q2: summary.recargos[2], q3: summary.recargos[3], q4: summary.recargos[4],
-                    total: summary.recargos.total
-                });
-            }
-            if (summary.retenciones.total !== 0) {
-                rows.push({
-                    concepto: 'Total Retenciones',
-                    q1: summary.retenciones[1], q2: summary.retenciones[2], q3: summary.retenciones[3], q4: summary.retenciones[4],
-                    total: summary.retenciones.total
-                });
-            }
-
-
-
             // FACTURADO FINAL (REAL TOTAL - Sincronizado con Cards)
             const facturadoRow: any = {
                 concepto: 'Total Gral. Facturado',
@@ -633,6 +616,25 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             facturadoRow.total = summary.total_real.total;
 
             rows.push(facturadoRow);
+
+            // SEPARATOR ROW
+            rows.push({ concepto: ' ', isSectionHeader: false, q1: null, q2: null, q3: null, q4: null, total: null });
+
+            if (summary.recargos.total !== 0) {
+                rows.push({
+                    concepto: 'Total Recargos',
+                    q1: summary.recargos[1], q2: summary.recargos[2], q3: summary.recargos[3], q4: summary.recargos[4],
+                    total: summary.recargos.total
+                });
+            }
+            if (summary.retenciones.total !== 0) {
+                rows.push({
+                    concepto: 'Total Retenciones',
+                    q1: summary.retenciones[1], q2: summary.retenciones[2], q3: summary.retenciones[3], q4: summary.retenciones[4],
+                    total: summary.retenciones.total
+                });
+            }
+
             return rows;
         };
 
