@@ -33,7 +33,7 @@ export async function GET(
 
     // Verificar que la empresa pertenece al usuario
     const [empresaCheck] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [empresaId, user.id]
     );
 
@@ -102,7 +102,7 @@ export async function PATCH(
 
     // Verificar que la empresa pertenece al usuario
     const [empresaCheck] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [empresaId, user.id]
     );
 
@@ -117,7 +117,7 @@ export async function PATCH(
     // Verificar si el CIF ya existe en otra empresa (solo si viene en el body)
     if ('cif' in body && body.cif !== null && body.cif !== undefined && body.cif.trim()) {
       const [cifCheck] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE CIF = ? AND id_de_usuario = ? AND id != ?',
+        'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
         [body.cif.trim(), user.id, empresaId]
       );
 
@@ -200,7 +200,7 @@ export async function PATCH(
     const [result] = await db.query<ResultSetHeader>(
       `UPDATE empresas 
        SET ${fieldsToUpdate.join(', ')}
-       WHERE id = ? AND id_de_usuario = ?`,
+       WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
       values
     );
 

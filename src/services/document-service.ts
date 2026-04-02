@@ -300,7 +300,7 @@ export async function getCompanies(): Promise<Company[]> {
 
     console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
 
-    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario FROM empresas WHERE id_de_usuario = ? ORDER BY nombre_de_empresa ASC';
+    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY nombre_de_empresa ASC';
 
     console.log('📝 [getCompanies] Query:', query);
     console.log('📝 [getCompanies] Params:', [user.id]);
@@ -368,7 +368,7 @@ export async function createCompany(data: {
 
     // Verificar si ya existe una empresa con el mismo CIF para este usuario
     const [existingCompanies] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE CIF = ? AND id_de_usuario = ?',
+      'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [data.cif.trim(), user.id]
     );
 
@@ -390,7 +390,7 @@ export async function createCompany(data: {
 
     // Insertar la nueva empresa CON mail_de_carga y recargo
     const [result] = await db.query<OkPacket>(
-      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario) VALUES (?, ?, ?, ?, ?, JSON_ARRAY(?))',
       [
         data.name.trim(),
         data.nombreFiscal?.trim() || null,
@@ -471,7 +471,7 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
         ) as is_issued
       FROM documentos d
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      WHERE e.id_de_usuario = ?
+      WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
     const params: any[] = [user.id];
@@ -548,7 +548,7 @@ export async function getDocumentById(id: number): Promise<Document | null> {
         e.cif as empresa_cif
       FROM documentos d
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      WHERE d.id = ? AND e.id_de_usuario = ?
+      WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
     console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
@@ -596,7 +596,7 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
             JOIN incidencias_documento i ON d.id = i.documento_id
             LEFT JOIN empresas e ON d.id_de_empresa = e.id
             WHERE i.validado = 0 
-              AND e.id_de_usuario = ?
+              AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
   AND d.id_de_empresa IS NOT NULL
               AND d.id_de_empresa IN(?)
         `;
@@ -1356,7 +1356,7 @@ export async function moveDocument(
       `SELECT d.id, d.id_de_empresa, e.id_de_usuario, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
          FROM documentos d
          JOIN empresas e ON d.id_de_empresa = e.id
-         WHERE d.id = ? AND e.id_de_usuario = ? `,
+         WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
       [documentId, userId]
     );
 
@@ -1388,7 +1388,7 @@ export async function moveDocument(
 
     // Verificar que la nueva empresa existe y pertenece al usuario
     const [empresaRows] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [newEmpresaId, userId]
     );
 
@@ -1463,7 +1463,7 @@ export async function deleteDocument(
       `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
-             WHERE d.id = ? AND e.id_de_usuario = ? `,
+             WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
       [documentId, user.id]
     );
 
@@ -1521,7 +1521,7 @@ export async function deleteCompany(
 
     // Verificar que la empresa pertenece al usuario
     const [companyCheck] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [empresaId, userId]
     );
 
@@ -1550,7 +1550,7 @@ export async function deleteCompany(
 
     // Eliminar la empresa
     await db.query(
-      'DELETE FROM empresas WHERE id = ? AND id_de_usuario = ?',
+      'DELETE FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [empresaId, userId]
     );
 
@@ -2283,7 +2283,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
     const whereDocType = `AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
 
     // ✅ Filtro de empresas (ahora siempre presente)
-    const whereEmpresa = 'AND e2.id_de_usuario = ? AND d.id_de_empresa IN (?)';
+    const whereEmpresa = 'AND e2.JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND d.id_de_empresa IN (?)';
     const params: any[] = [user.id, empresaIds];
 
     const [summary] = await db.query<RowDataPacket[]>(`
@@ -3442,7 +3442,7 @@ export async function getTrimestresList(
   const conn = await db.getConnection();
 
   try {
-    let whereConditions = ['e.id_de_usuario = ?'];
+    let whereConditions = ['JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))'];
     const params: any[] = [userId];
 
     // Filtro por múltiples empresas usando IN
@@ -3720,7 +3720,7 @@ export async function getDocumentosByTrimestre(
     }
 
     let whereConditions = [
-      'e.id_de_usuario = ?',
+      'JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))',
       'd.año_trimestre = ?'
     ];
     const params: any[] = [userId, año];
@@ -3828,7 +3828,7 @@ export async function cerrarTrimestre(
     });
 
     let whereConditions = [
-      'e.id_de_usuario = ?',
+      'JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))',
       'd.año_trimestre = ?',
       'd.num_trimestre = ?',
       'd.trimestre_cerrado = 0',
@@ -3875,7 +3875,7 @@ d.trimestre_cerrado = 1,
     // PASO 2: Calcular estadísticas para la tabla trimestres
     // ═══════════════════════════════════════════════════════════
     let statsWhereConditions = [
-      'e.id_de_usuario = ?',
+      'JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))',
       'd.año_trimestre = ?',
       'd.num_trimestre = ?'
     ];
@@ -3897,14 +3897,14 @@ d.trimestre_cerrado = 1,
 
     if (empresaIdsToQuery.length > 0) {
       const [empresasInfo] = await conn.query<RowDataPacket[]>(
-        'SELECT cif FROM empresas WHERE id IN (?) AND id_de_usuario = ?',
+        'SELECT cif FROM empresas WHERE id IN (?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
         [empresaIdsToQuery, userId]
       );
       MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
     } else {
       // Si no hay empresa específica, obtener todas del usuario
       const [empresasInfo] = await conn.query<RowDataPacket[]>(
-        'SELECT cif FROM empresas WHERE id_de_usuario = ?',
+        'SELECT cif FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
         [userId]
       );
       MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
@@ -4192,7 +4192,7 @@ export async function getUserExports(userId: number): Promise<any[]> {
   try {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT * FROM exports 
-       WHERE id_de_usuario = ?
+       WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))
   ORDER BY fecha_generacion DESC 
        LIMIT 50`,
       [userId]
@@ -4285,7 +4285,7 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
 WHERE(e.rol = 'receptor' OR e.rol = 'cliente')
         AND e.nombre IS NOT NULL
         AND e.nombre != ''
-        AND emp.id_de_usuario = ?
+        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
   `;
 
     const params: any[] = [user.id];
@@ -4332,7 +4332,7 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
 WHERE(e.rol = 'proveedor' OR e.rol = 'emisor')
         AND e.nombre IS NOT NULL
         AND e.nombre != ''
-        AND emp.id_de_usuario = ?
+        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
   `;
 
     const params: any[] = [user.id];
@@ -4381,7 +4381,7 @@ export async function getUniqueDocumentTypes(
       JOIN empresas emp ON d.id_de_empresa = emp.id
       WHERE d.tipo_documento IS NOT NULL
         AND d.tipo_documento != ''
-        AND emp.id_de_usuario = ?
+        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
     `;
 
     const params: any[] = [user.id];
@@ -4434,7 +4434,7 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE d.id IN (?) 
         AND d.trimestre_cerrado = 1
-        AND (e.id_de_usuario = ? OR d.id_de_empresa IS NULL)
+        AND (JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     `, [ids, userId]);
 
     if (closedCheck.length > 0) {
@@ -4458,7 +4458,7 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
         DELETE d FROM documentos d 
         LEFT JOIN empresas e ON d.id_de_empresa = e.id 
         WHERE d.id IN(?)
-AND(e.id_de_usuario = ? OR d.id_de_empresa IS NULL)
+AND(JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     `, [ids, userId]);
 
     console.log(`✅[deleteDocuments] Eliminados: ${result.affectedRows} `);

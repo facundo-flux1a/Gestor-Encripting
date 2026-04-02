@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
        FROM documentos d
        JOIN empresas emp ON d.id_de_empresa = emp.id
        LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
-       WHERE emp.id_de_usuario = ? ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
+       WHERE JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON)) ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
        AND d.numero_documento IS NOT NULL 
        AND d.numero_documento != ''`,
       empresaId ? [session.userId, empresaId] : [session.userId]

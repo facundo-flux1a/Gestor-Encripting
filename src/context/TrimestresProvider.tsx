@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 
 type TrimestresContextType = {
   shouldShowTutorial: boolean;
@@ -19,13 +20,14 @@ const STORAGE_KEY = 'trimestres_tutorial_completed';
 export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const pathname = usePathname();
 
   useEffect(() => {
     async function checkTutorialStatus() {
       try {
         setIsLoading(true);
 
-        console.log('📚 [TrimestresProvider] Iniciando verificación de tutorial');
+        console.log('📚 [TrimestresProvider] Iniciando verificación de tutorial. Path:', pathname);
 
         // 1. Logear valor de localStorage
         if (typeof window !== 'undefined') {
@@ -41,7 +43,14 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
           const data = await response.json();
           console.log('📚 [TrimestresProvider] Respuesta servidor:', data);
 
-          const showTutorial = data.tutorial === true;
+          let showTutorial = data.tutorial === true;
+
+          // ✅ FORCE REPLAY CHECK
+          if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_trimestres') === 'true') {
+            console.log('🔄 [TrimestresProvider] Forzando tutorial por solicitud de usuario (Replay)');
+            showTutorial = true;
+          }
+
           console.log('📚 [TrimestresProvider] shouldShowTutorial:', showTutorial);
 
           setShouldShowTutorial(showTutorial);
@@ -65,7 +74,7 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
     }
 
     checkTutorialStatus();
-  }, []);
+  }, [pathname]);
 
   const markAsCompleted = useCallback(async () => {
     try {
@@ -88,6 +97,14 @@ export const TrimestresProvider = ({ children }: { children: ReactNode }) => {
 
       if (response.ok) {
         console.log('✅ [TrimestresProvider] Tutorial completado en servidor');
+        // Clear replay flag
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('force_tutorial_trimestres');
+          // ✅ REFRESH FORZADO SIEMPRE: Para limpiar el DOM/clases inyectadas por driver.js 
+          // y evitar que quede bloqueada la interfaz de usuario.
+          console.log('🔄 [TrimestresProvider] Forzando recarga de página para limpiar estado de replay');
+          window.location.reload();
+        }
       } else {
         console.error('❌ [TrimestresProvider] Error al completar en servidor:', response.status);
       }

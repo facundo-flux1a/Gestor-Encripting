@@ -45,7 +45,7 @@ export async function PATCH(request: Request) {
       `SELECT d.id, d.tipo_documento, e.id_de_usuario, d.trimestre_cerrado, d.año_trimestre, d.num_trimestre
        FROM erp49.documentos d
        INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
-       WHERE d.id IN (${placeholders}) AND e.id_de_usuario = ?`,
+       WHERE d.id IN (${placeholders}) AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [...idsToConfirm, session.userId]
     );
     console.log('✅ Filas encontradas:', (checkRows as any[]).length);

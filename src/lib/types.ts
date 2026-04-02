@@ -17,6 +17,7 @@ export const UserSchema = z.object({
   tutorial_incidencias: z.number().optional(),
   tutorial_proveedores: z.number().optional(),
   config_otros_tipos: z.string().nullable().optional(),
+  organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -32,6 +33,7 @@ export const SessionPayloadSchema = z.object({
   tutorialIndividual: z.number().optional(),
   tutorialIncidencias: z.number().optional(),
   tutorialProveedores: z.number().optional(),
+  organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 
@@ -225,7 +227,22 @@ export type Company = {
   cif?: string;
   mail_de_carga?: string | null;
   recargo?: boolean | number | null;
+  id_de_usuario?: number[] | string | null;
 };
+
+export const InvitationSchema = z.object({
+  id: z.number().optional(),
+  empresa_id: z.number(),
+  email: z.string().email(),
+  rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']),
+  status: z.enum(['PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED']).default('PENDING'),
+  token: z.string(),
+  metadata: z.any().nullable().optional(),
+  fecha_expiracion: z.string(),
+  fecha_creacion: z.string().optional(),
+});
+
+export type Invitation = z.infer<typeof InvitationSchema>;
 
 export type CreateDocumentPayload = {
   tipo_documento: string;

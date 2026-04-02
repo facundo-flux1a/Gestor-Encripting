@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useActividad } from '@/context/ActividadProvider';
+import { injectSkipButton, removeSkipButton } from "@/lib/tutorial-utils";
 
 export function ActividadTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialMode } = useActividad();
@@ -11,9 +13,19 @@ export function ActividadTutorial() {
   const hasRunRef = useRef(false);
   const lastStepRef = useRef(0);
 
+  const pathname = usePathname();
+
   useEffect(() => {
+    // Si hay un flag de "force_tutorial", permitimos que se ejecute de nuevo
+    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_actividad') === 'true') {
+      console.log('🔄 [ActividadTutorial] Flag de Replay detectado, reseteando hasRunRef');
+      hasRunRef.current = false;
+    }
+
     if (isLoading || !shouldShowTutorial || hasRunRef.current) {
-      console.log('📊 [ActividadTutorial] Esperando...', { isLoading, shouldShowTutorial, hasRun: hasRunRef.current });
+      if (!hasRunRef.current) {
+        console.log('📊 [ActividadTutorial] Esperando...', { isLoading, shouldShowTutorial });
+      }
       return;
     }
 
@@ -52,9 +64,9 @@ export function ActividadTutorial() {
 
     const driverInstance = driver({
       showProgress: true,
-      showButtons: ['next', 'previous'],
+      showButtons: ['next', 'previous', 'close'],
       animate: true,
-      allowClose: false,
+      allowClose: true,
       overlayOpacity: 0.75,
       // overlayClickNext: false,
       disableActiveInteraction: true, // ⬅️ CRÍTICO: Deshabilitar interacción con elementos highlighted
@@ -177,6 +189,12 @@ export function ActividadTutorial() {
           if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
         });
         document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+        injectSkipButton(() => {
+          markAsCompleted();
+          driverInstanceRef.current?.destroy();
+          removeSkipButton();
+        });
       },
 
       onNextClick: (element, step, options) => {
@@ -197,15 +215,10 @@ export function ActividadTutorial() {
       },
 
       onCloseClick: () => {
-        console.log('❌ [ActividadTutorial] onCloseClick');
-        const idx = driverInstance.getActiveIndex() ?? 0;
-        const totalSteps = driverInstance.getConfig().steps?.length ?? 0;
-
-        if (idx >= totalSteps - 2) {
-          markAsCompleted();
-        }
-
+        console.log('❌ [ActividadTutorial] onCloseClick - Marcando como completado');
+        markAsCompleted();
         driverInstance.destroy();
+        removeSkipButton();
       },
 
       onPrevClick: () => {
@@ -216,6 +229,7 @@ export function ActividadTutorial() {
       onDestroyStarted: () => {
         // 🎯 Desactivar modo tutorial (restaura filtros originales)
         setTutorialMode(false);
+        removeSkipButton();
 
         // Limpieza de clases del body
         document.body.classList.forEach(cls => {

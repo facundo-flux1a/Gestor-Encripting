@@ -40,7 +40,14 @@ export function IncidenciasProvider({ children }: { children: ReactNode }) {
           console.log('📊 [IncidenciasProvider] Respuesta servidor:', data);
           console.log('📊 [IncidenciasProvider] data.tutorial:', data.tutorial);
 
-          const showTutorial = data.tutorial === true;
+          let showTutorial = data.tutorial === true;
+
+          // ✅ FORCE REPLAY CHECK
+          if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_incidencias') === 'true') {
+            console.log('🔄 [IncidenciasProvider] Forzando tutorial por solicitud de usuario (Replay)');
+            showTutorial = true;
+          }
+
           console.log('📊 [IncidenciasProvider] shouldShowTutorial:', showTutorial);
 
           setShouldShowTutorial(showTutorial);
@@ -80,8 +87,19 @@ export function IncidenciasProvider({ children }: { children: ReactNode }) {
         method: 'POST',
       });
 
+      // Clear replay flag
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('force_tutorial_incidencias');
+      }
+
       setShouldShowTutorial(false);
       console.log('✅ [IncidenciasProvider] Tutorial marcado como completado');
+
+      // ✅ REFRESH FORZADO SIEMPRE: Para limpiar el DOM/clases inyectadas por driver.js 
+      if (typeof window !== 'undefined') {
+        console.log('🔄 [IncidenciasProvider] Forzando recarga de página para limpiar estado de DOM');
+        window.location.reload();
+      }
     } catch (error) {
       console.error('❌ [IncidenciasProvider] Error al marcar como completado:', error);
     }

@@ -12,6 +12,12 @@ import { PasswordEditDialog } from "@/components/settings/PasswordEditDialog";
 import db from "@/lib/db";
 import type { RowDataPacket } from "mysql2";
 import { redirect } from "next/navigation";
+import { getCompanies } from "@/services/document-service";
+import { getUsersByIds } from "@/services/user-service";
+import { TeamManagement } from "@/components/settings/TeamManagement";
+import { Company, Invitation } from "@/lib/types";
+import { getInvitationsByEmpresa } from "@/services/invitation-service";
+import { TutorialReplaySection } from "@/components/settings/TutorialReplaySection";
 
 async function handleLogout() {
     'use server';
@@ -32,6 +38,32 @@ export default async function SettingsPage() {
     );
     const isGoogleAccount = rows[0]?.password?.startsWith(GOOGLE_PASSWORD_MARKER);
 
+    // Obtener empresas y sus miembros
+    const userCompanies = await getCompanies();
+
+    // Resolver miembros e invitaciones para cada empresa
+    const companiesWithMembers = await Promise.all(userCompanies.map(async (company: Company) => {
+        let memberIds: number[] = [];
+        try {
+            const rawIds = (company as any).id_de_usuario;
+            memberIds = Array.isArray(rawIds) ? rawIds : JSON.parse(rawIds || '[]');
+        } catch (e) {
+            memberIds = [];
+        }
+
+        const [members, invitations] = await Promise.all([
+            getUsersByIds(memberIds),
+            getInvitationsByEmpresa(company.id)
+        ]);
+
+        return {
+            id: company.id,
+            name: company.name,
+            members: members as any[],
+            invitations: invitations
+        };
+    }));
+
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
@@ -40,6 +72,9 @@ export default async function SettingsPage() {
                 </MainLayoutHeader>
 
                 <div className="grid gap-6">
+                    {/* Gestión de Equipo */}
+                    <TeamManagement companies={companiesWithMembers} />
+
                     {/* Perfil de Usuario */}
                     <UserProfileForm
                         initialName={user.nombre}
@@ -65,6 +100,9 @@ export default async function SettingsPage() {
                             </Button>
                         </CardContent>
                     </Card>
+
+                    {/* Tutoriales / Replay */}
+                    <TutorialReplaySection />
 
                     {/* Seguridad / Password */}
                     <PasswordEditDialog isGoogleAccount={isGoogleAccount} />

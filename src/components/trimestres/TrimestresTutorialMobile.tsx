@@ -3,8 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 /**
  * Mobile version of TrimestresTutorial.
@@ -116,7 +118,14 @@ export function TrimestresTutorialMobile() {
         }
     };
 
+    const pathname = usePathname();
+
     useEffect(() => {
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_trimestres') === 'true') {
+            logToTerminal('🔄 [TRIMESTRES] Replay detectado, reseteando hasRunRef');
+            hasRunRef.current = false;
+        }
+
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
 
         const timeoutId = setTimeout(() => {
@@ -249,6 +258,13 @@ export function TrimestresTutorialMobile() {
                     } else {
                         document.body.removeAttribute('data-tutorial-step');
                     }
+
+                    injectSkipButton(() => {
+                        markAsCompleted();
+                        removeGlobalTouchBlocker();
+                        removeSkipButton();
+                        driverInstanceRef.current?.destroy();
+                    });
                 },
 
                 onNextClick: (element, step, options) => {
@@ -265,6 +281,7 @@ export function TrimestresTutorialMobile() {
                         markAsCompleted();
                         // Clean up blockers before destroying driver to avoid "locking"
                         removeGlobalTouchBlocker();
+                        removeSkipButton();
                         document.body.classList.forEach(cls => {
                             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                         });
@@ -275,13 +292,12 @@ export function TrimestresTutorialMobile() {
                 },
 
                 onCloseClick: () => {
+                    markAsCompleted();
                     removeGlobalTouchBlocker();
+                    removeSkipButton();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
-                    const idx = driverInstance.getActiveIndex() ?? 0;
-                    const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-                    if (idx >= totalStepsCount - 2) markAsCompleted();
                     driverInstance.destroy();
                 },
 

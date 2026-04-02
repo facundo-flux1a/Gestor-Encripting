@@ -6,8 +6,9 @@ import { jwtVerify } from 'jose';
 const publicRoutes = [
   '/auth/login',
   '/auth/register',
-  '/auth/forgot-password',      // 👈 NUEVA
-  '/auth/reset-password',        // 👈 NUEVA
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/accept-invitation',
 ];
 const rootRoute = '/';
 
@@ -39,10 +40,17 @@ export async function middleware(request: NextRequest) {
     await jwtVerify(sessionCookie.value, secretKey, {
       algorithms: ['HS256'],
     });
-    // ✅ Firma válida
 
-    // Si intenta acceder a login/register o root con sesión válida -> Redirect a dashboard
-    if (isPublicRoute || pathname === rootRoute) {
+    // 3. Casos especiales: Si ya tiene sesión, permitir login/register SOLO si hay un token de invitación
+    // para que pueda usar el flujo de "Cambiar de Cuenta" o "Validar Identidad".
+    const hasToken = request.nextUrl.searchParams.has('token') || request.nextUrl.searchParams.has('invite_token');
+
+    if (isPublicRoute) {
+      if (hasToken) return NextResponse.next(); // Permitir
+      return NextResponse.redirect(new URL('/dashboard', request.url)); // Forzar dashboard si no hay token
+    }
+
+    if (pathname === rootRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 

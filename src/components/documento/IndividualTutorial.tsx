@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { driver, type DriveStep } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useIndividual } from '@/context/IndividualProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 export function IndividualTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted } = useIndividual();
@@ -155,9 +156,9 @@ export function IndividualTutorial() {
 
     const driverInstance = driver({
       showProgress: true,
-      showButtons: ['next', 'previous'],
+      showButtons: ['next', 'previous', 'close'],
       animate: true,
-      allowClose: false,
+      allowClose: true,
       overlayOpacity: 0.75,
       // overlayClickNext: false,
       disableActiveInteraction: true,
@@ -171,6 +172,12 @@ export function IndividualTutorial() {
         const currentStepIndex = options.state.activeIndex ?? 0;
         lastStepRef.current = currentStepIndex;
         console.log('🎯 [IndividualTutorial] Paso:', currentStepIndex, element);
+
+        injectSkipButton(() => {
+          markAsCompleted();
+          removeSkipButton();
+          driverInstanceRef.current?.destroy();
+        });
       },
 
       onNextClick: (element, step, options) => {
@@ -192,14 +199,9 @@ export function IndividualTutorial() {
 
       onCloseClick: () => {
         console.log('❌ [IndividualTutorial] onCloseClick');
-        const idx = driverInstance.getActiveIndex() ?? 0;
-        const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-
-        if (idx >= totalStepsCount - 2) {
-          markAsCompleted();
-        }
-
+        markAsCompleted();
         driverInstance.destroy();
+        removeSkipButton();
       },
 
       onPrevClick: () => {
@@ -209,6 +211,7 @@ export function IndividualTutorial() {
 
       onDestroyStarted: () => {
         console.log('🏁 [IndividualTutorial] onDestroyStarted');
+        removeSkipButton();
         // Limpieza de clases del body
         document.body.classList.forEach(cls => {
           if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);

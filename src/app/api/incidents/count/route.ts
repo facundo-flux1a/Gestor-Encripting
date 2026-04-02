@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       JOIN incidencias_documento i ON d.id = i.documento_id
       JOIN empresas e ON d.id_de_empresa = e.id
       WHERE i.validado = 0 
-        AND e.id_de_usuario = ?`;
+        AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`;
 
         const params: any[] = [session.userId];
 

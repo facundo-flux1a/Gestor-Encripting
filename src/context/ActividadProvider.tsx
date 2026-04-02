@@ -76,7 +76,14 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
           const data = await response.json();
           console.log('📊 [ActividadProvider] Respuesta servidor:', data);
 
-          const showTutorial = data.tutorial === true;
+          let showTutorial = data.tutorial === true;
+
+          // ✅ FORCE REPLAY CHECK
+          if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_actividad') === 'true') {
+            console.log('🔄 [ActividadProvider] Forzando tutorial por solicitud de usuario (Replay)');
+            showTutorial = true;
+          }
+
           console.log('📊 [ActividadProvider] shouldShowTutorial:', showTutorial);
 
           setShouldShowTutorial(showTutorial);
@@ -139,6 +146,13 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
         console.log('✅ [ActividadProvider] Tutorial completado en servidor');
       } else {
         console.error('❌ [ActividadProvider] Error al completar en servidor:', response.status);
+      }
+
+      // 4. Limpiar bandera de replay si existe y forzar recarga
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('force_tutorial_actividad');
+        console.log('🔄 [ActividadProvider] Forzando recarga de página para limpiar estado de DOM');
+        window.location.reload();
       }
     } catch (error) {
       console.error('❌ [ActividadProvider] Error:', error);

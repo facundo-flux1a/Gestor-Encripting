@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useTutorial } from '@/context/tutorial-context';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 export function DashboardTutorial() {
   const { shouldShowTutorial, completeTutorial, skipTutorial, setIsTutorialActive, currentStep, setCurrentStep } = useTutorial();
@@ -68,7 +70,14 @@ export function DashboardTutorial() {
     }
   };
 
+  const pathname = usePathname();
+
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_dashboard') === 'true') {
+      console.log('🔄 [DashboardTutorial] Replay detectado, reseteando hasInitialized');
+      hasInitialized.current = false;
+    }
+
     if (!shouldShowTutorial) {
       if (driverInstance) {
         console.log('🛑 [DashboardTutorial] Destruyendo driver desde el efecto cleanup');
@@ -191,6 +200,11 @@ export function DashboardTutorial() {
             isStep2Active.current = false;
             removeSidebarBlocker();
           }
+
+          injectSkipButton(() => {
+            skipTutorial();
+            driverObj.destroy();
+          });
         },
 
         onNextClick: (element, step, options) => {
@@ -224,15 +238,11 @@ export function DashboardTutorial() {
         },
 
         onCloseClick: () => {
-          console.log('❌ [DashboardTutorial] onCloseClick invocado');
-          // Al cerrar, si estamos en el último paso o cerca, completamos
-          const currentIndex = driverObj.getActiveIndex() ?? 0;
-          const totalSteps = driverObj.getConfig().steps?.length ?? 0;
-          if (currentIndex >= totalSteps - 2) {
-            completeTutorial();
-          }
+          console.log('❌ [DashboardTutorial] onCloseClick - Marcando como completado y cerrando');
+          completeTutorial();
           driverObj.destroy();
           setIsTutorialActive(false);
+          removeSkipButton();
         },
 
         onPrevClick: () => driverObj.movePrevious(),
@@ -337,6 +347,7 @@ export function DashboardTutorial() {
           setDriverInstance(null);
 
           // Asegurar que las clases del body se limpien
+          removeSkipButton();
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) {
               document.body.classList.remove(cls);

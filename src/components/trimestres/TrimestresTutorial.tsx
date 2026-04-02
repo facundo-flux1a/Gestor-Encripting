@@ -3,8 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 export function TrimestresTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialState, setMostrarVacios } = useTrimestres();
@@ -33,7 +35,14 @@ export function TrimestresTutorial() {
     }
   };
 
+  const pathname = usePathname();
+
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_trimestres') === 'true') {
+      console.log('🔄 [TrimestresTutorial] Replay detectado, reseteando hasRunRef');
+      hasRunRef.current = false;
+    }
+
     if (isLoading || !shouldShowTutorial || hasRunRef.current) {
       if (isLoading || !shouldShowTutorial) {
         console.log('📊 [TrimestresTutorial] Esperando...', { isLoading, shouldShowTutorial });
@@ -228,6 +237,12 @@ export function TrimestresTutorial() {
           } else {
             document.body.removeAttribute('data-tutorial-step');
           }
+
+          injectSkipButton(() => {
+            markAsCompleted();
+            driverInstanceRef.current?.destroy();
+            removeSkipButton();
+          });
         },
 
         onNextClick: (element, step, options) => {
@@ -247,6 +262,7 @@ export function TrimestresTutorial() {
           } else if (idx === totalStepsCount - 1) {
             console.log('🏁 [TrimestresTutorial] Último paso alcanzado. Completando...');
             markAsCompleted();
+            removeSkipButton();
             setTimeout(() => {
               console.log('🧨 [TrimestresTutorial] Ejecutando destroy()');
               driverInstance.destroy();
@@ -257,15 +273,10 @@ export function TrimestresTutorial() {
         },
 
         onCloseClick: () => {
-          console.log('❌ [TrimestresTutorial] onCloseClick');
-          const idx = driverInstance.getActiveIndex() ?? 0;
-          const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-
-          if (idx >= totalStepsCount - 2) {
-            markAsCompleted();
-          }
-
+          console.log('❌ [TrimestresTutorial] onCloseClick - Marcando como completado');
+          markAsCompleted();
           driverInstance.destroy();
+          removeSkipButton();
         },
 
         onPrevClick: () => {
@@ -276,6 +287,7 @@ export function TrimestresTutorial() {
           console.log('🏁 [TrimestresTutorial] onDestroyStarted invocado');
           document.body.removeAttribute('data-tutorial-step');
           setTutorialState(false, 0);
+          removeSkipButton();
 
           // Asegurar que las clases del body se limpien
           document.body.classList.forEach(cls => {

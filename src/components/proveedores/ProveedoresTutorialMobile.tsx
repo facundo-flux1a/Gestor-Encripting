@@ -3,8 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { driver, type DriveStep } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useProveedores } from '@/context/ProveedoresProvider';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 /**
  * Mobile version of ProveedoresTutorial.
@@ -81,7 +83,14 @@ export function ProveedoresTutorialMobile() {
     const addTouchBlocker = () => { };
     const removeTouchBlocker = () => { };
 
+    const pathname = usePathname();
+
     useEffect(() => {
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_proveedores') === 'true') {
+            logToTerminal('🔄 [PROVEEDORES] Replay detectado, reseteando hasRunRef');
+            hasRunRef.current = false;
+        }
+
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
 
         const hasSelectedCompanies = selectedCompanyIds && selectedCompanyIds.length > 0;
@@ -128,9 +137,9 @@ export function ProveedoresTutorialMobile() {
                 nextBtnText: 'Siguiente →',
                 prevBtnText: '← Anterior',
                 doneBtnText: '¡Entendido!',
-                allowClose: false,
+                allowClose: true,
                 disableActiveInteraction: true,
-                showButtons: ['next', 'previous'],
+                showButtons: ['next', 'previous', 'close'],
                 animate: true,
                 overlayOpacity: 0.75,
                 onHighlightStarted: (element, step, options) => {
@@ -144,6 +153,13 @@ export function ProveedoresTutorialMobile() {
                     document.body.classList.add(`tutorial-step-${currentStepIndex}`);
 
                     addGlobalTouchBlocker();
+
+                    injectSkipButton(() => {
+                        markAsCompleted();
+                        removeGlobalTouchBlocker();
+                        removeSkipButton();
+                        driverInstanceRef.current?.destroy();
+                    });
                 },
                 onNextClick: (element, step, options) => {
                     const idx = options.state.activeIndex ?? 0;
@@ -151,6 +167,7 @@ export function ProveedoresTutorialMobile() {
                     if (idx === total - 1) {
                         markAsCompleted();
                         removeGlobalTouchBlocker();
+                        removeSkipButton();
                         document.body.classList.forEach(cls => {
                             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                         });
@@ -160,17 +177,13 @@ export function ProveedoresTutorialMobile() {
                     }
                 },
                 onCloseClick: () => {
-                    removeGlobalTouchBlocker();
-                    document.body.classList.forEach(cls => {
-                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
-                    });
-                    const idx = driverInstanceRef.current?.getActiveIndex() ?? 0;
-                    const totalStepsCount = textSteps.length;
-                    if (idx >= totalStepsCount - 2) markAsCompleted();
+                    markAsCompleted();
+                    removeSkipButton();
                     driverInstanceRef.current?.destroy();
                 },
                 onPrevClick: () => driverObj.movePrevious(),
                 onDestroyStarted: async () => {
+                    removeSkipButton();
                     removeGlobalTouchBlocker();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
@@ -218,9 +231,9 @@ export function ProveedoresTutorialMobile() {
                 nextBtnText: 'Siguiente →',
                 prevBtnText: '← Anterior',
                 doneBtnText: '¡Entendido!',
-                allowClose: false,
+                allowClose: true,
                 disableActiveInteraction: false,
-                showButtons: ['next', 'previous'],
+                showButtons: ['next', 'previous', 'close'],
                 animate: true,
                 overlayOpacity: 0.75,
                 onHighlightStarted: (element, step, options) => {
@@ -234,6 +247,13 @@ export function ProveedoresTutorialMobile() {
                     document.body.classList.add(`tutorial-step-${currentStepIndex}`);
 
                     addGlobalTouchBlocker();
+
+                    injectSkipButton(() => {
+                        markAsCompleted();
+                        removeGlobalTouchBlocker();
+                        removeSkipButton();
+                        driverInstanceRef.current?.destroy();
+                    });
                 },
                 onNextClick: (element, step, options) => {
                     const idx = options.state.activeIndex ?? 0;
@@ -241,6 +261,7 @@ export function ProveedoresTutorialMobile() {
                     if (idx === total - 1) {
                         markAsCompleted();
                         removeGlobalTouchBlocker();
+                        removeSkipButton();
                         document.body.classList.forEach(cls => {
                             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                         });
@@ -250,13 +271,8 @@ export function ProveedoresTutorialMobile() {
                     }
                 },
                 onCloseClick: () => {
-                    removeGlobalTouchBlocker();
-                    document.body.classList.forEach(cls => {
-                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
-                    });
-                    const idx = driverInstanceRef.current?.getActiveIndex() ?? 0;
-                    const totalStepsCount = visualSteps.length;
-                    if (idx >= totalStepsCount - 2) markAsCompleted();
+                    markAsCompleted();
+                    removeSkipButton();
                     driverInstanceRef.current?.destroy();
                 },
                 onPrevClick: () => driverObj.movePrevious(),

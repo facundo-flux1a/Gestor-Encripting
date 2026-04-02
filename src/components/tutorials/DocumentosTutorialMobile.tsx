@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTutorial } from '@/context/tutorial-context';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 /**
  * Mobile version of DocumentosTutorial.
@@ -36,13 +38,23 @@ export function DocumentosTutorialMobile() {
         selectedIdsRef.current = selectedCompanyIds;
     }, [selectedCompanyIds]);
 
+    const pathname = usePathname();
+
     useEffect(() => {
         const checkTutorial = async () => {
             try {
                 const response = await fetch('/api/user/tutorial-documentos');
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.tutorial) {
+                    let showTutorial = Boolean(data.tutorial);
+
+                    // ✅ FORCE REPLAY CHECK
+                    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_documentos') === 'true') {
+                        console.log('🔄 [DocumentosTutorialMobile] Forzando tutorial por solicitud de usuario (Replay)');
+                        showTutorial = true;
+                    }
+
+                    if (showTutorial) {
                         setLocalShouldShow(true);
                         setIsTutorialActive(true);
                         localStorage.removeItem('tutorial_document_uploaded');
@@ -54,7 +66,7 @@ export function DocumentosTutorialMobile() {
             }
         };
         checkTutorial();
-    }, [setIsTutorialActive]);
+    }, [setIsTutorialActive, pathname]);
 
     useEffect(() => {
         const handleDocumentUpload = () => {
@@ -230,6 +242,18 @@ export function DocumentosTutorialMobile() {
                             trigger.click();
                         }
                     }
+
+                    injectSkipButton(() => {
+                        fetch('/api/user/tutorial-documentos', { method: 'POST' })
+                            .then(() => {
+                                setLocalShouldShow(false);
+                                setIsTutorialActive(false);
+                                localStorage.removeItem('tutorial_document_uploaded');
+                                removeGlobalTouchBlocker();
+                                driverInstance?.destroy();
+                            })
+                            .catch(console.error);
+                    });
                 },
 
                 onNextClick: (element, step, options) => {
@@ -267,34 +291,41 @@ export function DocumentosTutorialMobile() {
                                     setLocalShouldShow(false);
                                     setIsTutorialActive(false);
                                     localStorage.removeItem('tutorial_document_uploaded');
+                                    // Clear replay flag
+                                    if (typeof window !== 'undefined') {
+                                        localStorage.removeItem('force_tutorial_documentos');
+                                    }
                                 }
                             })
                             .catch(console.error);
                         // Clean up blocker before destroying driver
                         removeGlobalTouchBlocker();
-                        setTimeout(() => driverObj.destroy(), 100);
+                        setTimeout(() => {
+                            driverObj.destroy();
+                            console.log('🔄 [DocumentosTutorialMobile] Forzando recarga de página');
+                            window.location.reload();
+                        }, 100);
                     } else {
                         driverObj.moveNext();
                     }
                 },
 
                 onCloseClick: () => {
-                    // Ensure all blockers and classes are cleaned up if user closes tutorial manually
+                    console.log('❌ [DocumentosTutorialMobile] onCloseClick');
+                    fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
+                    removeSkipButton();
                     removeGlobalTouchBlocker();
                     document.body.classList.remove('tutorial-active');
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
-                    const idx = driverObj.getActiveIndex() ?? 0;
-                    if (idx >= finalSteps.length - 2) {
-                        fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
-                    }
                     driverObj.destroy();
                     setIsTutorialActive(false);
                 },
 
                 onDestroyStarted: () => {
                     setIsTutorialActive(false);
+                    removeSkipButton();
                     removeGlobalTouchBlocker();
                     document.body.classList.remove('tutorial-active');
                     document.body.classList.forEach(cls => {

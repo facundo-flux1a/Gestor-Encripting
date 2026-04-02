@@ -6,6 +6,7 @@ import { CompanyProvider } from '@/context/CompanyProvider';
 import { TutorialProvider } from '@/context/tutorial-context';
 import { PreferencesProvider } from '@/contexts/preferences-context';
 import { UploadProgressManager } from '@/components/upload/upload-progress-card';
+import { cookies } from 'next/headers';
 import { getSession } from '@/services/auth-service';
 
 export const metadata: Metadata = {

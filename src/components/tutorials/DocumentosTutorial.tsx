@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTutorial } from '@/context/tutorial-context';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 export function DocumentosTutorial() {
   const {
@@ -32,13 +34,23 @@ export function DocumentosTutorial() {
     selectedIdsRef.current = selectedCompanyIds;
   }, [selectedCompanyIds]);
 
+  const pathname = usePathname();
+
   useEffect(() => {
     const checkTutorial = async () => {
       try {
         const response = await fetch('/api/user/tutorial-documentos');
         if (response.ok) {
           const data = await response.json();
-          if (data.tutorial) {
+          let showTutorial = Boolean(data.tutorial);
+
+          // ✅ FORCE REPLAY CHECK
+          if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_documentos') === 'true') {
+            console.log('🔄 [DocumentosTutorial] Forzando tutorial por solicitud de usuario (Replay)');
+            showTutorial = true;
+          }
+
+          if (showTutorial) {
             setLocalShouldShow(true);
             setIsTutorialActive(true);
             localStorage.removeItem('tutorial_document_uploaded');
@@ -50,7 +62,7 @@ export function DocumentosTutorial() {
       }
     };
     checkTutorial();
-  }, [setIsTutorialActive]);
+  }, [setIsTutorialActive, pathname]);
 
   useEffect(() => {
     const handleDocumentUpload = () => {
@@ -221,10 +233,18 @@ export function DocumentosTutorial() {
           lastStepRef.current = idx;
           setCurrentStep(idx);
 
-          document.body.classList.forEach(cls => {
-            if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
-          });
           document.body.classList.add(`tutorial-step-${idx}`);
+
+          injectSkipButton(() => {
+            fetch('/api/user/tutorial-documentos', { method: 'POST' })
+              .then(() => {
+                setLocalShouldShow(false);
+                setIsTutorialActive(false);
+                localStorage.removeItem('tutorial_document_uploaded');
+                driverObj.destroy();
+              })
+              .catch(console.error);
+          });
         },
 
         onNextClick: (element, step, options) => {
@@ -261,6 +281,10 @@ export function DocumentosTutorial() {
                   setLocalShouldShow(false);
                   setIsTutorialActive(false);
                   localStorage.removeItem('tutorial_document_uploaded');
+                  // Clear replay flag
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('force_tutorial_documentos');
+                  }
                   console.log('✅ [DocumentosTutorial] DB actualizada');
                 }
               })
@@ -268,8 +292,9 @@ export function DocumentosTutorial() {
 
             // ✅ Cierre de UI
             setTimeout(() => {
-              console.log('🧨 [DocumentosTutorial] Ejecutando destroy()');
+              console.log('🧨 [DocumentosTutorial] Ejecutando destroy() y forzando recarga para limpiar DOM');
               driverObj.destroy();
+              window.location.reload();
             }, 100);
           } else {
             driverObj.moveNext();
@@ -278,20 +303,16 @@ export function DocumentosTutorial() {
 
         onCloseClick: () => {
           console.log('❌ [DocumentosTutorial] onCloseClick');
-          const idx = driverObj.getActiveIndex() ?? 0;
-          const totalStepsCount = finalSteps.length;
-
-          if (idx >= totalStepsCount - 2) {
-            fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
-          }
-
+          fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
           driverObj.destroy();
           setIsTutorialActive(false);
+          removeSkipButton();
         },
 
         onDestroyStarted: () => {
           console.log('🏁 [DocumentosTutorial] onDestroyStarted');
           setIsTutorialActive(false);
+          removeSkipButton();
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
           });

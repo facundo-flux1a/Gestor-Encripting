@@ -9,11 +9,12 @@ import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
 import crypto from 'crypto';
+import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
+import { acceptInvitation } from './invitation-service';
 
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
-import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)
@@ -41,6 +42,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIndividual: z.number().optional(),
       tutorialIncidencias: z.number().optional(),
       tutorialProveedores: z.number().optional(),
+      organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
       exp: z.number(),
     }).safeParse(payload);
 
@@ -57,6 +59,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIndividual: parsedPayload.data.tutorialIndividual,
       tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
       tutorialProveedores: parsedPayload.data.tutorialProveedores,
+      organization_rol: (parsedPayload.data.organization_rol as "ADMIN" | "EDITOR" | "VIEWER") || 'EDITOR',
       expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
 
@@ -72,27 +75,19 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
   if (!sessionCookie) {
     const cookieStore = await cookies();
     sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    console.log('🍪 [getSession] Intentando obtener cookie:', {
-      existe: !!sessionCookie,
-      todas: cookieStore.getAll().map(c => c.name)
-    });
   }
 
   if (!sessionCookie) return null;
 
   const session = await decrypt(sessionCookie);
-  if (!session) {
-    return null;
-  }
+  if (!session) return null;
 
-  // ✅ AGREGADO: Verificar si el usuario sigue activo en la BD
   try {
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT activo, email FROM usuarios WHERE id = ?',
+      'SELECT activo FROM usuarios WHERE id = ?',
       [session.userId]
     );
 
-    // Robust check for BIT or TINYINT fields
     const isActive = rows[0] && (
       Buffer.isBuffer(rows[0].activo)
         ? rows[0].activo[0] === 1
@@ -100,16 +95,27 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     );
 
     if (!isActive) {
-      console.warn('⚠️ [getSession] Usuario inactivo:', session.userId);
+      console.warn(`⚠️ [getSession] Usuario ${session.userId} inactivo o eliminado. Limpiando cookie zombie.`);
+      try {
+        const cookieStore = await cookies();
+        cookieStore.delete(SESSION_COOKIE_NAME);
+      } catch (e) {
+        console.error("No se pudo borrar la cookie (quizás server component context):", e);
+      }
       return null;
     }
+    return session;
   } catch (error) {
-    console.error('❌ [getSession] Error verificando estado activo:', error);
-    // En caso de error de BD, permitir continuar para no romper la app
+    console.error('Error in getSession DB query:', error);
+    // Asumimos inactivo/error, es mejor borrar y forzar login
+    try {
+      const cookieStore = await cookies();
+      cookieStore.delete(SESSION_COOKIE_NAME);
+    } catch (e) { }
+    return null;
   }
-
-  return session;
 }
+
 export async function createSession(
   userId: number,
   email: string,
@@ -120,40 +126,24 @@ export async function createSession(
   tutorialActividad: number = 0,
   tutorialIndividual: number = 0,
   tutorialIncidencias: number = 0,
-  tutorialProveedores: number = 0
+  tutorialProveedores: number = 0,
+  organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR'
 ) {
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session = await encrypt({
-    userId,
-    email,
-    nombre,
-    tutorial,
-    tutorialDocumentos,
-    tutorialTrimestres,
-    tutorialActividad,
-    tutorialIndividual,
-    tutorialIncidencias,
-    tutorialProveedores,
-    expires
+    userId, email, nombre, tutorial,
+    tutorialDocumentos, tutorialTrimestres, tutorialActividad,
+    tutorialIndividual, tutorialIncidencias, tutorialProveedores,
+    organization_rol: organizationRol
   });
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, session, {
-    expires,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    expires,
+    sameSite: 'lax',
     path: '/',
-  });
-  console.log('🍪 [createSession] Cookie guardada:', {
-    name: SESSION_COOKIE_NAME,
-    path: '/',
-    tutorial,
-    tutorialDocumentos,
-    tutorialTrimestres,
-    tutorialActividad,
-    tutorialIndividual,
-    tutorialIncidencias,
-    tutorialProveedores
   });
 }
 
@@ -188,115 +178,74 @@ async function migratePasswordToHash(userId: number, plainPassword: string) {
 export async function login(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
-
-  console.log('🔍 [login] Intentando login con:', { email: email?.trim(), passwordLength: password?.length });
+  const inviteToken = formData.get('invite_token') as string;
 
   if (!email || !password) {
-    console.warn('⚠️ [login] Email o password vacíos');
     return redirect('/auth/login?error=invalid_credentials');
   }
 
   try {
-    // ✅ AGREGADO: Incluir campo "activo" en la consulta
     const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?',
+      'SELECT * FROM usuarios WHERE email = ?',
       [email.trim()]
     );
 
-    console.log('📊 [login] Usuarios encontrados con ese email:', rows.length);
-
     if (rows.length === 0) {
-      console.warn('⚠️ [login] No existe usuario con email:', email.trim());
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    const user = rows[0] as User & {
-      activo: number; // ✅ AGREGADO
-      tutorial_documentos?: number;
-      tutorial_trimestres?: number;
-      tutorial_actividad?: number;
-      tutorial_individual?: number;
-      tutorial_incidencias?: number;
-      tutorial_proveedores?: number;
-    };
-
-    // ✅ AGREGADO: Verificar si el usuario está activo
-    if (!user.activo || user.activo === 0) {
-      console.warn('⚠️ [login] Usuario inactivo:', email.trim());
-      return redirect('/auth/login?error=user_inactive');
-    }
-
-    // 🔥 DETECTAR SI ES CUENTA DE GOOGLE
-    if (user.password && user.password.startsWith(GOOGLE_PASSWORD_MARKER)) {
-      console.warn('⚠️ [login] Cuenta creada con Google - debe usar Google Sign In');
-      return redirect('/auth/login?error=google_account');
-    }
+    const user = rows[0];
 
     let passwordValid = false;
-    let isPlainText = false;
-
     if (user.password === password.trim()) {
-      console.log('✅ [login] Contraseña en texto plano válida');
+      // Migración automática si estaba en texto plano
+      await migratePasswordToHash(user.id, password.trim());
       passwordValid = true;
-      isPlainText = true;
     } else {
-      try {
-        passwordValid = await bcrypt.compare(password.trim(), user.password || '');
-        console.log('🔐 [login] Validación bcrypt:', passwordValid);
-      } catch (bcryptError) {
-        console.log('⚠️ [login] bcrypt falló:', bcryptError);
-        passwordValid = false;
-      }
+      passwordValid = await bcrypt.compare(password.trim(), user.password || '');
     }
 
     if (!passwordValid) {
-      console.warn('❌ [login] Contraseña incorrecta');
       return redirect('/auth/login?error=invalid_credentials');
     }
-
-    if (isPlainText) {
-      console.log('🔄 [login] Migrando contraseña a hash...');
-      await migratePasswordToHash(user.id, password.trim());
-    }
-
-    console.log('✅ [login] Contraseña correcta, creando sesión con:', {
-      tutorial: user.tutorial || 0,
-      tutorialDocumentos: user.tutorial_documentos || 0,
-      tutorialTrimestres: user.tutorial_trimestres || 0,
-      tutorialActividad: user.tutorial_actividad || 0,
-      tutorialIndividual: user.tutorial_individual || 0,
-      tutorialIncidencias: user.tutorial_incidencias || 0,
-      tutorialProveedores: user.tutorial_proveedores || 0
-    });
 
     await createSession(
       user.id,
       user.email,
       user.nombre,
-      user.tutorial || 0,
-      user.tutorial_documentos || 0,
-      user.tutorial_trimestres || 0,
-      user.tutorial_actividad || 0,
-      user.tutorial_individual || 0,
-      user.tutorial_incidencias || 0,
-      user.tutorial_proveedores || 0
+      user.tutorial,
+      user.tutorial_documentos,
+      user.tutorial_trimestres,
+      user.tutorial_actividad,
+      user.tutorial_individual,
+      user.tutorial_incidencias,
+      user.tutorial_proveedores,
+      user.organization_rol
     );
 
-  } catch (error: any) {
-    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
-      throw error;
+    if (inviteToken) {
+      console.log('🎁 [auth-service] Token de invitación detectado en LOGIN:', inviteToken);
+      const inviteResult = await acceptInvitation(inviteToken, user.id);
+      console.log('🎁 [auth-service] Resultado acceptInvitation en LOGIN:', inviteResult);
+      if (!inviteResult.success) {
+        // ... (keep redirect)
+        return redirect(`/auth/login?error=invitation_error&message=${encodeURIComponent(inviteResult.error || '')}`);
+      }
     }
-    console.error('❌ [login] Error:', error);
+
+    redirect('/dashboard');
+  } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;
+    console.error('Login error:', error);
     return redirect('/auth/login?error=server_error');
   }
-
-  redirect('/dashboard');
 }
 
 export async function register(formData: FormData) {
   const nombre = formData.get('name') as string;
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
+  const inviteToken = formData.get('invite_token') as string;
 
   if (!nombre || !email || !password) {
     return redirect('/auth/register?error=missing_fields');
@@ -309,9 +258,6 @@ export async function register(formData: FormData) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('🔐 [register] Contraseña hasheada para nuevo usuario');
-
-    // ✅ AGREGADO: activo = 1 por defecto al registrarse
     const [result] = await db.query<OkPacket>(
       'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
       [nombre, email, hashedPassword]
@@ -323,391 +269,176 @@ export async function register(formData: FormData) {
 
     await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
 
-  } catch (error: any) {
-    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
-      throw error;
+    if (inviteToken) {
+      console.log('🎁 [auth-service] Token de invitación detectado en REGISTER:', inviteToken);
+      const inviteResult = await acceptInvitation(inviteToken, newUserId);
+      console.log('🎁 [auth-service] Resultado acceptInvitation en REGISTER:', inviteResult);
     }
+
+    redirect('/dashboard');
+  } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;
     console.error('Registration error:', error);
     return redirect('/auth/register?error=server_error');
   }
-
-  redirect('/dashboard');
 }
 
 export async function handleGoogleSignInOnServer(
   firebaseUser: { uid: string, email: string | null, displayName: string | null }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { email, displayName } = firebaseUser;
+    const { email, displayName, uid } = firebaseUser;
     if (!email) {
       return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
     }
 
-    // ✅ AGREGADO: Incluir campo "activo" en la consulta
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, organization_rol FROM usuarios WHERE email = ?',
       [email]
     );
 
-    let user: User & {
-      activo?: number; // ✅ AGREGADO
-      tutorial_documentos?: number;
-      tutorial_trimestres?: number;
-      tutorial_actividad?: number;
-      tutorial_individual?: number;
-      tutorial_incidencias?: number;
-      tutorial_proveedores?: number;
-    };
-    let tutorialValue = 0;
-    let tutorialDocumentosValue = 0;
-    let tutorialTrimestresValue = 0;
-    let tutorialActividadValue = 0;
-    let tutorialIndividualValue = 0;
-    let tutorialIncidenciasValue = 0;
-    let tutorialProveedoresValue = 0;
-
+    let user;
     if (existingUsers.length > 0) {
-      user = existingUsers[0] as User & {
-        activo?: number;
-        tutorial_documentos?: number;
-        tutorial_trimestres?: number;
-        tutorial_actividad?: number;
-        tutorial_individual?: number;
-        tutorial_incidencias?: number;
-        tutorial_proveedores?: number;
-      };
-
-      // ✅ AGREGADO: Verificar si el usuario está activo
+      user = existingUsers[0];
       if (!user.activo || user.activo === 0) {
-        console.warn('⚠️ [handleGoogleSignIn] Usuario inactivo:', email);
         return { success: false, error: 'Usuario inactivo. Contacte al administrador.' };
       }
-
-      tutorialValue = user.tutorial || 0;
-      tutorialDocumentosValue = user.tutorial_documentos || 0;
-      tutorialTrimestresValue = user.tutorial_trimestres || 0;
-      tutorialActividadValue = user.tutorial_actividad || 0;
-      tutorialIndividualValue = user.tutorial_individual || 0;
-      tutorialIncidenciasValue = user.tutorial_incidencias || 0;
-      tutorialProveedoresValue = user.tutorial_proveedores || 0;
-      console.log('✅ [handleGoogleSignIn] Usuario existente encontrado:', user.id);
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
-
-      const googlePassword = GOOGLE_PASSWORD_MARKER + crypto.randomBytes(32).toString('hex');
-
-      console.log('🆕 [handleGoogleSignIn] Creando nuevo usuario de Google');
-
-      // ✅ AGREGADO: activo = 1 por defecto al crear con Google
       const [result] = await db.query<OkPacket>(
         'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
-        [nombre, email, googlePassword]
+        [nombre, email, GOOGLE_PASSWORD_MARKER + uid]
       );
-
+      const newUserId = result.insertId;
+      await createDefaultAIConfig(newUserId);
       user = {
-        id: result.insertId,
-        email,
-        nombre,
-        activo: 1,
-        tutorial: 1,
-        tutorial_documentos: 1,
-        tutorial_trimestres: 1,
-        tutorial_actividad: 1,
-        tutorial_individual: 1,
-        tutorial_incidencias: 1,
-        tutorial_proveedores: 1
+        id: newUserId, email, nombre,
+        tutorial: 1, tutorial_documentos: 1, tutorial_trimestres: 1,
+        tutorial_actividad: 1, tutorial_individual: 1, tutorial_incidencias: 1, tutorial_proveedores: 1,
+        organization_rol: 'EDITOR'
       };
-      tutorialValue = 1;
-      tutorialDocumentosValue = 1;
-      tutorialTrimestresValue = 1;
-      tutorialActividadValue = 1;
-      tutorialIndividualValue = 1;
-      tutorialIncidenciasValue = 1;
-      tutorialProveedoresValue = 1;
-
-      await createDefaultAIConfig(user.id);
-      console.log('✅ [handleGoogleSignIn] Usuario creado con ID:', user.id);
     }
 
     await createSession(
-      user.id,
-      user.email,
-      user.nombre,
-      tutorialValue,
-      tutorialDocumentosValue,
-      tutorialTrimestresValue,
-      tutorialActividadValue,
-      tutorialIndividualValue,
-      tutorialIncidenciasValue,
-      tutorialProveedoresValue
+      user.id, user.email, user.nombre,
+      user.tutorial, user.tutorial_documentos, user.tutorial_trimestres,
+      user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores,
+      user.organization_rol
     );
 
     return { success: true };
-
   } catch (error) {
-    console.error("❌ [handleGoogleSignIn] Error:", error);
-    return { success: false, error: 'Error del servidor al procesar el inicio de sesión con Google.' };
-  }
-}
-
-// ... resto de funciones sin cambios (completeTutorial, etc.)
-
-export async function completeTutorial() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorial] Actualizando tutorial para usuario:', session.userId);
-
-    console.log('📝 [completeTutorial] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorial] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      0,
-      session.tutorialDocumentos || 0,
-      session.tutorialTrimestres || 0,
-      session.tutorialActividad || 0,
-      session.tutorialIndividual || 0,
-      session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorial] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialDocumentos() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialDocumentos] Actualizando tutorial documentos para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialDocumentos] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_documentos = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialDocumentos] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      0,
-      session.tutorialTrimestres || 0,
-      session.tutorialActividad || 0,
-      session.tutorialIndividual || 0,
-      session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialDocumentos] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialTrimestres() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialTrimestres] Actualizando tutorial trimestres para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialTrimestres] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_trimestres = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialTrimestres] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      session.tutorialDocumentos || 0,
-      0,
-      session.tutorialActividad || 0,
-      session.tutorialIndividual || 0,
-      session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialTrimestres] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialActividad() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialActividad] Actualizando tutorial actividad para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialActividad] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_actividad = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialActividad] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      session.tutorialDocumentos || 0,
-      session.tutorialTrimestres || 0,
-      0,
-      session.tutorialIndividual || 0,
-      session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialActividad] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialIndividual() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialIndividual] Actualizando tutorial individual para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialIndividual] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_individual = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialIndividual] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      session.tutorialDocumentos || 0,
-      session.tutorialTrimestres || 0,
-      session.tutorialActividad || 0,
-      0,
-      session.tutorialIncidencias || 0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialIndividual] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialIncidencias() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialIncidencias] Actualizando tutorial incidencias para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialIncidencias] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_incidencias = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialIncidencias] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      session.tutorialDocumentos || 0,
-      session.tutorialTrimestres || 0,
-      session.tutorialActividad || 0,
-      session.tutorialIndividual || 0,
-      0,
-      session.tutorialProveedores || 0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialIncidencias] Error:', error);
-    throw error;
-  }
-}
-
-export async function completeTutorialProveedores() {
-  try {
-    const session = await getSession();
-
-    if (!session?.userId) {
-      throw new Error('No hay sesión activa');
-    }
-
-    console.log('📝 [completeTutorialProveedores] Actualizando tutorial proveedores para usuario:', session.userId);
-
-    console.log('📝 [completeTutorialProveedores] Ejecutando query UPDATE para usuario:', session.userId);
-    const [result]: any = await db.query(
-      'UPDATE usuarios SET tutorial_proveedores = 0 WHERE id = ?',
-      [session.userId]
-    );
-    console.log('✅ [completeTutorialProveedores] Resultado DB:', result);
-
-    await createSession(
-      session.userId,
-      session.email,
-      session.nombre,
-      session.tutorial || 0,
-      session.tutorialDocumentos || 0,
-      session.tutorialTrimestres || 0,
-      session.tutorialActividad || 0,
-      session.tutorialIndividual || 0,
-      session.tutorialIncidencias || 0,
-      0
-    );
-
-  } catch (error) {
-    console.error('❌ [completeTutorialProveedores] Error:', error);
-    throw error;
+    console.error('Google Sign-In error:', error);
+    return { success: false, error: 'Error interno del servidor' };
   }
 }
 
 export async function logout() {
-  console.log('🚪 [logout] Cerrando sesión del servidor');
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
-
   redirect('/auth/login?logout=true');
+}
+
+
+export const verifySession = getSession;
+
+/**
+ * Helper interno para actualizar campos de tutorial en DB y Sesión
+ */
+async function updateUserTutorialField(field: string, value: number = 0) {
+  try {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'No hay sesión' };
+
+    // Log persistence to a local file for debugging
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logMsg = `[${new Date().toISOString()}] USER: ${session.userId} | FIELD: ${field} | VALUE: ${value}\n`;
+      fs.appendFileSync(path.join(process.cwd(), 'tutorial-persistence.log'), logMsg);
+    } catch (e) { }
+
+    console.log(`🔄 [auth-service] Actualizando "${field}" a ${value} para usuario ${session.userId}`);
+
+    // 1. Actualizar en Base de Datos
+    const [result]: any = await db.query(
+      `UPDATE usuarios SET ${field} = ? WHERE id = ?`,
+      [value, session.userId]
+    );
+
+    if (result.affectedRows === 0) {
+      console.warn(`⚠️ [auth-service] El UPDATE no afectó a ninguna fila. ¿El usuario ${session.userId} existe?`);
+    } else {
+      console.log(`✅ [auth-service] DB actualizada: ${result.affectedRows} fila(s) afectada(s)`);
+    }
+
+    // 2. Re-crear sesión con el valor actualizado para sincronizar la cookie
+    // Obtenemos los valores actuales de la sesión
+    const updatedPayload = { ...session };
+
+    // Mapear el campo de DB al campo del payload de sesión
+    const fieldMap: Record<string, keyof typeof updatedPayload> = {
+      'tutorial': 'tutorial',
+      'tutorial_documentos': 'tutorialDocumentos',
+      'tutorial_trimestres': 'tutorialTrimestres',
+      'tutorial_actividad': 'tutorialActividad',
+      'tutorial_individual': 'tutorialIndividual',
+      'tutorial_incidencias': 'tutorialIncidencias',
+      'tutorial_proveedores': 'tutorialProveedores'
+    };
+
+    const payloadField = fieldMap[field];
+    if (payloadField) {
+      (updatedPayload as any)[payloadField] = value;
+    }
+
+    // Actualizar la cookie de sesión con todos los campos actuales para no perder datos
+    await createSession(
+      updatedPayload.userId,
+      updatedPayload.email,
+      updatedPayload.nombre,
+      updatedPayload.tutorial ?? 0,
+      updatedPayload.tutorialDocumentos ?? 0,
+      updatedPayload.tutorialTrimestres ?? 0,
+      updatedPayload.tutorialActividad ?? 0,
+      updatedPayload.tutorialIndividual ?? 0,
+      updatedPayload.tutorialIncidencias ?? 0,
+      updatedPayload.tutorialProveedores ?? 0,
+      (updatedPayload as any).organization_rol as any
+    );
+
+    console.log(`✅ [auth-service] ${field} actualizado exitosamente`);
+    return { success: true };
+  } catch (error) {
+    console.error(`❌ [auth-service] Error actualizando ${field}:`, error);
+    return { success: false, error };
+  }
+}
+
+export async function completeTutorial() {
+  return await updateUserTutorialField('tutorial', 0);
+}
+
+export async function completeTutorialDocumentos() {
+  return await updateUserTutorialField('tutorial_documentos', 0);
+}
+
+export async function completeTutorialTrimestres() {
+  return await updateUserTutorialField('tutorial_trimestres', 0);
+}
+
+export async function completeTutorialActividad() {
+  return await updateUserTutorialField('tutorial_actividad', 0);
+}
+
+export async function completeTutorialIndividual() {
+  return await updateUserTutorialField('tutorial_individual', 0);
+}
+
+export async function completeTutorialIncidencias() {
+  return await updateUserTutorialField('tutorial_incidencias', 0);
+}
+
+export async function completeTutorialProveedores() {
+  return await updateUserTutorialField('tutorial_proveedores', 0);
 }

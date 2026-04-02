@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useActividad } from '@/context/ActividadProvider';
+import { injectSkipButton, removeSkipButton } from "@/lib/tutorial-utils";
 
 /**
  * Mobile version of ActividadTutorial.
@@ -32,7 +34,14 @@ export function ActividadTutorialMobile() {
         }
     };
 
+    const pathname = usePathname();
+
     useEffect(() => {
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_actividad') === 'true') {
+            logToTerminal('🔄 [ACTIVIDAD] Replay detectado, reseteando hasRunRef');
+            hasRunRef.current = false;
+        }
+
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
 
         const checkForTable = setInterval(() => {
@@ -112,9 +121,9 @@ export function ActividadTutorialMobile() {
 
         const driverInstance = driver({
             showProgress: true,
-            showButtons: ['next', 'previous'],
+            showButtons: ['next', 'previous', 'close'],
             animate: true,
-            allowClose: false,
+            allowClose: true,
             overlayOpacity: 0.75,
             disableActiveInteraction: true,
 
@@ -208,6 +217,13 @@ export function ActividadTutorialMobile() {
                 document.body.classList.add(`tutorial-step-${currentStepIndex}`);
 
                 addGlobalTouchBlocker();
+
+                injectSkipButton(() => {
+                    markAsCompleted();
+                    removeGlobalTouchBlocker();
+                    removeSkipButton();
+                    driverInstanceRef.current?.destroy();
+                });
             },
 
             onNextClick: (element, step, options) => {
@@ -215,8 +231,8 @@ export function ActividadTutorialMobile() {
                 const total = driverInstance.getConfig().steps?.length ?? 0;
                 if (idx === total - 1) {
                     markAsCompleted();
-                    // Clean up blockers immediately to avoid "lock"
                     removeGlobalTouchBlocker();
+                    removeSkipButton();
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
@@ -227,14 +243,9 @@ export function ActividadTutorialMobile() {
             },
 
             onCloseClick: () => {
-                removeGlobalTouchBlocker();
-                document.body.classList.forEach(cls => {
-                    if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
-                });
-                const idx = driverInstance.getActiveIndex() ?? 0;
-                const total = driverInstance.getConfig().steps?.length ?? 0;
-                if (idx >= total - 2) markAsCompleted();
+                markAsCompleted();
                 driverInstance.destroy();
+                removeSkipButton();
             },
 
             onPrevClick: () => driverInstance.movePrevious(),

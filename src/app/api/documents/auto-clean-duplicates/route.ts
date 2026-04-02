@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
         d.tipo_documento
        FROM documentos d
        JOIN empresas e ON d.id_de_empresa = e.id
-       WHERE e.id_de_usuario = ? 
+       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) 
          ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
          AND d.numero_documento IS NOT NULL 
          AND d.numero_documento != ''

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT estado, url_archivo, nombre_archivo 
        FROM exports 
-       WHERE id = ? AND id_de_usuario = ?`,
+       WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
       [exportId, user.id]
     );
 

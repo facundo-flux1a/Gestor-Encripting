@@ -82,6 +82,12 @@ export function IndividualProvider({ children }: { children: ReactNode }) {
 
       setShouldShowTutorial(false);
       console.log('✅ [IndividualProvider] Tutorial marcado como completado');
+
+      // ✅ REFRESH FORZADO SIEMPRE: Para limpiar el DOM/clases inyectadas por driver.js 
+      if (typeof window !== 'undefined') {
+        console.log('🔄 [IndividualProvider] Forzando recarga de página para limpiar estado de DOM');
+        window.location.reload();
+      }
     } catch (error) {
       console.error('❌ [IndividualProvider] Error al marcar como completado:', error);
     }

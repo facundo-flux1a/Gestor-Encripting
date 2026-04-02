@@ -37,13 +37,30 @@ export async function getCurrentUser(): Promise<User | null> {
     }
   }
 
-  // The session now contains all the necessary user data
   return {
     id: session.userId,
     nombre: session.nombre,
     email: session.email,
     tutorial: session.tutorial,
   };
+}
+
+/**
+ * Obtiene los detalles básicos de una lista de usuarios por ID
+ */
+export async function getUsersByIds(ids: number[]): Promise<Partial<User>[]> {
+  if (!ids || ids.length === 0) return [];
+
+  const [rows] = await db.query<RowDataPacket[]>(
+    'SELECT id, nombre, email FROM usuarios WHERE id IN (?)',
+    [ids]
+  );
+
+  return rows.map(row => ({
+    id: row.id,
+    nombre: row.nombre,
+    email: row.email
+  }));
 }
 
 /**

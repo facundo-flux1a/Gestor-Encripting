@@ -30,7 +30,7 @@ export async function GET() {
         mail_de_carga,
         recargo
       FROM empresas 
-      WHERE id_de_usuario = ?
+      WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))
       ORDER BY nombre_de_empresa ASC`,
       [user.id]
     );

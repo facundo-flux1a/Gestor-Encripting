@@ -36,7 +36,15 @@ export function ProveedoresProvider({ children }: { children: React.ReactNode })
         const data = await response.json();
         console.log('📊 [ProveedoresProvider] Estado recibido:', data);
 
-        setShouldShowTutorial(data.shouldShow);
+        let showTutorial = data.shouldShow;
+
+        // ✅ FORCE REPLAY CHECK
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_proveedores') === 'true') {
+          console.log('🔄 [ProveedoresProvider] Forzando tutorial por solicitud de usuario (Replay)');
+          showTutorial = true;
+        }
+
+        setShouldShowTutorial(showTutorial);
 
         // Si ya está completado en servidor, guardarlo en localStorage
         if (!data.shouldShow) {
@@ -71,7 +79,13 @@ export function ProveedoresProvider({ children }: { children: React.ReactNode })
         throw new Error('Error al completar tutorial');
       }
 
+      // Clear replay flag y recargar 
       console.log('✅ [ProveedoresProvider] Tutorial completado exitosamente');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('force_tutorial_proveedores');
+        console.log('🔄 [ProveedoresProvider] Forzando recarga de página para limpiar estado de DOM');
+        window.location.reload();
+      }
 
     } catch (error) {
       console.error('❌ [ProveedoresProvider] Error al completar:', error);

@@ -3,8 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { driver, type DriveStep } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useProveedores } from '@/context/ProveedoresProvider';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { injectSkipButton, removeSkipButton } from "@/lib/tutorial-utils";
 
 export function ProveedoresTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted } = useProveedores();
@@ -13,7 +15,14 @@ export function ProveedoresTutorial() {
   const driverInstanceRef = useRef<ReturnType<typeof driver> | null>(null);
   const lastStepRef = useRef<number>(0);
 
+  const pathname = usePathname();
+
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_proveedores') === 'true') {
+      console.log('🔄 [ProveedoresTutorial] Replay detectado, reseteando hasRunRef');
+      hasRunRef.current = false;
+    }
+
     console.log('🔵 [ProveedoresTutorial] === INICIO useEffect ===');
     console.log('🔍 [ProveedoresTutorial] Estado actual:', {
       isLoading,
@@ -89,16 +98,22 @@ export function ProveedoresTutorial() {
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
         doneBtnText: '¡Entendido!',
-        allowClose: false,
+        allowClose: true,
         // overlayClickNext: false,
         disableActiveInteraction: false,
-        showButtons: ['next', 'previous'],
+        showButtons: ['next', 'previous', 'close'],
         animate: true,
         overlayOpacity: 0.75,
         onHighlightStarted: (element, step, options) => {
           const currentStepIndex = options.state.activeIndex ?? 0;
           lastStepRef.current = currentStepIndex;
           console.log('💡 [ProveedoresTutorial] Paso:', currentStepIndex + 1, '/', textSteps.length);
+
+          injectSkipButton(() => {
+            markAsCompleted();
+            removeSkipButton();
+            driverInstanceRef.current?.destroy();
+          });
         },
         onNextClick: (element, step, options) => {
           const currentIndex = options.state.activeIndex;
@@ -108,6 +123,12 @@ export function ProveedoresTutorial() {
         onPrevClick: () => {
           console.log('⬅️ [ProveedoresTutorial] Retrocediendo');
           driverObj.movePrevious();
+        },
+        onCloseClick: () => {
+          console.log('❌ [ProveedoresTutorial] onCloseClick');
+          markAsCompleted();
+          driverObj.destroy();
+          removeSkipButton();
         },
         onDestroyStarted: async () => {
           const finalStep = lastStepRef.current;
@@ -127,6 +148,7 @@ export function ProveedoresTutorial() {
             driverInstanceRef.current.destroy();
             driverInstanceRef.current = null;
           }
+          removeSkipButton();
         },
       });
 
@@ -235,16 +257,22 @@ export function ProveedoresTutorial() {
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
         doneBtnText: '¡Entendido!',
-        allowClose: false,
+        allowClose: true,
         // overlayClickNext: false,
         disableActiveInteraction: false,
-        showButtons: ['next', 'previous'],
+        showButtons: ['next', 'previous', 'close'],
         animate: true,
         overlayOpacity: 0.75,
         onHighlightStarted: (element, step, options) => {
           const currentStepIndex = options.state.activeIndex ?? 0;
           lastStepRef.current = currentStepIndex;
           console.log('💡 [ProveedoresTutorial] Paso:', currentStepIndex + 1, '/', visualSteps.length);
+
+          injectSkipButton(() => {
+            markAsCompleted();
+            removeSkipButton();
+            driverInstanceRef.current?.destroy();
+          });
         },
         onNextClick: (element, step, options) => {
           const idx = options.state.activeIndex ?? 0;
@@ -264,15 +292,10 @@ export function ProveedoresTutorial() {
         },
 
         onCloseClick: () => {
-          console.log('❌ [ProveedoresTutorial] onCloseClick');
-          const idx = driverObj.getActiveIndex() ?? 0;
-          const totalStepsCount = driverObj.getConfig().steps?.length ?? 0;
-
-          if (idx >= totalStepsCount - 2) {
-            markAsCompleted();
-          }
-
+          console.log('❌ [ProveedoresTutorial] onCloseClick - Marcando como completado');
+          markAsCompleted();
           driverObj.destroy();
+          removeSkipButton();
         },
 
         onPrevClick: () => {
@@ -282,6 +305,7 @@ export function ProveedoresTutorial() {
 
         onDestroyStarted: () => {
           console.log('🏁 [ProveedoresTutorial] onDestroyStarted');
+          removeSkipButton();
           // Limpieza de clases del body
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);

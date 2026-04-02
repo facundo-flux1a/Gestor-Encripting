@@ -233,12 +233,44 @@ function ForgotPasswordDialog() {
   );
 }
 
+function LoginFooter() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get('token');
+  const email = searchParams.get('email');
+  const registerUrl = token
+    ? `/auth/register?token=${token}${email ? `&email=${encodeURIComponent(email)}` : ''}`
+    : '/auth/register';
+
+  return (
+    <div className="mt-4 text-center text-sm">
+      ¿No tienes una cuenta?{' '}
+      <Link href={registerUrl} className="underline">
+        Regístrate
+      </Link>
+    </div>
+  );
+}
+
 function LoginForm() {
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('token');
+  const invitedEmail = searchParams.get('email');
+
   return (
     <form action={login} className="space-y-4">
+      {inviteToken && <input type="hidden" name="invite_token" value={inviteToken} />}
       <div className="space-y-2">
         <Label htmlFor="email">Correo Electrónico</Label>
-        <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          placeholder="tu@email.com"
+          defaultValue={invitedEmail || ''}
+          readOnly={!!inviteToken && !!invitedEmail}
+          className={inviteToken && invitedEmail ? "bg-muted cursor-not-allowed" : ""}
+          required
+        />
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -268,19 +300,18 @@ export default function LoginPage() {
           <Suspense>
             <LoginError />
           </Suspense>
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
           <div className="my-4 flex items-center">
             <div className="flex-grow border-t border-muted" />
             <span className="mx-4 flex-shrink text-xs uppercase text-muted-foreground">O</span>
             <div className="flex-grow border-t border-muted" />
           </div>
           <GoogleLoginButton />
-          <div className="mt-4 text-center text-sm">
-            ¿No tienes una cuenta?{' '}
-            <Link href="/auth/register" className="underline">
-              Regístrate
-            </Link>
-          </div>
+          <Suspense fallback={<div className="mt-4 text-center text-sm">¿No tienes una cuenta? <span className="underline">Regístrate</span></div>}>
+            <LoginFooter />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

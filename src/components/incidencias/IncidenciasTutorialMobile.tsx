@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { driver, type DriveStep } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useIncidencias } from '@/context/IncidenciasProvider';
+import { injectSkipButton, removeSkipButton } from "@/lib/tutorial-utils";
 
 /**
  * Mobile version of IncidenciasTutorial.
@@ -70,7 +72,14 @@ export function IncidenciasTutorialMobile() {
         overlayTouchBlockerRef.current = null;
     };
 
+    const pathname = usePathname();
+
     useEffect(() => {
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_incidencias') === 'true') {
+            logToTerminal('🔄 [INCIDENCIAS] Replay detectado, reseteando hasRunRef');
+            hasRunRef.current = false;
+        }
+
         if (isLoading || !shouldShowTutorial || hasRunRef.current) return;
 
         const checkForPage = setInterval(() => {
@@ -146,9 +155,9 @@ export function IncidenciasTutorialMobile() {
 
         const driverInstance = driver({
             showProgress: true,
-            showButtons: ['next', 'previous'],
+            showButtons: ['next', 'previous', 'close'],
             animate: true,
-            allowClose: false,
+            allowClose: true,
             overlayOpacity: 0.75,
             disableActiveInteraction: true,
             steps,
@@ -166,6 +175,13 @@ export function IncidenciasTutorialMobile() {
                 });
                 document.body.classList.add(`tutorial-step-${currentStepIndex}`);
                 addGlobalTouchBlocker();
+
+                injectSkipButton(() => {
+                    markAsCompleted();
+                    removeGlobalTouchBlocker();
+                    removeSkipButton();
+                    driverInstanceRef.current?.destroy();
+                });
             },
             onNextClick: (element, step, options) => {
                 const idx = options.state.activeIndex ?? 0;
@@ -173,19 +189,21 @@ export function IncidenciasTutorialMobile() {
                 if (idx === total - 1) {
                     markAsCompleted();
                     removeGlobalTouchBlocker();
+                    removeSkipButton();
                     setTimeout(() => driverInstance.destroy(), 100);
                 } else {
                     driverInstance.moveNext();
                 }
             },
             onCloseClick: () => {
-                removeGlobalTouchBlocker();
-                const idx = driverInstance.getActiveIndex() ?? 0;
-                if (idx >= steps.length - 2) markAsCompleted();
+                console.log('❌ [IncidenciasTutorialMobile] onCloseClick - Marcando como completado');
+                markAsCompleted();
+                removeSkipButton();
                 driverInstance.destroy();
             },
             onPrevClick: () => driverInstance.movePrevious(),
             onDestroyStarted: () => {
+                removeSkipButton();
                 removeGlobalTouchBlocker();
                 document.body.classList.forEach(cls => {
                     if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);

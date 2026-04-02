@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 
 type TutorialContextType = {
   shouldShowTutorial: boolean;
@@ -28,6 +29,7 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isTutorialActive, setIsTutorialActiveState] = useState(false);
   const [currentStep, setCurrentStepState] = useState(0);
+  const pathname = usePathname();
 
   // ✅ Cargar estado del tutorial desde localStorage al iniciar
   useEffect(() => {
@@ -94,13 +96,27 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
 
         if (response.ok) {
           const data = await response.json();
-          console.log('📚 [TutorialProvider] RESPUESTA COMPLETA:', data);
-          console.log('📚 [TutorialProvider] data.tutorial:', data.tutorial);
-          console.log('📚 [TutorialProvider] Tipo:', typeof data.tutorial);
+          let showTutorial = Boolean(data.tutorial);
 
-          const showTutorial = Boolean(data.tutorial);
+          // ✅ FORCE REPLAY CHECK (Reactive to all flags)
+          const forceFlags = [
+            'force_tutorial_dashboard',
+            'force_tutorial_documentos',
+            'force_tutorial_trimestres',
+            'force_tutorial_actividad',
+            'force_tutorial_incidencias',
+            'force_tutorial_proveedores'
+          ];
+
+          const hasForceFlag = typeof window !== 'undefined' && forceFlags.some(flag => localStorage.getItem(flag) === 'true');
+
+          if (hasForceFlag) {
+            console.log('🔄 [TutorialProvider] Forzando tutorial por solicitud de usuario (Replay)');
+            showTutorial = true;
+          }
+
           setShouldShowTutorial(showTutorial);
-          console.log('📚 [TutorialProvider] shouldShowTutorial final:', showTutorial);
+          console.log('📚 [TutorialProvider] shouldShowTutorial final:', showTutorial, 'Path:', pathname);
         }
       } catch (error) {
         console.error('❌ [TutorialProvider] Error obteniendo estado:', error);
@@ -111,7 +127,21 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
     }
 
     checkTutorialStatus();
-  }, []);
+  }, [pathname]);
+
+  const clearReplayFlags = () => {
+    if (typeof window !== 'undefined') {
+      const forceFlags = [
+        'force_tutorial_dashboard',
+        'force_tutorial_documentos',
+        'force_tutorial_trimestres',
+        'force_tutorial_actividad',
+        'force_tutorial_incidencias',
+        'force_tutorial_proveedores'
+      ];
+      forceFlags.forEach(flag => localStorage.removeItem(flag));
+    }
+  };
 
   const setIsTutorialActive = (active: boolean) => {
     console.log('🎯 [TutorialProvider] setIsTutorialActive:', active);
@@ -165,6 +195,20 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
 
   const completeTutorial = async () => {
     try {
+      // ✅ Detectar si es un "replay" forzado ANTES de limpiar las flags
+      let wasForced = false;
+      if (typeof window !== 'undefined') {
+        const forceFlags = [
+          'force_tutorial_dashboard',
+          'force_tutorial_documentos',
+          'force_tutorial_trimestres',
+          'force_tutorial_actividad',
+          'force_tutorial_incidencias',
+          'force_tutorial_proveedores'
+        ];
+        wasForced = forceFlags.some(flag => localStorage.getItem(flag) === 'true');
+      }
+
       const response = await fetch('/api/user/tutorial', {
         method: 'POST',
       });
@@ -176,6 +220,12 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
 
         if (typeof window !== 'undefined') {
           localStorage.removeItem(STORAGE_KEY);
+          clearReplayFlags();
+
+          // ✅ REFRESH FORZADO SIEMPRE: Para limpiar el DOM/clases inyectadas por driver.js 
+          // y evitar que quede bloqueada la interfaz de usuario.
+          console.log('🔄 [TutorialProvider] Forzando recarga de página para limpiar estado de replay');
+          window.location.reload();
         }
 
         console.log('✅ [TutorialProvider] Tutorial completado');

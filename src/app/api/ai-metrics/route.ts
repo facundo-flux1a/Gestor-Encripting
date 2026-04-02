@@ -22,7 +22,7 @@ export async function GET() {
 
     // Obtener IDs de empresas del usuario
     const [empresasRows] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM erp49.empresas WHERE id_de_usuario = ?',
+      'SELECT id FROM erp49.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [user.id]
     );
 

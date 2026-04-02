@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useTutorial } from '@/context/tutorial-context';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
 /**
  * Mobile version of DashboardTutorial.
@@ -137,7 +139,14 @@ export function DashboardTutorialMobile() {
         }
     };
 
+    const pathname = usePathname();
+
     useEffect(() => {
+        if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_dashboard') === 'true') {
+            logToTerminal('🔄 [DASHBOARD] Replay detectado, reseteando hasInitialized');
+            hasInitialized.current = false;
+        }
+
         if (!shouldShowTutorial) {
             if (driverInstance) {
                 driverInstance.destroy();
@@ -203,6 +212,13 @@ export function DashboardTutorialMobile() {
                             if (sidebar && trigger) trigger.click();
                         }
                     }, 100);
+
+                    injectSkipButton(() => {
+                        completeTutorial();
+                        removeGlobalTouchBlocker();
+                        driverObj.destroy();
+                        setIsTutorialActive(false);
+                    });
                 },
 
                 onNextClick: (element, step, options) => {
@@ -231,11 +247,10 @@ export function DashboardTutorialMobile() {
                 },
 
                 onCloseClick: () => {
-                    const currentIndex = driverObj.getActiveIndex() ?? 0;
-                    const totalSteps = driverObj.getConfig().steps?.length ?? 0;
-                    if (currentIndex >= totalSteps - 2) completeTutorial();
+                    completeTutorial();
                     driverObj.destroy();
                     setIsTutorialActive(false);
+                    removeSkipButton();
                 },
 
                 onPrevClick: () => driverObj.movePrevious(),
@@ -323,6 +338,7 @@ export function DashboardTutorialMobile() {
                 ],
 
                 onDestroyStarted: () => {
+                    removeSkipButton();
                     removeGlobalTouchBlocker();
                     setIsTutorialActive(false);
                     setDriverInstance(null);

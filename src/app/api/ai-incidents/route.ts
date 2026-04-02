@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Obtener empresas del usuario para validar permisos
     const [empresasRows] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM erp49.empresas WHERE id_de_usuario = ?',
+      'SELECT id FROM erp49.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
       [user.id]
     );
 
@@ -145,7 +145,7 @@ export async function DELETE(request: NextRequest) {
        FROM erp49.ai_incidencias_documento ai
        INNER JOIN erp49.documentos d ON ai.documento_id = d.id
        INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
-       WHERE ai.id = ? AND e.id_de_usuario = ?`,
+       WHERE ai.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [incidentId, user.id]
     );
 

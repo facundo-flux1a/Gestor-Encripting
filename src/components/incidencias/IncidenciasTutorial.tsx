@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { driver, type DriveStep } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { usePathname } from 'next/navigation';
 import { useIncidencias } from '@/context/IncidenciasProvider';
+import { injectSkipButton, removeSkipButton } from "@/lib/tutorial-utils";
 
 export function IncidenciasTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted } = useIncidencias();
@@ -11,9 +13,18 @@ export function IncidenciasTutorial() {
   const hasRunRef = useRef(false);
   const lastStepRef = useRef(0);
 
+  const pathname = usePathname();
+
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('force_tutorial_incidencias') === 'true') {
+      console.log('🔄 [IncidenciasTutorial] Replay detectado, reseteando hasRunRef');
+      hasRunRef.current = false;
+    }
+
     if (isLoading || !shouldShowTutorial || hasRunRef.current) {
-      console.log('📊 [IncidenciasTutorial] Esperando...', { isLoading, shouldShowTutorial, hasRun: hasRunRef.current });
+      if (!hasRunRef.current) {
+        console.log('📊 [IncidenciasTutorial] Esperando...', { isLoading, shouldShowTutorial });
+      }
       return;
     }
 
@@ -109,9 +120,9 @@ export function IncidenciasTutorial() {
 
     const driverInstance = driver({
       showProgress: true,
-      showButtons: ['next', 'previous'],
+      showButtons: ['next', 'previous', 'close'],
       animate: true,
-      allowClose: false,
+      allowClose: true,
       overlayOpacity: 0.75,
       disableActiveInteraction: true,
       steps,
@@ -129,6 +140,12 @@ export function IncidenciasTutorial() {
           if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
         });
         document.body.classList.add(`tutorial-step-${currentStepIndex}`);
+
+        injectSkipButton(() => {
+          markAsCompleted();
+          removeSkipButton();
+          driverInstanceRef.current?.destroy();
+        });
       },
 
       onNextClick: (element, step, options) => {
@@ -150,14 +167,9 @@ export function IncidenciasTutorial() {
 
       onCloseClick: () => {
         console.log('❌ [IncidenciasTutorial] onCloseClick');
-        const idx = driverInstance.getActiveIndex() ?? 0;
-        const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
-
-        if (idx >= totalStepsCount - 2) {
-          markAsCompleted();
-        }
-
+        markAsCompleted();
         driverInstance.destroy();
+        removeSkipButton();
       },
 
       onPrevClick: () => {
@@ -167,6 +179,7 @@ export function IncidenciasTutorial() {
 
       onDestroyStarted: () => {
         console.log('🏁 [IncidenciasTutorial] onDestroyStarted');
+        removeSkipButton();
         // Limpieza de clases del body
         document.body.classList.forEach(cls => {
           if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
