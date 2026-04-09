@@ -182,7 +182,7 @@ export default function RootPage() {
               <div className="lg:w-1/2 relative">
                 <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/10">
                   <img
-                    src="http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/dashland.png"
+                    src="/api/images/gestor-documental/dashland.png"
                     alt="Dashboard de analíticas"
                     className="w-full h-auto object-cover"
                   />
@@ -328,7 +328,7 @@ export default function RootPage() {
               </div>
               <div className="lg:w-3/5">
                 <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                  <img src="http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/dashland.png" alt="Dashboard" className="w-full h-auto" />
+                  <img src="/api/images/gestor-documental/dashland.png" alt="Dashboard" className="w-full h-auto" />
                 </div>
               </div>
             </div>
@@ -344,7 +344,7 @@ export default function RootPage() {
               </div>
               <div className="lg:w-3/5">
                 <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                  <img src="http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/triland.png" alt="Trimestres" className="w-full h-auto" />
+                  <img src="/api/images/gestor-documental/triland.png" alt="Trimestres" className="w-full h-auto" />
                 </div>
               </div>
             </div>
@@ -360,7 +360,7 @@ export default function RootPage() {
               </div>
               <div className="lg:w-3/5">
                 <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                  <img src="http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/docland.png" alt="Documentos" className="w-full h-auto" />
+                  <img src="/api/images/gestor-documental/docland.png" alt="Documentos" className="w-full h-auto" />
                 </div>
               </div>
             </div>
@@ -376,7 +376,7 @@ export default function RootPage() {
               </div>
               <div className="lg:w-3/5">
                 <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                  <img src="http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/prodland.png" alt="Productos" className="w-full h-auto" />
+                  <img src="/api/images/gestor-documental/prodland.png" alt="Productos" className="w-full h-auto" />
                 </div>
               </div>
             </div>

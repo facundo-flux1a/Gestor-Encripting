@@ -5,22 +5,22 @@ import { cn } from '@/lib/utils';
 
 const SCREENSHOTS = [
     {
-        src: 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/dashland.png',
+        src: '/api/images/gestor-documental/dashland.png',
         label: 'Dashboard',
         description: 'Analíticas financieras en tiempo real',
     },
     {
-        src: 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/triland.png',
+        src: '/api/images/gestor-documental/triland.png',
         label: 'Trimestres',
         description: 'Cuadro de mando fiscal interactivo',
     },
     {
-        src: 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/docland.png',
+        src: '/api/images/gestor-documental/docland.png',
         label: 'Documentos',
         description: 'Gestión completa de facturas y documentos',
     },
     {
-        src: 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000/gestor-documental/prodland.png',
+        src: '/api/images/gestor-documental/prodland.png',
         label: 'Productos',
         description: 'Tracking de líneas de producto por proveedor',
     },
