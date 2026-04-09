@@ -5,9 +5,7 @@ export default function PrivacyPage() {
                 Política de Privacidad
             </h1>
 
-            <p className="text-muted-foreground mb-6">
-                Última actualización: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
+
 
             <section className="space-y-6">
                 <p>
