@@ -46,20 +46,34 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 /**
- * Obtiene los detalles básicos de una lista de usuarios por ID
+ * Obtiene los detalles básicos de una lista de usuarios por ID e opcionalmente su rol en una empresa específica
  */
-export async function getUsersByIds(ids: number[]): Promise<Partial<User>[]> {
+export async function getUsersByIds(ids: number[], companyId?: number): Promise<Partial<User>[]> {
   if (!ids || ids.length === 0) return [];
 
   const [rows] = await db.query<RowDataPacket[]>(
-    'SELECT id, nombre, email FROM usuarios WHERE id IN (?)',
+    'SELECT id, nombre, email, organization_rol FROM usuarios WHERE id IN (?)',
     [ids]
   );
+
+  let rolesMap: Record<string, string> = {};
+  if (companyId) {
+    const [compRows] = await db.query<RowDataPacket[]>(
+      'SELECT config_roles FROM erp49.empresas WHERE id = ?',
+      [companyId]
+    );
+    if (compRows.length > 0 && compRows[0].config_roles) {
+      rolesMap = typeof compRows[0].config_roles === 'string'
+        ? JSON.parse(compRows[0].config_roles)
+        : compRows[0].config_roles;
+    }
+  }
 
   return rows.map(row => ({
     id: row.id,
     nombre: row.nombre,
-    email: row.email
+    email: row.email,
+    organization_rol: rolesMap[row.id.toString()] || row.organization_rol || 'EDITOR'
   }));
 }
 

@@ -94,7 +94,7 @@ const CreateCompanyFormComponent = React.memo(({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form id="create-company-form" onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="company-name" className="text-sm font-medium">
@@ -402,21 +402,8 @@ export function CompaniesSelector() {
     setAvailableCompanies(companies);
   }, [companies]);
 
-  React.useEffect(() => {
-    async function loadCompanies() {
-      try {
-        const response = await fetch('/api/companies');
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableCompanies(data);
-          setCompanies(data);
-        }
-      } catch (error) {
-        console.error('Error loading companies:', error);
-      }
-    }
-    loadCompanies();
 
+  React.useEffect(() => {
     // Cargar usuario para la pestaña de ajustes
     getSession().then(session => {
       if (session) {
@@ -427,7 +414,8 @@ export function CompaniesSelector() {
         });
       }
     });
-  }, [setCompanies]);
+  }, []);
+
 
   React.useEffect(() => {
     console.log('🔍 [useEffect z-index] Ejecutando:', {
@@ -968,7 +956,7 @@ export function CompaniesSelector() {
                 </Button>
                 <Button
                   onClick={() => {
-                    const form = document.querySelector('form');
+                    const form = document.getElementById('create-company-form');
                     if (form) {
                       const event = new Event('submit', { bubbles: true, cancelable: true });
                       form.dispatchEvent(event);
@@ -1056,7 +1044,7 @@ export function CompaniesSelector() {
                 </Button>
                 <Button
                   onClick={() => {
-                    const form = document.querySelector('form');
+                    const form = document.getElementById('create-company-form');
                     if (form) {
                       const event = new Event('submit', { bubbles: true, cancelable: true });
                       form.dispatchEvent(event);
@@ -1409,7 +1397,7 @@ export function CompaniesSelector() {
                         </Button>
                         <Button
                           onClick={() => {
-                            const form = document.querySelector('form');
+                            const form = document.getElementById('create-company-form');
                             if (form) {
                               const event = new Event('submit', { bubbles: true, cancelable: true });
                               form.dispatchEvent(event);

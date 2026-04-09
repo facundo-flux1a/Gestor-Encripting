@@ -51,33 +51,50 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
           fetch('/api/user/selected-companies'),
         ]);
 
-        if (!companiesRes.ok) throw new Error('Error al cargar empresas');
+        if (!companiesRes.ok) {
+          if (companiesRes.status === 401 || companiesRes.status === 403) {
+            // If it fails with Auth error, don't crash, let layout handle logout
+            return;
+          }
+          throw new Error('Error al cargar empresas');
+        }
 
         const data: Company[] = await companiesRes.json();
         const selectionData = selectionRes.ok ? await selectionRes.json() : { ids: [] };
 
-        console.log('🏢 [CompanyProvider] Empresas obtenidas del servidor:', data.length);
-        console.log('🔁 [CompanyProvider] Selección recuperada de Redis:', selectionData.ids);
-
         setCompanies(data);
 
-        // Restore only valid IDs (prevents stale IDs from a different account)
+        // Restore only valid IDs (prevents stale IDs from a different account or removed company)
         const validIds = data.map((c) => c.id);
         const restoredIds = (selectionData.ids as number[]).filter((id) =>
           validIds.includes(id)
         );
 
-        setSelectedCompanyIds(restoredIds);
-        console.log('✅ [CompanyProvider] Selección restaurada:', restoredIds);
+        setSelectedCompanyIds((prev) => {
+          // Only update if the length changed or arrays mismatch to prevent constant re-renders
+          if (prev.length !== restoredIds.length || prev.some(id => !restoredIds.includes(id))) {
+            return restoredIds;
+          }
+          return prev;
+        });
       } catch (error) {
         console.error('❌ [CompanyProvider] Error loading companies:', error);
-        setCompanies([]);
-        setSelectedCompanyIds([]);
+        // Only wipe on critical hard error, maybe keep old state if it's intermittent failure
       } finally {
         setIsLoading(false);
       }
     }
+
+    // Initial load
     loadCompanies();
+
+    // Revalidar al cambiar de pestaña y volver
+    const handleFocus = () => loadCompanies();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   // ─── Toggle + save ────────────────────────────────────────────────────────

@@ -815,18 +815,10 @@ export default function DashboardPage() {
                         {analytics.kpis.resultadoIva >= 0 ? '+' : ''}{formatCurrency(analytics.kpis.resultadoIva)}
                       </span>
                     </div>
-                    {(Number(analytics.kpis.recargoRepercutido) !== 0 || Number(analytics.kpis.recargoSoportado) !== 0) && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Recargos Netos:</span>
-                        <span className={(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)) >= 0 ? "text-green-600" : "text-red-600 font-medium"}>
-                          {(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)) >= 0 ? '+' : ''}{formatCurrency(Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado))}
-                        </span>
-                      </div>
-                    )}
                     <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                       <span>Total Liquidación:</span>
-                      <span className={(analytics.kpis.resultadoIva + (Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado))) >= 0 ? "text-green-600" : "text-red-600 font-bold"}>
-                        {formatCurrency(analytics.kpis.resultadoIva + (Number(analytics.kpis.recargoRepercutido) - Number(analytics.kpis.recargoSoportado)))}
+                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-red-600 font-bold"}>
+                        {formatCurrency(analytics.kpis.resultadoIva)}
                       </span>
                     </div>
                   </div>

@@ -228,6 +228,9 @@ export type Company = {
   mail_de_carga?: string | null;
   recargo?: boolean | number | null;
   id_de_usuario?: number[] | string | null;
+  config_roles?: any;
+  members?: any[];
+  invitations?: any[];
 };
 
 export const InvitationSchema = z.object({

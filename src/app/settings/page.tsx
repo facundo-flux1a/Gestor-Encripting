@@ -52,7 +52,7 @@ export default async function SettingsPage() {
         }
 
         const [members, invitations] = await Promise.all([
-            getUsersByIds(memberIds),
+            getUsersByIds(memberIds, company.id),
             getInvitationsByEmpresa(company.id)
         ]);
 
@@ -73,7 +73,7 @@ export default async function SettingsPage() {
 
                 <div className="grid gap-6">
                     {/* Gestión de Equipo */}
-                    <TeamManagement companies={companiesWithMembers} />
+                    <TeamManagement companies={companiesWithMembers} currentUser={user} />
 
                     {/* Perfil de Usuario */}
                     <UserProfileForm

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { FileText, Package, Loader2, List, Grid } from "lucide-react";
 import type { Document, DocumentLine, DocumentEntity } from "@/lib/types";
@@ -87,12 +87,17 @@ export function ProviderDetailClient({
         updateUrl(activeTab, val);
     };
 
+    // Stable ref so companies can be read inside the effect without being a dep
+    const companiesRef = useRef(companies);
+    useEffect(() => { companiesRef.current = companies; }, [companies]);
+
     useEffect(() => {
         async function reloadData() {
-            if (companies.length === 0) return;
+            const currentCompanies = companiesRef.current;
+            if (currentCompanies.length === 0) return;
             setIsLoadingData(true);
             try {
-                const empresaIds = selectedCompanyIds.length > 0 ? selectedCompanyIds : companies.map(c => c.id);
+                const empresaIds = selectedCompanyIds.length > 0 ? selectedCompanyIds : currentCompanies.map(c => c.id);
                 const fiscalId = initialProvider.identificador_fiscal || '';
                 const [newDocs, newProds, newAnalytics, newAllProds] = await Promise.all([
                     getDocumentsByProviderName(fiscalId, empresaIds),
@@ -111,7 +116,9 @@ export function ProviderDetailClient({
             }
         }
         reloadData();
-    }, [selectedCompanyIds, companies, initialProvider.identificador_fiscal]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCompanyIds, initialProvider.identificador_fiscal]);
+
 
     // ✅ REEMPLAZAMOS useEffect POR useMemo PARA EL FILTRADO
     const { filteredProducts, filteredAllProducts } = useMemo(() => {

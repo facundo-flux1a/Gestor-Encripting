@@ -300,7 +300,7 @@ export async function getCompanies(): Promise<Company[]> {
 
     console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
 
-    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY nombre_de_empresa ASC';
+    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario, config_roles FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY nombre_de_empresa ASC';
 
     console.log('📝 [getCompanies] Query:', query);
     console.log('📝 [getCompanies] Params:', [user.id]);
@@ -321,6 +321,8 @@ export async function getCompanies(): Promise<Company[]> {
       cif: row.CIF,
       mail_de_carga: row.mail_de_carga,
       recargo: !!row.recargo,
+      id_de_usuario: row.id_de_usuario,
+      config_roles: row.config_roles
     }));
 
     console.log('✅ [getCompanies] Empresas mapeadas:', companies);
@@ -388,16 +390,17 @@ export async function createCompany(data: {
       }
     }
 
-    // Insertar la nueva empresa CON mail_de_carga y recargo
+    const initialConfigRoles = JSON.stringify({ [user.id]: 'ADMIN' });
     const [result] = await db.query<OkPacket>(
-      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario) VALUES (?, ?, ?, ?, ?, JSON_ARRAY(?))',
+      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario, config_roles) VALUES (?, ?, ?, ?, ?, JSON_ARRAY(?), CAST(? AS JSON))',
       [
         data.name.trim(),
         data.nombreFiscal?.trim() || null,
         data.cif.trim(),
         data.mailDeCarga?.trim() || null,
         data.recargo ? 1 : 0,
-        user.id
+        user.id,
+        initialConfigRoles
       ]
     );
 
@@ -408,7 +411,17 @@ export async function createCompany(data: {
       name: data.name.trim(),
       nombreFiscal: data.nombreFiscal?.trim() || null,
       cif: data.cif.trim(),
-      recargo: !!data.recargo
+      recargo: !!data.recargo,
+      config_roles: {
+        [user.id.toString()]: 'ADMIN'
+      },
+      members: [{
+        id: user.id,
+        nombre: user.nombre,
+        email: user.email,
+        organization_rol: 'ADMIN' // Explicitly set instead of casting to avoid any missing imports
+      } as any],
+      invitations: []
     };
 
     // Revalidar las rutas relevantes

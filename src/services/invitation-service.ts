@@ -4,35 +4,35 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
 });
 
 export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string) {
-    try {
-        const token = crypto.randomUUID();
-        const fechaExpiracion = new Date();
-        fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
+  try {
+    const token = crypto.randomUUID();
+    const fechaExpiracion = new Date();
+    fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
-        const [emp] = await db.query<RowDataPacket[]>('SELECT nombre_de_empresa as nombre FROM empresas WHERE id = ?', [empresaId]);
-        const empresaNombre = emp[0]?.nombre || 'la empresa';
+    const [emp] = await db.query<RowDataPacket[]>('SELECT nombre_de_empresa as nombre FROM empresas WHERE id = ?', [empresaId]);
+    const empresaNombre = emp[0]?.nombre || 'la empresa';
 
-        await db.query(
-            'INSERT INTO invitaciones_empresa (empresa_id, email, rol, token, fecha_expiracion, metadata, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [empresaId, email, rol, token, fechaExpiracion.toISOString().slice(0, 19).replace('T', ' '), JSON.stringify({ senderName, empresaNombre }), 'PENDING']
-        );
+    await db.query(
+      'INSERT INTO invitaciones_empresa (empresa_id, email, rol, token, fecha_expiracion, metadata, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [empresaId, email, rol, token, fechaExpiracion.toISOString().slice(0, 19).replace('T', ' '), JSON.stringify({ senderName, empresaNombre }), 'PENDING']
+    );
 
-        const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${token}`;
+    const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${token}`;
 
-        await transporter.sendMail({
-            from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
-            to: email,
-            subject: `${senderName || 'Un compañero'} te invita a ${empresaNombre} — Gestor Documental`,
-            html: `<!DOCTYPE html>
+    await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: `${senderName || 'Un compañero'} te invita a ${empresaNombre} — Gestor Documental`,
+      html: `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f6f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -74,101 +74,109 @@ export async function createInvitation(empresaId: string, email: string, rol: st
   </table>
 </body>
 </html>`
-        });
+    });
 
-        return { success: true };
-    } catch (error) {
-        console.error('❌ [createInvitation] Error:', error);
-        return { success: false, error: 'No se pudo enviar la invitación' };
-    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [createInvitation] Error:', error);
+    return { success: false, error: 'No se pudo enviar la invitación' };
+  }
 }
 
 export async function acceptInvitation(token: string, userId: string | number) {
-    try {
-        console.log('🎁 [invitation-service] Intentando aceptar invitación:', { token, userId });
-        const [rows] = await db.query<RowDataPacket[]>(
-            'SELECT * FROM invitaciones_empresa WHERE token = ? AND status = ? AND fecha_expiracion > NOW()',
-            [token, 'PENDING']
-        );
+  try {
+    console.log('🎁 [invitation-service] Intentando aceptar invitación:', { token, userId });
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM invitaciones_empresa WHERE token = ? AND status = ? AND fecha_expiracion > NOW()',
+      [token, 'PENDING']
+    );
 
-        if (rows.length === 0) {
-            console.warn('⚠️ [invitation-service] Invitación no encontrada o inválida. Token:', token);
-            return { success: false, error: 'Invitación no encontrada, expirada o ya utilizada' };
-        }
-
-        const inv = rows[0];
-        console.log('✅ [invitation-service] Invitación válida para empresa:', inv.id_empresa || inv.empresa_id);
-
-        const empresaId = inv.id_empresa || inv.empresa_id;
-
-        const [empresaRows] = await db.query<RowDataPacket[]>('SELECT id_de_usuario FROM empresas WHERE id = ?', [empresaId]);
-        if (empresaRows.length > 0) {
-            let userIds = [];
-            try {
-                userIds = typeof empresaRows[0].id_de_usuario === 'string' ? JSON.parse(empresaRows[0].id_de_usuario || '[]') : (empresaRows[0].id_de_usuario || []);
-            } catch (e) {
-                userIds = [];
-            }
-            if (!Array.isArray(userIds)) userIds = [];
-
-            if (!userIds.includes(parseInt(String(userId)))) {
-                userIds.push(parseInt(String(userId)));
-            }
-
-            console.log('🏢 [invitation-service] Actualizando miembros:', userIds);
-            await db.query('UPDATE empresas SET id_de_usuario = ? WHERE id = ?', [JSON.stringify(userIds), empresaId]);
-        }
-
-        console.log('🏁 [invitation-service] Finalizando con UPDATE ACCEPTED para el token:', token);
-        const [updateResult]: any = await db.query(
-            'UPDATE invitaciones_empresa SET status = ? WHERE token = ?',
-            ['ACCEPTED', token]
-        );
-        console.log('🏁 [invitation-service] Filas actualizadas a ACCEPTED:', updateResult?.affectedRows);
-
-        return { success: true };
-    } catch (error: any) {
-        console.error('❌ [acceptInvitation] Error:', error);
-        return { success: false, error: error.message };
+    if (rows.length === 0) {
+      console.warn('⚠️ [invitation-service] Invitación no encontrada o inválida. Token:', token);
+      return { success: false, error: 'Invitación no encontrada, expirada o ya utilizada' };
     }
+
+    const inv = rows[0];
+    console.log('✅ [invitation-service] Invitación válida para empresa:', inv.id_empresa || inv.empresa_id);
+
+    const empresaId = inv.id_empresa || inv.empresa_id;
+
+    const [empresaRows] = await db.query<RowDataPacket[]>('SELECT id_de_usuario FROM erp49.empresas WHERE id = ?', [empresaId]);
+    if (empresaRows.length > 0) {
+      let userIds = [];
+      try {
+        userIds = typeof empresaRows[0].id_de_usuario === 'string' ? JSON.parse(empresaRows[0].id_de_usuario || '[]') : (empresaRows[0].id_de_usuario || []);
+      } catch (e) {
+        userIds = [];
+      }
+      if (!Array.isArray(userIds)) userIds = [];
+
+      if (!userIds.includes(parseInt(String(userId)))) {
+        userIds.push(parseInt(String(userId)));
+      }
+
+      console.log('🏢 [invitation-service] Actualizando miembros y roles:', { userIds, userId, rol: inv.rol });
+
+      // Actualizamos el array de IDs Y el objeto de roles
+      await db.query(
+        `UPDATE erp49.empresas SET 
+                 id_de_usuario = ?, 
+                 config_roles = JSON_SET(COALESCE(config_roles, JSON_OBJECT()), ?, ?) 
+                 WHERE id = ?`,
+        [JSON.stringify(userIds), `$."${userId}"`, inv.rol, empresaId]
+      );
+    }
+
+    console.log('🏁 [invitation-service] Finalizando con UPDATE ACCEPTED para el token:', token);
+    const [updateResult]: any = await db.query(
+      'UPDATE invitaciones_empresa SET status = ? WHERE token = ?',
+      ['ACCEPTED', token]
+    );
+    console.log('🏁 [invitation-service] Filas actualizadas a ACCEPTED:', updateResult?.affectedRows);
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ [acceptInvitation] Error:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 export async function revokeInvitation(invitationId: string) {
-    try {
-        await db.query('UPDATE invitaciones_empresa SET status = ? WHERE id = ?', ['REVOKED', invitationId]);
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
+  try {
+    await db.query('UPDATE invitaciones_empresa SET status = ? WHERE id = ?', ['REVOKED', invitationId]);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
 export async function deleteInvitation(invitationId: string) {
-    try {
-        await db.query('DELETE FROM invitaciones_empresa WHERE id = ?', [invitationId]);
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
+  try {
+    await db.query('DELETE FROM invitaciones_empresa WHERE id = ?', [invitationId]);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
 export async function resendInvitation(invitationId: string) {
-    try {
-        const [rows] = await db.query<RowDataPacket[]>(
-            'SELECT * FROM invitaciones_empresa WHERE id = ? AND status = ?',
-            [invitationId, 'PENDING']
-        );
-        if (rows.length === 0) {
-            return { success: false, error: 'Invitación no encontrada o no pendiente' };
-        }
-        const inv = rows[0];
-        const metadata = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata || '{}') : inv.metadata;
-        const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${inv.token}`;
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM invitaciones_empresa WHERE id = ? AND status = ?',
+      [invitationId, 'PENDING']
+    );
+    if (rows.length === 0) {
+      return { success: false, error: 'Invitación no encontrada o no pendiente' };
+    }
+    const inv = rows[0];
+    const metadata = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata || '{}') : inv.metadata;
+    const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${inv.token}`;
 
-        await transporter.sendMail({
-            from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
-            to: inv.email,
-            subject: `[Re-enviado] Invitación para unirte a ${metadata.empresaNombre || 'la empresa'}`,
-            html: `
+    await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
+      to: inv.email,
+      subject: `[Re-enviado] Invitación para unirte a ${metadata.empresaNombre || 'la empresa'}`,
+      html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
           <h2 style="color: #333; text-align: center;">Invitación Pendiente - Gestor Documental</h2>
           <p style="font-size: 16px; color: #555;">
@@ -187,36 +195,36 @@ export async function resendInvitation(invitationId: string) {
             Enviado por Gestor Documental
           </p>
         </div>`
-        });
+    });
 
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
 export async function getInvitationByToken(token: string) {
-    try {
-        const [rows] = await db.query<RowDataPacket[]>(
-            'SELECT i.*, e.nombre_de_empresa FROM invitaciones_empresa i JOIN empresas e ON i.empresa_id = e.id WHERE i.token = ? AND i.status = "PENDING" AND i.fecha_expiracion > NOW()',
-            [token]
-        );
-        return rows[0] || null;
-    } catch (e: any) {
-        console.error('❌ [getInvitationByToken] Error:', e);
-        return null;
-    }
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT i.*, e.nombre_de_empresa FROM invitaciones_empresa i JOIN empresas e ON i.empresa_id = e.id WHERE i.token = ? AND i.status = "PENDING" AND i.fecha_expiracion > NOW()',
+      [token]
+    );
+    return rows[0] || null;
+  } catch (e: any) {
+    console.error('❌ [getInvitationByToken] Error:', e);
+    return null;
+  }
 }
 
 export async function getInvitationsByEmpresa(empresaId: string | number) {
-    try {
-        const [rows] = await db.query<RowDataPacket[]>(
-            'SELECT * FROM invitaciones_empresa WHERE empresa_id = ? ORDER BY id DESC',
-            [empresaId]
-        );
-        return rows as any[];
-    } catch (e: any) {
-        console.error('❌ [getInvitationsByEmpresa] Error:', e);
-        return [];
-    }
+  try {
+    const [rows] = await db.query<RowDataPacket[]>(
+      'SELECT * FROM invitaciones_empresa WHERE empresa_id = ? ORDER BY id DESC',
+      [empresaId]
+    );
+    return rows as any[];
+  } catch (e: any) {
+    console.error('❌ [getInvitationsByEmpresa] Error:', e);
+    return [];
+  }
 }
