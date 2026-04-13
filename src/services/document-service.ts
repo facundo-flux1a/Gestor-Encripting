@@ -1664,27 +1664,30 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     )
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
 
-  // ✅ PASO 1: Obtener proveedores y documentos
+  // ✅ PASO 1: Obtener proveedores, documentos y configuración contable
   const [providerRows] = await db.query<any[]>(`
-SELECT
-e.nombre,
-  e.rol,
-  e.identificador_fiscal,
-  e.direccion,
-  e.telefono,
-  e.email,
-  e.datos_extra,
-  e.fecha_creacion,
-  emp.nombre_de_empresa AS empresaNombre,
-    d.id as documento_id,
-    d.importe_total
+      SELECT
+        e.nombre,
+        e.rol,
+        e.identificador_fiscal,
+        e.direccion,
+        e.telefono,
+        e.email,
+        e.datos_extra,
+        e.fecha_creacion,
+        emp.nombre_de_empresa AS empresaNombre,
+        d.id as documento_id,
+        d.importe_total,
+        ec.cuenta_compra,
+        ec.cuenta_venta
       FROM entidades_documento e
       JOIN documentos d ON e.documento_id = d.id
       JOIN empresas emp ON d.id_de_empresa = emp.id
-      WHERE e.rol IN('proveedor', 'emisor')
-        AND d.id_de_empresa IN(${placeholders})
+      LEFT JOIN entidades_config ec ON ec.identificador_fiscal = e.identificador_fiscal AND ec.empresa_id = d.id_de_empresa
+      WHERE e.rol IN ('proveedor', 'emisor')
+        AND d.id_de_empresa IN (${placeholders})
         ${whereDocType}
-`, companyIds);
+  `, companyIds);
 
   console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
 
@@ -1722,6 +1725,8 @@ documento_id,
     email: string | null;
     datos_extra: any;
     fecha_creacion: string | null;
+    cuenta_compra: string | null;
+    cuenta_venta: string | null;
     empresas: Set<string>;
     totalSpent: number;
     documentos: Set<number>;
@@ -1741,6 +1746,8 @@ documento_id,
         email: row.email,
         datos_extra: row.datos_extra,
         fecha_creacion: row.fecha_creacion,
+        cuenta_compra: row.cuenta_compra,
+        cuenta_venta: row.cuenta_venta,
         empresas: new Set(),
         totalSpent: 0,
         documentos: new Set(),
@@ -1797,6 +1804,8 @@ documento_id,
       datos_extra: p.datos_extra || null,
       fecha_creacion: p.fecha_creacion || null,
       empresaNombre: empresaNombre,
+      cuenta_compra: p.cuenta_compra || null,
+      cuenta_venta: p.cuenta_venta || null,
     };
   });
 

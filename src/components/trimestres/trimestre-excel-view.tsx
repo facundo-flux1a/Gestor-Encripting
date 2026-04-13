@@ -774,8 +774,9 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                                 <div className="p-1.5 bg-blue-500/20 rounded text-blue-400"><LayoutGrid size={14} /></div>
                                                 VISTA UNIFICADA (ANÁLISIS GLOBAL)
                                             </h3>
-                                            <div className="h-[800px] w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800">
+                                            <div className="w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800">
                                                 <AgGridReact
+                                                    domLayout="autoHeight"
                                                     theme={darkTheme}
                                                     rowData={gridData.rowDataUnified}
                                                     columnDefs={columnDefs}
@@ -799,8 +800,9 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                         >
                                             <div className="space-y-2">
                                                 <h3 className="text-sm font-bold text-emerald-500 mb-2 uppercase tracking-tight">Recaudación de Ingresos (Emitidas)</h3>
-                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
                                                     <AgGridReact
+                                                        domLayout="autoHeight"
                                                         theme={darkTheme}
                                                         rowData={gridData.rowDataIngresos}
                                                         columnDefs={columnDefs}
@@ -812,8 +814,9 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
 
                                             <div className="space-y-2">
                                                 <h3 className="text-sm font-bold text-rose-500 mb-2 uppercase tracking-tight">Registro de Gastos (Recibidas)</h3>
-                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
                                                     <AgGridReact
+                                                        domLayout="autoHeight"
                                                         theme={darkTheme}
                                                         rowData={gridData.rowDataGastos}
                                                         columnDefs={columnDefs}
@@ -825,8 +828,9 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
 
                                             <div className="space-y-2">
                                                 <h3 className="text-sm font-bold text-blue-500 mb-2 uppercase tracking-tight">Balance Neto Anual</h3>
-                                                <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
                                                     <AgGridReact
+                                                        domLayout="autoHeight"
                                                         theme={darkTheme}
                                                         rowData={gridData.rowDataNeto}
                                                         columnDefs={columnDefs}

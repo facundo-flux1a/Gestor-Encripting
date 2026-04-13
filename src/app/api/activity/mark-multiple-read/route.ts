@@ -37,8 +37,7 @@ export async function PATCH(request: NextRequest) {
                 `SELECT a.id, a.parent_upload_id
          FROM erp49.actividad a
          INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-         INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-         WHERE a.id = ? AND u.id = ?`,
+         WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
                 [activityId, session.userId]
             );
 
@@ -56,9 +55,8 @@ export async function PATCH(request: NextRequest) {
             const [result] = await connection.query(
                 `UPDATE erp49.actividad a
          INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-         INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
          SET a.is_new = 0
-         WHERE a.id = ? AND u.id = ? AND a.is_new = 1`,
+         WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
                 [activityId, session.userId]
             );
 
@@ -83,8 +81,7 @@ export async function PATCH(request: NextRequest) {
                 `SELECT COUNT(*) as unread_count
          FROM erp49.actividad a
          INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-         INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-         WHERE a.parent_upload_id = ? AND u.id = ? AND a.is_new = 1`,
+         WHERE a.parent_upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
                 [parentUploadId, session.userId]
             );
 
@@ -98,9 +95,8 @@ export async function PATCH(request: NextRequest) {
                 const [parentResult] = await connection.query(
                     `UPDATE erp49.actividad a
            INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-           INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
            SET a.is_new = 0
-           WHERE a.upload_id = ? AND u.id = ? AND a.parent_upload_id IS NULL AND a.is_new = 1`,
+           WHERE a.upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.parent_upload_id IS NULL AND a.is_new = 1`,
                     [parentUploadId, session.userId]
                 );
 

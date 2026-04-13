@@ -32,10 +32,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="font-medium text-xs sm:text-sm bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-transparent mb-1 sm:mb-2">
           {label}
         </p>
-        <p className="text-xs sm:text-sm text-blue-500 tabular-nums font-semibold">
+        <p className="text-xs sm:text-sm text-green-500 tabular-nums font-semibold">
           {`Repercutido: ${formatCurrency(payload[0].value)}`}
         </p>
-        <p className="text-xs sm:text-sm text-orange-500 tabular-nums font-semibold">
+        <p className="text-xs sm:text-sm text-red-500 tabular-nums font-semibold">
           {`Soportado: ${formatCurrency(payload[1].value)}`}
         </p>
         <hr className="my-1 sm:my-2 border-muted" />
@@ -141,7 +141,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaRepercutido"
                   name="Repercutido"
-                  fill="hsl(var(--primary))"
+                  fill="#22c55e"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={0}
@@ -151,7 +151,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaSoportado"
                   name="Soportado"
-                  fill="hsl(var(--vat-10))"
+                  fill="#ef4444"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={100}
@@ -198,7 +198,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaRepercutido"
                   name="IVA Repercutido"
-                  fill="hsl(var(--primary))"
+                  fill="#22c55e"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={0}
@@ -208,7 +208,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaSoportado"
                   name="IVA Soportado"
-                  fill="hsl(var(--vat-10))"
+                  fill="#ef4444"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={100}
@@ -251,7 +251,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaRepercutido"
                   name="IVA Repercutido"
-                  fill="hsl(var(--primary))"
+                  fill="#22c55e"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={0}
@@ -261,7 +261,7 @@ export function IvaSummary({
                 <Bar
                   dataKey="ivaSoportado"
                   name="IVA Soportado"
-                  fill="hsl(var(--vat-10))"
+                  fill="#ef4444"
                   radius={[4, 4, 0, 0]}
                   className="hover:opacity-80 transition-opacity duration-200"
                   animationBegin={100}

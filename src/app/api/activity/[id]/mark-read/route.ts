@@ -11,16 +11,16 @@ export async function PATCH(
 ) {
   try {
     console.log('👁️ [API-ACTIVITY-MARK-READ] Iniciando...');
-    
+
     const session = await getSession();
-    
+
     if (!session) {
       console.warn('⚠️ [API-ACTIVITY-MARK-READ] No hay usuario autenticado');
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
     const activityId = parseInt(params.id, 10);
-    
+
     if (isNaN(activityId)) {
       return NextResponse.json({ error: 'ID de actividad inválido' }, { status: 400 });
     }
@@ -32,13 +32,12 @@ export async function PATCH(
       `SELECT a.id, a.parent_upload_id
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id = ? AND u.id = ?`,
+       WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
 
     const activitiesArray = activities as any[];
-    
+
     if (activitiesArray.length === 0) {
       return NextResponse.json({ error: 'Actividad no encontrada' }, { status: 404 });
     }
@@ -50,9 +49,8 @@ export async function PATCH(
     const [result] = await connection.query(
       `UPDATE erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
        SET a.is_new = 0
-       WHERE a.id = ? AND u.id = ? AND a.is_new = 1`,
+       WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
       [activityId, session.userId]
     );
 
@@ -70,8 +68,7 @@ export async function PATCH(
         `SELECT COUNT(*) as unread_count
          FROM erp49.actividad a
          INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-         INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-         WHERE a.parent_upload_id = ? AND u.id = ? AND a.is_new = 1`,
+         WHERE a.parent_upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
         [parentUploadId, session.userId]
       );
 
@@ -85,22 +82,21 @@ export async function PATCH(
         const [parentResult] = await connection.query(
           `UPDATE erp49.actividad a
            INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-           INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
            SET a.is_new = 0
-           WHERE a.upload_id = ? AND u.id = ? AND a.parent_upload_id IS NULL AND a.is_new = 1`,
+           WHERE a.upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.parent_upload_id IS NULL AND a.is_new = 1`,
           [parentUploadId, session.userId]
         );
 
         const parentUpdateResult = parentResult as any;
         parentUpdated = parentUpdateResult.affectedRows > 0;
-        
-        console.log('✅ [API-ACTIVITY-MARK-READ] ZIP padre actualizado:', { 
-          affectedRows: parentUpdateResult.affectedRows 
+
+        console.log('✅ [API-ACTIVITY-MARK-READ] ZIP padre actualizado:', {
+          affectedRows: parentUpdateResult.affectedRows
         });
       }
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       updated: updateResult.affectedRows > 0,
       parentUpdated

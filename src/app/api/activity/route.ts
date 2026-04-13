@@ -50,9 +50,8 @@ export async function GET(request: Request) {
         (SELECT nombre FROM erp49.entidades_documento WHERE documento_id = d.id AND rol = 'cliente' LIMIT 1) as cliente
       FROM erp49.actividad a
       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
       LEFT JOIN erp49.documentos d ON a.documento_id = d.id
-      WHERE u.id = ?
+      WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
     const params: any[] = [session.userId];
@@ -112,9 +111,8 @@ export async function GET(request: Request) {
       SELECT COUNT(*) as total
       FROM erp49.actividad a
       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
       LEFT JOIN erp49.documentos d ON a.documento_id = d.id
-      WHERE u.id = ?
+      WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
     const countParams: any[] = [session.userId];
@@ -206,8 +204,7 @@ export async function DELETE(request: Request) {
       `SELECT a.id 
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id = ? AND u.id = ?`,
+       WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
 

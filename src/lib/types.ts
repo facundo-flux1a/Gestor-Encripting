@@ -72,6 +72,8 @@ export const ProviderWithStatsSchema = DocumentEntitySchema.extend({
   totalDocuments: z.coerce.number(),
   uniqueProducts: z.coerce.number(),
   empresaNombre: z.string().optional(),
+  cuenta_compra: z.string().nullable().optional(),
+  cuenta_venta: z.string().nullable().optional(),
 });
 export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
 

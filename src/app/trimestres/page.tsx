@@ -210,26 +210,24 @@ function TrimestresPageContent() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [trimestreToClose, setTrimestreToClose] = React.useState<Trimestre | null>(null);
 
-  React.useEffect(() => {
-    if (isLoadingCompanies) {
-      console.log('⏳ [Trimestres] Esperando a que carguen las empresas...');
-      return;
-    }
+  // Track last params to avoid redundant fetches
+  const lastFetchRef = React.useRef<string>('');
 
-    console.log('🔄 [Trimestres] Cargando trimestres con empresas:', selectedCompanyIds);
+  // ─── CARGA DE DATOS (UNIFICADA) ──────────────────────────────────────────
+  React.useEffect(() => {
+    if (isLoadingCompanies) return;
+
+    const fetchKey = `${JSON.stringify(selectedCompanyIds)}-${selectedAño}-${selectedTrimestre}-${mostrarVacios}`;
+    if (lastFetchRef.current === fetchKey) return;
+    lastFetchRef.current = fetchKey;
+
+    console.log('🔄 [Trimestres] Iniciando carga de datos unificada:', fetchKey);
+
+    // Ejecutar cargas
     loadTrimestres();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño, isLoadingCompanies]);
-
-  React.useEffect(() => {
-    if (isLoadingCompanies) {
-      console.log('⏳ [Trimestres] Esperando a que carguen las empresas para los documentos...');
-      return;
-    }
-
-    console.log('🔄 [Trimestres] Cargando documentos con empresas:', selectedCompanyIds);
     loadDocumentos();
     loadAnnualDocumentos();
-  }, [selectedAño, selectedTrimestre, selectedCompanyIds, isLoadingCompanies]);
+  }, [selectedCompanyIds, mostrarVacios, selectedAño, selectedTrimestre, isLoadingCompanies]);
 
   const loadTrimestres = async () => {
     try {
@@ -237,15 +235,16 @@ function TrimestresPageContent() {
 
       console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds);
 
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        año: selectedAño.toString(),
+        mostrar_vacios: mostrarVacios.toString()
+      });
 
       if (selectedCompanyIds.length > 0) {
         selectedCompanyIds.forEach(id => {
           params.append('empresa_id', id.toString());
         });
       }
-
-      params.append('mostrar_vacios', mostrarVacios.toString());
 
       console.log('📡 [loadTrimestres] Fetching con params:', params.toString());
 

@@ -87,14 +87,6 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
 
     // Initial load
     loadCompanies();
-
-    // Revalidar al cambiar de pestaña y volver
-    const handleFocus = () => loadCompanies();
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
   }, []);
 
   // ─── Toggle + save ────────────────────────────────────────────────────────
@@ -144,7 +136,7 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading,
   }), [companies, selectedCompanyIds, isLoading, toggleCompanyId]);
 
-  console.log('🏢 [CompanyProvider] Companies:', companies.length, 'Selected:', selectedCompanyIds);
+
 
   return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 };

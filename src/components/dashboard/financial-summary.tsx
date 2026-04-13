@@ -159,12 +159,12 @@ export function FinancialSummary({ annualData, quarterlyData, defaultYear }: Fin
               >
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.9} />
-                    <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.6} />
+                    <stop offset="0%" stopColor="#22c55e" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0.6} />
                   </linearGradient>
                   <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.9} />
-                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.6} />
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="#dc2626" stopOpacity={0.6} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid

@@ -24,8 +24,7 @@ export async function GET(request: NextRequest) {
        SUM(CASE WHEN a.is_new = 1 THEN 1 ELSE 0 END) as total_unread
       FROM erp49.actividad a
       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-      WHERE u.id = ?`;
+      WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`;
 
     const params: any[] = [session.userId];
 

@@ -36,8 +36,7 @@ export async function POST(
         a.retry_count
       FROM erp49.actividad a
       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-      WHERE a.id = ? AND u.id = ?`,
+      WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
 

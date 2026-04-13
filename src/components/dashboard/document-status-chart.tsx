@@ -9,21 +9,19 @@ type ChartData = {
   value: number;
 };
 
-const COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--vat-other))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))'
-];
+const getColorForType = (name: string) => {
+  const n = name.toUpperCase();
+  if (n.includes('EMITID') || n.includes('VENTA') || n.includes('INGRESO') || n.includes('REPERCUTIDO')) return '#22c55e';
+  if (n.includes('RECIBID') || n.includes('GASTO') || n.includes('COMPRA') || n.includes('SOPORTADO')) return '#ef4444';
+  if (n.includes('ALBAR')) return 'hsl(var(--chart-3))';
+  return 'hsl(var(--muted-foreground))';
+};
 
-const HOVER_COLORS = [
-  'hsl(142 76% 36%)',  // Verde más brillante
-  'hsl(221 83% 53%)',  // Azul más brillante
-  'hsl(262 83% 58%)',  // Violeta más brillante
-  'hsl(346 77% 50%)',  // Rojo más brillante
-  'hsl(48 96% 53%)',   // Amarillo más brillante
-];
+const getHoverColor = (color: string) => {
+  if (color === '#22c55e') return '#16a34a'; // Darker green
+  if (color === '#ef4444') return '#dc2626'; // Darker red
+  return color;
+};
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -97,8 +95,8 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={window.innerWidth < 640 ? 70 : window.innerWidth < 1024 ? 85 : 100}
-                  innerRadius={window.innerWidth < 640 ? 45 : window.innerWidth < 1024 ? 55 : 60}
+                  outerRadius={typeof window !== 'undefined' && window.innerWidth < 640 ? 70 : typeof window !== 'undefined' && window.innerWidth < 1024 ? 85 : 100}
+                  innerRadius={typeof window !== 'undefined' && window.innerWidth < 640 ? 45 : typeof window !== 'undefined' && window.innerWidth < 1024 ? 55 : 60}
                   paddingAngle={3}
                   fill="hsl(var(--primary))"
                   labelLine={false}
@@ -108,19 +106,22 @@ export function DocumentStatusChart({ data }: { data: ChartData[] }) {
                   animationDuration={800}
                   animationEasing="ease-out"
                 >
-                  {data.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={activeIndex === index ? HOVER_COLORS[index % HOVER_COLORS.length] : COLORS[index % COLORS.length]}
-                      className="stroke-background cursor-pointer transition-all duration-300"
-                      strokeWidth={activeIndex === index ? 3 : 2}
-                      style={{
-                        filter: activeIndex === index ? 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' : 'none',
-                        transform: activeIndex === index ? 'scale(1.05)' : 'scale(1)',
-                        transformOrigin: 'center',
-                      }}
-                    />
-                  ))}
+                  {data.map((entry, index) => {
+                    const baseColor = getColorForType(entry.name);
+                    return (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={activeIndex === index ? getHoverColor(baseColor) : baseColor}
+                        className="stroke-background cursor-pointer transition-all duration-300"
+                        strokeWidth={activeIndex === index ? 3 : 2}
+                        style={{
+                          filter: activeIndex === index ? 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' : 'none',
+                          transform: activeIndex === index ? 'scale(1.05)' : 'scale(1)',
+                          transformOrigin: 'center',
+                        }}
+                      />
+                    );
+                  })}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>

@@ -5,12 +5,12 @@ import { revalidatePath } from 'next/cache';
 
 export async function DELETE(request: Request) {
   const conn = await connection.getConnection();
-  
+
   try {
     await conn.beginTransaction();
-    
+
     const session = await getSession();
-    
+
     if (!session) {
       await conn.rollback();
       conn.release();
@@ -24,8 +24,7 @@ export async function DELETE(request: Request) {
       `SELECT COUNT(*) as total
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE u.id = ?`,
+       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [session.userId]
     );
 
@@ -47,8 +46,7 @@ export async function DELETE(request: Request) {
     await conn.query(
       `DELETE a FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE u.id = ?`,
+       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [session.userId]
     );
 

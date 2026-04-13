@@ -663,7 +663,7 @@ export default function DashboardPage() {
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Ingresos (con IVA)
                       </CardTitle>
-                      <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                      <ArrowUpRight className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.totalIngresos)}</div>
@@ -711,7 +711,7 @@ export default function DashboardPage() {
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         Total Gastos (con IVA)
                       </CardTitle>
-                      <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
+                      <ArrowDownRight className="h-4 w-4 text-red-500" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.totalGastos)}</div>
@@ -758,7 +758,7 @@ export default function DashboardPage() {
                       <CardTitle className="text-sm font-medium">
                         Beneficio Bruto (con IVA)
                       </CardTitle>
-                      <Euro className="h-4 w-4 text-muted-foreground" />
+                      <Euro className={`h-4 w-4 ${analytics.kpis.beneficio >= 0 ? "text-green-500" : "text-red-500"}`} />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.beneficio || 0)}</div>
@@ -796,7 +796,7 @@ export default function DashboardPage() {
                       <CardTitle className="text-sm font-medium">
                         Resultado IVA
                       </CardTitle>
-                      <Euro className="h-4 w-4 text-muted-foreground" />
+                      <Euro className={`h-4 w-4 ${analytics.kpis.resultadoIva >= 0 ? "text-green-500" : "text-red-500"}`} />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.resultadoIva || 0)}</div>

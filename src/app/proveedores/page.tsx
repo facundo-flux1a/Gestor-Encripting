@@ -87,6 +87,7 @@ function ProveedoresPageContent() {
                         providers={providers}
                         showCompanyColumn={showCompanyColumn}
                         onProviderUpdated={fetchProviders} // ✅ AGREGAR ESTA LÍNEA
+                        companyId={selectedCompanyIds?.length === 1 ? selectedCompanyIds[0] : undefined}
                     />
                 </div>
             </div>

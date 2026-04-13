@@ -39,8 +39,7 @@ export async function DELETE(request: Request) {
             `SELECT COUNT(*) as total
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id IN (${placeholders}) AND u.id = ?`,
+       WHERE a.id IN (${placeholders}) AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
             [...activityIds, session.userId]
         );
 
@@ -62,8 +61,7 @@ export async function DELETE(request: Request) {
         await conn.query(
             `DELETE a FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id IN (${placeholders}) AND u.id = ?`,
+       WHERE a.id IN (${placeholders}) AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
             [...activityIds, session.userId]
         );
 

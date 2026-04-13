@@ -25,7 +25,12 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -49,17 +54,17 @@ import { useToast } from '@/hooks/use-toast';
 // 🎯 FUNCIÓN DE FORMATO MANUAL
 const formatCurrency = (amount: number | string | null | undefined): string => {
   if (amount === null || amount === undefined) return 'N/A';
-  
+
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return 'N/A';
-  
+
   const fixed = num.toFixed(2);
   const parts = fixed.split('.');
   const integerPart = parts[0];
   const decimalPart = parts[1];
-  
+
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  
+
   return `${formattedInteger},${decimalPart} €`;
 };
 
@@ -69,11 +74,13 @@ function EditProviderModal({
   open,
   onOpenChange,
   onSave,
+  companyId,
 }: {
   provider: ProviderWithStats | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
+  companyId?: number;
 }) {
   const { toast } = useToast();
   const [formData, setFormData] = React.useState({
@@ -85,6 +92,7 @@ function EditProviderModal({
   });
   const [isSaving, setIsSaving] = React.useState(false);
   const [showWarningModal, setShowWarningModal] = React.useState(false);
+  const [cuentaCompra, setCuentaCompra] = React.useState('');
 
   React.useEffect(() => {
     if (provider) {
@@ -95,6 +103,7 @@ function EditProviderModal({
         telefono: provider.telefono || '',
         email: provider.email || '',
       });
+      setCuentaCompra(provider.cuenta_compra || '');
     }
   }, [provider]);
 
@@ -133,9 +142,32 @@ function EditProviderModal({
 
       const result = await response.json();
 
+      if (companyId) {
+        // Enviar también configuración contable DELSOL
+        try {
+          const configRes = await fetch('/api/entidades-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              empresaId: companyId,
+              identificadorFiscal: formData.identificador_fiscal,
+              nombreReferencia: formData.nombre,
+              cuentaCompra: cuentaCompra === '' ? null : cuentaCompra,
+              cuentaVenta: null
+            })
+          });
+
+          if (!configRes.ok) {
+            console.error("Error al guardar config contable:", await configRes.text());
+          }
+        } catch (e) {
+          console.error("Excepción al guardar config contable:", e);
+        }
+      }
+
       toast({
         title: result.merged ? "Proveedores fusionados" : "Proveedor actualizado",
-        description: result.merged 
+        description: result.merged
           ? `Se han fusionado ambos proveedores. ${result.affectedRows} documentos actualizados.`
           : "Los cambios se han guardado correctamente",
       });
@@ -226,6 +258,46 @@ function EditProviderModal({
               </div>
             </div>
 
+            {companyId && (
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Building className="w-4 h-4 text-violet-500" />
+                  Configuración Contable
+                </h4>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cuenta_compra" className="flex justify-between items-center">
+                      <span>Cuenta Proveedor (Compras)</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs px-2 text-muted-foreground hover:text-destructive"
+                            onClick={() => setCuentaCompra('')}
+                            disabled={!cuentaCompra}
+                          >
+                            Limpiar cuenta
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          <p>Haz clic en "Guardar Cambios" después de limpiar para confirmar</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </Label>
+                    <Input
+                      id="cuenta_compra"
+                      value={cuentaCompra}
+                      onChange={(e) => setCuentaCompra(e.target.value.trim())}
+                      placeholder="Ej: 400..."
+                      title="Debe ser un número de 3 a 6 dígitos"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="gap-2">
               <Button
                 type="button"
@@ -257,7 +329,7 @@ function EditProviderModal({
                 <div>
                   Estás cambiando el CIF de <strong className="text-foreground">"{provider.identificador_fiscal}"</strong> a <strong className="text-foreground">"{formData.identificador_fiscal}"</strong>.
                 </div>
-                
+
                 <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-lg p-3 space-y-2">
                   <div className="flex items-start gap-2 text-sm">
                     <span className="text-violet-600 dark:text-violet-400 font-bold shrink-0">⚠️</span>
@@ -305,132 +377,192 @@ export const createColumns = (
   showCompanyColumn: boolean,
   onEdit: (provider: ProviderWithStats) => void
 ): ColumnDef<ProviderWithStats>[] => [
-  {
-    accessorKey: 'nombre',
-    header: 'Proveedor',
-    cell: ({ row }) => {
-      const provider = row.original;
-      return (
-        <Link
-          href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}
-          className="font-medium text-primary hover:underline flex items-center gap-1.5 sm:gap-2 group"
-        >
-          <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs sm:text-sm truncate transition-colors duration-200" title={provider.nombre}>
+    {
+      accessorKey: 'nombre',
+      header: 'Proveedor',
+      cell: ({ row }) => {
+        const provider = row.original;
+        return (
+          <Link
+            href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}
+            className="font-medium text-primary hover:underline flex items-center gap-1.5 sm:gap-2 group"
+          >
+            <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs sm:text-sm truncate transition-colors duration-200" title={provider.nombre}>
                 {provider.nombre}
-            </span>
-            {showCompanyColumn && provider.empresaNombre && (
-              <span className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate" title={provider.empresaNombre}>
-                {provider.empresaNombre}
               </span>
-            )}
-          </div>
-        </Link>
-      );
+              {showCompanyColumn && provider.empresaNombre && (
+                <span className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate" title={provider.empresaNombre}>
+                  {provider.empresaNombre}
+                </span>
+              )}
+            </div>
+          </Link>
+        );
+      },
+      size: 200,
+      minSize: 150,
     },
-    size: 200,
-    minSize: 150,
-  },
-  {
-    accessorKey: 'identificador_fiscal',
-    header: 'CIF/NIF',
-    cell: ({ row }) => {
-      const value = row.getValue('identificador_fiscal') as string;
-      return (
-        <span className="font-mono text-xs sm:text-sm break-all transition-colors duration-200 hover:text-primary" title={value}>
+    {
+      accessorKey: 'identificador_fiscal',
+      header: 'CIF/NIF',
+      cell: ({ row }) => {
+        const value = row.getValue('identificador_fiscal') as string;
+        return (
+          <span className="font-mono text-xs sm:text-sm break-all transition-colors duration-200 hover:text-primary" title={value}>
             {value || 'N/A'}
-        </span>
-      );
+          </span>
+        );
+      },
+      size: 110,
+      minSize: 90,
     },
-    size: 120,
-    minSize: 100,
-  },
-  {
-    accessorKey: 'totalSpent',
-    header: 'Gasto Total',
-    cell: ({ row }) => (
-      <div className="text-right font-mono text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
-        {formatCurrency(row.getValue('totalSpent'))}
-      </div>
-    ),
-    size: 120,
-    minSize: 100,
-  },
-  {
-    accessorKey: 'totalDocuments',
-    header: 'Documentos',
-    cell: ({ row }) => {
-      const value = row.getValue('totalDocuments') as number;
-      return (
-        <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
+    {
+      accessorKey: 'direccion',
+      header: 'Dirección',
+      cell: ({ row }) => {
+        const value = row.getValue('direccion') as string;
+        if (!value || value === 'N/A' || value === 'null') return <span className="text-muted-foreground text-[10px]">N/A</span>;
+        return (
+          <span className="text-xs truncate max-w-[150px] block" title={value}>
+            {value}
+          </span>
+        );
+      },
+      size: 150,
+      minSize: 100,
+    },
+    {
+      accessorKey: 'telefono',
+      header: 'Teléfono',
+      cell: ({ row }) => {
+        const value = row.getValue('telefono') as string;
+        if (!value || value === 'N/A' || value === 'null') return <span className="text-muted-foreground text-[10px]">N/A</span>;
+        return (
+          <span className="text-xs tabular-nums" title={value}>
+            {value}
+          </span>
+        );
+      },
+      size: 110,
+      minSize: 80,
+    },
+    {
+      accessorKey: 'email',
+      header: 'Email',
+      cell: ({ row }) => {
+        const value = row.getValue('email') as string;
+        if (!value || value === 'N/A' || value === 'null') return <span className="text-muted-foreground text-[10px]">N/A</span>;
+        return (
+          <span className="text-xs truncate max-w-[150px] block" title={value}>
+            {value}
+          </span>
+        );
+      },
+      size: 150,
+      minSize: 100,
+    },
+    {
+      accessorKey: 'totalSpent',
+      header: 'Gasto Total',
+      cell: ({ row }) => (
+        <div className="text-right font-mono text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
+          {formatCurrency(row.getValue('totalSpent'))}
+        </div>
+      ),
+      size: 120,
+      minSize: 100,
+    },
+    {
+      accessorKey: 'cuenta_compra',
+      header: 'Cta. Compra',
+      cell: ({ row }) => {
+        const value = row.getValue('cuenta_compra') as string;
+        if (!showCompanyColumn && value) {
+          return <span className="font-mono text-xs sm:text-sm">{value}</span>;
+        }
+        return <span className="text-xs text-muted-foreground">-</span>;
+      },
+      size: 100,
+      minSize: 80,
+    },
+    {
+      accessorKey: 'totalDocuments',
+      header: 'Documentos',
+      cell: ({ row }) => {
+        const value = row.getValue('totalDocuments') as number;
+        return (
+          <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
             {value || 0}
-        </div>
-      );
+          </div>
+        );
+      },
+      size: 100,
+      minSize: 80,
     },
-    size: 100,
-    minSize: 80,
-  },
-  {
-    accessorKey: 'uniqueProducts',
-    header: 'Productos Únicos',
-    cell: ({ row }) => {
-      const value = row.getValue('uniqueProducts') as number;
-      return (
-        <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
+    {
+      accessorKey: 'uniqueProducts',
+      header: 'Productos Únicos',
+      cell: ({ row }) => {
+        const value = row.getValue('uniqueProducts') as number;
+        return (
+          <div className="text-center text-xs sm:text-sm tabular-nums transition-colors duration-200 hover:text-primary">
             {value || 0}
-        </div>
-      );
+          </div>
+        );
+      },
+      size: 120,
+      minSize: 100,
     },
-    size: 120,
-    minSize: 100,
-  },
-  {
-    id: 'actions',
-    header: 'Acciones',
-    cell: ({ row }) => {
-      const provider = row.original;
-      return (
-        <div className="flex items-center justify-center gap-1 sm:gap-2">
-          {/* Botón Editar */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onEdit(provider)}
-            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
-          >
-            <Pencil className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:rotate-12" />
-            <span className="hidden sm:inline">Editar</span>
-          </Button>
+    {
+      id: 'actions',
+      header: 'Acciones',
+      cell: ({ row }) => {
+        const provider = row.original;
+        return (
+          <div className="flex items-center justify-center gap-1 sm:gap-2">
+            {/* Botón Editar */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(provider)}
+              className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
+            >
+              <Pencil className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:rotate-12" />
+              <span className="hidden sm:inline">Editar</span>
+            </Button>
 
-          {/* Botón Ver Detalles */}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            asChild
-            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
-          >
-            <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}>
-              <span className="hidden xs:inline">Ver</span>
-              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
-            </Link>
-          </Button>
-        </div>
-      );
+            {/* Botón Ver Detalles */}
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
+            >
+              <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}>
+                <span className="hidden xs:inline">Ver</span>
+                <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
+              </Link>
+            </Button>
+          </div>
+        );
+      },
+      size: 160,
+      minSize: 120,
     },
-    size: 160,
-    minSize: 120,
-  },
-];
+  ];
 
-export function ProvidersTable({ 
-  providers, 
+export function ProvidersTable({
+  providers,
   showCompanyColumn = false,
-  onProviderUpdated
-}: { 
+  onProviderUpdated,
+  companyId
+}: {
   providers: ProviderWithStats[];
   showCompanyColumn?: boolean;
   onProviderUpdated?: () => void;
+  companyId?: number;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -490,7 +622,7 @@ export function ProvidersTable({
                 {table.getHeaderGroups().map(headerGroup => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map(header => (
-                      <TableHead 
+                      <TableHead
                         key={header.id}
                         className="text-xs sm:text-sm"
                       >
@@ -505,8 +637,8 @@ export function ProvidersTable({
               <TableBody>
                 {table.getRowModel().rows.length ? (
                   table.getRowModel().rows.map((row, index) => (
-                    <TableRow 
-                      key={row.id} 
+                    <TableRow
+                      key={row.id}
                       data-state={row.getIsSelected() && 'selected'}
                       className="text-xs sm:text-sm transition-all duration-200 hover:bg-muted/50 animate-fade-in"
                       style={{ animationDelay: `${index * 30}ms` }}
@@ -520,8 +652,8 @@ export function ProvidersTable({
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell 
-                      colSpan={columns.length} 
+                    <TableCell
+                      colSpan={columns.length}
                       className="h-20 sm:h-24 text-center text-xs sm:text-sm text-muted-foreground"
                     >
                       No hay resultados.
@@ -577,6 +709,7 @@ export function ProvidersTable({
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onSave={handleSave}
+        companyId={companyId}
       />
 
       {/* Estilos de animación */}

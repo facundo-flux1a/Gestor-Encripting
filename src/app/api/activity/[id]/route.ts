@@ -8,12 +8,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const conn = await connection.getConnection();
-  
+
   try {
     await conn.beginTransaction();
-    
+
     const session = await getSession();
-    
+
     if (!session) {
       await conn.rollback();
       conn.release();
@@ -27,8 +27,7 @@ export async function DELETE(
       `SELECT a.id, a.upload_id, a.documento_id, a.documento_nombre, a.parent_upload_id
        FROM erp49.actividad a
        INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-       INNER JOIN erp49.usuarios u ON e.id_de_usuario = u.id
-       WHERE a.id = ? AND u.id = ?`,
+       WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
 
@@ -64,7 +63,7 @@ export async function DELETE(
       .filter(id => id !== null && id !== undefined);
 
     console.log('👶 [DELETE Activity] Actividades hijas encontradas:', childActivitiesArray.length);
-    
+
     if (childActivitiesArray.length > 0) {
       console.log('📄 [DELETE Activity] Documentos hijos:', childActivitiesArray.map(a => ({
         id: a.id,
@@ -78,15 +77,15 @@ export async function DELETE(
 
     if (allDocumentIds.length > 0) {
       console.log('🗑️ [DELETE Activity] Eliminando documentos de la tabla "documentos":', allDocumentIds);
-      
+
       const placeholders = allDocumentIds.map(() => '?').join(',');
-      
+
       // ✅ Las tablas relacionadas se eliminarán en cascada si tienes ON DELETE CASCADE
       await conn.query(
         `DELETE FROM erp49.documentos WHERE id IN (${placeholders})`,
         allDocumentIds
       );
-      
+
       console.log('✅ [DELETE Activity] Documentos eliminados correctamente');
     }
 
@@ -101,12 +100,12 @@ export async function DELETE(
     if (childActivitiesArray.length > 0) {
       const childIds = childActivitiesArray.map(a => a.id);
       const placeholders = childIds.map(() => '?').join(',');
-      
+
       await conn.query(
         `DELETE FROM erp49.actividad WHERE id IN (${placeholders})`,
         childIds
       );
-      
+
       console.log('✅ [DELETE Activity] Actividades hijas eliminadas:', childIds.length);
     }
 
