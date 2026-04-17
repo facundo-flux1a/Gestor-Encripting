@@ -18,3 +18,28 @@ export function normalizeProductDescription(desc: string): string {
   // 4. Pasar a mayúsculas para comparación insensible
   return normalized.trim().toUpperCase();
 }
+
+// 📅 Formateo de fechas consistente con soporte UTC
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return '-';
+  try {
+    const d = new Date(date);
+    const utcDate = new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000);
+    return new Intl.DateTimeFormat('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(utcDate);
+  } catch { return '-'; }
+}
+
+// 💶 Formateo de moneda unificado (EUR por defecto)
+export function formatCurrency(amount: number | string | null | undefined, currency: string = 'EUR'): string {
+  if (amount === null || amount === undefined) return '0,00 €';
+  let numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(numericAmount)) return '0,00 €';
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency
+  }).format(numericAmount);
+}

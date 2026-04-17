@@ -34,8 +34,8 @@ export async function getUserLimits(userId: number): Promise<UserLimits | null> 
   }
 
   return {
-    daily_limit_openai: rows[0].daily_limit_openai || 5,
-    daily_limit_gemini: rows[0].daily_limit_gemini || 50,
+    daily_limit_openai: rows[0].daily_limit_openai || 500,
+    daily_limit_gemini: rows[0].daily_limit_gemini || 1000,
     is_unlimited: rows[0].is_unlimited || false,
   };
 }
@@ -57,9 +57,9 @@ export async function getDailyUsage(
   );
 
   const limits = await getUserLimits(userId);
-  const limit = provider === 'openai' 
-    ? limits?.daily_limit_openai || 5
-    : limits?.daily_limit_gemini || 50;
+  const limit = provider === 'openai'
+    ? limits?.daily_limit_openai || 500
+    : limits?.daily_limit_gemini || 1000;
 
   const current = rows.length > 0 ? rows[0] : { request_count: 0, tokens_used: 0 };
   const requestCount = current.request_count || 0;

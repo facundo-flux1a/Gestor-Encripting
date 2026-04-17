@@ -84,6 +84,7 @@ export type ProviderWithStats = z.infer<typeof ProviderWithStatsSchema>;
 export const DocumentLineSchema = z.object({
   id: z.number().optional(),
   documento_id: z.number().optional(),
+  id_de_empresa: z.number().optional(),
   codigo: z.string().nullable(),
   descripcion: z.string().nullable(),
   cantidad: z.coerce.number(),
@@ -98,6 +99,7 @@ export const DocumentLineSchema = z.object({
   numero_documento: z.string().optional(),
   total_cantidad_comprada: z.coerce.number().optional(),
   veces_comprado: z.coerce.number().optional(),
+  cuenta_contable: z.string().nullable().optional(),
 });
 export type DocumentLine = z.infer<typeof DocumentLineSchema>;
 

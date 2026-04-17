@@ -114,7 +114,7 @@ export function TrimestreTable({
         <div className="min-w-[800px]">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
+              <TableRow className="bg-muted/50 hover:bg-muted/70 transition-colors">
                 <TableHead className="text-xs sm:text-sm font-semibold">Tipo</TableHead>
                 <TableHead className="text-xs sm:text-sm font-semibold">N° Documento</TableHead>
                 <TableHead className="text-xs sm:text-sm font-semibold">Fecha</TableHead>
@@ -129,15 +129,15 @@ export function TrimestreTable({
                 <TableHead className="text-center text-xs sm:text-sm font-semibold">Estado</TableHead>
               </TableRow>
               {/* ✅ TOTALS ROW (Custom or Calculated) */}
-              <TableRow className="bg-primary/10 hover:bg-primary/20 font-extrabold border-b-2 border-primary/40 transition-all duration-300 group cursor-default h-14">
-                <TableHead colSpan={6} className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300 uppercase tracking-wide">
+              <TableRow className="bg-primary/20 hover:bg-primary/30 font-extrabold border-b-2 border-primary/40 transition-all duration-300 group cursor-default h-14">
+                <TableHead colSpan={6} className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300 uppercase tracking-wide">
                   <div className="inline-block transition-transform duration-500 origin-right group-hover:scale-105 group-hover:rotate-[0.2deg]">
                     {footerValues?.label || "Resultado Neto del Periodo:"}
                   </div>
                 </TableHead>
 
                 {/* BASE FOOTER */}
-                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                <TableHead className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300">
                   <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-rotate-[0.2deg]">
                     <TooltipProvider>
                       <Tooltip>
@@ -174,7 +174,7 @@ export function TrimestreTable({
                 </TableHead>
 
                 {/* RECARGO FOOTER */}
-                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                <TableHead className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300">
                   <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:rotate-[0.2deg]">
                     {footerValues?.breakdown ? (
                       formatCurrency((footerValues.breakdown.ingresos as any).recargo - (footerValues.breakdown.gastos as any).recargo)
@@ -183,7 +183,7 @@ export function TrimestreTable({
                 </TableHead>
 
                 {/* RETENCION FOOTER */}
-                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                <TableHead className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300">
                   <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-rotate-[0.2deg]">
                     {footerValues?.breakdown ? (
                       formatCurrency((footerValues.breakdown.ingresos as any).retencion - (footerValues.breakdown.gastos as any).retencion)
@@ -192,7 +192,7 @@ export function TrimestreTable({
                 </TableHead>
 
                 {/* IVA FOOTER */}
-                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                <TableHead className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300">
                   <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:rotate-[0.2deg]">
                     <TooltipProvider>
                       <Tooltip>
@@ -232,7 +232,7 @@ export function TrimestreTable({
                 </TableHead>
 
                 {/* TOTAL FOOTER */}
-                <TableHead className="text-right text-sm sm:text-base text-white group-hover:text-primary transition-all duration-300">
+                <TableHead className="text-right text-sm sm:text-base text-foreground dark:text-white group-hover:text-primary transition-all duration-300">
                   <div className="inline-block transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-rotate-[0.2deg]">
                     <TooltipProvider>
                       <Tooltip>

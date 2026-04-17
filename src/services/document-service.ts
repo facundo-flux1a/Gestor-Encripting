@@ -1918,6 +1918,8 @@ export async function getProductsByProviderName(
     ld.precio_neto,
     ld.importe_linea,
     ld.datos_extra,
+    ld.cuenta_contable,
+    d.id_de_empresa,
     d.fecha_emision
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
@@ -1976,6 +1978,7 @@ SELECT * FROM RankedLines WHERE rn = 1
   const products: DocumentLine[] = lineaRows.map(l => ({
     id: l.line_id,
     documento_id: l.documento_id,
+    id_de_empresa: l.id_de_empresa || l.empresa_id,
     codigo: l.codigo,
     descripcion: l.descripcion,
     cantidad: l.cantidad,
@@ -1986,6 +1989,7 @@ SELECT * FROM RankedLines WHERE rn = 1
     importe_linea: l.importe_linea,
     datos_extra: safeJsonParse(l.datos_extra),
     fecha_emision: l.fecha_emision,
+    cuenta_contable: l.cuenta_contable,
     total_cantidad_comprada: l.total_cantidad_comprada,
     veces_comprado: l.veces_comprado,
   }));
@@ -2002,6 +2006,7 @@ export async function getAllProductLinesByProviderName(
   let baseQuery = `
 SELECT
 ld.*,
+  d.id_de_empresa,
   d.fecha_emision,
   d.numero_documento
       FROM lineas_documento ld
@@ -2037,6 +2042,7 @@ OR
   const products: DocumentLine[] = lineaRows.map(l => ({
     id: l.id,
     documento_id: l.documento_id,
+    id_de_empresa: l.id_de_empresa,
     codigo: l.codigo,
     descripcion: l.descripcion,
     cantidad: l.cantidad,
@@ -2049,6 +2055,7 @@ OR
     fecha_creacion: l.fecha_creacion,
     fecha_emision: l.fecha_emision,
     numero_documento: l.numero_documento,
+    cuenta_contable: l.cuenta_contable,
   }));
 
   return JSON.parse(JSON.stringify(products));
@@ -2072,8 +2079,8 @@ export async function getProductHistory(
   ld.descripcion,
   ld.cantidad,
   ld.unidad,
-  ld.precio_unitario,
   ld.importe_linea,
+  ld.cuenta_contable,
   d.fecha_emision,
   d.numero_documento,
   ROW_NUMBER() OVER(
@@ -2128,6 +2135,7 @@ SELECT * FROM UniqueHistory
       importe_linea: l.importe_linea,
       fecha_emision: l.fecha_emision,
       numero_documento: l.numero_documento,
+      cuenta_contable: l.cuenta_contable,
       datos_extra: {},
       fecha_creacion: null,
     }));
