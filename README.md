@@ -13,7 +13,7 @@ Una solución integral de **Enterprise Resource Planning (ERP)** diseñada para 
 
 ### 📑 Gestión Documental Inteligente (360°)
 - **Ingestión Automatizada**: Soporte para subida manual y captura automatizada desde buzones de correo.
-- **Procesamiento de Archivos**: Capacidad de manejar PDFs, imágenes e incluso archivos comprimidos (RAR).
+- **Procesamiento de Archivos**: Capacidad de manejar PDFs y archivos comprimidos (RAR-ZIP).
 - **Extracción con IA**: Análisis avanzado para la extracción automática de metadatos (Base Imponible, IVA, Retenciones) y clasificación de tipos de documentos.
 - **Gestión de Incidencias**: Workflow para el tratamiento de errores de extracción o datos incompletos, garantizando la calidad del dato.
 

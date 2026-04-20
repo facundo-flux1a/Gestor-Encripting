@@ -726,7 +726,7 @@ export default function DashboardPage() {
                     <h4 className="text-sm font-semibold">Desglose de Gastos</h4>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Base Imponible:</span>
-                      <span className="font-medium">{formatCurrency(analytics.kpis.totalGastosSinIva)}</span>
+                      <span className="font-medium">-{formatCurrency(analytics.kpis.totalGastosSinIva)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">IVA Soportado:</span>

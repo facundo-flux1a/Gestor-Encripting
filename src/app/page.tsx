@@ -396,8 +396,8 @@ export default function RootPage() {
             </div>
             <div className="grid gap-6">
               <div className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                <h3 className="text-xl font-bold mb-2">¿Puedo configurar los montos de alerta del IVA?</h3>
-                <p className="text-muted-foreground">Sí (actualmente en fase beta). Puedes definir nuevos montos de IVA de uso común, y dárselos como instrucción a la Inteligencia Artificial para que realice comprobaciones e identifique discrepancias automáticamente.</p>
+                <h3 className="text-xl font-bold mb-2">¿Puedo configurar los importes de alerta del IVA?</h3>
+                <p className="text-muted-foreground">Sí (actualmente en fase beta). Puedes definir nuevos importes de IVA de uso común, y dárselos como instrucción a la Inteligencia Artificial para que realice comprobaciones e identifique discrepancias automáticamente.</p>
               </div>
               <div className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
                 <h3 className="text-xl font-bold mb-2">¿Dónde se almacenan mis datos?</h3>
