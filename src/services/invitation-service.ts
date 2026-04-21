@@ -1,16 +1,7 @@
 import db from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
-import nodemailer from 'nodemailer';
+import { sendEmail } from './email-service';
 import crypto from 'crypto';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string) {
   try {
@@ -21,15 +12,14 @@ export async function createInvitation(empresaId: string, email: string, rol: st
     const [emp] = await db.query<RowDataPacket[]>('SELECT nombre_de_empresa as nombre FROM empresas WHERE id = ?', [empresaId]);
     const empresaNombre = emp[0]?.nombre || 'la empresa';
 
-    await db.query(
+    const [result]: any = await db.query(
       'INSERT INTO invitaciones_empresa (empresa_id, email, rol, token, fecha_expiracion, metadata, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [empresaId, email, rol, token, fechaExpiracion.toISOString().slice(0, 19).replace('T', ' '), JSON.stringify({ senderName, empresaNombre }), 'PENDING']
     );
 
     const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${token}`;
 
-    await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
+    const { success, error: emailError } = await sendEmail({
       to: email,
       subject: `${senderName || 'Un compañero'} te invita a ${empresaNombre} — Gestor Documental`,
       html: `<!DOCTYPE html>
@@ -76,7 +66,11 @@ export async function createInvitation(empresaId: string, email: string, rol: st
 </html>`
     });
 
-    return { success: true };
+    if (!success) {
+      throw new Error('No se pudo enviar el mail de invitación. Revisá la configuración SMTP.');
+    }
+
+    return { success: true, id: result.insertId, token };
   } catch (error) {
     console.error('❌ [createInvitation] Error:', error);
     return { success: false, error: 'No se pudo enviar la invitación' };
@@ -172,8 +166,7 @@ export async function resendInvitation(invitationId: string) {
     const metadata = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata || '{}') : inv.metadata;
     const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${inv.token}`;
 
-    await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME || 'Gestor Documental'}" <${process.env.SMTP_USER}>`,
+    const { success, error: emailError } = await sendEmail({
       to: inv.email,
       subject: `[Re-enviado] Invitación para unirte a ${metadata.empresaNombre || 'la empresa'}`,
       html: `
@@ -196,6 +189,10 @@ export async function resendInvitation(invitationId: string) {
           </p>
         </div>`
     });
+
+    if (!success) {
+      throw new Error('Error al re-enviar el mail. Revisá la configuración SMTP.');
+    }
 
     return { success: true };
   } catch (e: any) {

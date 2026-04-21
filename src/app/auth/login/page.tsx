@@ -25,8 +25,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-// 🔥 WEBHOOK HARDCODEADO
-const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/reset-password';
 
 function LoginButton() {
   const { pending } = useFormStatus();
@@ -150,8 +148,8 @@ function ForgotPasswordDialog() {
       // Calcular expiración (30 minutos)
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-      // 🔥 ENVIAR TODO A MICROSERVICE (token incluido)
-      const response = await fetch(MICROSERVICE_WEBHOOK_URL, {
+      // 🚀 LLAMADA A NUESTRA API LOCAL (Migrado de n8n)
+      const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

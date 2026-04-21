@@ -241,7 +241,7 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                             {data.topProductsBySpend.length > 0 ? (
                                 <div className="space-y-3">
                                     {data.topProductsBySpend.map((product, index) => (
-                                        <div key={product.codigo} className="flex items-center justify-between gap-2">
+                                        <div key={`${product.codigo}-${product.descripcion}-${index}`} className="flex items-center justify-between gap-2">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium truncate">{product.descripcion}</p>
                                                 <p className="text-xs text-muted-foreground">{product.codigo}</p>

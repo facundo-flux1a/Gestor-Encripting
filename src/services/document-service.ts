@@ -1696,12 +1696,16 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
 
   const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
       SELECT DISTINCT
-documento_id,
-  codigo
+        documento_id,
+        codigo,
+        descripcion
       FROM lineas_documento
       WHERE documento_id IN(${docIds.map(() => '?').join(',')})
-        AND codigo IS NOT NULL
-        AND codigo != ''
+        AND (
+          (codigo IS NOT NULL AND codigo != '')
+          OR
+          (descripcion IS NOT NULL AND descripcion != '')
+        )
   `, docIds) : [[]];
 
   console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
@@ -1712,7 +1716,9 @@ documento_id,
     if (!productsByDoc.has(p.documento_id)) {
       productsByDoc.set(p.documento_id, new Set());
     }
-    productsByDoc.get(p.documento_id)!.add(p.codigo);
+    // Usar código si existe, si no, descripción normalizada
+    const key = (p.codigo && p.codigo !== '') ? p.codigo : normalizeProductDescription(p.descripcion || '');
+    if (key) productsByDoc.get(p.documento_id)!.add(key);
   });
 
   // ✅ PASO 4: Agrupar por identificador_fiscal
@@ -2108,7 +2114,10 @@ SELECT * FROM UniqueHistory
   if (searchBy === 'code') {
     queryParams.push(identifier);
   } else {
-    queryParams.push(`%${identifier}%`);
+    // ✅ Hacemos que el LIKE sea más permisivo reemplazando espacios por '%' 
+    // para que coincida con descripciones que tengan guiones, barras, etc.
+    const searchPattern = identifier.split(/\s+/).filter(Boolean).join('%');
+    queryParams.push(`%${searchPattern}%`);
   }
 
   const [lineaRows] = await db.query<any[]>(query, queryParams);
@@ -2226,11 +2235,18 @@ OR
   const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
   lines.forEach(line => {
     const amt = Number(line.importe_linea || 0);
-    if (line.codigo && line.descripcion) {
-      if (!productSpend[line.codigo]) {
-        productSpend[line.codigo] = { codigo: line.codigo, descripcion: line.descripcion, total: 0 };
+    // Identificador único (Código o descripción normalizada)
+    const key = (line.codigo && line.codigo !== '') ? line.codigo : normalizeProductDescription(line.descripcion || '');
+
+    if (key) {
+      if (!productSpend[key]) {
+        productSpend[key] = {
+          codigo: line.codigo || '',
+          descripcion: line.descripcion || '',
+          total: 0
+        };
       }
-      productSpend[line.codigo].total += amt;
+      productSpend[key].total += amt;
     }
   });
 
