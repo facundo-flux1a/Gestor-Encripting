@@ -6,7 +6,7 @@ import type { RowDataPacket } from 'mysql2';
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-    
+
     if (!session || !session.userId) {
       console.warn('[CLEAN DB] ❌ Intento sin autenticación');
       return NextResponse.json(
@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[CLEAN DB] ✅ Usuario ${userId} (${userEmail}) ejecutando limpieza de BD...`);
-    
+
     const webhookResponse = await fetch(
-      'https://agent.flux1a.com.ar/webhook/b6eec5d7-5509-4c65-85b9-80ff5d183817',
+      'https://n8n-yx21.onrender.com/webhook/b6eec5d7-5509-4c65-85b9-80ff5d183817',
       {
         method: 'POST',
         headers: {
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[CLEAN DB] ❌ Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Error al limpiar la base de datos',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
