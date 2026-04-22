@@ -138,7 +138,7 @@ export function StatsHoverTable({
         (isActive('iva4') ? quotas.iva4 : 0);
 
     // ✅ Cálculo de diferencias entre suma teórica y Total Real de Facturas
-    const diffBases = totalBaseOverride !== undefined ? (Math.abs(totalBaseOverride) - calculatedTotalBase) : 0;
+    const diffBases = totalBaseOverride !== undefined ? (Math.abs(totalBaseOverride) - Math.abs(calculatedTotalBase)) : 0;
     const diffIvas = totalIvaOverride !== undefined ? (Math.abs(totalIvaOverride) - Math.abs(calculatedTotalIVA)) : 0;
 
     // Si la diferencia es de céntimos o tasas raras, permitimos toggle

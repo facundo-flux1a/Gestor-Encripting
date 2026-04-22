@@ -21,6 +21,13 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+export interface Member {
+  id: number;
+  nombre: string;
+  email: string;
+  organization_rol?: 'ADMIN' | 'EDITOR' | 'VIEWER';
+}
+
 export const SessionPayloadSchema = z.object({
   userId: z.number(),
   email: z.string(),

@@ -121,8 +121,8 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
             ivaDetails.forEach((detail: any) => {
                 const tipoIva = (detail.tipo_impuesto || '').toLowerCase();
                 const cuotaVal = Number(detail.cuota || 0);
-                const cuotaAbs = cuotaVal * absSign;
-                const cuotaNeto = cuotaVal * netoSign;
+                const cuotaAbs = Math.abs(cuotaVal) * absSign;
+                const cuotaNeto = Math.abs(cuotaVal) * netoSign;
 
                 if (tipoIva.includes('retencion')) {
                     docRetSum += cuotaVal;
@@ -161,8 +161,8 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                     totalNetoSum[`base_${rate}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
                 }
 
-                docBaseSum += base;
-                docIvaSum += cuota;
+                docBaseSum += Math.abs(base);
+                docIvaSum += Math.abs(cuota);
 
                 const theoreticalIva = Math.round(base * rate) / 100;
                 if (Math.abs(cuota - theoreticalIva) > 0.01) {
@@ -172,29 +172,29 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                     totalNetoSum.iva_docs[rate][q].push(info);
                 }
 
-                targetSum.iva_db[rate][q] += Number(detail.cuota || 0) * absSign;
-                targetSum.iva_db[rate].total += Number(detail.cuota || 0) * absSign;
-                totalNetoSum.iva_db[rate][q] += Number(detail.cuota || 0) * netoSign;
-                totalNetoSum.iva_db[rate].total += Number(detail.cuota || 0) * netoSign;
+                targetSum.iva_db[rate][q] += Math.abs(Number(detail.cuota || 0)) * absSign;
+                targetSum.iva_db[rate].total += Math.abs(Number(detail.cuota || 0)) * absSign;
+                totalNetoSum.iva_db[rate][q] += Math.abs(Number(detail.cuota || 0)) * netoSign;
+                totalNetoSum.iva_db[rate].total += Math.abs(Number(detail.cuota || 0)) * netoSign;
 
                 const keyBase = `base_${rate}`;
                 if (targetSum[keyBase]) {
-                    const baseAbs = base * absSign;
-                    const baseNeto = base * netoSign;
+                    const baseAbs = Math.abs(base) * absSign;
+                    const baseNeto = Math.abs(base) * netoSign;
                     targetSum[keyBase][q] += baseAbs;
                     targetSum[keyBase].total += baseAbs;
                     totalNetoSum[keyBase][q] += baseNeto;
                     totalNetoSum[keyBase].total += baseNeto;
                 }
                 else {
-                    targetSum['base_0'][q] += base * absSign;
-                    targetSum['base_0'].total += base * absSign;
+                    targetSum['base_0'][q] += Math.abs(base) * absSign;
+                    targetSum['base_0'].total += Math.abs(base) * absSign;
                 }
 
                 const keyIva = `iva_${rate}`;
                 if (targetSum[keyIva]) {
-                    const realIvaAbs = cuota * absSign;
-                    const realIvaNeto = cuota * netoSign;
+                    const realIvaAbs = Math.abs(cuota) * absSign;
+                    const realIvaNeto = Math.abs(cuota) * netoSign;
                     targetSum[keyIva][q] += realIvaAbs;
                     targetSum[keyIva].total += realIvaAbs;
                     totalNetoSum[keyIva][q] += realIvaNeto;

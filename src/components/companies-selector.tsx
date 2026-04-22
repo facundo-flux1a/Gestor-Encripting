@@ -3,11 +3,11 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
 import { useCompanyContext } from '@/context/CompanyProvider';
-import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, Lock, X } from 'lucide-react';
+import { Plus, ChevronDown, Trash2, AlertTriangle, HelpCircle, Settings, Mail, Lock, X, UserPlus, Loader2, RotateCcw, Ban, Shield, Users, Building2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTutorial } from '@/context/tutorial-context';
 import { getSession } from '@/services/auth-service';
-import { type User as UserType } from '@/lib/types';
+import { type User as UserType, type Invitation, type Member } from '@/lib/types';
 
 import { UserProfileForm } from './settings/UserProfileForm';
 import { PasswordEditDialog } from './settings/PasswordEditDialog';
@@ -21,6 +21,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -390,13 +399,161 @@ export function CompaniesSelector() {
   const [editingCompany, setEditingCompany] = React.useState<Company | null>(null);
   const [originalCompany, setOriginalCompany] = React.useState<Company | null>(null);
   const [isEmailValid, setIsEmailValid] = React.useState(true);
-  const [activeTab, setActiveTab] = React.useState<'empresa' | 'usuario'>('empresa');
+  const [activeTab, setActiveTab] = React.useState<'empresa' | 'usuario' | 'equipo'>('empresa');
   const [currentUser, setCurrentUser] = React.useState<UserType | null>(null);
 
+  // Estados para Gestión de Equipo
+  const [members, setMembers] = React.useState<Member[]>([]);
+  const [invitations, setInvitations] = React.useState<Invitation[]>([]);
+  const [isFetchingTeam, setIsFetchingTeam] = React.useState(false);
+  const [isInviting, setIsInviting] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState('');
+  const [inviteRole, setInviteRole] = React.useState<'ADMIN' | 'EDITOR' | 'VIEWER'>('EDITOR');
+  const [resendingId, setResendingId] = React.useState<number | null>(null);
+  const [revokingId, setRevokingId] = React.useState<number | null>(null);
+  const [removingId, setRemovingId] = React.useState<number | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
-  const [isZIndexLowered, setIsZIndexLowered] = React.useState(false); // ⬅️ AGREGAR ESTA LÍNEA
+  const [isZIndexLowered, setIsZIndexLowered] = React.useState(false);
 
+  // Funciones de Gestión de Equipo
+  const fetchTeamData = React.useCallback(async (companyId: number) => {
+    setIsFetchingTeam(true);
+    try {
+      const response = await fetch(`/api/companies/${companyId}/team`);
+      if (response.ok) {
+        const data = await response.json();
+        setMembers(data.members || []);
+        setInvitations(data.invitations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching team data:', error);
+    } finally {
+      setIsFetchingTeam(false);
+    }
+  }, []);
+
+  const handleInvite = async () => {
+    if (!editingCompany || !inviteEmail) return;
+
+    setIsInviting(true);
+    try {
+      const response = await fetch(`/api/companies/${editingCompany.id}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, rol: inviteRole }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Invitación enviada",
+          description: `Se ha enviado la invitación a ${inviteEmail}`,
+        });
+        setInviteEmail('');
+        fetchTeamData(editingCompany.id);
+      } else {
+        const data = await response.json();
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: data.error || "No se pudo enviar la invitación",
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al enviar invitación",
+      });
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleResendInvitation = async (invitationId: number) => {
+    setResendingId(invitationId);
+    try {
+      const response = await fetch(`/api/auth/resend-invitation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: invitationId }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Invitación re-enviada",
+          description: "Se ha vuelto a enviar el correo de acceso.",
+        });
+      } else {
+        throw new Error("Error al re-enviar");
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo re-enviar la invitación",
+      });
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId: number) => {
+    setRevokingId(invitationId);
+    try {
+      const response = await fetch(`/api/auth/revoke-invitation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: invitationId }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Invitación revocada",
+          description: "La invitación ha sido cancelada.",
+        });
+        if (editingCompany) fetchTeamData(editingCompany.id);
+      } else {
+        throw new Error("Error al revocar");
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo revocar la invitación",
+      });
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: number) => {
+    if (!editingCompany) return;
+    setRemovingId(memberId);
+    try {
+      const response = await fetch(`/api/companies/${editingCompany.id}/members/${memberId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Miembro eliminado",
+          description: "El usuario ha sido removido de la empresa.",
+        });
+        fetchTeamData(editingCompany.id);
+      } else {
+        throw new Error("Error al eliminar miembro");
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo eliminar al miembro",
+      });
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   React.useEffect(() => {
     setAvailableCompanies(companies);
@@ -554,6 +711,7 @@ export function CompaniesSelector() {
     setIsEditDialogOpen(true);
     setIsEmailValid(true);
     setActiveTab('empresa');
+    fetchTeamData(company.id);
   };
 
   const handleSaveCompany = async () => {
@@ -1070,12 +1228,14 @@ export function CompaniesSelector() {
 
             {/* Selector de Pestañas Estilo Slider */}
             <div className="flex justify-center my-4">
-              <div className="bg-muted/50 p-1 rounded-full flex relative w-64 border border-border/50">
+              <div className="bg-muted/50 p-1 rounded-full flex relative w-80 border border-border/50">
                 {/* Animated Background Slider */}
                 <div
                   className={cn(
-                    "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
-                    activeTab === 'empresa' ? "left-1" : "left-[calc(50%+2px)]"
+                    "absolute top-1 bottom-1 w-[calc(33.33%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
+                    activeTab === 'empresa' ? "left-1" :
+                      activeTab === 'usuario' ? "left-[calc(33.33%+2px)]" :
+                        "left-[calc(66.66%+2px)]"
                   )}
                 />
                 <button
@@ -1096,11 +1256,20 @@ export function CompaniesSelector() {
                 >
                   Usuario
                 </button>
+                <button
+                  onClick={() => setActiveTab('equipo')}
+                  className={cn(
+                    "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                    activeTab === 'equipo' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Equipo
+                </button>
               </div>
             </div>
 
             <div className="mt-2 min-h-[400px]">
-              {activeTab === 'empresa' ? (
+              {activeTab === 'empresa' && (
                 <>
                   {editingCompany && (
                     <EditCompanyFormComponent
@@ -1146,7 +1315,9 @@ export function CompaniesSelector() {
                     </div>
                   </DialogFooter>
                 </>
-              ) : (
+              )}
+
+              {activeTab === 'usuario' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {currentUser && (
                     <UserProfileForm
@@ -1171,6 +1342,168 @@ export function CompaniesSelector() {
                     </h4>
                     <FilteringPreferences minimal />
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'equipo' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <UserPlus className="w-4 h-4 text-violet-500" />
+                      Invitar Colaborador
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-email-1" className="text-xs">Email</Label>
+                        <Input
+                          id="invite-email-1"
+                          placeholder="ejemplo@correo.com"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-role-1" className="text-xs">Rol</Label>
+                        <select
+                          id="invite-role-1"
+                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          value={inviteRole}
+                          onChange={(e) => setInviteRole(e.target.value as any)}
+                        >
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="EDITOR">EDITOR</option>
+                          <option value="VIEWER">VIEWER</option>
+                        </select>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleInvite}
+                      disabled={isInviting || !inviteEmail}
+                      className="w-full"
+                      size="sm"
+                    >
+                      {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                      Enviar Invitación
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <Users className="w-4 h-4 text-violet-500" />
+                      Miembros Activos
+                    </h4>
+                    <div className="rounded-md border overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-muted/50">
+                          <TableRow className="h-8">
+                            <TableHead className="text-[10px] uppercase">Usuario</TableHead>
+                            <TableHead className="text-[10px] uppercase">Email</TableHead>
+                            <TableHead className="text-[10px] uppercase">Rol</TableHead>
+                            <TableHead className="text-right text-[10px] uppercase">Acción</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {isFetchingTeam ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-4">
+                                <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                              </TableCell>
+                            </TableRow>
+                          ) : members.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-4 text-muted-foreground text-xs">
+                                No hay miembros adicionales
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            members.map((member) => (
+                              <TableRow key={member.id} className="h-10">
+                                <TableCell className="text-xs font-medium">{member.nombre}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{member.email}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-[9px] px-1 h-4 uppercase">
+                                    {member.organization_rol || 'EDITOR'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {member.id !== currentUser?.id && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                      disabled={removingId === member.id}
+                                      onClick={() => handleRemoveMember(member.id)}
+                                    >
+                                      {removingId === member.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  {invitations.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-violet-500" />
+                        Invitaciones Pendientes
+                      </h4>
+                      <div className="rounded-md border overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-muted/30">
+                            <TableRow className="h-8">
+                              <TableHead className="text-[10px] uppercase">Email</TableHead>
+                              <TableHead className="text-[10px] uppercase">Estado</TableHead>
+                              <TableHead className="text-right text-[10px] uppercase">Acciones</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {invitations.map((inv) => (
+                              <TableRow key={inv.id} className="h-10">
+                                <TableCell className="text-xs truncate max-w-[150px]">{inv.email}</TableCell>
+                                <TableCell>
+                                  <Badge variant={inv.status === 'PENDING' ? 'secondary' : 'outline'} className="text-[9px] px-1 h-4">
+                                    {inv.status === 'PENDING' ? 'Pendiente' : inv.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    {inv.status === 'PENDING' && (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 text-blue-500 hover:bg-blue-50"
+                                          disabled={resendingId === inv.id}
+                                          onClick={() => handleResendInvitation(inv.id!)}
+                                        >
+                                          {resendingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 text-orange-500 hover:bg-orange-50"
+                                          disabled={revokingId === inv.id}
+                                          onClick={() => handleRevokeInvitation(inv.id!)}
+                                        >
+                                          {revokingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1432,12 +1765,14 @@ export function CompaniesSelector() {
 
           {/* Selector de Pestañas Estilo Slider */}
           <div className="flex justify-center my-4">
-            <div className="bg-muted/50 p-1 rounded-full flex relative w-64 border border-border/50">
+            <div className="bg-muted/50 p-1 rounded-full flex relative w-80 border border-border/50">
               {/* Animated Background Slider */}
               <div
                 className={cn(
-                  "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
-                  activeTab === 'empresa' ? "left-1" : "left-[calc(50%+2px)]"
+                  "absolute top-1 bottom-1 w-[calc(33.33%-4px)] bg-violet-600 rounded-full transition-all duration-300 ease-in-out shadow-lg shadow-violet-500/20",
+                  activeTab === 'empresa' ? "left-1" :
+                    activeTab === 'usuario' ? "left-[calc(33.33%+2px)]" :
+                      "left-[calc(66.66%+2px)]"
                 )}
               />
               <button
@@ -1458,11 +1793,20 @@ export function CompaniesSelector() {
               >
                 Usuario
               </button>
+              <button
+                onClick={() => setActiveTab('equipo')}
+                className={cn(
+                  "flex-1 py-1.5 text-[10px] font-bold rounded-full z-10 transition-colors uppercase tracking-widest",
+                  activeTab === 'equipo' ? "text-white" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Equipo
+              </button>
             </div>
           </div>
 
           <div className="mt-2 min-h-[400px]">
-            {activeTab === 'empresa' ? (
+            {activeTab === 'empresa' && (
               <>
                 {editingCompany && (
                   <EditCompanyFormComponent
@@ -1508,7 +1852,9 @@ export function CompaniesSelector() {
                   </div>
                 </DialogFooter>
               </>
-            ) : (
+            )}
+
+            {activeTab === 'usuario' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {currentUser && (
                   <UserProfileForm
@@ -1533,6 +1879,168 @@ export function CompaniesSelector() {
                   </h4>
                   <FilteringPreferences minimal />
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'equipo' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-violet-500" />
+                    Invitar Colaborador
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="invite-email" className="text-xs">Email</Label>
+                      <Input
+                        id="invite-email"
+                        placeholder="ejemplo@correo.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="invite-role" className="text-xs">Rol</Label>
+                      <select
+                        id="invite-role"
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value as any)}
+                      >
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="EDITOR">EDITOR</option>
+                        <option value="VIEWER">VIEWER</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleInvite}
+                    disabled={isInviting || !inviteEmail}
+                    className="w-full"
+                    size="sm"
+                  >
+                    {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                    Enviar Invitación
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Users className="w-4 h-4 text-violet-500" />
+                    Miembros Activos
+                  </h4>
+                  <div className="rounded-md border overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-muted/50">
+                        <TableRow className="h-8">
+                          <TableHead className="text-[10px] uppercase">Usuario</TableHead>
+                          <TableHead className="text-[10px] uppercase">Email</TableHead>
+                          <TableHead className="text-[10px] uppercase">Rol</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Acción</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isFetchingTeam ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-4">
+                              <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                            </TableCell>
+                          </TableRow>
+                        ) : members.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-4 text-muted-foreground text-xs">
+                              No hay miembros adicionales
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          members.map((member) => (
+                            <TableRow key={member.id} className="h-10">
+                              <TableCell className="text-xs font-medium">{member.nombre}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{member.email}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[9px] px-1 h-4 uppercase">
+                                  {member.organization_rol || 'EDITOR'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {member.id !== currentUser?.id && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                    disabled={removingId === member.id}
+                                    onClick={() => handleRemoveMember(member.id)}
+                                  >
+                                    {removingId === member.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {invitations.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-violet-500" />
+                      Invitaciones Pendientes
+                    </h4>
+                    <div className="rounded-md border overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-muted/30">
+                          <TableRow className="h-8">
+                            <TableHead className="text-[10px] uppercase">Email</TableHead>
+                            <TableHead className="text-[10px] uppercase">Estado</TableHead>
+                            <TableHead className="text-right text-[10px] uppercase">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invitations.map((inv) => (
+                            <TableRow key={inv.id} className="h-10">
+                              <TableCell className="text-xs truncate max-w-[150px]">{inv.email}</TableCell>
+                              <TableCell>
+                                <Badge variant={inv.status === 'PENDING' ? 'secondary' : 'outline'} className="text-[9px] px-1 h-4">
+                                  {inv.status === 'PENDING' ? 'Pendiente' : inv.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  {inv.status === 'PENDING' && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-blue-500 hover:bg-blue-50"
+                                        disabled={resendingId === inv.id}
+                                        onClick={() => handleResendInvitation(inv.id!)}
+                                      >
+                                        {resendingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-orange-500 hover:bg-orange-50"
+                                        disabled={revokingId === inv.id}
+                                        onClick={() => handleRevokeInvitation(inv.id!)}
+                                      >
+                                        {revokingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
