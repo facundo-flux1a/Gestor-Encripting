@@ -342,7 +342,7 @@ export async function uploadDocument(
   console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
   console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
-  const MICROSERVICE_WEBHOOK_URL = 'https://n8n-yx21.onrender.com/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
+  const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {

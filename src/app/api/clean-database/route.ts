@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     console.log(`[CLEAN DB] ✅ Usuario ${userId} (${userEmail}) ejecutando limpieza de BD...`);
 
     const webhookResponse = await fetch(
-      'https://n8n-yx21.onrender.com/webhook/b6eec5d7-5509-4c65-85b9-80ff5d183817',
+      'https://agent.flux1a.com.ar/webhook/b6eec5d7-5509-4c65-85b9-80ff5d183817',
       {
         method: 'POST',
         headers: {
