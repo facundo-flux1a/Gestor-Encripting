@@ -2721,7 +2721,10 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%irpf%'
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%recargo%'
                     AND LOWER(di.tipo_impuesto) NOT LIKE '%equivalencia%'
-                ), ABS(d.importe_total - d.importe_sin_impuestos)) as total_iva,
+                ), (ABS(d.importe_total - d.importe_sin_impuestos) - 
+                    COALESCE((SELECT SUM(di3.cuota) FROM impuestos_documento di3 WHERE di3.documento_id = d.id AND (di3.tipo_impuesto LIKE '%recargo%' OR di3.tipo_impuesto LIKE '%equivalencia%')), 0) +
+                    COALESCE((SELECT SUM(di4.cuota) FROM impuestos_documento di4 WHERE di4.documento_id = d.id AND (di4.tipo_impuesto LIKE '%retencion%' OR di4.tipo_impuesto LIKE '%irpf%')), 0)
+                )) as total_iva,
                 -- ✅ RECARGO SEPARADO
                 COALESCE((SELECT SUM(di.cuota) 
                   FROM impuestos_documento di 
@@ -2784,8 +2787,8 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
           END), 0) as totalGastosSinIva,
           
           -- ✅ IMPUESTOS DESGLOSADOS (Incluyendo Recargo para paridad con Trimestres)
-          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva + recargo_cuota) ELSE (total_iva + recargo_cuota) END) ELSE 0 END), 0) as ivaRepercutido,
-          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva + recargo_cuota) ELSE (total_iva + recargo_cuota) END) ELSE 0 END), 0) as ivaSoportado,
+          COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva) ELSE (total_iva) END) ELSE 0 END), 0) as ivaRepercutido,
+          COALESCE(SUM(CASE WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND total_iva > 0 THEN -(total_iva) ELSE (total_iva) END) ELSE 0 END), 0) as ivaSoportado,
           
           -- ✅ RETENCIONES: Siempre positivo para el KPI, el signo lo manejamos en la fórmula
           COALESCE(SUM(CASE WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 THEN -ABS(retencion_cuota) ELSE ABS(retencion_cuota) END) ELSE 0 END), 0) as retencionRepercutido,

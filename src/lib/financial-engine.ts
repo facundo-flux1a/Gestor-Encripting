@@ -8,6 +8,7 @@ export interface FinancialSummary {
     ivaReal: Record<number | string, number>;
     retenciones: Record<number | string, number>;
     recargos: Record<number | string, number>;
+    otrosCargos: Record<string, Record<number | string, number>>;
     bases: Record<number, Record<number | string, number>>;
     ivaTeorico: Record<number, Record<number | string, number>>;
     ivaDB: Record<number, Record<number | string, number>>;
@@ -36,6 +37,7 @@ const createEmptySummary = (): FinancialSummary => {
         ivaReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        otrosCargos: {},
         bases: {},
         ivaTeorico: {},
         ivaDB: {},
@@ -103,8 +105,20 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // 4. Totales Reales (BD)
         const valReal = Math.abs(docTotalVal);
         const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0));
-        // Si no hay iva explícito, aproximamos por diferencia para la estadística global
-        const ivaRealVal = Math.abs(Number(doc.iva || 0)) || (valReal - baseRealVal);
+        // Si no hay iva explícito, aproximamos por diferencia (se ajustará al final sumando impuestos)
+        let ivaRealVal = Math.abs(Number(doc.iva || (doc as any).total_iva || 0));
+        const recargoCab = Math.abs(Number((doc as any).recargo_cuota || (doc as any).recargo || 0));
+        const retencionCab = Math.abs(Number((doc as any).retencion_cuota || (doc as any).retencion || 0));
+
+        // Si el IVA viene de cabecera, podría incluir el recargo. Lo restamos para empezar con IVA puro.
+        if (ivaRealVal > 0 && recargoCab > 0 && Math.abs(ivaRealVal - (valReal - baseRealVal)) < 0.01) {
+            ivaRealVal = Math.max(0, ivaRealVal - recargoCab + retencionCab);
+        }
+
+        // Si sigue siendo 0, usamos la diferencia total-base como fallback inicial (menos otros impuestos conocidos)
+        if (ivaRealVal === 0) {
+            ivaRealVal = Math.max(0, valReal - baseRealVal - recargoCab + retencionCab);
+        }
 
         if (hasValidQ) {
             target.totalReal[q!] += valReal * absSign;
@@ -160,6 +174,23 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
 
                 const rate = Math.round(Number(detail.porcentaje));
                 const base = Math.round(Math.abs(Number(detail.base_imponible) || 0) * 100) / 100;
+
+                // ✅ OTROS CARGOS: líneas con porcentaje=0, cuota>0 y nombre no-IVA (ej: 'Aplazo')
+                if (rate === 0 && cuota !== 0 && !tipoIva.includes('iva') && !tipoIva.includes('exent')) {
+                    const nombreCargo = detail.tipo_impuesto || 'Otro';
+                    if (!target.otrosCargos[nombreCargo]) {
+                        target.otrosCargos[nombreCargo] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                        totalNeto.otrosCargos[nombreCargo] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+                    }
+                    if (hasValidQ) {
+                        target.otrosCargos[nombreCargo][q!] += cuota * absSign;
+                        totalNeto.otrosCargos[nombreCargo][q!] += cuota * netoSign;
+                    }
+                    target.otrosCargos[nombreCargo].total += cuota * absSign;
+                    totalNeto.otrosCargos[nombreCargo].total += cuota * netoSign;
+                    docIvaSum += cuota; // cuenta para el total teórico
+                    return;
+                }
 
                 docBaseSum += base;
                 docIvaSum += cuota;
@@ -231,7 +262,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // ✅ DETECCIÓN INTELIGENTE DE SUPLIDOS / EXENTOS (Base 0%)
         // Si hay una diferencia entre la base de cabecera y la suma de líneas,
         // pero la cabecera + impuestos cuadra con el total real, entonces la diferencia es Base 0%.
-        const headerBaseVal = Math.abs(Number(doc.importe_sin_impuestos || doc.base_imponible || 0));
+        const headerBaseVal = Math.abs(Number((doc as any).importe_sin_impuestos || doc.base_imponible || 0));
         const baseGap = headerBaseVal - docBaseSum;
         const theoreticalTotalWithHeader = headerBaseVal + docIvaSum + docRecSum - docRetSum;
 
@@ -254,6 +285,22 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         if (hasValidQ && Math.abs(valReal - docTheoreticalTotal) > 0.01 && ivaDetails.length > 0) {
             const docId = doc.numero_documento || `ID:${doc.id_documento}`;
             target.mismatchDocs.total[q!].push(`${docId} (BD:${valReal.toFixed(2)}€ vs Calc:${docTheoreticalTotal.toFixed(2)}€)`);
+        }
+
+        // ✅ AJUSTE FINAL DE IVA REAL: 
+        // Si usamos el fallback (total-base), debemos restar Recargos y Retenciones encontrados
+        // para que 'ivaReal' sea solo IVA puro.
+        const ivaFallback = valReal - baseRealVal;
+        if (Math.abs(ivaRealVal - ivaFallback) < 0.01) {
+            const trueIvaReal = Math.max(0, ivaRealVal - docRecSum + docRetSum);
+            const diff = trueIvaReal - ivaRealVal;
+
+            if (hasValidQ) {
+                target.ivaReal[q!] += diff * absSign;
+                totalNeto.ivaReal[q!] += diff * netoSign;
+            }
+            target.ivaReal.total += diff * absSign;
+            totalNeto.ivaReal.total += diff * netoSign;
         }
 
         // Contadores

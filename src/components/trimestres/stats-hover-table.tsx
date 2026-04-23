@@ -73,7 +73,8 @@ interface StatsHoverTableProps {
     totalBaseOverride?: number;
     totalIvaOverride?: number;
     totalOverride?: number;
-    mismatchDocs?: string[]; // 🆕 Lista de documentos con descuadres
+    mismatchDocs?: string[]; // Lista de documentos con descuadres
+    otrosCargos?: Record<string, number>; // Cargos nombrados (ej: 'Aplazo')
 }
 
 export function StatsHoverTable({
@@ -87,7 +88,8 @@ export function StatsHoverTable({
     totalBaseOverride,
     totalIvaOverride,
     totalOverride,
-    mismatchDocs
+    mismatchDocs,
+    otrosCargos = {},
 }: StatsHoverTableProps) {
     // Estado para claves desactivadas
     const [disabledKeys, setDisabledKeys] = React.useState<Set<string>>(new Set());
@@ -135,7 +137,8 @@ export function StatsHoverTable({
         (isActive('iva21') ? quotas.iva21 : 0) +
         (isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (isActive('iva10') ? quotas.iva10 : 0) +
-        (isActive('iva4') ? quotas.iva4 : 0);
+        (isActive('iva4') ? quotas.iva4 : 0) +
+        Object.entries(otrosCargos).reduce((acc, [key, val]) => acc + (isActive(`otro_${key}`) ? val : 0), 0);
 
     // ✅ Cálculo de diferencias entre suma teórica y Total Real de Facturas
     const diffBases = totalBaseOverride !== undefined ? (Math.abs(totalBaseOverride) - Math.abs(calculatedTotalBase)) : 0;
@@ -160,7 +163,8 @@ export function StatsHoverTable({
         (!isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (!isActive('iva10') ? quotas.iva10 : 0) +
         (!isActive('iva4') ? quotas.iva4 : 0) +
-        (!isActive('otrosIvas') ? diffIvas : 0);
+        (!isActive('otrosIvas') ? diffIvas : 0) +
+        Object.entries(otrosCargos).reduce((acc, [key, val]) => acc + (!isActive(`otro_${key}`) ? val : 0), 0);
 
     // Si hay override del backend, anclar a él y restar exactamente lo desactivado
     const totalBase = totalBaseOverride !== undefined
@@ -262,6 +266,20 @@ export function StatsHoverTable({
                     onClick={() => toggleKey('iva4')}
                     isActive={isActive('iva4')}
                 />
+
+                {/* Otros Cargos nombrados (ej: Aplazo) */}
+                {Object.entries(otrosCargos).map(([nombre, valor]) =>
+                    Math.abs(valor) > 0.01 ? (
+                        <TaxRow
+                            key={`otro_${nombre}`}
+                            label={nombre}
+                            value={valor}
+                            className="italic text-amber-500/80"
+                            onClick={() => toggleKey(`otro_${nombre}`)}
+                            isActive={isActive(`otro_${nombre}`)}
+                        />
+                    ) : null
+                )}
 
                 {Math.abs(diffIvas) > 0.01 && (
                     <TaxRow

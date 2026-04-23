@@ -4,9 +4,9 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { Document } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronDown, ChevronUp, LayoutGrid, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from "@/hooks/use-toast";
+import { Check, Info, FileSpreadsheet, List, ChevronDown, ChevronUp, AlertCircle, Eye, EyeOff, LayoutGrid } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -46,7 +46,9 @@ const createEmptySummary = () => {
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         total_real: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         iva_db: {} as any,
-        iva_docs: {} as any
+        iva_docs: {} as any,
+        total_mismatches: [] as any[],
+        doc_count: 0
     };
     types.forEach(type => {
         rates.forEach(rate => {
@@ -63,9 +65,9 @@ const createEmptySummary = () => {
 
 const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
     const foundRatesSet = new Set<number>([21, 15, 10, 4, 0]);
-    const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
-    const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
-    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[] };
+    const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
+    const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
+    const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
 
     data.forEach((doc) => {
         // ✅ FILTRO DE SEGURIDAD: Evitar que documentos de otros años se sumen si se colaron en el array
@@ -109,6 +111,9 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
         totalNetoSum.total_real[q] += docTotalNeto;
         totalNetoSum.total_real.total += docTotalNeto;
 
+        targetSum.doc_count++;
+        totalNetoSum.doc_count++;
+
         const ivaDetails = (doc as any).iva_details || [];
         const hasIvaDetails = ivaDetails.length > 0;
 
@@ -125,7 +130,7 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 const cuotaNeto = Math.abs(cuotaVal) * netoSign;
 
                 if (tipoIva.includes('retencion')) {
-                    docRetSum += cuotaVal;
+                    docRetSum += Math.abs(cuotaVal);
                     targetSum.retenciones[q] += cuotaAbs;
                     targetSum.retenciones.total += cuotaAbs;
                     totalNetoSum.retenciones[q] += cuotaNeto;
@@ -134,7 +139,7 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 }
 
                 if (tipoIva.includes('recargo') || tipoIva.includes('equivalencia')) {
-                    docRecSum += cuotaVal;
+                    docRecSum += Math.abs(cuotaVal);
                     targetSum.recargos[q] += cuotaAbs;
                     targetSum.recargos.total += cuotaAbs;
                     totalNetoSum.recargos[q] += cuotaNeto;
@@ -208,7 +213,12 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
 
             let deducedRate = 21; // Default fallback
             let refinedBase = Math.abs(baseImponible);
-            let refinedIva = Math.abs(docTotalVal) - refinedBase;
+
+            // ✅ EXTRAER RECARGOS Y RETENCIONES DE CABECERA SI NO HAY LÍNEAS
+            const recCab = Math.abs(Number((doc as any).recargo_cuota || (doc as any).recargo || 0));
+            const retCab = Math.abs(Number((doc as any).retencion_cuota || (doc as any).retencion || 0));
+
+            let refinedIva = Math.max(0, Math.abs(docTotalVal) - refinedBase - recCab + retCab);
 
             if (refinedBase > 0 && Math.abs(docTotalVal) > 0) {
                 const ratio = Math.abs(docTotalVal) / refinedBase;
@@ -218,11 +228,9 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
                 else if (Math.abs(ratio - 1.21) < 0.02) deducedRate = 21;
                 else if (Math.abs(ratio - 1.00) < 0.01) {
                     // ✅ CASO SATURADO: El usuario sugiere que se maneje como IVA.
-                    // Si Base == Total, probablemente la base incluya el IVA (ej. tickets de restaurante)
-                    // Asumimos 21% por defecto para extraer la base real.
                     deducedRate = 21;
-                    refinedBase = Math.round((Math.abs(docTotalVal) / 1.21) * 100) / 100;
-                    refinedIva = Math.abs(docTotalVal) - refinedBase;
+                    refinedBase = Math.round((Math.max(0, Math.abs(docTotalVal) - recCab + retCab) / 1.21) * 100) / 100;
+                    refinedIva = Math.max(0, Math.abs(docTotalVal) - refinedBase - recCab + retCab);
                 }
                 else deducedRate = 0; // Exento u otros casos
             }
@@ -230,6 +238,18 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
             const deducedIva = refinedIva;
             docBaseSum += refinedBase;
             docIvaSum += deducedIva;
+            docRecSum += recCab;
+            docRetSum += retCab;
+
+            // Registrar los de cabecera en el summary si se usan
+            if (recCab > 0) {
+                targetSum.recargos[q] += recCab * absSign;
+                targetSum.recargos.total += recCab * absSign;
+            }
+            if (retCab > 0) {
+                targetSum.retenciones[q] += retCab * absSign;
+                targetSum.retenciones.total += retCab * absSign;
+            }
 
             foundRatesSet.add(deducedRate);
 
@@ -269,6 +289,7 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
             // ✅ COLLECT METADATA FOR TOOLTIP
             targetSum.deduced_docs.push({
                 num_doc: doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`,
+                id: doc.id_documento || (doc as any).id || (doc as any)._id,
                 base: baseImponible,
                 deduced_iva: deducedIva,
                 deduced_rate: deducedRate,
@@ -296,8 +317,12 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
             } else {
                 targetSum.base_mismatches.push({
                     num_doc: doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`,
+                    id: doc.id_documento || (doc as any).id || (doc as any)._id,
                     header_base: headerBase,
                     lines_base: docBaseSum,
+                    doc_iva: docIvaSum,
+                    doc_rec: docRecSum,
+                    doc_ret: docRetSum,
                     diff: baseDelta * absSign,
                     q: q
                 });
@@ -307,6 +332,20 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
         // Trace for developer level
         const theoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum;
         const diff = Math.abs(Math.abs(docTotalVal) - theoreticalTotal);
+        if (diff > 0.05) {
+            targetSum.total_mismatches.push({
+                num_doc: doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`,
+                id: doc.id_documento || (doc as any).id || (doc as any)._id,
+                total_db: docTotalVal,
+                total_calc: theoreticalTotal * absSign,
+                doc_base: docBaseSum,
+                doc_iva: docIvaSum,
+                doc_rec: docRecSum,
+                doc_ret: docRetSum,
+                diff: diff
+            });
+        }
+
         if (diff > 0.01) {
             // Diagnostic patterns
             const isNoTaxesCandidate = !hasIvaDetails && Math.abs(diff - (Math.abs(docTotalVal) * 0.21)) < 1;
@@ -497,9 +536,37 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
     ], [selectedTrimestre]);
 
     const gridData = useMemo(() => {
-        if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [], rowDataUnified: [] };
+        if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [], rowDataUnified: [], auditData: null };
 
         const { ingresosSum, gastosSum, totalNetoSum, foundRates } = calculateAnnualSummary(documents, año);
+
+        const calcHealth = (sum: any) => {
+            const totalDocs = sum.doc_count;
+            const errors = sum.total_mismatches.length + sum.base_mismatches.length;
+            const score = totalDocs > 0 ? Math.max(0, 100 - (errors / totalDocs * 100)) : 100;
+            return {
+                score,
+                lastCheck: sum.lastCheck,
+                totalMismatches: sum.total_mismatches,
+                baseMismatches: sum.base_mismatches,
+                deducedDocs: sum.deduced_docs,
+                docCount: totalDocs
+            };
+        };
+
+        const auditData = {
+            ingresos: calcHealth(ingresosSum),
+            gastos: calcHealth(gastosSum),
+        };
+
+        const globalAudit = {
+            score: (auditData.ingresos.score + auditData.gastos.score) / 2,
+            lastCheck: auditData.ingresos.lastCheck,
+            totalMismatches: [...auditData.ingresos.totalMismatches, ...auditData.gastos.totalMismatches],
+            baseMismatches: [...auditData.ingresos.baseMismatches, ...auditData.gastos.baseMismatches],
+            deducedDocs: [...auditData.ingresos.deducedDocs, ...auditData.gastos.deducedDocs],
+            docCount: auditData.ingresos.docCount + auditData.gastos.docCount
+        };
 
         const buildRows = (summary: any, accentColor: string) => {
             const rows: any[] = [];
@@ -556,8 +623,8 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 let bSum = 0; currentRates.forEach(r => bSum += summary[`base_${r}`]?.[q] || 0);
                 let iSum = 0; currentRates.forEach(r => iSum += summary.iva_db[r]?.[q] || 0);
 
-                // ✅ CORRECCIÓN CRÍTICA: Las retenciones ya son negativas, usarlas algebraicamente
-                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) + (summary.retenciones[q] || 0);
+                // ✅ CORRECCIÓN CRÍTICA: Las retenciones se restan del total (Base + IVA + Recargo - Retención)
+                const theoreticalQ = bSum + iSum + (summary.recargos[q] || 0) - (summary.retenciones[q] || 0);
                 const realQ = summary.total_real[q];
                 const delta = realQ - theoreticalQ;
 
@@ -587,8 +654,6 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                     totalBasesRow[`q${q}`] += (summary[`base_${r}`]?.[q] || 0);
                     totalIvaRow[`q${q}`] += (summary.iva_db[r]?.[q] || 0);
                 });
-                // ✅ IMPORTANTE: Las Cards incluyen recargos en el total de IVA
-                totalIvaRow[`q${q}`] += (summary.recargos[q] || 0);
 
                 // INTEGRAR AJUSTE EN TOTAL BASES
                 totalBasesRow[`q${q}`] += adjustmentRow[`q${q}`];
@@ -644,6 +709,8 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             rowDataNeto: buildRows(totalNetoSum, '#3b82f6'),
             ingresosTraces: ingresosSum.traces,
             gastosTraces: gastosSum.traces,
+            auditData: auditData,
+            globalAudit: globalAudit,
             rowDataUnified: [
                 { concepto: '--- INGRESOS (EMITIDAS) ---', isSectionHeader: true, q1: null, q2: null, q3: null, q4: null, total: null },
                 ...buildRows(ingresosSum, '#10b981'),
@@ -743,8 +810,12 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                         <CardContent className="p-0">
                             {/* Control Bar: Legend + Toggle */}
                             <div className="bg-slate-950 p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800">
-                                <div className="text-xs text-slate-400">
-                                    Bases + IVA + Recargos - Retenciones = <span className="text-blue-500 font-bold text-sm">TOTAL</span>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                    <div className="text-xs text-slate-400">
+                                        Bases + IVA + Recargos - Retenciones = <span className="text-blue-500 font-bold text-sm">TOTAL</span>
+                                    </div>
+
+
                                 </div>
 
                                 <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800 px-4">

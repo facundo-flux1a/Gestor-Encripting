@@ -552,15 +552,46 @@ export async function uploadDocument(
       console.log(`[${normalizedFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales`);
     }
 
-    // 🔥 LLAMAR A MICROSERVICE Y CAPTURAR ERRORES CON MENSAJE GENÉRICO
+    // 🔥 LLAMAR A MICROSERVICE CON TIMEOUT DE 90 SEGUNDOS
     console.log(`[${normalizedFileName}] 📡 Llamando a Microservice webhook...`);
     console.log(`[${normalizedFileName}] 🆔 UploadId que enviamos: ${uploadId}`);
 
-    const webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload),
-    });
+    const WEBHOOK_TIMEOUT_MS = 390_000; // 6.5 minutos (5 min original + 1.5 min extra para lotes grandes)
+    const abortController = new AbortController();
+    const timeoutTimer = setTimeout(() => abortController.abort(), WEBHOOK_TIMEOUT_MS);
+
+    let webhookResponse: Response;
+    try {
+      webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload),
+        signal: abortController.signal,
+      });
+    } catch (fetchError: any) {
+      clearTimeout(timeoutTimer);
+
+      // Si fue un timeout (AbortError), el webhook ya recibió la petición → éxito silencioso
+      if (fetchError.name === 'AbortError') {
+        console.warn(`⚠️ [${normalizedFileName}] Webhook tardó más de ${WEBHOOK_TIMEOUT_MS / 1000}s → asumiendo procesamiento en segundo plano`);
+        return {
+          success: true,
+          isDuplicate: false,
+          message: '✅ Archivo enviado. Los documentos se están analizando en segundo plano.',
+          url: publicUrl,
+          fileHash: mainFileHash,
+        };
+      }
+
+      // Error de red real (conexión rechazada, DNS, etc.) → sí falló
+      console.error(`❌ [${normalizedFileName}] Error de red al llamar al webhook:`, fetchError.message);
+      const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+      throw new Error(userFriendlyMessage);
+    }
+
+    clearTimeout(timeoutTimer);
 
     // 🔥 VERIFICAR SI MICROSERVICE RETORNÓ ERROR (status code != 200)
     if (!webhookResponse.ok) {

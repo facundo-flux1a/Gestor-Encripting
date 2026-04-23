@@ -669,12 +669,12 @@ function TrimestresPageContent() {
   const mapToStatsBreakdown = (summary: any) => {
     const totalBaseTeorica = Object.values(summary.bases).reduce((acc: number, b: any) => acc + b.total, 0);
 
-    // ✅ MODELO TEÓRICO AGREGADO (Solo informativo para el desglose)
+    // ✅ MODELO REAL AGREGADO (Extraído literalmente de cada línea de la BD)
     const quotas = {
-      iva21: Math.round((summary.bases[21]?.total || 0) * 21) / 100,
-      iva15: Math.round((summary.bases[15]?.total || 0) * 15) / 100,
-      iva10: Math.round((summary.bases[10]?.total || 0) * 10) / 100,
-      iva4: Math.round((summary.bases[4]?.total || 0) * 4) / 100,
+      iva21: summary.ivaDB[21]?.total || 0,
+      iva15: summary.ivaDB[15]?.total || 0,
+      iva10: summary.ivaDB[10]?.total || 0,
+      iva4: summary.ivaDB[4]?.total || 0,
     };
 
     const totalIvaTeorico = Object.values(quotas).reduce((acc, v) => acc + v, 0);
@@ -705,7 +705,11 @@ function TrimestresPageContent() {
       mismatchDocs: [
         ...(summary.mismatchDocs.total[selectedTrimestre] || []),
         ...Object.values(summary.mismatchDocs.iva[selectedTrimestre] || {}).flat()
-      ]
+      ],
+      // ✅ Cargos nombrados (ej: 'Aplazo') para mostrar en la card con su nombre real
+      otrosCargos: Object.fromEntries(
+        Object.entries(summary.otrosCargos || {}).map(([nombre, data]) => [nombre, (data as any).total || 0])
+      ),
     };
   };
 
