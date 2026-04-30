@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Estratégico: Gestor Muvail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6F42C1;
+            --primary-light: #8a63cf;
+            --background: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #38bdf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            line-height: 1.85;
+            padding: 64px 24px;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(111, 66, 193, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(111, 66, 193, 0.035) 1px, transparent 1px);
+            background-size: 52px 52px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 920px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── HEADER ── */
+        header {
+            text-align: center;
+            margin-bottom: 80px;
+            padding: 72px 56px;
+            background: linear-gradient(135deg, rgba(111, 66, 193, 0.2) 0%, rgba(15, 23, 42, 0) 100%);
+            border-radius: 28px;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -80px;
+            right: -80px;
+            width: 320px;
+            height: 320px;
+            background: radial-gradient(circle, rgba(111, 66, 193, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -100px;
+            left: -60px;
+            width: 260px;
+            height: 260px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.07) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .logo-placeholder {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--primary-light);
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            margin-bottom: 32px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(111, 66, 193, 0.4);
+            padding: 8px 22px;
+            border-radius: 100px;
+        }
+
+        .logo-placeholder::before {
+            content: '◆';
+            color: var(--primary);
+            font-size: 9px;
+        }
+
+        h1 {
+            font-size: 46px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            line-height: 1.15;
+            background: linear-gradient(to right, #fff 30%, var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 18px;
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.75;
+        }
+
+        /* ── DIVIDER ── */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 0 0 64px;
+            opacity: 0.2;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--primary), transparent);
+        }
+
+        .divider span {
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: var(--primary-light);
+        }
+
+        /* ── SECTIONS ── */
+        section {
+            margin-bottom: 60px;
+            padding: 52px 48px;
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            position: relative;
+        }
+
+        section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, var(--primary), transparent);
+            border-radius: 20px 20px 0 0;
+            opacity: 0.45;
+        }
+
+        /* ── H2 ── */
+        h2 {
+            margin-bottom: 36px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        h2 .bar {
+            display: block;
+            width: 4px;
+            min-height: 48px;
+            background: linear-gradient(to bottom, var(--primary), var(--accent));
+            border-radius: 2px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        h2 .h2-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        h2 .section-label {
+            font-size: 10px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--primary-light);
+            font-weight: 600;
+        }
+
+        h2 .section-main {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+        }
+
+        /* ── H3 ── */
+        h3 {
+            font-size: 19px;
+            margin: 40px 0 14px;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h3::before {
+            content: '//';
+            color: var(--primary);
+            font-size: 13px;
+            opacity: 0.65;
+        }
+
+        p {
+            margin-bottom: 20px;
+            color: #cbd5e1;
+            font-size: 15.5px;
+            line-height: 1.9;
+        }
+
+        /* ── LIST ── */
+        ul {
+            list-style: none;
+            margin-bottom: 24px;
+        }
+
+        li {
+            margin-bottom: 16px;
+            padding: 16px 20px 16px 48px;
+            position: relative;
+            background: rgba(111, 66, 193, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(111, 66, 193, 0.1);
+            color: #cbd5e1;
+            font-size: 15px;
+            line-height: 1.75;
+        }
+
+        li::before {
+            content: '→';
+            position: absolute;
+            left: 18px;
+            top: 16px;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        /* ── TABLE ── */
+        .matrix-container {
+            overflow-x: auto;
+            margin: 32px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 20px 18px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: rgba(111, 66, 193, 0.12);
+            color: var(--primary-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 11px;
+        }
+
+        td {
+            color: #94a3b8;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .muvail-cell {
+            background: rgba(111, 66, 193, 0.08);
+            font-weight: 600;
+            color: #fff !important;
+            border-left: 2px solid var(--primary);
+        }
+
+        /* ── ROADMAP ── */
+        .badge {
+            display: inline-block;
+            padding: 6px 18px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            margin-bottom: 14px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .roadmap-item {
+            border-left: 2px solid rgba(111, 66, 193, 0.3);
+            padding: 4px 0 4px 44px;
+            margin-bottom: 52px;
+            position: relative;
+        }
+
+        .roadmap-item::after {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 8px;
+            width: 14px;
+            height: 14px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 0 4px rgba(111, 66, 193, 0.2);
+        }
+
+        .roadmap-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .tech-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 22px 26px;
+            border-radius: 10px;
+            margin-top: 16px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            color: var(--accent);
+            border: 1px solid rgba(56, 189, 248, 0.14);
+            letter-spacing: 0.3px;
+            line-height: 1.8;
+        }
+
+        /* ── CONCLUSION HIGHLIGHT ── */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(111, 66, 193, 0.1), rgba(56, 189, 248, 0.04));
+            border: 1px solid rgba(111, 66, 193, 0.28);
+            border-radius: 14px;
+            padding: 32px 36px;
+            margin-top: 8px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+            font-size: 16px;
+            line-height: 1.95;
+        }
+
+        /* ── FOOTER ── */
+        footer {
+            text-align: center;
+            margin-top: 80px;
+            color: var(--text-muted);
+            font-size: 13px;
+            border-top: 1px solid var(--border);
+            padding-top: 36px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .footer-logo {
+            font-size: 10px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--primary-light);
+            opacity: 0.6;
+        }
+
+        @media (max-width: 640px) {
+            header {
+                padding: 48px 24px;
+            }
+
+            section {
+                padding: 36px 24px;
+            }
+
+            h1 {
+                font-size: 32px;
+            }
+        }
+
+        @media print {
+            body {
+                background-color: white;
+                color: black;
+                padding: 0;
+            }
+
+            body::before {
+                display: none;
+            }
+
+            .container {
+                max-width: 100%;
+            }
+
+            section {
+                background: none;
+                border: 1px solid #eee;
+                backdrop-filter: none;
+                break-inside: avoid;
+            }
+
+            h1,
+            h2 .section-main,
+            h3,
+            .muvail-cell {
+                color: #2e1065 !important;
+                -webkit-text-fill-color: initial;
+            }
+
+            .tech-box {
+                background: #f8fafc;
+                border: 1px solid #eee;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- HEADER -->
+        <header>
+            <div class="logo-placeholder">Gestor Muvail</div>
+            <h1>Benchmark de Innovación Estratégica</h1>
+            <p class="subtitle">Análisis Competitivo y Hoja de Ruta de Automatización Documental</p>
+        </header>
+
+        <div class="divider"><span>◆</span></div>
+
+        <!-- 1. RESUMEN EJECUTIVO -->
+        <section id="executive-summary">
+            <h2>
+                <span class="bar"></span>
+                <span class="h2-inner">
+                    <span class="section-label">01 — Apertura</span>
+                    <span class="section-main">Resumen Ejecutivo</span>
+                </span>
+            </h2>
+            <p>En el ecosistema empresarial actual, la gestión documental ha dejado de ser un proceso administrativo
+                para convertirse en un activo estratégico de alto valor. Este benchmark analiza dos referentes de la
+                industria: <strong>Sage Autoscan</strong>, el estándar del legado corporativo, y
+                <strong>Dijit.app</strong>, líder en flujos de control inteligentes.</p>
+            <p>El objetivo es trazar la hoja de ruta para <strong>Gestor Muvail</strong>, enfocando su evolución en la
+                absorción de las mejores prácticas globales y su superación a través de una arquitectura de Inteligencia
+                Artificial de "Cero Fricción" que controla todo el ciclo, desde el albarán físico hasta el asiento
+                contable.</p>
+        </section>
+
+        <div class="divider"><span>◆</span></div>
+
+        <!-- 2. ANÁLISIS DE MERCADO -->
+        <section id="analysis">
+            <h2>
+                <span class="bar"></span>
+                <span class="h2-inner">
+                    <span class="section-label">02 — Contexto</span>
+                    <span class="section-main">Análisis de Mercado: Los Referentes</span>
+                </span>
+            </h2>
+
+            <h3>A. Sage Autoscan: Centralización Masiva de Físicos</h3>
+            <p>Destaca por su capacidad de absorber grandes volúmenes de documentos físicos directamente al entorno
+                contable.</p>
+            <ul>
+                <li><strong>Inspiración:</strong> La capacidad de centralizar fuentes físicas complejas y la auditoría
+                    automática que bloquea errores preventivamente.</li>
+                <li><strong>Muvail "El Cómo":</strong> Implementación de una "Zona de Carga Física" proactiva. Tras la
+                    subida de la imagen, el sistema genera un <strong>borrador editable (ODF/PDF)</strong> que
+                    reconstruye digitalmente el papel para una validación visual asíncrona por parte del usuario o el
+                    agente.</li>
+            </ul>
+
+            <h3>B. Dijit.app: Validación y Casación Inteligente</h3>
+            <p>Referente en la gestión de ciclos complejos de validación y vinculación documental (Three-Way Matching).
+            </p>
+            <ul>
+                <li><strong>Inspiración:</strong> La <strong>Casación Inteligente</strong> de albaranes y facturas,
+                    junto con una jerarquía de roles de aprobación que garantiza el control financiero total.</li>
+                <li><strong>Muvail "El Cómo":</strong> Evolución del actual *Health Check* matemático hacia un sistema
+                    de reconciliación operativa. Muvail automatizará el vínculo entre Factura + Albarán + Pedido,
+                    operando bajo un modelo de Gestión por Excepción (Solo avisar si algo no casa).</li>
+            </ul>
+        </section>
+
+        <div class="divider"><span>◆</span></div>
+
+        <!-- 3. MATRIZ -->
+        <section id="matrix">
+            <h2>
+                <span class="bar"></span>
+                <span class="h2-inner">
+                    <span class="section-label">03 — Comparativa</span>
+                    <span class="section-main">Matriz de Comparación Estratégica</span>
+                </span>
+            </h2>
+            <div class="matrix-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Capacidad Técnica</th>
+                            <th>Sage Autoscan</th>
+                            <th>Dijit.app</th>
+                            <th>Gestor Muvail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Ingesta de Físicos</td>
+                            <td>Superior (Scanner Nativo)</td>
+                            <td>Media (Carga Web)</td>
+                            <td class="muvail-cell">OCR-to-Template (Borrador Editable)</td>
+                        </tr>
+                        <tr>
+                            <td>Validación / Control</td>
+                            <td>Bloqueo Manual Rígido</td>
+                            <td>Matching Automatizado</td>
+                            <td class="muvail-cell">Casación Inteligente + Aprobaciones</td>
+                        </tr>
+                        <tr>
+                            <td>Desempeño IA</td>
+                            <td>Estático / OCR Básico</td>
+                            <td>IA Generativa Contextual</td>
+                            <td class="muvail-cell">LLM Reasoning + Auditoría de Verdad</td>
+                        </tr>
+                        <tr>
+                            <td>Audit de Datos</td>
+                            <td>Consistencia Técnica</td>
+                            <td>Validación de Documentos</td>
+                            <td class="muvail-cell">Health Check Operativo Cross-Doc</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="divider"><span>◆</span></div>
+
+        <!-- 4. ROADMAP -->
+        <section id="roadmap">
+            <h2>
+                <span class="bar"></span>
+                <span class="h2-inner">
+                    <span class="section-label">04 — Evolución</span>
+                    <span class="section-main">Grandes Pasos de Evolución</span>
+                </span>
+            </h2>
+            <p>Estos hitos representan la visión estratégica para consolidar a Muvail como el líder absoluto en el
+                control financiero de la empresa moderna.</p>
+
+            <br>
+
+            <div class="roadmap-item">
+                <span class="badge">Paso 1</span>
+                <h3>Digitalización Espejo (Mirror-Drafting)</h3>
+                <p>Erradicar la fricción entre el papel y el dato digital mediante la generación de borradores ODF
+                    editables que replican el documento físico original.</p>
+                <div class="tech-box">
+                    FLOW: Physical Capture → Semantic Reasoning → ODF Template Generation → Side-by-Side Audit.
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <span class="badge">Paso 2</span>
+                <h3>Motor de Reconciliación (Three-Way Match)</h3>
+                <p>Vincular automáticamente facturas con albaranes y pedidos. El sistema solo genera alertas si detecta
+                    discrepancias entre lo recibido y lo facturado.</p>
+                <div class="tech-box">
+                    LOGIC: Invoice-POD-Order Reconciliation → Exception Management → Hierarchical Approval Flow.
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"><span>◆</span></div>
+
+        <!-- 5. CONCLUSIÓN -->
+        <section id="conclusion">
+            <h2>
+                <span class="bar"></span>
+                <span class="h2-inner">
+                    <span class="section-label">05 — Cierre</span>
+                    <span class="section-main">Conclusión</span>
+                </span>
+            </h2>
+            <div class="highlight-box">
+                <p>Al integrar la digitalización proactiva de Sage y los flujos de validación operativa de Dijit,
+                    <strong>Gestor Muvail</strong> se consolida como el <strong>Cerebro Estratégico</strong> capaz de
+                    garantizar la verdad comercial de la empresa, desde la recepción del albarán hasta el cierre
+                    contable.</p>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer>
+            <span class="footer-logo">Gestor Muvail</span>
+            <p>&copy; 2026 Gestor Muvail — Inteligencia Documental de Vanguardia</p>
+        </footer>
+
+    </div>
+</body>
+
+</html>

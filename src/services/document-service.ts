@@ -4527,3 +4527,91 @@ AND(JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     connection.release();
   }
 }
+
+export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
+  summary: { total: number; mismatches: number };
+  documents: Document[];
+}> {
+  if (companyIds.length === 0) return { summary: { total: 0, mismatches: 0 }, documents: [] };
+
+  const [rows] = await db.query<RowDataPacket[]>(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN (ABS(d.importe_total - (d.importe_sin_impuestos + 
+          COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+      )) > 0.05) THEN 1 ELSE 0 END) as mismatches
+    FROM documentos d
+    WHERE d.id_de_empresa IN (?)
+  `, [companyIds]);
+
+  // Fetch documents with mismatches OR balanced but pending confirmation (verified = 0)
+  const [docRows] = await db.query<DocumentPacket[]>(`
+    SELECT 
+      d.*,
+      (ABS(d.importe_total - (d.importe_sin_impuestos + 
+          COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+      ))) as mismatch_amount,
+      hcs.verified as hcs_verified
+    FROM documentos d
+    LEFT JOIN erp49.health_check_status hcs ON hcs.documento_id = d.id
+    WHERE d.id_de_empresa IN (?)
+    HAVING mismatch_amount > 0.05
+       OR (mismatch_amount <= 0.05 AND hcs.verified = 0)
+    ORDER BY d.fecha_emision DESC
+    LIMIT 50
+  `, [companyIds]);
+
+  const documents = await mapDocumentPacketsToDocuments(docRows);
+
+  // Auto-register newly detected mismatched documents in health_check_status
+  for (const doc of docRows as any[]) {
+    if (Number(doc.mismatch_amount || 0) > 0.05) {
+      await db.query(
+        `INSERT IGNORE INTO erp49.health_check_status (documento_id, empresa_id, verified) VALUES (?, ?, 0)`,
+        [doc.id, doc.id_de_empresa]
+      );
+    }
+  }
+
+  if (documents.length > 0) {
+    const docIds = documents.map(d => d.id_documento);
+
+    const [suggestionRows] = await db.query<any[]>(
+      'SELECT * FROM ai_suggestions WHERE documento_id IN (?)',
+      [docIds]
+    );
+
+    const [statusRows] = await db.query<any[]>(
+      'SELECT documento_id, verified FROM erp49.health_check_status WHERE documento_id IN (?)',
+      [docIds]
+    );
+
+    documents.forEach(doc => {
+      doc.ai_suggestions = suggestionRows.filter(s => s.documento_id === doc.id_documento);
+      const status = statusRows.find((s: any) => s.documento_id === doc.id_documento);
+      (doc as any).hcs_verified = status ? Number(status.verified) : null;
+      (doc as any).hcs_mismatch_amount = Number(
+        (docRows as any[]).find(r => r.id === doc.id_documento)?.mismatch_amount || 0
+      );
+    });
+  }
+
+  return {
+    summary: {
+      total: rows[0].total || 0,
+      mismatches: Number(rows[0].mismatches) || 0
+    },
+    documents
+  };
+}
+
+/**
+ * Confirms a document in health_check_status so it disappears from the Health Check dashboard.
+ */
+export async function confirmHealthCheckDocument(documentId: number): Promise<void> {
+  await db.query(
+    `UPDATE erp49.health_check_status SET verified = 1 WHERE documento_id = ?`,
+    [documentId]
+  );
+}
+

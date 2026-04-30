@@ -75,6 +75,7 @@ export async function middleware(request: NextRequest) {
 }
 
 // Configuration for which paths the middleware should apply to.
+// Excludes: API routes, Next.js internals, and any path with a file extension (static assets)
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 };

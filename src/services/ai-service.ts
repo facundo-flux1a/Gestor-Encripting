@@ -424,7 +424,7 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
         };
       }
 
-      model = provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+      model = provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini';
       console.log(`🔑 Usando shared key: ${provider} (preferencia del usuario: ${userConfig?.shared_provider || 'gemini'})`);
     }
 

@@ -178,6 +178,8 @@ export type Document = {
   num_trimestre?: number;
   trimestre_cerrado?: number;
   is_issued?: number;  // ✅ 1 = emitida (ingreso), 0 = recibida (gasto) — calculado por backend
+  mismatch_amount?: number; // ✅ Diferencia matemática detectada en auditoría
+  ai_suggestions?: any[];   // ✅ Sugerencias de Vertex AI persistentes
 };
 
 export const DocumentUpdateSchema = z.object({

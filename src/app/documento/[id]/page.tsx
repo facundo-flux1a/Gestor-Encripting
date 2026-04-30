@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { notFound, useParams } from 'next/navigation';
+import { notFound, useParams, useSearchParams } from 'next/navigation';
 import { MainLayout, MainLayoutHeader } from '@/components/layout/main-layout';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
 import { useForm } from 'react-hook-form';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, X, Save, Trash2, ShieldCheck, Eye, Lock } from 'lucide-react';
 import { Form } from '@/components/ui/form';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import { AnalyzeDocumentCard } from '@/components/incidents/analyze-document-card';
 import { DeleteConfirmationDialog } from '@/components/dashboard/delete-confirmation-dialog';
@@ -22,6 +23,8 @@ import { PlusCircle } from 'lucide-react';
 import { DocumentPreviewDialog } from '@/components/dashboard/document-preview-dialog';
 import { IndividualProvider } from '@/context/IndividualProvider';
 import { IndividualTutorialRouter } from '@/components/documento/IndividualTutorialRouter';
+import { AuditSplitView } from '@/components/dashboard/audit-split-view';
+import { getAuditHistory, diagnoseDocument, clearSuggestions } from '@/services/vertex-ai-service';
 
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
@@ -50,6 +53,7 @@ const formatCurrency = (amount: number | string): string => {
 
 function DocumentoPageContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +62,8 @@ function DocumentoPageContent() {
   const [isValidating, setIsValidating] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isAuditMode, setIsAuditMode] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const { toast } = useToast();
 
   const lastDocIdRef = useRef<number | null>(null);
@@ -99,6 +105,33 @@ function DocumentoPageContent() {
       keepSubmitCount: false,
     });
   }, [form]);
+
+  const isEditable = useMemo(() => {
+    if (!doc) return false;
+    return !doc.trimestre_cerrado;
+  }, [doc?.id_documento, doc?.trimestre_cerrado]);
+
+  // Calcular si el documento está cuadrado (para el auto-ocultado de sugerencias)
+  const isFixed = useMemo(() => {
+    if (!doc) return true;
+    const formValues = form.getValues();
+    const base = Number(formValues.base_imponible ?? doc.base_imponible ?? 0);
+    const total = Number(formValues.total ?? doc.total ?? 0);
+
+    // Sumar cuotas de impuestos (iva_details)
+    const taxes = (formValues.iva_details || doc.iva_details || []).reduce((acc: number, tax: any) => acc + Number(tax.cuota || 0), 0);
+
+    const diff = Math.abs(total - (base + taxes));
+    return diff <= 0.05;
+  }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details')]);
+
+  useEffect(() => {
+    const auditParam = searchParams.get('audit');
+    if (auditParam === 'true') {
+      console.log('🔍 [page] Modo Auditoría forzado por URL');
+      setIsAuditMode(true);
+    }
+  }, [searchParams]);
 
   const fetchDocument = useCallback(async (id: number) => {
     try {
@@ -147,13 +180,26 @@ function DocumentoPageContent() {
     }
 
     fetchDocument(id);
+
+    // Cargar sugerencias persistentes
+    getAuditHistory(id).then(setSuggestions).catch(console.error);
   }, [params.id, fetchDocument]);
+
+  // Re-cargar sugerencias al entrar en modo auditoría para asegurar frescura
+  useEffect(() => {
+    if (isAuditMode && doc) {
+      getAuditHistory(doc.id_documento).then(setSuggestions).catch(console.error);
+    }
+  }, [isAuditMode, doc?.id_documento]);
 
   const onAnalysisComplete = useCallback(() => {
     if (doc) {
       fetchDocument(doc.id_documento);
+      getAuditHistory(doc.id_documento).then(setSuggestions).catch(console.error);
     }
   }, [doc, fetchDocument]);
+
+  // Auto-audit trigger eliminado a petición del usuario para mantener control manual
 
   const handleDelete = async () => {
     if (!doc) return;
@@ -225,6 +271,10 @@ function DocumentoPageContent() {
         className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
       });
 
+      // Limpiar sugerencias de la IA ya que el documento es válido
+      await clearSuggestions(doc.id_documento);
+      setSuggestions([]);
+
       fetchDocument(doc.id_documento);
     } catch (error) {
       console.error("Failed to validate incidents", error);
@@ -241,9 +291,9 @@ function DocumentoPageContent() {
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc) return;
 
-    // ✅ GUARD: Prevenir ejecución si no está en modo edición
-    if (!isEditing) {
-      console.log('⚠️ [onSubmit] Bloqueado - no está en modo edición');
+    // ✅ GUARD: Prevenir ejecución si no está en modo edición ni modo auditoría
+    if (!isEditing && !isAuditMode) {
+      console.log('⚠️ [onSubmit] Bloqueado - no está en modo edición ni auditoría');
       return;
     }
 
@@ -296,18 +346,30 @@ function DocumentoPageContent() {
     resetFormWithDocData(doc);
   }, [doc, resetFormWithDocData]);
 
-  const isEditable = useMemo(() => {
-    if (!doc) return false;
-    return !doc.trimestre_cerrado;
-  }, [doc?.id_documento, doc?.trimestre_cerrado]);
+  // isEditable y isFixed han sido movidos arriba para soporte de auto-audit
+
+  const refreshHistory = useCallback(async () => {
+    if (doc) {
+      try {
+        const history = await getAuditHistory(doc.id_documento);
+        setSuggestions(history);
+      } catch (err) {
+        console.error("Error refreshing audit history", err);
+      }
+    }
+  }, [doc?.id_documento]);
+
+  const isAuditRequest = searchParams.get('audit') === 'true';
 
   if (isLoading) {
     return (
       <MainLayout>
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center space-y-4 animate-pulse">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-            <p className="text-muted-foreground text-sm">Cargando documento...</p>
+            <Loader2 className={cn("h-12 w-12 animate-spin mx-auto", isAuditRequest ? "text-violet-500" : "text-primary")} />
+            <p className={cn("text-sm font-bold uppercase tracking-widest", isAuditRequest ? "text-violet-500" : "text-muted-foreground")}>
+              {isAuditRequest ? 'Preparando Health Check...' : 'Cargando documento...'}
+            </p>
           </div>
         </div>
       </MainLayout>
@@ -320,6 +382,22 @@ function DocumentoPageContent() {
 
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
   const exportData = doc ? [doc] : [];
+
+  // El return de AuditSplitView se mantiene aquí
+  if (isAuditMode && doc) {
+    return (
+      <AuditSplitView
+        doc={doc}
+        form={form}
+        suggestions={suggestions}
+        onClose={() => setIsAuditMode(false)}
+        isFixed={isFixed}
+        onSubmit={onSubmit}
+        isSaving={isSaving}
+        onHistoryUpdate={refreshHistory}
+      />
+    );
+  }
 
   // ✅ CONTENIDO SIN FORM
   const pageContent = (
@@ -437,6 +515,17 @@ function DocumentoPageContent() {
                     </TooltipContent>
                   )}
                 </Tooltip>
+
+                <Button
+                  variant="outline"
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsAuditMode(true)}
+                  className="hidden md:flex bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 hover:border-violet-300 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800 transition-all shadow-sm"
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Modo Auditoría
+                </Button>
 
                 <Tooltip>
                   <TooltipTrigger asChild>

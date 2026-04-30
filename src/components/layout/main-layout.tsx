@@ -304,6 +304,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
+    { href: '/dashboard/health-check', label: 'Salud Documental', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
