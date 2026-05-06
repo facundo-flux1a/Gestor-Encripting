@@ -37,19 +37,6 @@ export function LandingFooter() {
                 </div>
                 <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
                     <p>© {new Date().getFullYear()} Gestor Documental Muvail. Todos los derechos reservados.</p>
-                    <a
-                        href="https://allbase.com.ar"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 hover:text-primary transition-colors"
-                    >
-                        <img
-                            src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75"
-                            alt="AllBase Logo"
-                            className="h-5 w-5 opacity-60"
-                        />
-                        <span>Powered by AllBase</span>
-                    </a>
                 </div>
             </div>
         </footer>

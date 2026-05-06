@@ -381,24 +381,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           <div className="p-2 border-t">
             <UserProfile user={user} />
           </div>
-          <Separator />
-          <div className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:py-2">
-            <a
-              href="https://flux1a.com.ar"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <img
-                src="https://www.allbase.com.ar/_next/image?url=%2Ficons%2FSIMBOLO%20DEGRADADO.png&w=32&q=75"
-                alt="Flux1a Logo"
-                className="h-6 w-6 shrink-0"
-              />
-              <span className="group-data-[collapsible=icon]:hidden">
-                Powered by AllBase
-              </span>
-            </a>
-          </div>
         </SidebarFooter>
       </Sidebar>
 
