@@ -120,9 +120,10 @@ async function extractAndHashRarFiles(
   fileHashes: { [fileName: string]: string },
   uploadIds: { [fileName: string]: string }
 }> {
-  const RAILWAY_RAR_SERVICE = 'https://rar-extractor.onrender.com/api/extract-rar';
+  const RAR_EXTRACTOR_URL = process.env.RAR_EXTRACTOR_URL || 'https://rar-extractor.onrender.com';
+  const RAR_SERVICE_ENDPOINT = `${RAR_EXTRACTOR_URL.replace(/\/$/, '')}/api/extract-rar`;
 
-  console.log(`  [RAR] 🔄 Llamando al microservicio de Railway...`);
+  console.log(`  [RAR] 🔄 Llamando al microservicio: ${RAR_SERVICE_ENDPOINT}`);
 
   const formData = new FormData();
   const blob = new Blob([fileBuffer], { type: 'application/vnd.rar' });
@@ -130,14 +131,14 @@ async function extractAndHashRarFiles(
   formData.append('parentUploadId', parentUploadId);
 
   try {
-    const response = await fetch(RAILWAY_RAR_SERVICE, {
+    const response = await fetch(RAR_SERVICE_ENDPOINT, {
       method: 'POST',
       body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Railway RAR service error: ${errorText}`);
+      throw new Error(`RAR service error: ${errorText}`);
     }
 
     const result = await response.json();
@@ -342,10 +343,11 @@ export async function uploadDocument(
   console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
   console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
-  const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/bbdefd63-f86a-4590-a52a-37a891accbf333LOCA';
+  const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
+
     console.error('Missing environment variables for upload service.');
     throw new Error('Configuración del servidor incompleta. Contacte al administrador.');
   }

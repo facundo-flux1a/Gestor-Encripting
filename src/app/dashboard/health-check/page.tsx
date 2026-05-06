@@ -53,8 +53,10 @@ export default function HealthCheckPage() {
     const [data, setData] = useState<{
         summary: { total: number; mismatches: number };
         documents: Document[];
+        triggeredDiagnoses?: number[];
     } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isPolling, setIsPolling] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     // AI Diagnosis State
@@ -62,7 +64,7 @@ export default function HealthCheckPage() {
     const [diagnosisResult, setDiagnosisResult] = useState<any | null>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    const loadHealthData = async () => {
+    const loadHealthData = async (silent = false) => {
         if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
             setData(null);
             setIsLoading(false);
@@ -70,14 +72,33 @@ export default function HealthCheckPage() {
         }
 
         try {
-            setIsLoading(true);
+            if (!silent) setIsLoading(true);
             const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
             const result = await getHealthCheckAnalytics(companyIdsAsNumbers);
+            
+            // Si hay diagnósticos disparados, avisar al usuario (solo si no es polling silencioso)
+            if (!silent && result.triggeredDiagnoses && result.triggeredDiagnoses.length > 0) {
+                result.triggeredDiagnoses.forEach((docId: number) => {
+                    const doc = result.documents.find((d: any) => d.id_documento === docId);
+                    toast({
+                        title: "Análisis IA en curso",
+                        description: `Gemini está analizando la factura ${doc?.numero_documento || `#${docId}`} en segundo plano...`,
+                        variant: "default",
+                    });
+                });
+            }
+
             setData(result);
+
+            // Verificar si necesitamos activar el polling
+            const needsPolling = result.documents.some((doc: any) => 
+                doc.mismatch_amount > 0.05 && (!doc.ai_suggestions || doc.ai_suggestions.length === 0)
+            );
+            setIsPolling(needsPolling);
         } catch (err) {
             console.error('Error loading health data:', err);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -132,9 +153,25 @@ export default function HealthCheckPage() {
         ? Math.round(((data.summary.total - data.summary.mismatches) / data.summary.total) * 100)
         : 100;
 
+    // Polling Effect: Refresca los datos cada 5 segundos si hay diagnósticos en curso
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isPolling) {
+            console.log('🔄 [HealthCheck] Polling activo: esperando resultados de IA...');
+            interval = setInterval(() => {
+                loadHealthData(true);
+            }, 5000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isPolling, selectedCompanyIds]);
+
     useEffect(() => {
         loadHealthData();
     }, [selectedCompanyIds]);
+
+
 
     if (isLoading) {
         return (

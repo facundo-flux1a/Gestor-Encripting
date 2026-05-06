@@ -494,9 +494,11 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
       params.push(empresaIds);
     }
 
-    // ✅ NUEVO: Filtro para excluir documentos con incidencias pendientes
+    // ✅ NUEVO: Filtro para excluir documentos con incidencias pendientes o descuadres no verificados
     if (excludeIncidents) {
-      query += ` AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+      query += ` AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
+      query += ` AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
     }
 
     query += ' ORDER BY d.fecha_emision DESC';
@@ -1662,7 +1664,8 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
   // ✅ PASO 1: Obtener proveedores, documentos y configuración contable
   const [providerRows] = await db.query<any[]>(`
@@ -1853,6 +1856,7 @@ export async function getDocumentsByProviderName(
         WHERE ed.identificador_fiscal = ?
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
     `;
 
   const params: any[] = [fiscalId];
@@ -1933,6 +1937,7 @@ export async function getProductsByProviderName(
             WHERE ed.identificador_fiscal = ?
     AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
               AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
               AND(
       (ld.codigo IS NOT NULL AND ld.codigo != '') 
                 OR
@@ -2021,6 +2026,7 @@ ld.*,
       WHERE ed.identificador_fiscal = ?
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
         AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
 AND(
   (ld.codigo IS NOT NULL AND ld.codigo != '')
 OR
@@ -2102,6 +2108,7 @@ export async function getProductHistory(
         WHERE ed.identificador_fiscal = ?
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
           ${searchBy === 'code' ? 'AND ld.codigo = ?' : 'AND ld.descripcion LIKE ?'}
 )
@@ -2181,7 +2188,8 @@ export async function getProviderAnalytics(
   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
   // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
   const [docs] = await db.query<DocumentPacket[]>(`
@@ -2206,6 +2214,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     WHERE ed.identificador_fiscal = ?
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
       AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
 AND(
   (ld.codigo IS NOT NULL AND ld.codigo != '')
 OR
@@ -2661,7 +2670,8 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
 OR(LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)`;
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
   // ✅ CONSTRUCCIÓN DINÁMICA DE FILTRO TEMPORAL
   let wherePeriodFilter = '';
@@ -2927,6 +2937,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               ${wherePeriodFilter}
             GROUP BY d.id -- ✅ Necesario para la subquery de is_issued
@@ -3023,6 +3034,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               -- No filters for period here, we want ALL available history
         )
@@ -3092,6 +3104,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
               ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
               -- No year filter for yearly summary strictly, unless we wanted to filter by range, but usually we want all years
         )
@@ -3175,6 +3188,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
             ${wherePeriodFilter}
         )
@@ -3271,6 +3285,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
@@ -3356,6 +3371,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                   OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
               )
               AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
@@ -3420,6 +3436,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
               OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           )
           AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
         GROUP BY e.identificador_fiscal, e.nombre
@@ -3571,6 +3588,7 @@ export async function getTrimestresList(
             OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
 AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
         GROUP BY d.id
       )
 SELECT
@@ -3795,7 +3813,8 @@ export async function getDocumentosByTrimestre(
       OR (LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
       OR (LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
-    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)`);
+    AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`);
 
     const whereClause = whereConditions.join(' AND ');
 
@@ -3997,6 +4016,7 @@ d.trimestre_cerrado = 1,
             OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
     AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
         GROUP BY d.id
       )
 SELECT
@@ -4562,14 +4582,36 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   `, [companyIds]);
 
   const documents = await mapDocumentPacketsToDocuments(docRows);
+  const triggeredDiagnoses: number[] = [];
 
-  // Auto-register newly detected mismatched documents in health_check_status
+  // Auto-register newly detected mismatched documents and trigger first diagnosis
   for (const doc of docRows as any[]) {
     if (Number(doc.mismatch_amount || 0) > 0.05) {
-      await db.query(
+      const [insertResult] = await db.query<any>(
         `INSERT IGNORE INTO erp49.health_check_status (documento_id, empresa_id, verified) VALUES (?, ?, 0)`,
         [doc.id, doc.id_de_empresa]
       );
+      // Only diagnose if this is a NEW registration AND has no prior suggestions
+      if (insertResult.affectedRows > 0) {
+        const [existingSuggestions] = await db.query<any[]>(
+          `SELECT id FROM erp49.ai_suggestions WHERE documento_id = ? LIMIT 1`,
+          [doc.id]
+        );
+        if ((existingSuggestions as any[]).length === 0) {
+          console.log(`🤖 [Auto-diagnosis] Disparando diagnóstico inicial para doc #${doc.id}...`);
+          triggeredDiagnoses.push(doc.id);
+          // Fire-and-forget: diagnose in background, don't block the response
+          import('@/services/vertex-ai-service')
+            .then(({ diagnoseDocument }) => {
+              return diagnoseDocument(doc.id).then(() => {
+                console.log(`✅ [Auto-diagnosis] Diagnóstico completado con éxito para doc #${doc.id}`);
+              });
+            })
+            .catch((e: any) => console.error(`❌ [Auto-diagnosis] Error crítico para doc #${doc.id}:`, e));
+        } else {
+          console.log(`⏭️ [Auto-diagnosis] Doc #${doc.id} ya tiene sugerencias, saltando.`);
+        }
+      }
     }
   }
 
@@ -4601,7 +4643,8 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
       total: rows[0].total || 0,
       mismatches: Number(rows[0].mismatches) || 0
     },
-    documents
+    documents,
+    triggeredDiagnoses
   };
 }
 
