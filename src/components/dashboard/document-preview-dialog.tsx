@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download, ExternalLink, Loader2, RotateCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fixMinioUrl } from '@/lib/utils';
 
 interface DocumentPreviewDialogProps {
   isOpen: boolean;
@@ -59,17 +60,18 @@ export function DocumentPreviewDialog({
   };
 
   const handleDownload = async () => {
-    if (!documentUrl) return;
+    const fixedUrl = fixMinioUrl(documentUrl);
+    if (!fixedUrl) return;
 
     console.log("📥 [DocumentPreview] Iniciando flujo de descarga para:", documentName);
-    console.log("🔗 [DocumentPreview] URL original:", documentUrl);
+    console.log("🔗 [DocumentPreview] URL procesada:", fixedUrl);
 
     try {
       setIsDownloading(true);
       toast({ title: "Iniciando descarga segura..." });
 
       // Extraer el nombre del archivo de la URL
-      const urlParts = documentUrl.split('/');
+      const urlParts = fixedUrl.split('/');
       const rawFilename = urlParts[urlParts.length - 1];
 
       if (!rawFilename) throw new Error("No se pudo extraer el nombre del archivo");
@@ -101,7 +103,7 @@ export function DocumentPreviewDialog({
 
       // Fallback: Abrir link directo de MinIO (como funcionaba antes)
       console.log("🔄 [DocumentPreview] Iniciando fallback a link directo");
-      window.open(documentUrl, '_blank');
+      window.open(fixedUrl, '_blank');
     } finally {
       setIsDownloading(false);
     }
@@ -112,7 +114,8 @@ export function DocumentPreviewDialog({
   }
 
   // Add timestamp to prevent caching
-  const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(documentUrl)}&embedded=true&t=${Date.now()}`;
+  const fixedUrl = fixMinioUrl(documentUrl);
+  const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fixedUrl)}&embedded=true&t=${Date.now()}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -212,7 +215,7 @@ export function DocumentPreviewDialog({
                 asChild
                 className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm"
               >
-                <a href={documentUrl} target="_blank" rel="noopener noreferrer">
+                <a href={fixMinioUrl(documentUrl)} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                   <span className="hidden sm:inline">Abrir en nueva pestaña</span>
                   <span className="sm:hidden">Abrir</span>

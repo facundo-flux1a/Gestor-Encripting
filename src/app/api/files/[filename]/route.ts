@@ -31,17 +31,40 @@ export async function GET(
 
     console.log(`[${requestId}] 🔗 [serve-file] Conectando a MinIO: ${minioUrl}`);
 
-    const response = await fetch(minioUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/pdf, application/octet-stream',
-      },
-    });
+    let response;
+    try {
+      response = await fetch(minioUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/pdf, application/octet-stream',
+        },
+      });
+    } catch (error) {
+      console.warn(`[${requestId}] ⚠️ [serve-file] Error al conectar con MinIO primario:`, error);
+    }
 
-    if (!response.ok) {
-      console.error(`[${requestId}] ❌ [serve-file] Error MinIO:`, response.status, response.statusText);
+    // 🔥 FALLBACK LOGIC
+    if (!response || !response.ok) {
+      const fallbackBaseUrl = 'https://minio.allbase.com.ar';
+      const fallbackUrl = `${fallbackBaseUrl}/${bucketName}/${filePath}`;
+      console.log(`[${requestId}] 🔄 [serve-file] Reintentando con fallback: ${fallbackUrl}`);
+      
+      try {
+        response = await fetch(fallbackUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/pdf, application/octet-stream',
+          },
+        });
+      } catch (fallbackError) {
+        console.error(`[${requestId}] ❌ [serve-file] Error en fallback MinIO:`, fallbackError);
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.error(`[${requestId}] ❌ [serve-file] Error final MinIO:`, response?.status || 'No Response');
       return NextResponse.json(
-        { error: `Archivo no encontrado (${response.status})` },
+        { error: `Archivo no encontrado (${response?.status || 'Error de conexión'})` },
         { status: 404 }
       );
     }

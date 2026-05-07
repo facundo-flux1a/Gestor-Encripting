@@ -43,3 +43,14 @@ export function formatCurrency(amount: number | string | null | undefined, curre
     currency
   }).format(numericAmount);
 }
+// 🪣 Fix MinIO URLs with fallback domain
+export function fixMinioUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const brokenDomain = 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000';
+  const fallbackDomain = 'https://minio.allbase.com.ar';
+  
+  if (url.includes(brokenDomain)) {
+    return url.replace(brokenDomain, fallbackDomain);
+  }
+  return url;
+}
