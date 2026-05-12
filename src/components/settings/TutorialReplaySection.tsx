@@ -12,6 +12,7 @@ const TUTORIALS = [
     { id: 'actividad', name: 'Historial de Actividad', path: '/dashboard/actividad', storageKey: 'force_tutorial_actividad' },
     { id: 'incidencias', name: 'Gestión de Incidencias', path: '/dashboard/incidencias', storageKey: 'force_tutorial_incidencias' },
     { id: 'proveedores', name: 'Directorio de Proveedores', path: '/dashboard/proveedores', storageKey: 'force_tutorial_proveedores' },
+    { id: 'health-check', name: 'Salud Documental', path: '/dashboard/health-check', storageKey: 'force_tutorial_health_check' },
 ];
 
 export function TutorialReplaySection() {

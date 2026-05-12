@@ -528,6 +528,19 @@ export async function uploadDocument(
     console.log(`[${normalizedFileName}] ✅ Subida a MinIO completada`);
     console.log(`[${normalizedFileName}] 🔗 URL: ${publicUrl}`);
 
+    // 🆕 Guardar file_path, file_hash y cif para que el sistema de reintentos pueda reconstruir el payload
+    try {
+      await connection.query(
+        `UPDATE erp49.actividad 
+         SET file_path = ?, file_hash = ?, cif = ?
+         WHERE upload_id = ?`,
+        [filePath, mainFileHash, cif || null, uploadId]
+      );
+      console.log(`[${normalizedFileName}] ✅ Datos de reintento guardados (file_path, file_hash, cif)`);
+    } catch (updateErr) {
+      console.warn(`[${normalizedFileName}] ⚠️ No se pudieron guardar datos de reintento:`, updateErr);
+    }
+
     // 🔥 PREPARAR PAYLOAD PARA MICROSERVICE (con nombre normalizado)
     const webhookPayload: any = {
       text: filePath,

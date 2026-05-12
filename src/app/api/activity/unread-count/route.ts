@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connection from '@/lib/db';
 import { getSession } from '@/services/auth-service';
+import { ActivityService } from '@/services/activity-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,8 +39,11 @@ export async function GET(request: NextRequest) {
 
     // Contar actividades no leídas separadas por tipo (success vs fallidas)
     const [rows] = await connection.query(query, params);
-
     const result = (rows as any[])[0] || {};
+
+    // 🔥 RESCATISTA PROACTIVO: Ahora gestionado por <RetryMonitor /> en el frontend.
+    // Se desactiva aquí para evitar reintentos duplicados.
+    // Ver: src/components/upload/retry-monitor.tsx
 
     return NextResponse.json({
       success: true,

@@ -11,6 +11,7 @@ interface PageHeaderProps {
     children?: React.ReactNode; // For actions
     className?: string;
     hideSidebarTrigger?: boolean;
+    "data-tutorial"?: string;
 }
 
 export function PageHeader({
@@ -19,7 +20,8 @@ export function PageHeader({
     badgeCount,
     children,
     className,
-    hideSidebarTrigger
+    hideSidebarTrigger,
+    "data-tutorial": dataTutorial
 }: PageHeaderProps) {
     return (
         <MainLayoutHeader hideSidebarTrigger={hideSidebarTrigger}>
@@ -30,7 +32,7 @@ export function PageHeader({
                         <Icon className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 text-primary" />
                     </div>
 
-                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate">
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate" data-tutorial={dataTutorial}>
                         {title}
                     </h1>
 

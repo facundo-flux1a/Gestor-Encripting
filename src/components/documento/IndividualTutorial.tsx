@@ -72,7 +72,17 @@ export function IndividualTutorial() {
           align: 'end' as const,
         },
       },
-      // Paso 2: Vista principal del documento
+      // Paso 2: Modo Auditoría
+      {
+        element: '[data-tutorial="documento-auditoria"]',
+        popover: {
+          title: '🔍 Modo Auditoría',
+          description: '¿Ves algún descuadre o error? El Modo Auditoría abre una vista dividida donde puedes comparar el documento original con los datos extraídos, mientras la IA te sugiere correcciones automáticas.',
+          side: 'bottom' as const,
+          align: 'center' as const,
+        },
+      },
+      // Paso 3: Vista principal del documento
       {
         element: '[data-tutorial="documento-view"]',
         popover: {

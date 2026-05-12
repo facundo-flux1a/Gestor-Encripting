@@ -175,6 +175,73 @@ export default function ActivityTable({
     { value: 'subiendo', label: 'En proceso' },
   ];
 
+  // Track already scheduled retries by { activityId: retryCount }
+  const [scheduledRetries, setScheduledRetries] = useState<Map<number, number>>(new Map());
+
+  useEffect(() => {
+    // Detectar fallos recientes que aún no han superado los 3 intentos y no están ya programados para este retryCount
+    const now = Date.now();
+    const newFailures = activities.filter(activity => {
+      const isFailed = activity.status?.toLowerCase() === 'fallido' || activity.status?.toLowerCase() === 'error';
+      const currentRetryCount = activity.retry_count || 0;
+      const lastScheduledCount = scheduledRetries.get(activity.id);
+      
+      return (
+        isFailed && 
+        currentRetryCount < 3 && 
+        (lastScheduledCount === undefined || currentRetryCount > lastScheduledCount) &&
+        new Date(activity.updated_at).getTime() > now - 30000
+      );
+    });
+
+    if (newFailures.length > 0) {
+      const idsToRetry = newFailures.map(f => f.id);
+      console.log(`🤖 [AutoRetry] Detectados ${newFailures.length} fallos para reintentar:`, idsToRetry);
+      
+      // Marcar como programados inmediatamente vinculando el ID con el retry_count actual
+      setScheduledRetries(prev => {
+        const next = new Map(prev);
+        newFailures.forEach(f => next.set(f.id, f.retry_count || 0));
+        return next;
+      });
+
+      const count = newFailures.length;
+      const isBatch = count > 1;
+      
+      toast({
+        title: isBatch ? `🔄 Reintentando ${count} documentos` : `🔄 Reintentando procesamiento`,
+        description: isBatch 
+          ? `Se detectaron múltiples fallos. Reintentando automáticamente en 10 segundos...`
+          : `"${newFailures[0].documento_nombre || 'Archivo sin nombre'}" falló. Reintentando automáticamente (Intento ${(newFailures[0].retry_count || 0) + 1}/3).`,
+        className: "bg-gradient-to-br from-indigo-500 to-purple-600 text-white",
+      });
+
+      // Programar la ejecución tras 10 segundos
+      setTimeout(async () => {
+        console.log(`🚀 [AutoRetry] Ejecutando reintentos para: ${idsToRetry.join(', ')}`);
+        
+        // Ejecutamos en serie para no saturar
+        for (const id of idsToRetry) {
+          try {
+            console.log(`📡 [AutoRetry] Disparando API para ID ${id}...`);
+            const response = await fetch(`/api/activity/${id}/retry`, { method: 'POST' });
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              console.error(`❌ [AutoRetry] Error en ID ${id}:`, errData);
+            } else {
+              console.log(`✅ [AutoRetry] Éxito para ID ${id}`);
+            }
+          } catch (err) {
+            console.error(`❌ [AutoRetry] Fallo de red para ID ${id}:`, err);
+          }
+        }
+        
+        // Refrescar la tabla para ver los nuevos estados
+        fetchActivities(true);
+      }, 10000);
+    }
+  }, [activities, scheduledRetries]);
+
   useEffect(() => {
     checkAuth();
     // Mostrar hint si inicia con filtros por defecto
@@ -723,7 +790,7 @@ export default function ActivityTable({
     if (s === 'completado') classes = 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
     if (s === 'fallido' || s === 'error') classes = 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
     if (s === 'interrumpido') classes = 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30';
-    if (s.includes('subiendo') || s.includes('guardando') || s.includes('clasificado')) {
+    if (s.includes('subiendo') || s.includes('guardando') || s.includes('clasificado') || s === 'reintentando') {
       classes = 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
     }
 

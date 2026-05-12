@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connection from '@/lib/db';
 import { getSession } from '@/services/auth-service';
+import { ActivityService } from '@/services/activity-service';
 
 export async function GET(request: Request) {
   try {
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
         a.progress,
         a.mensaje,
         a.error_detalle,
+        a.retry_count,
         a.created_at,
         a.updated_at,
         a.completed_at,
@@ -164,9 +166,36 @@ export async function GET(request: Request) {
     const [countRows] = await connection.query(countQuery, countParams);
     const total = (countRows as any[])[0].total;
 
+    // 🔥 PROACTIVE RESCUE: Ahora gestionado por <RetryMonitor /> en el frontend.
+    // Se desactiva aquí para evitar reintentos duplicados.
+    // Ver: src/components/upload/retry-monitor.tsx
+
+    // 🔥 FORMATEO DINÁMICO: Inyectar mensaje de agotado si retry_count >= 3
+    const formattedRows = (rows as any[]).map(a => {
+      if ((a.status?.toLowerCase() === 'fallido' || a.status?.toLowerCase() === 'error') && (a.retry_count || 0) >= 3) {
+        const disclaimer = '⚠️ (Se agotaron los 3 reintentos automáticos)';
+        const currentDetail = a.error_detalle || 'Error';
+        return {
+          ...a,
+          mensaje: '⚠️ Reintentos automáticos agotados (3/3)',
+          error_detalle: currentDetail.includes(disclaimer) ? currentDetail : `${currentDetail}\n\n${disclaimer}`
+        };
+      }
+      
+      // ✅ ÉXITO TRAS REINTENTO: Indicar que se logró tras varios intentos
+      if (a.status?.toLowerCase() === 'completado' && (a.retry_count || 0) > 0) {
+        return {
+          ...a,
+          mensaje: `✅ Completado tras ${(a.retry_count || 0)} reintentos automáticos`
+        };
+      }
+
+      return a;
+    });
+
     return NextResponse.json({
       success: true,
-      actividades: rows,
+      actividades: formattedRows,
       pagination: {
         total,
         limit,

@@ -46,6 +46,8 @@ import {
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { HealthCheckProvider } from '@/context/HealthCheckProvider';
+import { HealthCheckTutorialRouter } from '@/components/tutorials/HealthCheckTutorialRouter';
 
 export default function HealthCheckPage() {
     const router = useRouter(); // Initialize router
@@ -75,7 +77,7 @@ export default function HealthCheckPage() {
             if (!silent) setIsLoading(true);
             const companyIdsAsNumbers = selectedCompanyIds.map(id => Number(id));
             const result = await getHealthCheckAnalytics(companyIdsAsNumbers);
-            
+
             // Si hay diagnósticos disparados, avisar al usuario (solo si no es polling silencioso)
             if (!silent && result.triggeredDiagnoses && result.triggeredDiagnoses.length > 0) {
                 result.triggeredDiagnoses.forEach((docId: number) => {
@@ -91,7 +93,7 @@ export default function HealthCheckPage() {
             setData(result);
 
             // Verificar si necesitamos activar el polling
-            const needsPolling = result.documents.some((doc: any) => 
+            const needsPolling = result.documents.some((doc: any) =>
                 doc.mismatch_amount > 0.05 && (!doc.ai_suggestions || doc.ai_suggestions.length === 0)
             );
             setIsPolling(needsPolling);
@@ -207,9 +209,10 @@ export default function HealthCheckPage() {
     }
 
     return (
+        <HealthCheckProvider>
         <MainLayout>
             <div className="flex-1 space-y-8 p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500">
-                <PageHeader title="Health Check" icon={ShieldCheck}>
+                <PageHeader title="Health Check" icon={ShieldCheck} data-tutorial="health-header">
                     <Button variant="outline" size="sm" onClick={loadHealthData} className="gap-2">
                         <RefreshCw className="h-4 w-4" />
                         Recalcular
@@ -217,7 +220,7 @@ export default function HealthCheckPage() {
                 </PageHeader>
 
                 {/* KPI Section */}
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-tutorial="health-kpis">
                     <Card className="relative overflow-hidden border-none shadow-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 backdrop-blur-sm">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Score de Salud</CardTitle>
@@ -286,7 +289,7 @@ export default function HealthCheckPage() {
                             <p className="text-sm text-muted-foreground">Listado de documentos con discrepancias detectadas por el motor de auditoría.</p>
                         </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <div className="relative w-full sm:w-64">
+                            <div className="relative w-full sm:w-64" data-tutorial="health-search">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Buscar factura o emisor..."
@@ -301,7 +304,7 @@ export default function HealthCheckPage() {
                         </div>
                     </div>
 
-                    <Card className="border-none shadow-xl bg-card/30 backdrop-blur-md overflow-hidden">
+                    <Card className="border-none shadow-xl bg-card/30 backdrop-blur-md overflow-hidden" data-tutorial="health-table">
                         <Table>
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
@@ -402,7 +405,7 @@ export default function HealthCheckPage() {
                                                                 ) : (
                                                                     <Sparkles className="h-3.5 w-3.5" />
                                                                 )}
-                                                                <span className="font-bold tracking-tight">IA</span>
+                                                                <span className="font-bold tracking-tight" data-tutorial="health-ia">IA</span>
                                                             </Button>
                                                         )}
                                                         <Link href={`/documento/${doc.id_documento}?audit=true`} passHref>
@@ -485,6 +488,8 @@ export default function HealthCheckPage() {
                     </DialogContent>
                 </Dialog>
             </div>
+            <HealthCheckTutorialRouter />
         </MainLayout>
+        </HealthCheckProvider>
     );
 }

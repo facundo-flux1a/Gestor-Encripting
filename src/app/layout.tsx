@@ -6,6 +6,7 @@ import { CompanyProvider } from '@/context/CompanyProvider';
 import { TutorialProvider } from '@/context/tutorial-context';
 import { PreferencesProvider } from '@/contexts/preferences-context';
 import { UploadProgressManager } from '@/components/upload/upload-progress-card';
+import { RetryMonitor } from '@/components/upload/retry-monitor';
 import { cookies } from 'next/headers';
 import { getSession } from '@/services/auth-service';
 
@@ -58,6 +59,7 @@ export default async function RootLayout({
                 {/* Upload Progress Manager - siempre en primer plano */}
                 <div className="relative z-50">
                   <UploadProgressManager userId={userId} />
+                  <RetryMonitor userId={userId} />
                 </div>
               </TutorialProvider>
             </PreferencesProvider>

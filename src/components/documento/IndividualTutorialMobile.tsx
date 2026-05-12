@@ -117,6 +117,14 @@ export function IndividualTutorialMobile() {
                 },
             },
             {
+                element: '[data-tutorial="documento-auditoria"]',
+                popover: {
+                    title: '🔍 Modo Auditoría',
+                    description: 'Compará el documento original con los datos extraídos en vista dividida y usá la IA para corregir errores automáticamente.',
+                    side: 'bottom' as const, align: 'center' as const,
+                },
+            },
+            {
                 element: '[data-tutorial="documento-view"]',
                 popover: {
                     title: '📋 Información',

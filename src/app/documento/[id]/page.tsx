@@ -522,6 +522,7 @@ function DocumentoPageContent() {
                   size="sm"
                   onClick={() => setIsAuditMode(true)}
                   className="hidden md:flex bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 hover:border-violet-300 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800 transition-all shadow-sm"
+                  data-tutorial="documento-auditoria"
                 >
                   <ShieldCheck className="mr-2 h-4 w-4" />
                   Modo Auditoría

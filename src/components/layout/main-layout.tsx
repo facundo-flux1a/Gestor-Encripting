@@ -50,6 +50,7 @@ import { Separator } from '@/components/ui/separator';
 import { CompaniesSelector } from '../companies-selector';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { usePreferences } from '@/contexts/preferences-context';
+import { SuggestionBox } from '../suggestions/SuggestionBox';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -390,6 +391,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </SidebarInset>
+
+      {/* Global Suggestion Box */}
+      <SuggestionBox />
     </SidebarProvider>
   );
 }

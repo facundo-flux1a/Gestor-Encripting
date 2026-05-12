@@ -3,27 +3,32 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { CheckCircle2, Loader2, AlertCircle, X, WifiOff, Minimize2, Maximize2, Archive, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertCircle, X, WifiOff, Minimize2, Maximize2, Archive, FileText, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChildProgress {
+  id: number; // 🆕
   uploadId: string;
   fileName: string;
   status: string;
   step: string;
   progress: number;
   message: string;
+  retryCount: number; // 🆕
 }
 
 interface UploadProgressData {
-  status: 'processing' | 'analyzing' | 'saving' | 'completed' | 'failed' | 'waiting' | 'procesando' | 'Completado' | 'Fallido';
+  id: number; // 🆕
+  status: 'processing' | 'analyzing' | 'saving' | 'completed' | 'failed' | 'waiting' | 'procesando' | 'Completado' | 'Fallido' | 'Reintentando';
   step: string;
   progress: number;
   message: string;
+  retryCount: number; // 🆕
   error?: string;
   isCompressed?: boolean;
-  hasIncidents?: boolean; // 🆕 Indica si el documento tiene incidencias
+  hasIncidents?: boolean;
   children?: ChildProgress[];
   data?: {
     error?: string;
@@ -132,6 +137,7 @@ interface UploadProgressManagerProps {
 }
 
 export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
+  const { toast } = useToast();
   const [uploads, setUploads] = useState<Map<string, UploadItem>>(() => {
     if (userId) {
       const stored = loadFromStorage(userId);
@@ -278,6 +284,9 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
     };
   }, [addUpload, removeUpload]);
 
+  // 🆕 Los reintentos automáticos ahora se gestionan en <RetryMonitor />,
+  // un componente totalmente independiente. Ver: src/components/upload/retry-monitor.tsx
+
   useEffect(() => {
     uploads.forEach((upload) => {
       if (upload.connectionStatus === 'polling' && !pollIntervalsRef.current.has(upload.uploadId)) {
@@ -316,9 +325,24 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
 
                   const normalizedStatus = data.status.toLowerCase();
                   const isFinished = normalizedStatus === 'completado' ||
-                    data.status === 'completed' ||
+                    normalizedStatus === 'completed' ||
                     normalizedStatus === 'fallido' ||
-                    data.status === 'failed';
+                    normalizedStatus === 'failed' ||
+                    normalizedStatus === 'permanent-fail' ||
+                    normalizedStatus === 'error';
+
+                  const isLastFailure = (normalizedStatus === 'fallido' || normalizedStatus === 'failed' || normalizedStatus === 'error') && (data.retryCount ?? 0) >= 3;
+                  const isPermanentFail = normalizedStatus === 'permanent-fail';
+                  
+                  // Auto-cerrar si: completado, es el último fallo de los 3 reintentos, o es un fallo permanente.
+                  // También cerramos si es un fallo intermedio para que el RetryMonitor tome el control con su propia notificación si se desea,
+                  // pero el usuario pidió expresamente que el modal de upload se cierre al fallar.
+                  const shouldAutoClose = normalizedStatus === 'completado' || 
+                                       normalizedStatus === 'completed' || 
+                                       normalizedStatus === 'fallido' || 
+                                       normalizedStatus === 'failed' || 
+                                       normalizedStatus === 'error' ||
+                                       isPermanentFail;
 
                   if (isFinished) {
                     console.log('🛑 [Manager] Deteniendo polling por estado final:', upload.uploadId);
@@ -331,11 +355,14 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                     }
 
                     // 🔥 INICIAR TIMER DE AUTO-CLOSE
-                    // Si tiene incidencias, dar más tiempo para que el usuario lo vea (15s en lugar de 5s)
-                    const closeDelay = data.hasIncidents ? 15000 : AUTO_CLOSE_DELAY;
+                    if (shouldAutoClose && !autoCloseTimersRef.current.has(upload.uploadId)) {
+                      // Si tiene incidencias, dar más tiempo (15s). 
+                      // Si es un fallo, cerrar rápido (3s) para no estorbar.
+                      // Si es éxito limpio, usar delay normal (5s).
+                      const isError = normalizedStatus === 'fallido' || normalizedStatus === 'failed' || normalizedStatus === 'error' || normalizedStatus === 'permanent-fail';
+                      const closeDelay = data.hasIncidents ? 15000 : (isError ? 3000 : AUTO_CLOSE_DELAY);
 
-                    if (!autoCloseTimersRef.current.has(upload.uploadId)) {
-                      console.log(`⏲️ [Manager] Auto-close programado en ${closeDelay / 1000}s para:`, upload.uploadId, data.hasIncidents ? '(CON INCIDENCIAS)' : '');
+                      console.log(`⏲️ [Manager] Auto-close programado en ${closeDelay / 1000}s para:`, upload.uploadId, data.hasIncidents ? '(CON INCIDENCIAS)' : (isError ? '(ERROR)' : ''));
                       const timer = setTimeout(() => {
                         console.log('🔄 [Manager] Auto-close ejecutado para:', upload.uploadId);
                         removeUpload(upload.uploadId);
@@ -439,6 +466,9 @@ function UploadCard({
     if (normalizedStatus === 'fallido' || status === 'failed' || normalizedStatus === 'interrumpido') {
       return <AlertCircle className="h-5 w-5 text-red-500" />;
     }
+    if (normalizedStatus === 'reintentando') {
+      return <RefreshCw className="h-5 w-5 animate-spin text-indigo-600" />;
+    }
     return <Loader2 className="h-5 w-5 animate-spin text-violet-600" />;
   };
 
@@ -450,6 +480,9 @@ function UploadCard({
     }
     if (normalizedStatus === 'fallido' || status === 'failed' || normalizedStatus === 'interrumpido') {
       return 'bg-red-500';
+    }
+    if (normalizedStatus === 'reintentando') {
+      return 'bg-indigo-500';
     }
     return 'bg-violet-600';
   };
@@ -520,6 +553,16 @@ function UploadCard({
               <span className="font-medium">{upload.progressData.progress}%</span>
             </div>
           </div>
+
+          {/* 🆕 INDICADOR DE REINTENTOS */}
+          {(upload.progressData.retryCount || 0) > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 w-fit">
+              <RefreshCw className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+              <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                Reintento {upload.progressData.retryCount}/3
+              </span>
+            </div>
+          )}
 
           <p className="text-sm text-muted-foreground">
             {upload.progressData.message}

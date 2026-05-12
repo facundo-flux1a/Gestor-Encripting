@@ -1,6 +1,6 @@
-// src/app/api/upload-progress/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connection from '@/lib/db';
+import { ActivityService } from '@/services/activity-service';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,72 +11,104 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { uploadId, parentUploadId, status, step, progress, message } = body;
 
-    const {
-      uploadId,
-      parentUploadId,
-      status,
-      step,
-      progress,
-      message,
-      data
-    } = body;
+    // Normalizar entrada de IDs (soportar camelCase y snake_case del agente)
+    const effectiveUploadId = uploadId || body.upload_id;
+    const effectiveParentId = parentUploadId || body.parent_upload_id;
 
-    console.log('📡 [POST] Callback recibido:', {
-      uploadId,
-      parentUploadId,
-      status,
-      step,
-      progress,
-      message
-    });
+    console.log(`📡 [POST-Progress] Callback: ${effectiveUploadId} - Status: ${status}`);
 
-    if (!uploadId) {
+    if (!effectiveUploadId) {
       return NextResponse.json({ error: 'uploadId requerido' }, { status: 400 });
     }
 
-    // 🔥 MANEJO ESPECIAL PARA ERRORES
-    if (status === 'Fallido' || status === 'Error' || status === 'error') {
-      console.error(`❌ [POST] Marcando como fallido: ${uploadId}`);
+    // 🔥 MANEJO ESPECIAL PARA ERRORES (AUTORETRY BACKEND)
+    // Soportar "failed" (n8n), "Fallido", "Error", etc.
+    const normalizedStatus = status?.toLowerCase();
+    const isFailure = normalizedStatus === 'failed' || normalizedStatus === 'fallido' || normalizedStatus === 'error';
 
-      await connection.query(
-        `UPDATE actividad 
-         SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, updated_at = NOW()
-         WHERE upload_id = ?`,
-        [step || 'Error', message || 'Error al procesar', uploadId]
-      );
+    if (isFailure) {
+      console.error(`❌ [POST] Falla detectada ("${status}") en UploadID: ${effectiveUploadId}`);
 
-      // 🔥 SI TIENE PARENT, TAMBIÉN MARCAR AL PADRE
-      if (parentUploadId) {
-        await markParentAsFailed(parentUploadId, message);
+      // 1. Obtener actividad (Búsqueda REFORZADA en erp49)
+      let [actRows] = await connection.query(
+        'SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM erp49.actividad WHERE upload_id = ? OR parent_upload_id = ? OR id = ?',
+        [effectiveUploadId, effectiveUploadId, body.activityId || -1]
+      ) as any;
+
+      // Fallback por nombre si no hay ID (para emails o reintentos con IDs nuevos)
+      if (actRows.length === 0 && (body.fileName || body.documento_nombre)) {
+        const fname = body.fileName || body.documento_nombre;
+        console.log(`🔍 [POST-Progress] Fallback: Buscando por nombre "${fname}"`);
+        [actRows] = await connection.query(
+          'SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM erp49.actividad WHERE documento_nombre = ? AND updated_at > NOW() - INTERVAL 2 HOUR LIMIT 1',
+          [fname]
+        ) as any;
       }
 
+      const activity = actRows[0];
+      const currentRetries = activity?.retry_count || 0;
+      const fileName = activity?.documento_nombre || 'Archivo';
+
+      // 2. Determinar el mensaje final
+      let finalMensaje = message || 'Error al procesar';
+      let finalDetalle = activity?.error_detalle || step || 'Error desconocido';
+
+      if (currentRetries >= 3) {
+        finalMensaje = '⚠️ Reintentos automáticos agotados (3/3). Intenta nuevamente de forma manual.';
+        if (!finalDetalle.includes('agotaron')) {
+          finalDetalle = `${finalDetalle}\n\n⚠️ (Se agotaron los 3 reintentos automáticos)`;
+        }
+      }
+
+      // 3. Actualizar el registro (Usando el ID real para asegurar el match)
+      const filterField = activity?.id ? 'id = ?' : 'upload_id = ?';
+      const filterValue = activity?.id || effectiveUploadId;
+
+      await connection.query(
+        `UPDATE erp49.actividad 
+         SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, error_detalle = ?, updated_at = NOW()
+         WHERE ${filterField}`,
+        [step || 'Error', finalMensaje, finalDetalle, filterValue]
+      );
+
+      // 4. 🔥 AUTORETRY: Ahora gestionado por <RetryMonitor /> en el frontend.
+      // Se desactiva aquí para evitar reintentos duplicados.
+      // Ver: src/components/upload/retry-monitor.tsx
+
+      // 4b. SI TIENE PARENT, TAMBIÉN MARCAR AL PADRE
+      if (effectiveParentId) {
+        await markParentAsFailed(effectiveParentId, message);
+      }
+
+      // 5. Responder éxito (el frontend verá el estado 'failed' y mostrará el toast)
       return NextResponse.json({
         success: true,
-        uploadId,
-        status: 'Fallido',
-        stored: true
+        message: currentRetries < 3 ? 'Falla registrada' : 'Reintentos agotados',
+        activityId: activity?.id || null,
+        retryCount: currentRetries
       });
     }
 
     // 🔥 ACTUALIZACIÓN NORMAL
     await connection.query(
-      `UPDATE actividad 
+      `UPDATE erp49.actividad 
        SET status = ?, step = ?, progress = ?, mensaje = ?, updated_at = NOW()
-       WHERE upload_id = ?`,
-      [status, step, progress, message, uploadId]
+       WHERE upload_id = ? OR parent_upload_id = ?`,
+      [status, step, progress, message, effectiveUploadId, effectiveUploadId]
     );
 
-    console.log(`✅ [POST] Actualizado: ${uploadId} - ${step} (${progress}%)`);
+    console.log(`✅ [POST-Progress] Actualizado: ${effectiveUploadId} - ${step} (${progress}%)`);
 
     // 🔥 SI TIENE PARENT, ACTUALIZAR EL PROGRESO DEL PADRE
-    if (parentUploadId) {
-      await updateParentProgress(parentUploadId);
+    if (effectiveParentId) {
+      await updateParentProgress(effectiveParentId);
     }
 
     return NextResponse.json({
       success: true,
-      uploadId,
+      uploadId: effectiveUploadId,
       stored: true
     });
 
@@ -226,20 +258,24 @@ export async function GET(request: NextRequest) {
     }
 
     const response = {
+      id: mainRecord.id, // 🆕 Necesario para reintentos
       status: mainRecord.status,
       step: mainRecord.step,
       progress: mainRecord.progress,
       message: mainRecord.mensaje,
+      retryCount: mainRecord.retry_count || 0, // 🆕
       timestamp: Date.now(),
       isCompressed: children.length > 0,
-      hasIncidents, // 🆕 Nuevo campo
+      hasIncidents, 
       children: children.map((child: any) => ({
+        id: child.id, // 🆕
         uploadId: child.upload_id,
         fileName: child.documento_nombre,
         status: child.status,
         step: child.step,
         progress: child.progress,
-        message: child.mensaje
+        message: child.mensaje,
+        retryCount: child.retry_count || 0 // 🆕
       }))
     };
 

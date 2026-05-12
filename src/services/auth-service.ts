@@ -42,6 +42,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIndividual: z.number().optional(),
       tutorialIncidencias: z.number().optional(),
       tutorialProveedores: z.number().optional(),
+      tutorialHealthCheck: z.number().optional(),
       organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
       exp: z.number(),
     }).safeParse(payload);
@@ -59,6 +60,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIndividual: parsedPayload.data.tutorialIndividual,
       tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
       tutorialProveedores: parsedPayload.data.tutorialProveedores,
+      tutorialHealthCheck: parsedPayload.data.tutorialHealthCheck,
       organization_rol: (parsedPayload.data.organization_rol as "ADMIN" | "EDITOR" | "VIEWER") || 'EDITOR',
       expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
@@ -127,6 +129,7 @@ export async function createSession(
   tutorialIndividual: number = 0,
   tutorialIncidencias: number = 0,
   tutorialProveedores: number = 0,
+  tutorialHealthCheck: number = 0,
   organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR'
 ) {
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -134,6 +137,7 @@ export async function createSession(
     userId, email, nombre, tutorial,
     tutorialDocumentos, tutorialTrimestres, tutorialActividad,
     tutorialIndividual, tutorialIncidencias, tutorialProveedores,
+    tutorialHealthCheck,
     organization_rol: organizationRol
   });
 
@@ -220,6 +224,7 @@ export async function login(formData: FormData) {
       user.tutorial_individual,
       user.tutorial_incidencias,
       user.tutorial_proveedores,
+      user.tutorial_health_check,
       user.organization_rol
     );
 
@@ -259,7 +264,7 @@ export async function register(formData: FormData) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query<OkPacket>(
-      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
+      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1)',
       [nombre, email, hashedPassword]
     );
 
@@ -267,7 +272,7 @@ export async function register(formData: FormData) {
 
     await createDefaultAIConfig(newUserId);
 
-    await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1);
+    await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1, 1);
 
     if (inviteToken) {
       console.log('🎁 [auth-service] Token de invitación detectado en REGISTER:', inviteToken);
@@ -293,7 +298,7 @@ export async function handleGoogleSignInOnServer(
     }
 
     const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, organization_rol FROM usuarios WHERE email = ?',
+      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check, organization_rol FROM usuarios WHERE email = ?',
       [email]
     );
 
@@ -306,7 +311,7 @@ export async function handleGoogleSignInOnServer(
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
       const [result] = await db.query<OkPacket>(
-        'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1)',
+        'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1)',
         [nombre, email, GOOGLE_PASSWORD_MARKER + uid]
       );
       const newUserId = result.insertId;
@@ -315,6 +320,7 @@ export async function handleGoogleSignInOnServer(
         id: newUserId, email, nombre,
         tutorial: 1, tutorial_documentos: 1, tutorial_trimestres: 1,
         tutorial_actividad: 1, tutorial_individual: 1, tutorial_incidencias: 1, tutorial_proveedores: 1,
+        tutorial_health_check: 1,
         organization_rol: 'EDITOR'
       };
     }
@@ -323,6 +329,7 @@ export async function handleGoogleSignInOnServer(
       user.id, user.email, user.nombre,
       user.tutorial, user.tutorial_documentos, user.tutorial_trimestres,
       user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores,
+      user.tutorial_health_check,
       user.organization_rol
     );
 
@@ -384,7 +391,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       'tutorial_actividad': 'tutorialActividad',
       'tutorial_individual': 'tutorialIndividual',
       'tutorial_incidencias': 'tutorialIncidencias',
-      'tutorial_proveedores': 'tutorialProveedores'
+      'tutorial_proveedores': 'tutorialProveedores',
+      'tutorial_health_check': 'tutorialHealthCheck'
     };
 
     const payloadField = fieldMap[field];
@@ -404,6 +412,7 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       updatedPayload.tutorialIndividual ?? 0,
       updatedPayload.tutorialIncidencias ?? 0,
       updatedPayload.tutorialProveedores ?? 0,
+      updatedPayload.tutorialHealthCheck ?? 0,
       (updatedPayload as any).organization_rol as any
     );
 
@@ -441,4 +450,8 @@ export async function completeTutorialIncidencias() {
 
 export async function completeTutorialProveedores() {
   return await updateUserTutorialField('tutorial_proveedores', 0);
+}
+
+export async function completeTutorialHealthCheck() {
+  return await updateUserTutorialField('tutorial_health_check', 0);
 }

@@ -105,7 +105,8 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
             'force_tutorial_trimestres',
             'force_tutorial_actividad',
             'force_tutorial_incidencias',
-            'force_tutorial_proveedores'
+            'force_tutorial_proveedores',
+            'force_tutorial_health_check'
           ];
 
           const hasForceFlag = typeof window !== 'undefined' && forceFlags.some(flag => localStorage.getItem(flag) === 'true');
@@ -137,7 +138,8 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
         'force_tutorial_trimestres',
         'force_tutorial_actividad',
         'force_tutorial_incidencias',
-        'force_tutorial_proveedores'
+        'force_tutorial_proveedores',
+        'force_tutorial_health_check'
       ];
       forceFlags.forEach(flag => localStorage.removeItem(flag));
     }
@@ -204,7 +206,8 @@ export const TutorialProvider = ({ children }: { children: ReactNode }) => {
           'force_tutorial_trimestres',
           'force_tutorial_actividad',
           'force_tutorial_incidencias',
-          'force_tutorial_proveedores'
+          'force_tutorial_proveedores',
+          'force_tutorial_health_check'
         ];
         wasForced = forceFlags.some(flag => localStorage.getItem(flag) === 'true');
       }

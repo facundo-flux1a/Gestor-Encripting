@@ -139,7 +139,7 @@ export function ActivityErrorModal({
                 <AlertCircle className="w-3 h-3" />
                 Detalle del error
               </p>
-              <p className={`text-sm text-${statusColor}-200 font-medium`}>
+              <p className={`text-sm text-${statusColor}-200 font-medium whitespace-pre-wrap`}>
                 {activity.error_detalle}
               </p>
             </div>
