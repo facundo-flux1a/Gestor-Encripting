@@ -18,6 +18,8 @@ import { TeamManagement } from "@/components/settings/TeamManagement";
 import { Company, Invitation } from "@/lib/types";
 import { getInvitationsByEmpresa } from "@/services/invitation-service";
 import { TutorialReplaySection } from "@/components/settings/TutorialReplaySection";
+import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
+
 
 async function handleLogout() {
     'use server';
@@ -106,6 +108,11 @@ export default async function SettingsPage() {
 
                     {/* Seguridad / Password */}
                     <PasswordEditDialog isGoogleAccount={isGoogleAccount} />
+
+                    {/* Integración API */}
+                    <ApiKeysSection
+                        companies={userCompanies.map((c: Company) => ({ id: c.id, name: c.name }))}
+                    />
 
                     {/* Sesión */}
                     <Card>

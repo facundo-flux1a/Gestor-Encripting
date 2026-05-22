@@ -87,11 +87,25 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
     return String(value ?? '');
 };
 
+// ✅ Helper: determina si un detalle es una línea de IVA real (no retención ni recargo)
+const isRealIvaDetail = (detail: any): boolean => {
+    const tipo = (detail.tipo_impuesto || '').toLowerCase();
+    return !tipo.includes('retencion') &&
+           !tipo.includes('irpf') &&
+           !tipo.includes('recargo') &&
+           !tipo.includes('equivalencia');
+};
+
 const getTaxColumnValue = (doc: any, columnId: string, format?: ExportFormat): string | number => {
     const rateMatch = columnId.match(/\d+/);
     if (rateMatch) {
         const rate = Number(rateMatch[0]);
-        const ivaDetail = doc.iva_details?.find((i: any) => Number(i.porcentaje) === rate);
+        // ✅ FIX: Excluir retenciones/recargos antes de buscar por porcentaje.
+        // Sin este filtro, una retención con porcentaje=0 sería devuelta al buscar base_0,
+        // duplicando la base imponible en el export.
+        const ivaDetail = doc.iva_details?.find(
+            (i: any) => isRealIvaDetail(i) && Number(i.porcentaje) === rate
+        );
         if (columnId.startsWith('base_')) {
             if (format === 'excel') return ivaDetail?.base_imponible ?? 0;
             return formatCurrency(ivaDetail?.base_imponible ?? 0);
@@ -125,7 +139,10 @@ const getNumericValue = (item: any, columnId: string): number => {
         const rateMatch = columnId.match(/\d+/);
         if (rateMatch) {
             const rate = Number(rateMatch[0]);
-            const ivaDetail = doc.iva_details?.find((i: any) => Number(i.porcentaje) === rate);
+            // ✅ FIX: Mismo filtro que getTaxColumnValue — excluir retenciones/recargos
+            const ivaDetail = doc.iva_details?.find(
+                (i: any) => isRealIvaDetail(i) && Number(i.porcentaje) === rate
+            );
             if (columnId.startsWith('base_')) {
                 return Number(ivaDetail?.base_imponible) || 0;
             } else if (columnId.startsWith('iva_')) {
