@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
@@ -154,7 +154,7 @@ export async function createSession(
 async function createDefaultAIConfig(userId: number) {
   try {
     await db.query(
-      `INSERT INTO erp49.ai_user_config 
+      `INSERT INTO ${dbName}.ai_user_config 
        (user_id, use_own_key, daily_limit_openai, daily_limit_gemini, is_unlimited)
        VALUES (?, FALSE, 5, 50, FALSE)
        ON DUPLICATE KEY UPDATE user_id = user_id`,

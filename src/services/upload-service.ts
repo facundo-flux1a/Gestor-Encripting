@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import JSZip from 'jszip';
 
 const UploadResponseSchema = z.object({
@@ -188,7 +188,7 @@ async function createActivityRecord(
 ): Promise<void> {
   try {
     await connection.query(
-      `INSERT INTO erp49.actividad 
+      `INSERT INTO ${dbName}.actividad 
         (upload_id, parent_upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -223,7 +223,7 @@ async function markUploadAsFailed(
     console.log(`❌ [Upload] Nodo: ${errorNode || 'Error general'}`);
 
     await connection.query(
-      `UPDATE erp49.actividad 
+      `UPDATE ${dbName}.actividad 
        SET status = 'Fallido', 
            step = ?, 
            progress = 0, 
@@ -236,7 +236,7 @@ async function markUploadAsFailed(
     console.log(`✅ [Upload] Registro padre actualizado: ${uploadId}`);
 
     const [childRows] = await connection.query(
-      `SELECT upload_id FROM erp49.actividad WHERE parent_upload_id = ?`,
+      `SELECT upload_id FROM ${dbName}.actividad WHERE parent_upload_id = ?`,
       [uploadId]
     ) as any;
 
@@ -244,7 +244,7 @@ async function markUploadAsFailed(
       console.log(`❌ [Upload] Marcando ${childRows.length} archivos hijos como fallidos...`);
 
       await connection.query(
-        `UPDATE erp49.actividad 
+        `UPDATE ${dbName}.actividad 
          SET status = 'Fallido', 
              step = 'Error en archivo padre', 
              progress = 0, 
@@ -531,7 +531,7 @@ export async function uploadDocument(
     // 🆕 Guardar file_path, file_hash y cif para que el sistema de reintentos pueda reconstruir el payload
     try {
       await connection.query(
-        `UPDATE erp49.actividad 
+        `UPDATE ${dbName}.actividad 
          SET file_path = ?, file_hash = ?, cif = ?
          WHERE upload_id = ?`,
         [filePath, mainFileHash, cif || null, uploadId]

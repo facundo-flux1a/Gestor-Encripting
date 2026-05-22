@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { revalidatePath } from 'next/cache';
 
@@ -25,8 +25,8 @@ export async function DELETE(
     // 1️⃣ Obtener actividad padre Y su upload_id
     const [checkRows] = await conn.query(
       `SELECT a.id, a.upload_id, a.documento_id, a.documento_nombre, a.parent_upload_id
-       FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+       FROM ${dbName}.actividad a
+       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
        WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
@@ -52,7 +52,7 @@ export async function DELETE(
     // 2️⃣ Buscar actividades hijas (que tengan este upload_id como parent_upload_id)
     const [childActivities] = await conn.query(
       `SELECT id, documento_id, upload_id, documento_nombre
-       FROM erp49.actividad 
+       FROM ${dbName}.actividad 
        WHERE parent_upload_id = ?`,
       [uploadId]
     );
@@ -82,7 +82,7 @@ export async function DELETE(
 
       // ✅ Las tablas relacionadas se eliminarán en cascada si tienes ON DELETE CASCADE
       await conn.query(
-        `DELETE FROM erp49.documentos WHERE id IN (${placeholders})`,
+        `DELETE FROM ${dbName}.documentos WHERE id IN (${placeholders})`,
         allDocumentIds
       );
 
@@ -91,7 +91,7 @@ export async function DELETE(
 
     // 4️⃣ Eliminar actividad padre
     await conn.query(
-      'DELETE FROM erp49.actividad WHERE id = ?',
+      `DELETE FROM ${dbName}.actividad WHERE id = ?`,
       [activityId]
     );
     console.log('✅ [DELETE Activity] Actividad padre eliminada');
@@ -102,7 +102,7 @@ export async function DELETE(
       const placeholders = childIds.map(() => '?').join(',');
 
       await conn.query(
-        `DELETE FROM erp49.actividad WHERE id IN (${placeholders})`,
+        `DELETE FROM ${dbName}.actividad WHERE id IN (${placeholders})`,
         childIds
       );
 

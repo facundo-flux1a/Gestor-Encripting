@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 
 export const dynamic = 'force-dynamic';
@@ -20,8 +20,8 @@ export async function PATCH(request: NextRequest) {
 
     // Marcar todas las actividades del usuario como leídas
     const [result] = await connection.query(
-      `UPDATE erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      `UPDATE ${dbName}.actividad a
+       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
        SET a.is_new = 0
        WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
       [session.userId]

@@ -1,6 +1,6 @@
 'use server';
 
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident, Company, CreateDocumentPayload, DashboardAnalytics } from '@/lib/types';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
@@ -4573,7 +4573,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
       ))) as mismatch_amount,
       hcs.verified as hcs_verified
     FROM documentos d
-    LEFT JOIN erp49.health_check_status hcs ON hcs.documento_id = d.id
+    LEFT JOIN ${dbName}.health_check_status hcs ON hcs.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
     HAVING mismatch_amount > 0.05
        OR (mismatch_amount <= 0.05 AND hcs.verified = 0)
@@ -4588,13 +4588,13 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   for (const doc of docRows as any[]) {
     if (Number(doc.mismatch_amount || 0) > 0.05) {
       const [insertResult] = await db.query<any>(
-        `INSERT IGNORE INTO erp49.health_check_status (documento_id, empresa_id, verified) VALUES (?, ?, 0)`,
+        `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified) VALUES (?, ?, 0)`,
         [doc.id, doc.id_de_empresa]
       );
       // Only diagnose if this is a NEW registration AND has no prior suggestions
       if (insertResult.affectedRows > 0) {
         const [existingSuggestions] = await db.query<any[]>(
-          `SELECT id FROM erp49.ai_suggestions WHERE documento_id = ? LIMIT 1`,
+          `SELECT id FROM ${dbName}.ai_suggestions WHERE documento_id = ? LIMIT 1`,
           [doc.id]
         );
         if ((existingSuggestions as any[]).length === 0) {
@@ -4624,7 +4624,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     );
 
     const [statusRows] = await db.query<any[]>(
-      'SELECT documento_id, verified FROM erp49.health_check_status WHERE documento_id IN (?)',
+      `SELECT documento_id, verified FROM ${dbName}.health_check_status WHERE documento_id IN (?)`,
       [docIds]
     );
 
@@ -4653,7 +4653,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
  */
 export async function confirmHealthCheckDocument(documentId: number): Promise<void> {
   await db.query(
-    `UPDATE erp49.health_check_status SET verified = 1 WHERE documento_id = ?`,
+    `UPDATE ${dbName}.health_check_status SET verified = 1 WHERE documento_id = ?`,
     [documentId]
   );
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/services/user-service';
-import pool from '@/lib/db';
+import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Obtener empresas del usuario para validar permisos
     const [empresasRows] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM erp49.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+      `SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
       [user.id]
     );
 
@@ -71,9 +71,9 @@ export async function GET(request: NextRequest) {
         d.importe_total,
         d.id_de_empresa,
         e.nombre_de_empresa as empresa_nombre
-      FROM erp49.ai_incidencias_documento ai
-      INNER JOIN erp49.documentos d ON ai.documento_id = d.id
-      INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
+      FROM ${dbName}.ai_incidencias_documento ai
+      INNER JOIN ${dbName}.documentos d ON ai.documento_id = d.id
+      INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
       WHERE d.id_de_empresa IN (?)
     `;
 
@@ -142,9 +142,9 @@ export async function DELETE(request: NextRequest) {
     // Verificar que la incidencia pertenece a un documento del usuario
     const [checkRows] = await pool.query<RowDataPacket[]>(
       `SELECT ai.id 
-       FROM erp49.ai_incidencias_documento ai
-       INNER JOIN erp49.documentos d ON ai.documento_id = d.id
-       INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
+       FROM ${dbName}.ai_incidencias_documento ai
+       INNER JOIN ${dbName}.documentos d ON ai.documento_id = d.id
+       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
        WHERE ai.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [incidentId, user.id]
     );
@@ -158,7 +158,7 @@ export async function DELETE(request: NextRequest) {
 
     // Eliminar incidencia
     await pool.query(
-      'DELETE FROM erp49.ai_incidencias_documento WHERE id = ?',
+      `DELETE FROM ${dbName}.ai_incidencias_documento WHERE id = ?`,
       [incidentId]
     );
 

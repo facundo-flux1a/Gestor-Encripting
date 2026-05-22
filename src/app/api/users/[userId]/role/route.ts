@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
 export async function PATCH(
@@ -26,7 +26,7 @@ export async function PATCH(
 
         // 🛡️ Seguridad: Verificar si el usuario que hace la petición es ADMIN en ESA empresa
         const [companyRows] = await db.query<RowDataPacket[]>(
-            'SELECT config_roles FROM erp49.empresas WHERE id = ?',
+            `SELECT config_roles FROM ${dbName}.empresas WHERE id = ?`,
             [companyId]
         );
 
@@ -49,7 +49,7 @@ export async function PATCH(
 
         // Actualizar en el JSON de la empresa usando JSON_SET
         await db.query(
-            'UPDATE erp49.empresas SET config_roles = JSON_SET(config_roles, ?, ?) WHERE id = ?',
+            `UPDATE ${dbName}.empresas SET config_roles = JSON_SET(config_roles, ?, ?) WHERE id = ?`,
             [`$."${userId}"`, rol, companyId]
         );
 

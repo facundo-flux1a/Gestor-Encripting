@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/services/user-service';
 import { analyzeDocumentWithAI } from '@/services/ai-service';
 import { canMakeRequest } from '@/services/ai-limits-service';
-import pool from '@/lib/db';
+import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
     // Obtener el documento y verificar permisos
     const [docRows] = await pool.execute<RowDataPacket[]>(
       `SELECT d.*, e.id_de_usuario 
-       FROM erp49.documentos d
-       INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
+       FROM ${dbName}.documentos d
+       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
        WHERE d.id = ?`,
       [documentId]
     );
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     // Obtener configuración de IA del usuario para saber qué provider va a usar
     const [configRows] = await pool.execute<RowDataPacket[]>(
       `SELECT use_own_key, shared_provider, daily_limit_openai, daily_limit_gemini, is_unlimited
-       FROM erp49.ai_user_config
+       FROM ${dbName}.ai_user_config
        WHERE user_id = ?`,
       [user.id]
     );
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       ]);
 
       await pool.query(
-        `INSERT INTO erp49.ai_incidencias_documento 
+        `INSERT INTO ${dbName}.ai_incidencias_documento 
          (documento_id, id_de_empresa, tipo, descripcion, severidad, analisis_id, provider, model)
          VALUES ?`,
         [values]

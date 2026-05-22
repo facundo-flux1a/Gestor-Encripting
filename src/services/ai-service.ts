@@ -1,6 +1,6 @@
 'use server';
 
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import { getCurrentUser } from './user-service';
 import { encrypt, decrypt } from '@/lib/encryption';
 import { canMakeRequest, incrementDailyUsage } from './ai-limits-service'; // ✅ IMPORTAR
@@ -154,7 +154,7 @@ export async function getUserAIConfig(): Promise<UserAIConfig | null> {
     if (!user) return null;
 
     const [rows] = await db.query<any[]>(
-      `SELECT * FROM erp49.ai_user_config WHERE user_id = ? LIMIT 1`,
+      `SELECT * FROM ${dbName}.ai_user_config WHERE user_id = ? LIMIT 1`,
       [user.id]
     );
 
@@ -210,7 +210,7 @@ export async function saveUserAIConfig(config: {
 
     if (existing) {
       await db.query(
-        `UPDATE erp49.ai_user_config 
+        `UPDATE ${dbName}.ai_user_config 
          SET use_own_key = ?, own_provider = ?, own_api_key_encrypted = ?, 
              custom_prompt = ?, preferred_model = ?, shared_provider = ?
          WHERE user_id = ?`,
@@ -226,7 +226,7 @@ export async function saveUserAIConfig(config: {
       );
     } else {
       await db.query(
-        `INSERT INTO erp49.ai_user_config 
+        `INSERT INTO ${dbName}.ai_user_config 
          (user_id, use_own_key, own_provider, own_api_key_encrypted, custom_prompt, preferred_model, shared_provider)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -431,8 +431,8 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
     // Obtener datos del documento y configuración de la empresa (Recargo)
     const [rows] = await db.query<any[]>(
       `SELECT d.*, e.recargo as empresa_recargo 
-       FROM erp49.documentos d
-       LEFT JOIN erp49.empresas e ON d.id_de_empresa = e.id
+       FROM ${dbName}.documentos d
+       LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
        WHERE d.id = ?`,
       [documentId]
     );
@@ -570,7 +570,7 @@ Esta empresa NO aplica recargo de equivalencia. Si encuentras un recargo cobrado
 
     // Guardar log de uso
     const [logResult] = await db.query<any>(
-      `INSERT INTO erp49.ai_usage_log 
+      `INSERT INTO ${dbName}.ai_usage_log 
        (user_id, document_id, provider, model, used_own_key, tokens_used, incidents_found)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [user.id, documentId, provider, model, usedOwnKey, result.tokens, incidents.length]

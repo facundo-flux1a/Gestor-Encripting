@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 
 export const dynamic = 'force-dynamic';
@@ -35,8 +35,8 @@ export async function PATCH(request: NextRequest) {
             // Obtener información de la actividad
             const [activities] = await connection.query(
                 `SELECT a.id, a.parent_upload_id
-         FROM erp49.actividad a
-         INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+         FROM ${dbName}.actividad a
+         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
          WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
                 [activityId, session.userId]
             );
@@ -53,8 +53,8 @@ export async function PATCH(request: NextRequest) {
 
             // Marcar la actividad como leída
             const [result] = await connection.query(
-                `UPDATE erp49.actividad a
-         INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+                `UPDATE ${dbName}.actividad a
+         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
          SET a.is_new = 0
          WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
                 [activityId, session.userId]
@@ -79,8 +79,8 @@ export async function PATCH(request: NextRequest) {
             // Contar cuántos hermanos siguen sin leer
             const [unreadSiblings] = await connection.query(
                 `SELECT COUNT(*) as unread_count
-         FROM erp49.actividad a
-         INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+         FROM ${dbName}.actividad a
+         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
          WHERE a.parent_upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.is_new = 1`,
                 [parentUploadId, session.userId]
             );
@@ -93,8 +93,8 @@ export async function PATCH(request: NextRequest) {
                 console.log('✨ [API-ACTIVITY-MARK-MULTIPLE-READ] Todos los hermanos están leídos, marcando ZIP padre...');
 
                 const [parentResult] = await connection.query(
-                    `UPDATE erp49.actividad a
-           INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+                    `UPDATE ${dbName}.actividad a
+           INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
            SET a.is_new = 0
            WHERE a.upload_id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) AND a.parent_upload_id IS NULL AND a.is_new = 1`,
                     [parentUploadId, session.userId]

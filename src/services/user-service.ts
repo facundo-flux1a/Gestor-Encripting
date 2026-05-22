@@ -1,6 +1,6 @@
 'use server';
 
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { User } from '@/lib/types';
 import { getSession, createSession } from './auth-service';
 import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
@@ -59,7 +59,7 @@ export async function getUsersByIds(ids: number[], companyId?: number): Promise<
   let rolesMap: Record<string, string> = {};
   if (companyId) {
     const [compRows] = await db.query<RowDataPacket[]>(
-      'SELECT config_roles FROM erp49.empresas WHERE id = ?',
+      `SELECT config_roles FROM ${dbName}.empresas WHERE id = ?`,
       [companyId]
     );
     if (compRows.length > 0 && compRows[0].config_roles) {

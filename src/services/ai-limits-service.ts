@@ -1,6 +1,6 @@
 'use server';
 
-import pool from '@/lib/db';
+import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export interface UserLimits {
@@ -24,7 +24,7 @@ export interface DailyUsage {
 export async function getUserLimits(userId: number): Promise<UserLimits | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT daily_limit_openai, daily_limit_gemini, is_unlimited 
-     FROM erp49.ai_user_config 
+     FROM ${dbName}.ai_user_config 
      WHERE user_id = ?`,
     [userId]
   );
@@ -51,7 +51,7 @@ export async function getDailyUsage(
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT request_count, tokens_used 
-     FROM erp49.ai_daily_usage 
+     FROM ${dbName}.ai_daily_usage 
      WHERE user_id = ? AND provider = ? AND usage_date = ?`,
     [userId, provider, today]
   );
@@ -112,7 +112,7 @@ export async function incrementDailyUsage(
   const today = new Date().toISOString().split('T')[0];
 
   await pool.query(
-    `INSERT INTO erp49.ai_daily_usage 
+    `INSERT INTO ${dbName}.ai_daily_usage 
      (user_id, provider, usage_date, request_count, tokens_used)
      VALUES (?, ?, ?, 1, ?)
      ON DUPLICATE KEY UPDATE 

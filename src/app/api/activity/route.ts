@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { ActivityService } from '@/services/activity-service';
 
@@ -48,11 +48,11 @@ export async function GET(request: Request) {
         e.CIF,
         d.tipo_documento,
         d.numero_documento,
-        (SELECT nombre FROM erp49.entidades_documento WHERE documento_id = d.id AND rol = 'emisor' LIMIT 1) as empresa_emisora,
-        (SELECT nombre FROM erp49.entidades_documento WHERE documento_id = d.id AND rol = 'cliente' LIMIT 1) as cliente
-      FROM erp49.actividad a
-      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      LEFT JOIN erp49.documentos d ON a.documento_id = d.id
+        (SELECT nombre FROM ${dbName}.entidades_documento WHERE documento_id = d.id AND rol = 'emisor' LIMIT 1) as empresa_emisora,
+        (SELECT nombre FROM ${dbName}.entidades_documento WHERE documento_id = d.id AND rol = 'cliente' LIMIT 1) as cliente
+      FROM ${dbName}.actividad a
+      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+      LEFT JOIN ${dbName}.documentos d ON a.documento_id = d.id
       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
@@ -111,9 +111,9 @@ export async function GET(request: Request) {
     // Contar total
     let countQuery = `
       SELECT COUNT(*) as total
-      FROM erp49.actividad a
-      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
-      LEFT JOIN erp49.documentos d ON a.documento_id = d.id
+      FROM ${dbName}.actividad a
+      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+      LEFT JOIN ${dbName}.documentos d ON a.documento_id = d.id
       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
     `;
 
@@ -231,8 +231,8 @@ export async function DELETE(request: Request) {
 
     const [checkRows] = await connection.query(
       `SELECT a.id 
-       FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+       FROM ${dbName}.actividad a
+       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
        WHERE a.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [activityId, session.userId]
     );
@@ -242,7 +242,7 @@ export async function DELETE(request: Request) {
     }
 
     await connection.query(
-      'DELETE FROM erp49.actividad WHERE id = ?',
+      `DELETE FROM ${dbName}.actividad WHERE id = ?`,
       [activityId]
     );
 

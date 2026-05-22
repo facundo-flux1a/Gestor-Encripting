@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
 export async function DELETE(
@@ -17,7 +17,7 @@ export async function DELETE(
 
         // 🛡️ Seguridad: Verificar si el usuario que hace la petición es ADMIN en ESA empresa
         const [companyRows] = await db.query<RowDataPacket[]>(
-            'SELECT id_de_usuario, config_roles FROM erp49.empresas WHERE id = ?',
+            `SELECT id_de_usuario, config_roles FROM ${dbName}.empresas WHERE id = ?`,
             [companyId]
         );
 
@@ -58,7 +58,7 @@ export async function DELETE(
 
         // Actualizar la base de datos: Remover del array Y del objeto JSON
         await db.query(
-            'UPDATE erp49.empresas SET id_de_usuario = ?, config_roles = JSON_REMOVE(config_roles, ?) WHERE id = ?',
+            `UPDATE ${dbName}.empresas SET id_de_usuario = ?, config_roles = JSON_REMOVE(config_roles, ?) WHERE id = ?`,
             [JSON.stringify(finalUserIds), `$."${targetUserId}"`, companyId]
         );
 

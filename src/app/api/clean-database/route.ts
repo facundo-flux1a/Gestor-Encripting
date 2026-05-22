@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
 export async function POST(request: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const userEmail = session.email;
 
     const [rows] = await connection.query<RowDataPacket[]>(
-      `SELECT id, email, has_permits FROM erp49.usuarios WHERE id = ?`,
+      `SELECT id, email, has_permits FROM ${dbName}.usuarios WHERE id = ?`,
       [userId]
     );
 

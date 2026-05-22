@@ -1,6 +1,6 @@
 // app/api/documents-confirm/route.ts
 import { NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 
 export async function PATCH(request: Request) {
@@ -43,8 +43,8 @@ export async function PATCH(request: Request) {
     console.log('3️⃣ Consultando base de datos...');
     const [checkRows] = await connection.query(
       `SELECT d.id, d.tipo_documento, e.id_de_usuario, d.trimestre_cerrado, d.año_trimestre, d.num_trimestre
-       FROM erp49.documentos d
-       INNER JOIN erp49.empresas e ON d.id_de_empresa = e.id
+       FROM ${dbName}.documentos d
+       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
        WHERE d.id IN (${placeholders}) AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [...idsToConfirm, session.userId]
     );
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
     ).join(' ');
 
     await connection.query(
-      `UPDATE erp49.documentos 
+      `UPDATE ${dbName}.documentos 
        SET tipo_documento = CASE ${caseStatements} END
        WHERE id IN (${placeholders})`,
       idsToConfirm

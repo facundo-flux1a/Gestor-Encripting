@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         email, 
         expires_at, 
         used 
-      FROM erp49.password_reset_tokens 
+      FROM ${dbName}.password_reset_tokens 
       WHERE token = ?`,
       [token]
     );
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // ✅ NUEVO: Obtener la contraseña actual del usuario
     const [userRows] = await db.query<User[]>(
-      'SELECT id, password FROM erp49.usuarios WHERE id = ?',
+      `SELECT id, password FROM ${dbName}.usuarios WHERE id = ?`,
       [resetToken.user_id]
     );
 
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     // Actualizar contraseña del usuario
     const [updateResult] = await db.query<ResultSetHeader>(
-      `UPDATE erp49.usuarios 
+      `UPDATE ${dbName}.usuarios 
        SET password = ?, 
            fecha_actualizacion = CURRENT_TIMESTAMP 
        WHERE id = ?`,
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
 
     // Marcar token como usado
     await db.query<ResultSetHeader>(
-      `UPDATE erp49.password_reset_tokens 
+      `UPDATE ${dbName}.password_reset_tokens 
        SET used = 1 
        WHERE id = ?`,
       [resetToken.id]

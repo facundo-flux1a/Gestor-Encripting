@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { revalidatePath } from 'next/cache';
 
@@ -22,8 +22,8 @@ export async function DELETE(request: Request) {
     // 1️⃣ Contar actividades antes de eliminar
     const [countResult] = await conn.query(
       `SELECT COUNT(*) as total
-       FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+       FROM ${dbName}.actividad a
+       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
        WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [session.userId]
     );
@@ -44,8 +44,8 @@ export async function DELETE(request: Request) {
 
     // 2️⃣ Eliminar SOLO las actividades (NO los documentos)
     await conn.query(
-      `DELETE a FROM erp49.actividad a
-       INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      `DELETE a FROM ${dbName}.actividad a
+       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
        WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [session.userId]
     );

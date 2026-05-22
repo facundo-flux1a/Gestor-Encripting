@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { ActivityService } from '@/services/activity-service';
 import { RowDataPacket } from 'mysql2';
@@ -70,7 +70,7 @@ export async function GET(
 
     const [rows] = await connection.query<RowDataPacket[]>(
       `SELECT id, status, retry_count, error_detalle, updated_at 
-       FROM erp49.actividad WHERE id = ?`,
+       FROM ${dbName}.actividad WHERE id = ?`,
       [parseInt(id)]
     );
 
@@ -94,7 +94,7 @@ export async function DELETE(
     const session = await getSession();
     if (!session) return new NextResponse('Unauthorized', { status: 401 });
 
-    await connection.query(`UPDATE erp49.actividad SET retry_count = 3 WHERE id = ?`, [parseInt(id)]);
+    await connection.query(`UPDATE ${dbName}.actividad SET retry_count = 3 WHERE id = ?`, [parseInt(id)]);
     return NextResponse.json({ success: true, message: 'Reintentos automáticos cancelados para esta actividad' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

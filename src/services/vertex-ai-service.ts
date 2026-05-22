@@ -1,7 +1,7 @@
 'use server';
 
 import { VertexAI } from '@google-cloud/vertexai';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import { getCurrentUser } from './user-service';
 
 // Tipos
@@ -107,9 +107,9 @@ export async function diagnoseDocument(documentId: number): Promise<DiagnosticRe
         // 1. Obtener datos del documento con la suma de sus impuestos
         const [rows] = await db.query<any[]>(
             `SELECT d.*, e.recargo as empresa_recargo,
-                COALESCE((SELECT SUM(cuota) FROM erp49.impuestos_documento WHERE documento_id = d.id), 0) as total_impuestos
-             FROM erp49.documentos d
-             LEFT JOIN erp49.empresas e ON d.id_de_empresa = e.id
+                COALESCE((SELECT SUM(cuota) FROM ${dbName}.impuestos_documento WHERE documento_id = d.id), 0) as total_impuestos
+             FROM ${dbName}.documentos d
+             LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
              WHERE d.id = ? `,
             [documentId]
         );
@@ -120,7 +120,7 @@ export async function diagnoseDocument(documentId: number): Promise<DiagnosticRe
         // 1.1 Obtener desglose de impuestos
         const [taxRows] = await db.query<any[]>(
             `SELECT tipo_impuesto, porcentaje, base_imponible, cuota 
-             FROM erp49.impuestos_documento 
+             FROM ${dbName}.impuestos_documento 
              WHERE documento_id = ?`,
             [documentId]
         );
@@ -128,7 +128,7 @@ export async function diagnoseDocument(documentId: number): Promise<DiagnosticRe
         // 1.2 Obtener líneas del documento
         const [lineRows] = await db.query<any[]>(
             `SELECT descripcion, cantidad, precio_unitario, importe_linea, descuento_porcentaje
-             FROM erp49.lineas_documento
+             FROM ${dbName}.lineas_documento
              WHERE documento_id = ?
              ORDER BY id`,
             [documentId]
@@ -137,7 +137,7 @@ export async function diagnoseDocument(documentId: number): Promise<DiagnosticRe
         // 1.3 Obtener entidades (emisor y receptor)
         const [entityRows] = await db.query<any[]>(
             `SELECT rol, nombre, identificador_fiscal
-             FROM erp49.entidades_documento
+             FROM ${dbName}.entidades_documento
              WHERE documento_id = ?`,
             [documentId]
         );
@@ -381,7 +381,7 @@ async function saveSuggestionsToDb(docId: number, empresaId: number, incidents: 
         // Eliminar análisis anteriores del mismo documento antes de guardar el nuevo
         // (el historial ya va embebido en la columna 'historial' del nuevo registro)
         await db.query(
-            `DELETE FROM erp49.ai_suggestions WHERE documento_id = ?`,
+            `DELETE FROM ${dbName}.ai_suggestions WHERE documento_id = ?`,
             [docId]
         );
 
@@ -399,7 +399,7 @@ async function saveSuggestionsToDb(docId: number, empresaId: number, incidents: 
             ]);
 
             await db.query(
-                `INSERT INTO erp49.ai_suggestions 
+                `INSERT INTO ${dbName}.ai_suggestions 
                 (documento_id, empresa_id, tipo, descripcion, severidad, sugerencia, analisis_nro, historial, include_in_context) 
                 VALUES ?`,
                 [values]
@@ -420,7 +420,7 @@ async function saveSuggestionsToDb(docId: number, empresaId: number, incidents: 
 export async function getAuditHistory(docId: number): Promise<Incident[]> {
     try {
         const [rows] = await db.query<any[]>(
-            'SELECT * FROM erp49.ai_suggestions WHERE documento_id = ? ORDER BY created_at DESC',
+            `SELECT * FROM ${dbName}.ai_suggestions WHERE documento_id = ? ORDER BY created_at DESC`,
             [docId]
         );
         return rows;
@@ -435,7 +435,7 @@ export async function getAuditHistory(docId: number): Promise<Incident[]> {
  */
 export async function toggleContextItem(id: number, include: boolean) {
     try {
-        await db.query('UPDATE erp49.ai_suggestions SET include_in_context = ? WHERE id = ?', [include, id]);
+        await db.query(`UPDATE ${dbName}.ai_suggestions SET include_in_context = ? WHERE id = ?`, [include, id]);
         return { success: true };
     } catch (error) {
         console.error('❌ Error actualizando contexto:', error);
@@ -448,7 +448,7 @@ export async function toggleContextItem(id: number, include: boolean) {
  */
 export async function deleteHistoryItem(id: number) {
     try {
-        await db.query('DELETE FROM erp49.ai_suggestions WHERE id = ?', [id]);
+        await db.query(`DELETE FROM ${dbName}.ai_suggestions WHERE id = ?`, [id]);
         return { success: true };
     } catch (error) {
         console.error('❌ Error eliminando hito del historial:', error);
@@ -468,7 +468,7 @@ export async function getPersistentSuggestions(docId: number) {
  */
 export async function clearSuggestions(docId: number) {
     try {
-        await db.query('DELETE FROM erp49.ai_suggestions WHERE documento_id = ?', [docId]);
+        await db.query(`DELETE FROM ${dbName}.ai_suggestions WHERE documento_id = ?`, [docId]);
         console.log(`🗑️ Historial eliminado para doc #${docId}`);
     } catch (error) {
         console.error('❌ Error eliminando sugerencias de BD:', error);

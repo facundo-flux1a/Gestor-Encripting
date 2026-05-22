@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { ActivityService } from '@/services/activity-service';
 
 export const dynamic = 'force-dynamic';
@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     if (isFailure) {
       console.error(`❌ [POST] Falla detectada ("${status}") en UploadID: ${effectiveUploadId}`);
 
-      // 1. Obtener actividad (Búsqueda REFORZADA en erp49)
+      // 1. Obtener actividad
       let [actRows] = await connection.query(
-        'SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM erp49.actividad WHERE upload_id = ? OR parent_upload_id = ? OR id = ?',
+        `SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM ${dbName}.actividad WHERE upload_id = ? OR parent_upload_id = ? OR id = ?`,
         [effectiveUploadId, effectiveUploadId, body.activityId || -1]
       ) as any;
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         const fname = body.fileName || body.documento_nombre;
         console.log(`🔍 [POST-Progress] Fallback: Buscando por nombre "${fname}"`);
         [actRows] = await connection.query(
-          'SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM erp49.actividad WHERE documento_nombre = ? AND updated_at > NOW() - INTERVAL 2 HOUR LIMIT 1',
+          `SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM ${dbName}.actividad WHERE documento_nombre = ? AND updated_at > NOW() - INTERVAL 2 HOUR LIMIT 1`,
           [fname]
         ) as any;
       }
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       const filterValue = activity?.id || effectiveUploadId;
 
       await connection.query(
-        `UPDATE erp49.actividad 
+        `UPDATE ${dbName}.actividad 
          SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, error_detalle = ?, updated_at = NOW()
          WHERE ${filterField}`,
         [step || 'Error', finalMensaje, finalDetalle, filterValue]
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // 🔥 ACTUALIZACIÓN NORMAL
     await connection.query(
-      `UPDATE erp49.actividad 
+      `UPDATE ${dbName}.actividad 
        SET status = ?, step = ?, progress = ?, mensaje = ?, updated_at = NOW()
        WHERE upload_id = ? OR parent_upload_id = ?`,
       [status, step, progress, message, effectiveUploadId, effectiveUploadId]

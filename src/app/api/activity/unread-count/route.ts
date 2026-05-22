@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { ActivityService } from '@/services/activity-service';
 
@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
        SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) = 'completado' THEN 1 ELSE 0 END) as unread_success,
        SUM(CASE WHEN a.is_new = 1 AND LOWER(a.status) IN ('fallido', 'error', 'interrumpido') THEN 1 ELSE 0 END) as unread_failed,
        SUM(CASE WHEN a.is_new = 1 THEN 1 ELSE 0 END) as total_unread
-      FROM erp49.actividad a
-      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      FROM ${dbName}.actividad a
+      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
       WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`;
 
     const params: any[] = [session.userId];

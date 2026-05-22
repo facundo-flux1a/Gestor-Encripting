@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 
 export const dynamic = 'force-dynamic';
@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
         a.upload_id,
         a.status,
         a.updated_at
-      FROM erp49.actividad a
-      INNER JOIN erp49.empresas e ON a.id_de_empresa = e.id
+      FROM ${dbName}.actividad a
+      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
       WHERE a.status IN ('Fallido', 'Error', 'failed')
         AND (a.retry_count IS NULL OR a.retry_count < 3)
         AND a.updated_at > NOW() - INTERVAL 30 MINUTE

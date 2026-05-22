@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/services/user-service';
-import pool from '@/lib/db';
+import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export async function GET() {
 
     // Obtener IDs de empresas del usuario
     const [empresasRows] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM erp49.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+      `SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
       [user.id]
     );
 
@@ -57,7 +57,7 @@ export async function GET() {
     // ✅ Obtener límites del usuario
     const [limitsRows] = await pool.query<RowDataPacket[]>(
       `SELECT daily_limit_openai, daily_limit_gemini, is_unlimited
-       FROM erp49.ai_user_config
+       FROM ${dbName}.ai_user_config
        WHERE user_id = ?`,
       [user.id]
     );
@@ -72,7 +72,7 @@ export async function GET() {
     const today = new Date().toISOString().split('T')[0];
     const [dailyUsageRows] = await pool.query<RowDataPacket[]>(
       `SELECT provider, request_count
-       FROM erp49.ai_daily_usage
+       FROM ${dbName}.ai_daily_usage
        WHERE user_id = ? AND usage_date = ?`,
       [user.id, today]
     );
@@ -86,7 +86,7 @@ export async function GET() {
         COUNT(*) as total_analisis,
         SUM(tokens_used) as total_tokens,
         SUM(CASE WHEN used_own_key = 1 THEN 1 ELSE 0 END) as analisis_con_propia_key
-       FROM erp49.ai_usage_log
+       FROM ${dbName}.ai_usage_log
        WHERE user_id = ?`,
       [user.id]
     );
@@ -103,7 +103,7 @@ export async function GET() {
         provider,
         COUNT(*) as total_analisis,
         SUM(tokens_used) as total_tokens
-       FROM erp49.ai_usage_log
+       FROM ${dbName}.ai_usage_log
        WHERE user_id = ?
        GROUP BY provider`,
       [user.id]
@@ -127,7 +127,7 @@ export async function GET() {
         SUM(CASE WHEN used_own_key = 1 THEN 1 ELSE 0 END) as analisis_con_propia_key,
         MIN(created_at) as primer_analisis,
         MAX(created_at) as ultimo_analisis
-       FROM erp49.ai_usage_log
+       FROM ${dbName}.ai_usage_log
        WHERE user_id = ?
        GROUP BY provider, model
        ORDER BY total_analisis DESC`,
@@ -141,9 +141,9 @@ export async function GET() {
         SUM(CASE WHEN severidad = 'alta' THEN 1 ELSE 0 END) as incidencias_alta,
         SUM(CASE WHEN severidad = 'media' THEN 1 ELSE 0 END) as incidencias_media,
         SUM(CASE WHEN severidad = 'baja' THEN 1 ELSE 0 END) as incidencias_baja
-       FROM erp49.ai_incidencias_documento
+       FROM ${dbName}.ai_incidencias_documento
        WHERE documento_id IN (
-         SELECT id FROM erp49.documentos WHERE id_de_empresa IN (?)
+         SELECT id FROM ${dbName}.documentos WHERE id_de_empresa IN (?)
        )`,
       [empresaIds]
     );

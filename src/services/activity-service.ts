@@ -1,4 +1,4 @@
-import connection from '@/lib/db';
+import connection, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 export interface RetryResult {
@@ -36,7 +36,7 @@ export class ActivityService {
           documento_nombre,
           retry_count,
           error_detalle
-        FROM erp49.actividad 
+        FROM ${dbName}.actividad 
         WHERE id = ?`,
         [activityId]
       );
@@ -56,7 +56,7 @@ export class ActivityService {
         const disclaimer = "\n\n⚠️ (Se agotaron los 3 reintentos automáticos)";
 
         await conn.query(
-          `UPDATE erp49.actividad 
+          `UPDATE ${dbName}.actividad 
            SET 
              status = 'Fallido',
              mensaje = '⚠️ Reintentos automáticos agotados (3/3). Intenta nuevamente de forma manual.',
@@ -113,7 +113,7 @@ export class ActivityService {
 
       // 5. Actualizar el registro existente
       await conn.query(
-        `UPDATE erp49.actividad 
+        `UPDATE ${dbName}.actividad 
          SET 
            status = 'Reintentando',
            step = 'Iniciando reintento',

@@ -1,4 +1,4 @@
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { sendEmail } from './email-service';
 import crypto from 'crypto';
@@ -95,7 +95,7 @@ export async function acceptInvitation(token: string, userId: string | number) {
 
     const empresaId = inv.id_empresa || inv.empresa_id;
 
-    const [empresaRows] = await db.query<RowDataPacket[]>('SELECT id_de_usuario FROM erp49.empresas WHERE id = ?', [empresaId]);
+    const [empresaRows] = await db.query<RowDataPacket[]>(`SELECT id_de_usuario FROM ${dbName}.empresas WHERE id = ?`, [empresaId]);
     if (empresaRows.length > 0) {
       let userIds = [];
       try {
@@ -113,7 +113,7 @@ export async function acceptInvitation(token: string, userId: string | number) {
 
       // Actualizamos el array de IDs Y el objeto de roles
       await db.query(
-        `UPDATE erp49.empresas SET 
+        `UPDATE ${dbName}.empresas SET 
                  id_de_usuario = ?, 
                  config_roles = JSON_SET(COALESCE(config_roles, JSON_OBJECT()), ?, ?) 
                  WHERE id = ?`,

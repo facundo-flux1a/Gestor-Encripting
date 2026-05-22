@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import db, { dbName } from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
 interface ResetToken extends RowDataPacket {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         email, 
         expires_at, 
         used 
-      FROM erp49.password_reset_tokens 
+      FROM ${dbName}.password_reset_tokens 
       WHERE token = ?`,
       [token]
     );
