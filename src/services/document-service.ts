@@ -4549,10 +4549,11 @@ AND(JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
 }
 
 export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
-  summary: { total: number; mismatches: number };
+  summary: { total: number; mismatches: number; logic_checks: number };
   documents: Document[];
+  triggeredDiagnoses?: number[];
 }> {
-  if (companyIds.length === 0) return { summary: { total: 0, mismatches: 0 }, documents: [] };
+  if (companyIds.length === 0) return { summary: { total: 0, mismatches: 0, logic_checks: 0 }, documents: [] };
 
   const [rows] = await db.query<RowDataPacket[]>(`
     SELECT 
@@ -4564,14 +4565,64 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     WHERE d.id_de_empresa IN (?)
   `, [companyIds]);
 
-  // Fetch documents with mismatches OR balanced but pending confirmation (verified = 0)
+  // ─── FASE 1: Detectar y registrar checks LÓGICOS ───────────────────────────
+
+  // 1a. Fecha anómala: YEAR(fecha_emision) != año_trimestre, o año < 2020
+  const [fechaAnomalas] = await db.query<RowDataPacket[]>(`
+    SELECT d.id, d.id_de_empresa, d.año_trimestre, DATE_FORMAT(d.fecha_emision, '%d/%m/%Y') as fecha_fmt
+    FROM documentos d
+    WHERE d.id_de_empresa IN (?)
+      AND d.fecha_emision IS NOT NULL
+      AND (
+        YEAR(d.fecha_emision) != d.año_trimestre
+        OR YEAR(d.fecha_emision) < 2020
+      )
+      AND d.id NOT IN (SELECT documento_id FROM ${dbName}.health_check_status WHERE verified = 0)
+  `, [companyIds]);
+
+  for (const doc of fechaAnomalas as any[]) {
+    const motivo = `Fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR.`;
+    await db.query(
+      `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo)
+       VALUES (?, ?, 0, 'FECHA_ANOMALA', ?)`,
+      [doc.id, doc.id_de_empresa, motivo]
+    );
+    console.log(`📅 [HealthCheck] Fecha anómala registrada para doc #${doc.id}`);
+  }
+
+  // 1b. Entidad duplicada: misma entidad como emisor/proveedor Y receptor/cliente
+  const [entidadesDuplicadas] = await db.query<RowDataPacket[]>(`
+    SELECT ed.documento_id, d.id_de_empresa,
+           COALESCE(NULLIF(ed.identificador_fiscal,''), ed.nombre) as entidad_key
+    FROM entidades_documento ed
+    JOIN documentos d ON ed.documento_id = d.id
+    WHERE d.id_de_empresa IN (?)
+      AND ed.documento_id NOT IN (SELECT documento_id FROM ${dbName}.health_check_status WHERE verified = 0)
+    GROUP BY ed.documento_id, entidad_key
+    HAVING SUM(ed.rol IN ('emisor','proveedor')) > 0
+       AND SUM(ed.rol IN ('receptor','cliente')) > 0
+  `, [companyIds]);
+
+  for (const doc of entidadesDuplicadas as any[]) {
+    const motivo = `La entidad "${doc.entidad_key}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
+    await db.query(
+      `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo)
+       VALUES (?, ?, 0, 'ENTIDAD_DUPLICADA', ?)`,
+      [doc.documento_id, doc.id_de_empresa, motivo]
+    );
+    console.log(`🔁 [HealthCheck] Entidad duplicada registrada para doc #${doc.documento_id}`);
+  }
+
+  // ─── FASE 2: Fetch documents with mismatches OR pending confirmation (verified = 0) ───
   const [docRows] = await db.query<DocumentPacket[]>(`
     SELECT 
       d.*,
       (ABS(d.importe_total - (d.importe_sin_impuestos + 
           COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
       ))) as mismatch_amount,
-      hcs.verified as hcs_verified
+      hcs.verified as hcs_verified,
+      hcs.check_type as hcs_check_type,
+      hcs.motivo as hcs_motivo
     FROM documentos d
     LEFT JOIN ${dbName}.health_check_status hcs ON hcs.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
@@ -4588,8 +4639,8 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   for (const doc of docRows as any[]) {
     if (Number(doc.mismatch_amount || 0) > 0.05) {
       const [insertResult] = await db.query<any>(
-        `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified) VALUES (?, ?, 0)`,
-        [doc.id, doc.id_de_empresa]
+        `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo) VALUES (?, ?, 0, 'MISMATCH_MATEMATICO', ?)`,
+        [doc.id, doc.id_de_empresa, `Descuadre de ${Number(doc.mismatch_amount).toFixed(2)}€ entre importe total y la suma de base + impuestos.`]
       );
       // Only diagnose if this is a NEW registration AND has no prior suggestions
       if (insertResult.affectedRows > 0) {
@@ -4624,7 +4675,8 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     );
 
     const [statusRows] = await db.query<any[]>(
-      `SELECT documento_id, verified FROM ${dbName}.health_check_status WHERE documento_id IN (?)`,
+      `SELECT documento_id, verified, check_type, motivo FROM ${dbName}.health_check_status WHERE documento_id IN (?)`,
+
       [docIds]
     );
 
@@ -4632,16 +4684,30 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
       doc.ai_suggestions = suggestionRows.filter(s => s.documento_id === doc.id_documento);
       const status = statusRows.find((s: any) => s.documento_id === doc.id_documento);
       (doc as any).hcs_verified = status ? Number(status.verified) : null;
+      (doc as any).hcs_check_type = status?.check_type ?? 'MISMATCH_MATEMATICO';
+      (doc as any).hcs_motivo = status?.motivo ?? null;
       (doc as any).hcs_mismatch_amount = Number(
         (docRows as any[]).find(r => r.id === doc.id_documento)?.mismatch_amount || 0
       );
     });
   }
 
+  // Contar alertas lógicas pendientes (FECHA_ANOMALA + ENTIDAD_DUPLICADA con verified = 0)
+  const [logicRows] = await db.query<RowDataPacket[]>(`
+    SELECT COUNT(*) as logic_checks
+    FROM ${dbName}.health_check_status hcs
+    JOIN documentos d ON hcs.documento_id = d.id
+    WHERE d.id_de_empresa IN (?)
+      AND hcs.verified = 0
+      AND hcs.check_type IN ('FECHA_ANOMALA', 'ENTIDAD_DUPLICADA')
+  `, [companyIds]);
+
+
   return {
     summary: {
       total: rows[0].total || 0,
-      mismatches: Number(rows[0].mismatches) || 0
+      mismatches: Number(rows[0].mismatches) || 0,
+      logic_checks: Number(logicRows[0].logic_checks) || 0
     },
     documents,
     triggeredDiagnoses

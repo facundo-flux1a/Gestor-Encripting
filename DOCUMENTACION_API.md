@@ -65,52 +65,111 @@ curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
 
 ---
 
-## 3. Posibles futuras APIs a Implementarse (Roadmap)
+## 3. Consulta de Documentos
+Extrae un listado estructurado en JSON de los documentos procesados (facturas, abonos, etc.), ideal para sincronizar bases de datos externas.
 
-Con el objetivo de ampliar el ecosistema de integraciones, aquí te mostramos algunas de las capacidades que se podrían añadir a la API v1 en futuras actualizaciones. La autenticación para todas estas APIs usaría el mismo mecanismo de `X-Api-Key`.
+* **URL:** `/api/v1/documents`
+* **Método:** `GET`
+* **Content-Type:** `application/json`
 
-### 🔮 3.1. API de Extracción y Consulta de Documentos (GET `/api/v1/documents`)
-**¿Para qué serviría?**
-Permitirá a un ERP externo consultar el listado de facturas procesadas de manera estructurada (en formato JSON en lugar de Excel).
+#### Parámetros Query (Filtros Opcionales)
+| Parámetro | Tipo | Opciones / Descripción |
+| :--- | :--- | :--- |
+| `trimestre` | `number` | `1`, `2`, `3`, `4`. Filtra por trimestre fiscal. |
+| `año` | `number` | Ej: `2024`. Filtra por un año específico. |
+| `proveedor` | `string` | Busca coincidencias en nombre o CIF del proveedor. |
+| `cliente` | `string` | Busca coincidencias en nombre o CIF del cliente. |
+| `tipo` | `string` | `"emitidas"`, `"recibidas"` o `"todas"`. |
 
-**¿Qué traería?**
-Un JSON con la lista de documentos, indicando bases imponibles, desglose de impuestos, proveedores, fechas de vencimiento, estado (pagada/pendiente) y una URL firmada de corta duración para descargar el archivo PDF/Imagen original.
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/documents?trimestre=3&año=2024" \
+     -H "X-Api-Key: muvail_tu_clave"
+```
 
-**Filtros soportados:**
-* `trimestre` y `año`: Para extraer en lotes periodos fiscales específicos.
-* `tipo`: Para distinguir entre comprobantes de gastos (`recibidas`) o ingresos (`emitidas`).
-* `proveedor` o `cliente`: Filtrado directo (ej: para sincronizar solo un CUIT/CIF en particular).
-* `fecha_desde` y `fecha_hasta`: Para sincronizaciones diarias (ej: "traer solo lo validado hoy").
-
-**Aplicación práctica:** 
-Creación de flujos de trabajo avanzados en herramientas como n8n o Make.com. Usando el Gestor Documental como fuente de verdad de comprobantes validados, podrías diseñar automatizaciones externas robustas que conecten y sincronicen estos datos directamente con otras plataformas contables, bases de datos propietarias o ERPs complejos.
+#### Respuesta
+```json
+{
+  "data": [
+    {
+      "id_documento": 140,
+      "numero_documento": "A-0014",
+      "tipo_documento": "Factura",
+      "fecha_emision": "2024-08-15",
+      "importe_total": 5400.00,
+      "url_archivo": "https://minio.allbase.com.ar/gestor-documental/factura_A0014.pdf",
+      "proveedores": [
+        { "nombre": "Corralón Sur", "identificador_fiscal": "30-12345678-9" }
+      ],
+      "impuestos": [
+        { "tipo_impuesto": "IVA", "porcentaje": 21, "base_imponible": 4462.80, "cuota": 937.20 }
+      ],
+      "lineas_detalle": [
+        { "descripcion": "Cemento Portland", "cantidad": 50, "precio_unitario": 89.25, "importe_linea": 4462.80 }
+      ]
+    }
+  ]
+}
+```
 
 ---
 
-### 🔮 3.2. API de Ingesta Automatizada (POST `/api/v1/documents/upload`)
-**¿Para qué serviría?**
-Permitiría inyectar documentos al sistema directamente desde otras plataformas sin que un usuario tenga que entrar al dashboard a subirlos.
+## 4. Analíticas Financieras
+Extrae métricas consolidadas sobre el rendimiento financiero y la salud contable de la empresa.
 
-**¿Qué parámetros recibiría?**
-Únicamente el archivo binario (PDF/JPG) o una URL pública de descarga directa del mismo. No es necesario enviar identificadores de empresa, usuario ni configuraciones adicionales, ya que el backend del Gestor Documental extrae toda esta información de enrutamiento directamente desde la API Key (`X-Api-Key`), haciendo que la integración sea extremadamente limpia y segura.
+* **URL:** `/api/v1/analytics`
+* **Método:** `GET`
 
-**Aplicación práctica:**
-Dado que el sistema ya cuenta con recepción nativa por correo electrónico, esta API es ideal para flujos desde repositorios en la nube (Google Drive, OneDrive, Dropbox). A través de n8n o Make, podrías hacer que, cada vez que un operario arrastre una factura a la carpeta "Drive/Facturas a procesar", la API lo capture y lo inyecte automáticamente al Gestor Documental para su extracción inmediata por la IA.
+#### Parámetros Query (Filtros Opcionales)
+| Parámetro | Tipo | Opciones / Descripción |
+| :--- | :--- | :--- |
+| `trimestre` | `number` | `1`, `2`, `3`, `4`. Filtra por trimestre fiscal. |
+| `año` | `number` | Ej: `2024`. Filtra por un año específico. |
+
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/analytics?año=2024" \
+     -H "X-Api-Key: muvail_tu_clave"
+```
+
+#### Respuesta
+```json
+{
+  "metricas_financieras": {
+    "total_ingresos": 120500.00,
+    "total_gastos": 45000.50,
+    "beneficio_neto": 75499.50,
+    "iva_repercutido": 25305.00,
+    "iva_soportado": 9450.10,
+    "documentos_totales": 150
+  },
+  "health_check": {
+    "score_salud_porcentaje": 98,
+    "descuadres_matematicos": 1,
+    "alertas_logicas": 0,
+    "documentos_con_incidencias": []
+  }
+}
+```
 
 ---
 
-### 🔮 3.3. API de Analítica e Historial de Productos (GET `/api/v1/analytics` y `/api/v1/products`)
-**¿Para qué serviría?**
-Para extraer las métricas de negocio agregadas, alimentar herramientas de Business Intelligence (PowerBI, Tableau, Looker Studio) y analizar detalladamente el comportamiento de compras, costos y variaciones por proveedor.
+## 5. Historial de Productos
+Extrae un histórico detallado línea por línea de todos los productos y servicios adquiridos, útil para cruzar precios de proveedores.
 
-**¿Qué traería?**
-- **Métricas Financieras:** Total de IVA soportado y repercutido en el mes actual, proyecciones de gasto, y el estado del "Health Check" contable.
-- **Datos de Compras (Productos):** Un listado detallado de los productos y servicios adquiridos, mostrando precios unitarios, histórico de compras de ese ítem, cantidades y a qué proveedor se le compró.
+* **URL:** `/api/v1/products`
+* **Método:** `GET`
 
-**Filtros soportados:**
-* `trimestre` y `año`: Para ver la salud financiera o comparar métricas de un periodo exacto.
-* `producto_nombre/código`: Permite analizar la variación del costo de un material en específico durante el año.
-* `proveedor`: Para consolidar el total gastado con un solo socio comercial y revisar su histórico de precios facturados.
+#### Parámetros Query (Filtros Opcionales)
+| Parámetro | Tipo | Opciones / Descripción |
+| :--- | :--- | :--- |
+| `trimestre` | `number` | `1`, `2`, `3`, `4`. Filtra por trimestre fiscal. |
+| `año` | `number` | Ej: `2024`. Filtra por un año específico. |
+| `producto` | `string` | Busca coincidencias en la descripción del producto (ej: "cemento"). |
+| `proveedor` | `string` | Busca coincidencias en nombre o CIF del proveedor. |
 
-**Aplicación práctica:**
-Los directores financieros (CFOs) podrán conectar esta API a un panel maestro en PowerBI para cruzar los datos de gastos en tiempo real con las ventas de la empresa. Al mismo tiempo, abrirá la puerta para que el departamento de Compras evalúe y compare qué proveedor ofreció el mejor precio históricamente para un mismo producto, detectando inflación encubierta o permitiendo negociar mejores tarifas en volumen.
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/products?producto=cemento" \
+     -H "X-Api-Key: muvail_tu_clave"
+```

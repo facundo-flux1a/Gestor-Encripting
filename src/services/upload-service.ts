@@ -344,7 +344,8 @@ export async function uploadDocument(
   console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
 
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
-  const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
+  const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
+  const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
 
@@ -697,3 +698,161 @@ export async function uploadDocument(
     throw new Error(userFriendlyMessage);
   }
 }
+
+/**
+ * Función exclusiva para la API externa. 
+ * Es asíncrona y no interfiere con la UI.
+ */
+export async function uploadDocumentFromApi(
+  fileUrl: string,
+  empresaId: string,
+  uploadId: string
+): Promise<void> {
+  const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
+  const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
+  const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+
+  if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
+    console.error('❌ [UploadAPI] Configuración incompleta.');
+    await markUploadAsFailed(uploadId, 'Configuración del servidor incompleta.', 'Validación inicial');
+    return;
+  }
+
+  let normalizedFileName = `api_upload_${Date.now()}.pdf`; // default
+  let fileBuffer: ArrayBuffer;
+  let fileMimeType = 'application/pdf';
+
+  try {
+    console.log(`📡 [UploadAPI] Descargando archivo desde URL: ${fileUrl}`);
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error(`Error HTTP al descargar: ${response.status}`);
+    }
+    
+    fileBuffer = await response.arrayBuffer();
+    
+    const contentDisposition = response.headers.get('content-disposition');
+    if (contentDisposition && contentDisposition.includes('filename=')) {
+      let extracted = contentDisposition.split('filename=')[1];
+      if (extracted.includes(';')) extracted = extracted.split(';')[0];
+      normalizedFileName = normalizeFileName(extracted.replace(/["']/g, ''));
+    } else {
+      const urlObj = new URL(fileUrl);
+      const pathname = urlObj.pathname;
+      const parts = pathname.split('/');
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.includes('.')) {
+        normalizedFileName = normalizeFileName(decodeURIComponent(lastPart));
+      }
+    }
+    
+    fileMimeType = response.headers.get('content-type') || 'application/pdf';
+  } catch (err: any) {
+    console.error(`❌ [UploadAPI] Error al descargar archivo:`, err.message);
+    await markUploadAsFailed(uploadId, 'No se pudo descargar el archivo desde la URL proporcionada.', 'Descarga de archivo');
+    return;
+  }
+
+  const fileSize = fileBuffer.byteLength;
+  const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
+  const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
+
+  try {
+    const mainFileHash = await calculateFileHash(fileBuffer);
+    
+    const [rows] = await connection.query('SELECT CIF, recargo, nombre_de_empresa FROM empresas WHERE id = ?', [empresaId]);
+    const empresaData = rows as { CIF: string, recargo: number, nombre_de_empresa: string }[];
+
+    if (!empresaData || empresaData.length === 0) {
+      throw new Error(`Empresa no encontrada: ${empresaId}`);
+    }
+
+    const cif = empresaData[0].CIF;
+    const recargo = !!empresaData[0].recargo;
+    const nombreEmpresa = empresaData[0].nombre_de_empresa;
+
+    const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
+    if (duplicateRecord) {
+      console.warn(`❌ [UploadAPI] DUPLICADO DETECTADO: ${normalizedFileName}`);
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+      await markUploadAsFailed(
+        uploadId,
+        `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`,
+        'Verificación de duplicados'
+      );
+      return;
+    }
+
+    await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
+    
+    const fileNameWithoutExt = normalizedFileName.includes('.') ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) : normalizedFileName;
+    const fileExt = normalizedFileName.includes('.') ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) : '';
+    const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
+    const filePath = `archivos/${uniqueFileName}`;
+
+    const s3Client = new S3Client({
+      region: process.env.MINIO_REGION || "us-east-1",
+      endpoint: MINIO_ENDPOINT,
+      credentials: {
+        accessKeyId: MINIO_ACCESS_KEY,
+        secretAccessKey: MINIO_SECRET_KEY,
+      },
+      forcePathStyle: true,
+    });
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: MINIO_BUCKET_NAME,
+      Key: filePath,
+      Body: Buffer.from(fileBuffer),
+      ContentType: fileMimeType,
+      ACL: 'public-read',
+    }));
+
+    const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+    
+    await connection.query(
+      `UPDATE ${dbName}.actividad SET file_path = ?, file_hash = ?, cif = ? WHERE upload_id = ?`,
+      [filePath, mainFileHash, cif || null, uploadId]
+    );
+
+    const webhookPayload: any = {
+      text: filePath,
+      empresaId: empresaId,
+      cif: cif,
+      nombreEmpresa: nombreEmpresa,
+      recargo: recargo,
+      fileHash: mainFileHash,
+      uploadId: uploadId,
+      fileName: normalizedFileName,
+      originalFileName: normalizedFileName,
+      fileSize: fileSize,
+      publicUrl: publicUrl,
+      isCompressedFile: false,
+      mimeType: fileMimeType,
+      normalizedFileType: normalizedFileType,
+      fileExtension: fileExtension,
+      fechaSubida: now.toISOString(),
+    };
+
+    console.log(`📡 [UploadAPI] Llamando webhook para ${normalizedFileName}...`);
+    
+    // Lo lanzamos sin esperar respuesta asíncronamente
+    fetch(MICROSERVICE_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhookPayload),
+    }).then(res => {
+      if (!res.ok) console.error(`❌ [UploadAPI] Microservice error HTTP: ${res.status}`);
+      else console.log(`✅ [UploadAPI] Webhook respondió OK (${res.status}) para ${uploadId}`);
+    }).catch(err => {
+      console.error(`❌ [UploadAPI] Fetch error a webhook:`, err.message);
+    });
+
+  } catch (error: any) {
+    console.error(`❌ [UploadAPI] Error general:`, error.message);
+    await markUploadAsFailed(uploadId, 'Error inesperado durante el procesamiento.', 'Procesamiento general');
+  }
+}

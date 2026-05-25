@@ -53,7 +53,7 @@ export default function HealthCheckPage() {
     const router = useRouter(); // Initialize router
     const { selectedCompanyIds } = useCompanyContext();
     const [data, setData] = useState<{
-        summary: { total: number; mismatches: number };
+        summary: { total: number; mismatches: number; logic_checks: number };
         documents: Document[];
         triggeredDiagnoses?: number[];
     } | null>(null);
@@ -104,10 +104,10 @@ export default function HealthCheckPage() {
         }
     };
 
-    const handleDiagnose = async (docId: number) => {
+    const handleDiagnose = async (docId: number, checkType?: string) => {
         try {
             setIsDiagnosing(docId);
-            const result = await diagnoseDocument(docId);
+            const result = await diagnoseDocument(docId, checkType);
             if (result.success) {
                 setDiagnosisResult(result);
                 setIsDialogOpen(true);
@@ -151,8 +151,10 @@ export default function HealthCheckPage() {
         doc.entidades.some(e => e.rol === 'EMISOR' && e.nombre?.toLowerCase().includes(searchTerm.toLowerCase()))
     ) || [];
 
-    const healthScore = data
-        ? Math.round(((data.summary.total - data.summary.mismatches) / data.summary.total) * 100)
+    const logicChecks = data?.summary.logic_checks ?? 0;
+    const totalIssues = (data?.summary.mismatches ?? 0) + logicChecks;
+    const healthScore = data && data.summary.total > 0
+        ? Math.round(((data.summary.total - totalIssues) / data.summary.total) * 100)
         : 100;
 
     // Polling Effect: Refresca los datos cada 5 segundos si hay diagnósticos en curso
@@ -220,7 +222,7 @@ export default function HealthCheckPage() {
                 </PageHeader>
 
                 {/* KPI Section */}
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-tutorial="health-kpis">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" data-tutorial="health-kpis">
                     <Card className="relative overflow-hidden border-none shadow-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 backdrop-blur-sm">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Score de Salud</CardTitle>
@@ -275,6 +277,19 @@ export default function HealthCheckPage() {
                         </CardContent>
                     </Card>
 
+                    <Card className="border-none shadow-lg bg-card/50 backdrop-blur-sm">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Alertas Lógicas</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className={cn("text-3xl font-bold", logicChecks > 0 ? "text-amber-500" : "text-muted-foreground")}>{logicChecks}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Fecha o entidad anómala</p>
+                            <div className={cn("mt-4 flex items-center gap-1.5 text-xs font-medium", logicChecks > 0 ? "text-amber-500" : "text-muted-foreground")}>
+                                <AlertTriangle className="h-3 w-3" />
+                                <span>{logicChecks > 0 ? 'Pendientes de validación' : 'Sin alertas'}</span>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                 </div>
 
@@ -284,7 +299,7 @@ export default function HealthCheckPage() {
                         <div className="space-y-1">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
                                 Audit Log: Incidencias Activas
-                                <Badge variant="secondary" className="bg-red-500/10 text-red-500 border-none">{data.summary.mismatches}</Badge>
+                                <Badge variant="secondary" className="bg-red-500/10 text-red-500 border-none">{totalIssues}</Badge>
                             </h3>
                             <p className="text-sm text-muted-foreground">Listado de documentos con discrepancias detectadas por el motor de auditoría.</p>
                         </div>
@@ -344,70 +359,109 @@ export default function HealthCheckPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-col gap-1">
-                                                        {(doc as any).hcs_mismatch_amount <= 0.05 ? (
-                                                            <div className="flex items-center gap-2 text-green-500 bg-green-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
-                                                                <CheckCircle2 className="h-3 w-3" />
-                                                                Cuadrado — Pendiente confirmación
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-2 text-red-500 bg-red-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
-                                                                <AlertTriangle className="h-3 w-3" />
-                                                                Error de Cuadre
-                                                            </div>
-                                                        )}
-                                                        {doc.ai_suggestions && doc.ai_suggestions.length > 0 ? (
-                                                            <div className="mt-2 p-2.5 bg-violet-500/5 border border-violet-500/10 rounded-lg text-xs text-violet-400 leading-relaxed italic line-clamp-3 max-w-[250px] shadow-sm">
-                                                                <Sparkles className="h-3 w-3 inline mr-1.5 mb-0.5 text-violet-500" />
-                                                                {doc.ai_suggestions[0].descripcion}
-                                                            </div>
-                                                        ) : (
-                                                            (doc as any).hcs_mismatch_amount > 0.05 && (
-                                                                <span className="text-[10px] text-red-400/70 px-2 italic">
-                                                                    Desvío: {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format((doc as any).hcs_mismatch_amount)}
-                                                                </span>
-                                                            )
-                                                        )}
+                                                        {(() => {
+                                                            const checkType = (doc as any).hcs_check_type ?? 'MISMATCH_MATEMATICO';
+                                                            const motivo = (doc as any).hcs_motivo;
+                                                            const mismatch = (doc as any).hcs_mismatch_amount ?? 0;
+
+                                                            if (checkType === 'FECHA_ANOMALA') {
+                                                                return (
+                                                                    <div className="flex items-center gap-2 text-amber-500 bg-amber-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
+                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                        Fecha Anómala
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            if (checkType === 'ENTIDAD_DUPLICADA') {
+                                                                return (
+                                                                    <div className="flex items-center gap-2 text-orange-500 bg-orange-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
+                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                        Entidad Duplicada
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            if (mismatch <= 0.05) {
+                                                                return (
+                                                                    <div className="flex items-center gap-2 text-green-500 bg-green-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
+                                                                        <CheckCircle2 className="h-3 w-3" />
+                                                                        Cuadrado — Pendiente confirmación
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <div className="flex items-center gap-2 text-red-500 bg-red-500/5 px-2 py-1 rounded-md text-xs font-medium w-fit">
+                                                                    <AlertTriangle className="h-3 w-3" />
+                                                                    Error de Cuadre
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                        {/* Motivo o desvío */}
+                                                        {(() => {
+                                                            const checkType = (doc as any).hcs_check_type ?? 'MISMATCH_MATEMATICO';
+                                                            const motivo = (doc as any).hcs_motivo;
+                                                            const mismatch = (doc as any).hcs_mismatch_amount ?? 0;
+                                                            if (motivo && checkType !== 'MISMATCH_MATEMATICO') {
+                                                                return (
+                                                                    <span className="text-[10px] text-muted-foreground px-2 italic">{motivo}</span>
+                                                                );
+                                                            }
+                                                            if (mismatch > 0.05 && doc.ai_suggestions && doc.ai_suggestions.length > 0) {
+                                                                return (
+                                                                    <div className="mt-2 p-2.5 bg-violet-500/5 border border-violet-500/10 rounded-lg text-xs text-violet-400 leading-relaxed italic line-clamp-3 max-w-[250px] shadow-sm">
+                                                                        <Sparkles className="h-3 w-3 inline mr-1.5 mb-0.5 text-violet-500" />
+                                                                        {doc.ai_suggestions[0].descripcion}
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            if (mismatch > 0.05) {
+                                                                return (
+                                                                    <span className="text-[10px] text-red-400/70 px-2 italic">
+                                                                        Desvío: {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(mismatch)}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })()}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {(doc as any).hcs_mismatch_amount <= 0.05 ? (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="h-8 gap-1.5 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleConfirm(doc.id_documento);
-                                                                }}
-                                                                disabled={isConfirming === doc.id_documento}
-                                                            >
-                                                                {isConfirming === doc.id_documento ? (
-                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                ) : (
-                                                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                                                )}
-                                                                Confirmar
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="h-8 gap-1.5 text-violet-500 hover:text-violet-600 hover:bg-violet-500/10"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDiagnose(doc.id_documento);
-                                                                }}
-                                                                disabled={isDiagnosing === doc.id_documento}
-                                                            >
-                                                                {isDiagnosing === doc.id_documento ? (
-                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                ) : (
-                                                                    <Sparkles className="h-3.5 w-3.5" />
-                                                                )}
-                                                                <span className="font-bold tracking-tight" data-tutorial="health-ia">IA</span>
-                                                            </Button>
-                                                        )}
+                                                        {/* Botón IA — siempre disponible */}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 gap-1.5 text-violet-500 hover:text-violet-600 hover:bg-violet-500/10"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDiagnose(doc.id_documento, (doc as any).hcs_check_type);
+                                                            }}
+                                                            disabled={isDiagnosing === doc.id_documento}
+                                                        >
+                                                            {isDiagnosing === doc.id_documento ? (
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                            ) : (
+                                                                <Sparkles className="h-3.5 w-3.5" />
+                                                            )}
+                                                            <span className="font-bold tracking-tight" data-tutorial="health-ia">IA</span>
+                                                        </Button>
+                                                        {/* Botón Confirmar — siempre disponible */}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 gap-1.5 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleConfirm(doc.id_documento);
+                                                            }}
+                                                            disabled={isConfirming === doc.id_documento}
+                                                        >
+                                                            {isConfirming === doc.id_documento ? (
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                            ) : (
+                                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                            )}
+                                                            Confirmar
+                                                        </Button>
                                                         <Link href={`/documento/${doc.id_documento}?audit=true`} passHref>
                                                             <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary">
                                                                 Validar <ArrowRight className="h-3 w-3" />

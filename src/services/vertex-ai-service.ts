@@ -77,7 +77,7 @@ ESTRUCTURA JSON:
 
 Responde SOLO JSON.`;
 
-export async function diagnoseDocument(documentId: number): Promise<DiagnosticResult> {
+export async function diagnoseDocument(documentId: number, checkType?: string): Promise<DiagnosticResult> {
     try {
         const user = await getCurrentUser();
         if (!user) return { success: false, incidents: [], error: 'No autorizado' };
@@ -226,8 +226,16 @@ ${taxAnalysis.map((t: any) => `- ${t.tipo_impuesto} ${t.pct}%: Cuota registrada 
 
         // 3. Preparar prompt de datos
         const sumLines = lineRows.reduce((s: number, l: any) => s + Number(l.importe_linea || 0), 0);
+
+        // Bloque de contexto específico para checks lógicos (no matemáticos)
+        const logicCheckBlock = checkType === 'FECHA_ANOMALA'
+            ? `⚠️ TIPO DE ANÁLISIS: FECHA ANÓMALA\nEste documento fue marcado porque su fecha de emisión no coincide con el año del trimestre al que está asignado en el sistema. Esto suele ocurrir cuando el OCR malinterpreta el formato de la fecha (ej: "18-05-26" leído como año 2018 en lugar de 2026). Tu tarea es analizar si los datos del documento son coherentes y sugerir la corrección de la fecha de emisión si es necesario. NO busques descuadres matemáticos si el total, la base y los impuestos están correctos.\n`
+            : checkType === 'ENTIDAD_DUPLICADA'
+            ? `⚠️ TIPO DE ANÁLISIS: ENTIDAD DUPLICADA\nEste documento fue marcado porque la misma entidad (por CIF o nombre) aparece registrada como emisor/proveedor Y como receptor/cliente en el mismo documento. Esto puede indicar un error del OCR al asignar roles, o un documento mal clasificado (ej: una factura recibida registrada como emitida). Analiza el tipo de documento, el contexto del emisor y del receptor, y sugiere cuál rol está equivocado y cómo debería corregirse. NO busques descuadres matemáticos si el total, la base y los impuestos están correctos.\n`
+            : '';
+
         const promptData = `
-CONTEXTO DEL SISTEMA (REGLAS DE NEGOCIO Y ESTRUCTURA):
+${logicCheckBlock}CONTEXTO DEL SISTEMA (REGLAS DE NEGOCIO Y ESTRUCTURA):
 - La fórmula del sistema es: Total = Base Imponible + SUM(Cuotas de Impuestos).
 - "Base Imponible" (campo: importe_sin_impuestos) es la suma neta de las líneas del documento.
 - "Total" (campo: importe_total) es el importe final que el cliente paga.

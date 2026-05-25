@@ -163,6 +163,9 @@ export async function POST(request: NextRequest) {
         AND d.id NOT IN (
           SELECT documento_id FROM incidencias_documento WHERE validado = 0
         )
+        AND d.id NOT IN (
+          SELECT documento_id FROM health_check_status WHERE verified = 0
+        )
     `;
     const params: any[] = [empresaId];
 
