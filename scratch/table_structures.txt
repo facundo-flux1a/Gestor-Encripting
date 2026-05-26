@@ -1,0 +1,110 @@
+
+========================================
+TABLE: documentos
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: file_hash                 | Type: varchar(64)     | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: tipo_documento            | Type: varchar(100)    | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: numero_documento          | Type: varchar(100)    | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: fecha_emision             | Type: date            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_vencimiento         | Type: date            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: importe_total             | Type: decimal(14,2)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: importe_sin_impuestos     | Type: decimal(14,2)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: moneda                    | Type: char(3)         | Null: YES   | Key:       | Default: EUR        | Extra: 
+Field: observaciones             | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: datos_extra               | Type: json            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_creacion            | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: is_new                    | Type: int             | Null: YES   | Key: MUL   | Default: 1          | Extra: 
+Field: trimestre_cerrado         | Type: tinyint(1)      | Null: YES   | Key: MUL   | Default: 0          | Extra: 
+Field: enviado_sii               | Type: tinyint(1)      | Null: YES   | Key:       | Default: 0          | Extra: 
+Field: fecha_cierre_trimestre    | Type: datetime        | Null: YES   | Key:       | Default: null       | Extra: 
+Field: año_trimestre             | Type: int             | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: num_trimestre             | Type: int             | Null: YES   | Key:       | Default: null       | Extra: 
+Field: dashboard-correo          | Type: varchar(50)     | Null: YES   | Key:       | Default: null       | Extra: 
+
+========================================
+TABLE: entidades_documento
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: documento_id              | Type: bigint          | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: rol                       | Type: varchar(50)     | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: nombre                    | Type: varchar(255)    | Null: YES   | Key:       | Default: null       | Extra: 
+Field: direccion                 | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: identificador_fiscal      | Type: varchar(50)     | Null: YES   | Key:       | Default: null       | Extra: 
+Field: telefono                  | Type: varchar(50)     | Null: YES   | Key:       | Default: null       | Extra: 
+Field: email                     | Type: varchar(255)    | Null: YES   | Key:       | Default: null       | Extra: 
+Field: datos_extra               | Type: json            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_creacion            | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: cuenta_contable           | Type: varchar(10)     | Null: YES   | Key:       | Default: null       | Extra: 
+
+========================================
+TABLE: lineas_documento
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: documento_id              | Type: bigint          | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: codigo                    | Type: varchar(100)    | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: descripcion               | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: cantidad                  | Type: decimal(14,3)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: unidad                    | Type: varchar(20)     | Null: YES   | Key:       | Default: null       | Extra: 
+Field: precio_unitario           | Type: decimal(14,4)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: descuento_porcentaje      | Type: decimal(5,2)    | Null: YES   | Key:       | Default: null       | Extra: 
+Field: precio_neto               | Type: decimal(14,4)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: importe_linea             | Type: decimal(14,4)   | Null: YES   | Key:       | Default: null       | Extra: 
+Field: datos_extra               | Type: json            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_creacion            | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: cuenta_contable           | Type: varchar(20)     | Null: YES   | Key:       | Default: null       | Extra: 
+
+========================================
+TABLE: impuestos_documento
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: documento_id              | Type: bigint          | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: tipo_impuesto             | Type: varchar(50)     | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: porcentaje                | Type: decimal(5,2)    | Null: NO    | Key:       | Default: null       | Extra: 
+Field: base_imponible            | Type: decimal(14,2)   | Null: NO    | Key:       | Default: null       | Extra: 
+Field: cuota                     | Type: decimal(14,2)   | Null: NO    | Key:       | Default: null       | Extra: 
+Field: total_con_impuesto        | Type: decimal(14,2)   | Null: NO    | Key:       | Default: null       | Extra: 
+Field: fecha_creacion            | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+
+========================================
+TABLE: archivos_documento
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: documento_id              | Type: bigint          | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: tipo_archivo              | Type: varchar(50)     | Null: YES   | Key:       | Default: null       | Extra: 
+Field: nombre_archivo            | Type: varchar(255)    | Null: YES   | Key:       | Default: null       | Extra: 
+Field: ruta_archivo              | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: hash_archivo              | Type: char(64)        | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_subida              | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+
+========================================
+TABLE: incidencias_documento
+========================================
+Field: id                        | Type: bigint          | Null: NO    | Key: PRI   | Default: null       | Extra: auto_increment
+Field: documento_id              | Type: bigint          | Null: NO    | Key: MUL   | Default: null       | Extra: 
+Field: incidencia                | Type: tinyint(1)      | Null: NO    | Key: MUL   | Default: 1          | Extra: 
+Field: fecha_incidencia          | Type: timestamp       | Null: YES   | Key: MUL   | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: descripcion               | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: validado                  | Type: tinyint(1)      | Null: NO    | Key: MUL   | Default: 0          | Extra: 
+Field: fecha_validacion          | Type: timestamp       | Null: YES   | Key:       | Default: null       | Extra: 
+Field: validado_por              | Type: varchar(100)    | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: usuario_validado_id       | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+Field: observaciones_validacion  | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 
+Field: fecha_creacion            | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: fecha_actualizacion       | Type: timestamp       | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+Field: id_de_empresa             | Type: bigint          | Null: YES   | Key: MUL   | Default: null       | Extra: 
+
+========================================
+TABLE: health_check_status
+========================================
+Field: documento_id              | Type: int             | Null: NO    | Key: PRI   | Default: null       | Extra: 
+Field: empresa_id                | Type: int             | Null: NO    | Key:       | Default: null       | Extra: 
+Field: verified                  | Type: tinyint(1)      | Null: YES   | Key:       | Default: 0          | Extra: 
+Field: created_at                | Type: datetime        | Null: YES   | Key:       | Default: CURRENT_TIMESTAMP | Extra: DEFAULT_GENERATED
+Field: check_type                | Type: varchar(50)     | Null: NO    | Key:       | Default: MISMATCH_MATEMATICO | Extra: 
+Field: motivo                    | Type: text            | Null: YES   | Key:       | Default: null       | Extra: 

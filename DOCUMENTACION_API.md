@@ -112,6 +112,178 @@ curl -X GET "https://[tu-dominio]/api/v1/documents?trimestre=3&año=2024" \
 }
 ```
 
+> **⚠️ Importante — Array `impuestos[]` en este endpoint:**
+> El array `impuestos[]` de `/api/v1/documents` es un **volcado sin filtrar** de la tabla `impuestos_documento`. Contiene **todos los tipos de impuesto** del documento: IVA puro, Recargos de Equivalencia y Retenciones/IRPF mezclados.
+>
+> Para procesar correctamente en tu ERP deberás discriminar por `tipo_impuesto`:
+> - **IVA puro** → filas donde `tipo_impuesto` **NO** contiene `"RECARGO"`, `"RETENCION"` ni `"IRPF"`.
+> - **Recargo de Equivalencia** → filas con `tipo_impuesto` que contiene `"RECARGO"` o `"EQUIVALENCIA"`. La `cuota` se almacena con **signo positivo**.
+> - **Retenciones / IRPF** → filas con `tipo_impuesto` que contiene `"RETENCION"` o `"IRPF"`. La `cuota` se almacena con **signo negativo** (ej: `-142.50`).
+>
+> Fórmula correcta para obtener el total real: `Total = Base + IVA_puro + Recargo - ABS(Retencion)`
+>
+> Si preferís recibir los impuestos ya calculados y separados, utilizá el endpoint `/api/v1/analytics` que devuelve los campos `iva_repercutido`, `recargo_repercutido` y `retencion_repercutido` ya discriminados.
+
+---
+
+## 3.1 Consulta Unificada de Documentos Completos (Recomendado para Sincronización)
+Extrae un volcado completo con toda la información disponible en la base de datos (incluyendo hash de archivo original, cuentas contables a nivel de entidad y de línea de producto, descuentos, incidencias de validación y estado del health check).
+
+* **URL:** `/api/v1/documents/full`
+* **Método:** `GET`
+* **Content-Type:** `application/json`
+
+#### Parámetros Query (Filtros e Inclusiones Opcionales)
+| Parámetro | Tipo | Opciones / Descripción |
+| :--- | :--- | :--- |
+| `trimestre` | `number` | `1`, `2`, `3`, `4`. Filtra por trimestre fiscal. |
+| `año` | `number` | Ej: `2024`. Filtra por un año específico. |
+| `proveedor` | `string` | Busca coincidencias en nombre o CIF del emisor. |
+| `cliente` | `string` | Busca coincidencias en nombre o CIF del receptor. |
+| `tipo` | `string` | `"emitidas"`, `"recibidas"` o `"todas"`. |
+| `incluir_incidencias` | `boolean` | `true` para incluir documentos con incidencias pendientes (por defecto `false`, los oculta). |
+| `incluir_sin_verificar` | `boolean` | `true` para incluir documentos que fallaron en el health check de descuadre (por defecto `false`, los oculta). |
+| `incluir_sin_confirmar` | `boolean` | `true` para incluir borradores y facturas marcadas como "(sin confirmar)" (por defecto `false`). |
+
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/documents/full?incluir_incidencias=true&incluir_sin_verificar=true" \
+     -H "X-Api-Key: muvail_tu_clave"
+```
+
+#### Respuesta
+```json
+{
+  "total": 1,
+  "data": [
+    {
+      "id": 2564,
+      "file_hash": "62b7cf537b...",
+      "tipo_documento": "FACTURA EMITIDA",
+      "numero_documento": "2/108",
+      "fecha_emision": "2026-03-26",
+      "fecha_vencimiento": "2026-04-26",
+      "importe_total": 16559.77,
+      "importe_sin_impuestos": 13685.76,
+      "moneda": "EUR",
+      "observaciones": null,
+      "datos_extra": null,
+      "fecha_creacion": "2026-03-26T12:00:00.000Z",
+      "id_de_empresa": 11,
+      "is_new": 0,
+      "trimestre_cerrado": false,
+      "enviado_sii": false,
+      "fecha_cierre_trimestre": null,
+      "año": 2026,
+      "trimestre": 1,
+      "canal_carga": "correo",
+      "is_issued": true,
+      "url_archivo": "https://minio.allbase.com.ar/gestor-documental/archivos/...",
+      "entidades": {
+        "emisor": {
+          "id": 150,
+          "nombre": "VALENTIA ALIMENTACIÓN S.L.",
+          "identificador_fiscal": "B12345678",
+          "direccion": "Polígono Industrial, S/N",
+          "telefono": "960000000",
+          "email": "facturas@valentia.com",
+          "cuenta_contable": "40000001",
+          "datos_extra": null,
+          "fecha_creacion": "2026-03-26T12:00:00.000Z"
+        }
+      },
+      "impuestos": [
+        {
+          "id": 845,
+          "tipo_impuesto": "IVA_GENERAL",
+          "porcentaje": 21.00,
+          "base_imponible": 13685.76,
+          "cuota": 2874.01,
+          "total_con_impuesto": 16559.77,
+          "fecha_creacion": "2026-03-26T12:00:00.000Z"
+        }
+      ],
+      "lineas_detalle": [
+        {
+          "id": 9201,
+          "codigo": "ALB-105",
+          "descripcion": "ALBARAN 105, 24 MARZO",
+          "cantidad": 1.00,
+          "unidad": "ud",
+          "precio_unitario": 13685.7600,
+          "descuento_porcentaje": 0.00,
+          "precio_neto": 13685.7600,
+          "importe_linea": 13685.7600,
+          "cuenta_contable": "62900000",
+          "datos_extra": null,
+          "fecha_creacion": "2026-03-26T12:00:00.000Z"
+        }
+      ],
+      "archivos": [
+        {
+          "id": 5012,
+          "tipo_archivo": "application/pdf",
+          "nombre_archivo": "factura-valentia-2-108.pdf",
+          "hash_archivo": "62b7cf537b...",
+          "ruta_archivo": "archivos/factura-valentia-2-108.pdf",
+          "fecha_subida": "2026-03-26T12:00:00.000Z",
+          "url_archivo": "https://minio.allbase.com.ar/gestor-documental/archivos/..."
+        }
+      ],
+      "incidencias": [],
+      "health_check": {
+        "verified": true,
+        "created_at": "2026-04-30T16:42:02.000Z",
+        "check_type": "MISMATCH_MATEMATICO",
+        "motivo": null
+      }
+    }
+  ]
+}
+
+#### Campos de la respuesta
+
+Cada objeto del array `data[]` contiene:
+
+| Campo | Descripción |
+| :--- | :--- |
+| `id` | ID interno del documento. |
+| `file_hash` | Hash SHA-256 del archivo original. Permite detectar duplicados en el ERP. |
+| `tipo_documento` | Tipo literal extraído por el OCR (ej: `"FACTURA RECIBIDA"`, `"ABONO EMITIDO"`). |
+| `numero_documento` | Número de serie de la factura. |
+| `fecha_emision` | Fecha de emisión (`YYYY-MM-DD`). |
+| `fecha_vencimiento` | Fecha de vencimiento de pago (`null` si no aplica). |
+| `importe_total` | Total del documento incluyendo todos los impuestos. |
+| `importe_sin_impuestos` | Base imponible total (sin IVA, sin recargos, sin retenciones). |
+| `moneda` | Código ISO de la moneda (ej: `"EUR"`). |
+| `observaciones` | Notas del documento (`null` si no hay). |
+| `datos_extra` | JSON libre con campos adicionales extraídos por el OCR (`null` si no hay). |
+| `año` | Año fiscal del documento. |
+| `trimestre` | Trimestre fiscal del documento (1–4). |
+| `is_issued` | `true` si la empresa es **emisora**, `false` si es **receptora**. Se calcula comparando el CIF del emisor contra el CIF de la empresa. |
+| `trimestre_cerrado` | `true` si el trimestre fue cerrado y bloqueado. |
+| `enviado_sii` | `true` si fue marcado como enviado al SII. |
+| `canal_carga` | Canal de ingreso del documento (`"correo"`, `"manual"`, `"webhook"`, etc.). |
+| `url_archivo` | URL pública directa al archivo original (PDF/imagen). |
+| `entidades` | Objeto indexado por `rol` (`emisor`, `receptor`, `proveedor`, etc.). Cada entidad incluye: `nombre`, `identificador_fiscal`, `direccion`, `telefono`, `email`, `cuenta_contable`, `datos_extra`. |
+| `lineas_detalle` | Array de líneas. Cada línea incluye: `codigo`, `descripcion`, `cantidad`, `unidad`, `precio_unitario`, `descuento_porcentaje`, `precio_neto`, `importe_linea`, `cuenta_contable`. |
+| `impuestos` | Array de impuestos **sin filtrar** (ver nota abajo). Cada fila: `tipo_impuesto`, `porcentaje`, `base_imponible`, `cuota`, `total_con_impuesto`. |
+| `archivos` | Array de archivos con `nombre_archivo`, `hash_archivo`, `tipo_archivo`, `ruta_archivo`, `url_archivo`. |
+| `incidencias` | Array de incidencias. Vacío si no tiene. Cada una incluye: `descripcion`, `validado`, `fecha_validacion`, `validado_por`, `observaciones_validacion`. |
+| `health_check` | Estado del chequeo matemático: `{ verified, check_type, motivo }`. `null` si nunca fue verificado. |
+
+> **⚠️ Importante — Array `impuestos[]` en este endpoint:**
+> Es un volcado sin filtrar. Contiene **todos los tipos de impuesto mezclados**: IVA puro, Recargos de Equivalencia y Retenciones/IRPF.
+>
+> Para procesar correctamente en tu ERP, discriminá por `tipo_impuesto`:
+> - **IVA puro** → filas donde `tipo_impuesto` **NO** contiene `"RECARGO"`, `"RETENCION"` ni `"IRPF"`.
+> - **Recargo de Equivalencia** → `tipo_impuesto` contiene `"RECARGO"` o `"EQUIVALENCIA"`. La `cuota` es **positiva**.
+> - **Retenciones / IRPF** → `tipo_impuesto` contiene `"RETENCION"` o `"IRPF"`. La `cuota` es **negativa** (ej: `-142.50`).
+>
+> Fórmula correcta para reconstruir el total: `Total = Base + IVA_puro + Recargo - ABS(Retencion)`
+>
+> Si solo necesitás los totales discriminados, usá `/api/v1/analytics` que devuelve `iva_repercutido`, `recargo_repercutido` y `retencion_repercutido` directamente.
+
 ---
 
 ## 4. Analíticas Financieras
@@ -173,3 +345,102 @@ Extrae un histórico detallado línea por línea de todos los productos y servic
 curl -X GET "https://[tu-dominio]/api/v1/products?producto=cemento" \
      -H "X-Api-Key: muvail_tu_clave"
 ```
+
+---
+
+## 6. Gestión de Incidencias
+Permite listar las incidencias de validación de documentos y marcarlas como resueltas directamente desde el ERP externo. Solo se puede operar sobre incidencias de la empresa vinculada a la API Key.
+
+### 6.1 Listar Incidencias
+
+* **URL:** `/api/v1/incidents`
+* **Método:** `GET`
+
+#### Parámetros Query (Filtros Opcionales)
+| Parámetro | Tipo | Opciones / Descripción |
+| :--- | :--- | :--- |
+| `estado` | `string` | `pendientes` (default), `validadas`, `todas`. |
+| `documento_id` | `number` | Filtra incidencias de un documento específico. |
+
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/incidents?estado=pendientes" \
+     -H "X-Api-Key: muvail_tu_clave"
+```
+
+#### Respuesta
+```json
+{
+  "total": 2,
+  "filtros": { "estado": "pendientes", "documento_id": "todos" },
+  "data": [
+    {
+      "incidencia_id": 42,
+      "documento_id": 195,
+      "estado": "pendiente",
+      "descripcion_incidencia": "Diferencia de 0.12€ entre total y base+IVA.",
+      "validado_por": null,
+      "fecha_validacion": null,
+      "observaciones_validacion": null,
+      "documento": {
+        "tipo_documento": "FACTURA RECIBIDA",
+        "numero_documento": "F-2024/0089",
+        "fecha_emision": "2024-09-15",
+        "importe_total": 1250.12,
+        "importe_sin_impuestos": 1033.00,
+        "moneda": "EUR",
+        "entidad_nombre": "Proveedor S.A.",
+        "entidad_cif": "B12345678",
+        "verificado_matematicamente": false,
+        "razon_descuadre": "Total no coincide con Base + IVA"
+      }
+    }
+  ]
+}
+```
+
+### 6.2 Validar (Resolver) una Incidencia
+
+* **URL:** `/api/v1/incidents`
+* **Método:** `POST`
+* **Content-Type:** `application/json`
+
+#### Body JSON
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `incidencia_id` | `number` | **Obligatorio.** ID de la incidencia a resolver (obtenido del `GET`). |
+| `observaciones` | `string` | Opcional. Motivo de la aprobación para el registro. |
+| `validado_por` | `string` | Opcional. Email o identificador del usuario que aprueba desde el ERP. |
+
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X POST "https://[tu-dominio]/api/v1/incidents" \
+     -H "X-Api-Key: muvail_tu_clave" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "incidencia_id": 42,
+           "observaciones": "Diferencia de 0.12€ aceptada. Redondeo del proveedor.",
+           "validado_por": "contabilidad@miempresa.com"
+         }'
+```
+
+#### Respuesta
+```json
+{
+  "success": true,
+  "incidencia_id": 42,
+  "documento_id": 195,
+  "estado": "validada",
+  "validado_por": "contabilidad@miempresa.com",
+  "fecha_validacion": "2026-05-26T15:00:00.000Z",
+  "observaciones": "Diferencia de 0.12€ aceptada. Redondeo del proveedor."
+}
+```
+
+#### Códigos de Error
+| Código | Motivo |
+| :--- | :--- |
+| `400` | `incidencia_id` faltante o no es número. |
+| `401` | API Key inválida o faltante. |
+| `404` | La incidencia no existe o no pertenece a tu empresa. |
+| `409` | La incidencia ya estaba validada previamente. |

@@ -53,8 +53,16 @@ export async function GET(request: NextRequest) {
           total_ingresos: dashboardData.kpis.totalIngresos,
           total_gastos: dashboardData.kpis.totalGastos,
           beneficio_neto: dashboardData.kpis.beneficio,
+          // IVA PURO (excluye Recargos de Equivalencia y Retenciones/IRPF)
           iva_repercutido: dashboardData.kpis.ivaRepercutido,
           iva_soportado: dashboardData.kpis.ivaSoportado,
+          resultado_iva_puro: dashboardData.kpis.resultadoIva,
+          // RECARGOS DE EQUIVALENCIA (separados del IVA puro)
+          recargo_repercutido: dashboardData.kpis.recargoRepercutido,
+          recargo_soportado: dashboardData.kpis.recargoSoportado,
+          // RETENCIONES / IRPF (cuota almacenada con signo negativo en BD)
+          retencion_repercutido: dashboardData.kpis.retencionRepercutido,
+          retencion_soportado: dashboardData.kpis.retencionSoportado,
           documentos_totales: dashboardData.kpis.totalDocs,
           facturas_ingreso: dashboardData.kpis.totalFacturasIngreso,
           facturas_gasto: dashboardData.kpis.totalFacturasGasto,

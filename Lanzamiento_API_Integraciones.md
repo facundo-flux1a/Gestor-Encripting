@@ -141,4 +141,4 @@ Extrae cada línea individual de los comprobantes para trazar variaciones de pre
   ```
 
 ---
-*Gestor Documental API v1 - Conectando tu información contable con el mundo.*
+*Gestor Documental API v1*
