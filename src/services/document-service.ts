@@ -13,6 +13,7 @@ import { normalizeProductDescription } from "@/lib/utils";
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
+import { fireWebhook } from '@/services/webhook-service';
 
 
 
@@ -1126,6 +1127,11 @@ codigo = ?,
       console.error('❌ [Background] Error en validación de incidencias:', err);
     });
 
+    // 🔔 WEBHOOKS TRIGGER: Documento Modificado
+    fireWebhook(empresaId, 'documento.modificado', { documento_id: id }).catch(err => {
+      console.error('❌ [Background] Error disparando webhook de modificación:', err);
+    });
+
     return { success: true };
   } catch (error: any) {
     console.error('═══════════════════════════════════════════════════════════');
@@ -1303,6 +1309,16 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       console.error('❌ [Background] Error en validación de incidencias:', err);
     });
 
+    // 🔔 WEBHOOKS TRIGGER: Documento Modificado
+    // Buscamos el empresa_id porque no viene en el payload de updateDocumentField
+    db.query<RowDataPacket[]>('SELECT id_de_empresa FROM documentos WHERE id = ?', [id])
+      .then(([rows]) => {
+        if (rows.length > 0) {
+          fireWebhook(rows[0].id_de_empresa, 'documento.modificado', { documento_id: id });
+        }
+      })
+      .catch(err => console.error('❌ [Background] Error disparando webhook de modificación:', err));
+
     return { success: true };
   } catch (error) {
     await connection.rollback();
@@ -1475,7 +1491,7 @@ export async function deleteDocument(
 
     // Verificar que el documento pertenece a una empresa del usuario y si está cerrado
     const [docCheck] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
+      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre, d.id_de_empresa, d.numero_documento 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
              WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
@@ -1508,6 +1524,14 @@ export async function deleteDocument(
     }
 
     console.log('✅ [deleteDocument] Documento eliminado correctamente');
+
+    // 🔔 WEBHOOKS TRIGGER: Documento Eliminado
+    fireWebhook(docData.id_de_empresa, 'documento.eliminado', { 
+      documento_id: documentId,
+      numero_documento: docData.numero_documento || null
+    }).catch(err => {
+      console.error('❌ [Background] Error disparando webhook de eliminación:', err);
+    });
 
     // Revalidar rutas
     revalidatePath('/documents');
@@ -1603,6 +1627,26 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
      WHERE id = ? `,
     [documentId]
   );
+
+  // 🔔 WEBHOOKS TRIGGER: Incidencia resuelta manualmente desde el dashboard
+  try {
+    const [docRows] = await db.query<RowDataPacket[]>(
+      `SELECT id_de_empresa, file_hash, tipo_documento, numero_documento, importe_total FROM documentos WHERE id = ? LIMIT 1`,
+      [documentId]
+    );
+    if (docRows.length > 0) {
+      const empresaId = docRows[0].id_de_empresa;
+      await fireWebhook(empresaId, 'incidencia.resuelta_manualmente', {
+        documento_id: documentId,
+        validado_por: 'dashboard',
+        quedan_incidencias_pendientes: false
+      });
+      // Al validar todas desde el dashboard siempre quedará limpio → listo para ERP
+      await fireWebhook(empresaId, 'documento.listo_para_erp', docRows[0]);
+    }
+  } catch (whErr) {
+    console.error('❌ [validateDocumentIncidents] Error disparando webhook:', whErr);
+  }
 
   return { success: true };
 }
@@ -2468,6 +2512,10 @@ d.id,
             [doc.id, doc.id_de_empresa, description]
           );
           newIncidentsFound++;
+          fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
+            documento_id: doc.id,
+            motivo: description
+          }).catch(console.error);
         }
       }
     }
@@ -2505,6 +2553,10 @@ d.id,
               [doc.id, doc.id_de_empresa, description]
             );
             newIncidentsFound++;
+            fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
+              documento_id: doc.id,
+              motivo: description
+            }).catch(console.error);
           }
         }
       }
@@ -2527,6 +2579,10 @@ d.id,
               [doc.id, doc.id_de_empresa, description]
             );
             newIncidentsFound++;
+            fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
+              documento_id: doc.id,
+              motivo: description
+            }).catch(console.error);
           }
         }
       }
@@ -2547,6 +2603,10 @@ d.id,
               [doc.id, doc.id_de_empresa, description]
             );
             newIncidentsFound++;
+            fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
+              documento_id: doc.id,
+              motivo: description
+            }).catch(console.error);
           }
         }
       }

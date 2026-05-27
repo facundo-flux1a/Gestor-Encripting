@@ -13,7 +13,7 @@ export async function GET(
 
         const bucketName = process.env.MINIO_BUCKET_NAME || 'gestor-documental';
         // Usar el endpoint de .env como primario (ya que lo actualizamos al estable)
-        const primaryBaseUrl = (process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
+        const primaryBaseUrl = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
         const secondaryBaseUrl = 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000';
 
         // Reconstruir el path. Si el primer elemento es el bucket, lo removemos para no duplicarlo si ya está en el endpoint

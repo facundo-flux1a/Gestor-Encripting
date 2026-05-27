@@ -345,7 +345,7 @@ export async function uploadDocument(
 
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
 
@@ -710,7 +710,7 @@ export async function uploadDocumentFromApi(
 ): Promise<void> {
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
     console.error('❌ [UploadAPI] Configuración incompleta.');

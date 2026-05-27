@@ -5,11 +5,13 @@ import db from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import crypto from 'crypto';
 
-const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
+const { MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME, MINIO_PUBLIC_ENDPOINT } = process.env;
+
+const ACTUAL_MINIO_ENDPOINT = MINIO_PUBLIC_ENDPOINT || MINIO_ENDPOINT;
 
 const s3Client = new S3Client({
     region: process.env.MINIO_REGION || "us-east-1",
-    endpoint: MINIO_ENDPOINT,
+    endpoint: ACTUAL_MINIO_ENDPOINT,
     credentials: {
         accessKeyId: MINIO_ACCESS_KEY || '',
         secretAccessKey: MINIO_SECRET_KEY || '',
@@ -37,7 +39,7 @@ export async function uploadSuggestionMedia(formData: FormData) {
             ACL: 'public-read',
         }));
 
-        const publicUrl = `${MINIO_ENDPOINT?.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+        const publicUrl = `${ACTUAL_MINIO_ENDPOINT?.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
         return { success: true, url: publicUrl };
     } catch (error: any) {
         console.error('❌ [SuggestionService] Upload error:', error);

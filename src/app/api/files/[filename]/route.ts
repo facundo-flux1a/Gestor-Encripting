@@ -18,7 +18,7 @@ export async function GET(
     }
 
     // Usar variables de entorno para mayor seguridad y flexibilidad
-    const baseUrl = (process.env.MINIO_ENDPOINT || 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000').replace(/\/$/, '');
+    const baseUrl = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000').replace(/\/$/, '');
     const bucketName = process.env.MINIO_BUCKET_NAME || 'gestor-documental';
 
     console.log(`[${requestId}] 📥 [serve-file] Solicitando: ${filename}`);

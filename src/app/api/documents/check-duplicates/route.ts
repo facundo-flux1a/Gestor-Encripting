@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
         );
 
         if (existing.length === 0) {
+          const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
           await db.query(
             `INSERT INTO incidencias_documento 
              (documento_id, id_de_empresa, descripcion, incidencia, validado) 
@@ -108,10 +109,17 @@ export async function POST(req: NextRequest) {
             [
               docId,
               grupo.empresa_id,
-              `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`
+              desc
             ]
           );
           creadas++;
+          
+          import('@/services/webhook-service').then(({ fireWebhook }) => {
+            fireWebhook(grupo.empresa_id, 'documento.requiere_atencion', {
+              documento_id: docId,
+              motivo: desc
+            }).catch(console.error);
+          });
         }
       }
     }

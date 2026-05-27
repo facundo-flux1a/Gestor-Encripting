@@ -234,7 +234,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 9. Agrupar archivos y generar enlaces públicos
-    const MINIO_ENDPOINT = (process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
+    const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
     const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
 
     const archivosByDoc: Record<number, any[]> = {};

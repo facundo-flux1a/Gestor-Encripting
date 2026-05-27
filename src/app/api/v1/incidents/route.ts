@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/services/api-key-service';
+import { fireWebhook } from '@/services/webhook-service';
 import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
 
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
           ORDER BY id LIMIT 1)       AS entidad_cif,
          -- Estado del health check matemático del documento
          hcs.verified                AS verificado_matematicamente,
-         hcs.reason                  AS razon_descuadre
+         hcs.motivo                  AS razon_descuadre
        FROM incidencias_documento i
        JOIN documentos d ON i.documento_id = d.id
        LEFT JOIN health_check_status hcs ON hcs.documento_id = d.id
@@ -150,9 +151,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Body JSON inválido.' }, { status: 400 });
     }
 
-    const { incidencia_id, observaciones, validado_por } = body;
+    const { incidencia_id: rawId, observaciones, validado_por } = body;
+    const incidencia_id = typeof rawId === 'string' ? parseInt(rawId, 10) : rawId;
 
-    if (!incidencia_id || typeof incidencia_id !== 'number') {
+    if (!incidencia_id || typeof incidencia_id !== 'number' || isNaN(incidencia_id)) {
       return NextResponse.json(
         { error: 'El campo "incidencia_id" es obligatorio y debe ser un número.' },
         { status: 400 }
@@ -196,6 +198,43 @@ export async function POST(request: NextRequest) {
         incidencia_id,
       ]
     );
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 🔔 WEBHOOKS TRIGGER: Incidencia Resuelta
+    // ─────────────────────────────────────────────────────────────────────────────
+    try {
+      // Validar si quedan más incidencias sin resolver para este documento
+      const [remainingIncRows] = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM incidencias_documento WHERE documento_id = ? AND validado = 0`,
+        [incRows[0].doc_id]
+      );
+      
+      const docId = incRows[0].doc_id;
+      const quedanPendientes = remainingIncRows[0]?.count > 0;
+
+      // Disparamos el webhook notificando la resolución
+      await fireWebhook(empresaId, 'incidencia.resuelta_manualmente', {
+        incidencia_id,
+        documento_id: docId,
+        observaciones,
+        validado_por,
+        quedan_incidencias_pendientes: quedanPendientes
+      });
+
+      // Si no quedan pendientes, el ERP probablemente quiera saber que el documento ya está limpio
+      if (!quedanPendientes) {
+        const [docRows] = await db.query<RowDataPacket[]>(
+          `SELECT id, file_hash, tipo_documento, numero_documento, importe_total, url_archivo 
+           FROM documentos WHERE id = ? LIMIT 1`,
+          [docId]
+        );
+        if (docRows.length > 0) {
+          await fireWebhook(empresaId, 'documento.listo_para_erp', docRows[0]);
+        }
+      }
+    } catch (whErr) {
+      console.error('❌ [POST /api/v1/incidents] Error disparando webhook:', whErr);
+    }
 
     return NextResponse.json(
       {

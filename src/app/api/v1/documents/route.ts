@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
     // 7. Enriquecer documentos
     const empresaCif = documentos[0]?.empresa_cif?.trim().toLowerCase() || '';
-    const MINIO_ENDPOINT = (process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
+    const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
     const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
 
     let enriched = documentos.map((doc: any) => {

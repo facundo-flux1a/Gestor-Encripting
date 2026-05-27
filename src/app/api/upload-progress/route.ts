@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connection, { dbName } from '@/lib/db';
-import { ActivityService } from '@/services/activity-service';
-
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+import { RowDataPacket } from 'mysql2';
+import { fireWebhook } from '@/services/webhook-service';
 
 // ==========================================
-// POST: Recibir callbacks del flujo
+// POST: Recibir callback de n8n / microservicio
 // ==========================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { uploadId, parentUploadId, status, step, progress, message } = body;
+    // documentId puede venir directamente del body (n8n lo envía en HTTP Request3)
+    const bodyDocumentId = body.documentId || body.documento_id || null;
 
     // Normalizar entrada de IDs (soportar camelCase y snake_case del agente)
     const effectiveUploadId = uploadId || body.upload_id;
     const effectiveParentId = parentUploadId || body.parent_upload_id;
 
-    console.log(`📡 [POST-Progress] Callback: ${effectiveUploadId} - Status: ${status}`);
+    console.log(`📡 [POST-Progress] Callback: ${effectiveUploadId} - Status: ${status} - documentId: ${bodyDocumentId}`);
 
     if (!effectiveUploadId) {
       return NextResponse.json({ error: 'uploadId requerido' }, { status: 400 });
@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     // Soportar "failed" (n8n), "Fallido", "Error", etc.
     const normalizedStatus = status?.toLowerCase();
     const isFailure = normalizedStatus === 'failed' || normalizedStatus === 'fallido' || normalizedStatus === 'error';
+    // n8n envía "completed" (minúscula), el frontend puede enviar "Completado"
+    const isCompleted = normalizedStatus === 'completed' || normalizedStatus === 'completado';
 
     if (isFailure) {
       console.error(`❌ [POST] Falla detectada ("${status}") en UploadID: ${effectiveUploadId}`);
@@ -106,6 +108,17 @@ export async function POST(request: NextRequest) {
       await updateParentProgress(effectiveParentId);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 🔔 WEBHOOKS TRIGGER: Completado — se dispara en background, sin bloquear la respuesta
+    // Usamos una función centralizada para manejar Lotes vs Documentos únicos
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (isCompleted) {
+      // 🔥 BACKGROUND: no bloqueamos la respuesta HTTP — n8n recibe 200 de inmediato
+      ;(async () => {
+        await dispatchCompletionWebhook(effectiveUploadId);
+      })();
+    }
+
     return NextResponse.json({
       success: true,
       uploadId: effectiveUploadId,
@@ -125,17 +138,15 @@ export async function POST(request: NextRequest) {
 async function markParentAsFailed(parentUploadId: string, errorMessage?: string) {
   try {
     await connection.query(
-      `UPDATE actividad 
+      `UPDATE ${dbName}.actividad 
        SET status = 'Fallido', 
-           step = 'Error en procesamiento', 
-           progress = 0, 
-           mensaje = ?, 
+           step = 'Error en procesamiento',
+           mensaje = ?,
            updated_at = NOW()
        WHERE upload_id = ?`,
-      [errorMessage || 'Uno o más archivos fallaron en el procesamiento', parentUploadId]
+      [errorMessage || 'Error en archivo hijo', parentUploadId]
     );
-
-    console.log(`❌ [Parent Update] Padre marcado como fallido: ${parentUploadId}`);
+    console.log(`✅ [Parent Update] Padre ${parentUploadId} marcado como Fallido`);
   } catch (error) {
     console.error('❌ [Parent Update] Error al marcar padre como fallido:', error);
   }
@@ -146,7 +157,7 @@ async function updateParentProgress(parentUploadId: string) {
   try {
     // Obtener todos los hijos
     const [children] = await connection.query(
-      `SELECT status, progress FROM actividad WHERE parent_upload_id = ?`,
+      `SELECT status, progress FROM ${dbName}.actividad WHERE parent_upload_id = ?`,
       [parentUploadId]
     ) as any;
 
@@ -178,7 +189,7 @@ async function updateParentProgress(parentUploadId: string) {
 
     // Actualizar el padre
     await connection.query(
-      `UPDATE actividad 
+      `UPDATE ${dbName}.actividad 
        SET status = ?, step = ?, progress = ?, mensaje = ?, updated_at = NOW()
        WHERE upload_id = ?`,
       [parentStatus, parentStep, averageProgress, parentMessage, parentUploadId]
@@ -187,6 +198,159 @@ async function updateParentProgress(parentUploadId: string) {
     console.log(`✅ [Parent Update] ${parentUploadId} - ${parentStatus} ${averageProgress}% (${children.length} hijos)`);
   } catch (error) {
     console.error('❌ [Parent Update] Error:', error);
+  }
+}
+
+// ==========================================
+// CENTRAL WEBHOOK DISPATCHER (Maneja Lotes y Documentos Únicos)
+// ==========================================
+async function dispatchCompletionWebhook(uploadId: string) {
+  try {
+    // 1. Obtener registro principal
+    const [actRows] = await connection.query<RowDataPacket[]>(
+      `SELECT id_de_empresa, documento_id, parent_upload_id FROM ${dbName}.actividad WHERE upload_id = ? LIMIT 1`,
+      [uploadId]
+    );
+    const mainRecord = actRows[0];
+    if (!mainRecord) return;
+
+    // 2. Si es un hijo (tiene parent_upload_id), no disparamos webhook acá. Esperamos al padre.
+    if (mainRecord.parent_upload_id) {
+      console.log(`ℹ️ [Webhook-Dispatch] ${uploadId} es un hijo. Webhook se dispara desde el padre.`);
+      return;
+    }
+
+    const empresaId = mainRecord.id_de_empresa;
+    if (!empresaId) return;
+
+    // 3. Buscar si tiene hijos en la base de datos (lote/ZIP/multi-pdf)
+    const [childRows] = await connection.query<RowDataPacket[]>(
+      `SELECT documento_id FROM ${dbName}.actividad WHERE parent_upload_id = ? AND documento_id IS NOT NULL`,
+      [uploadId]
+    );
+
+    // 4. Dedup guard: usamos el upload_id_original como clave única en webhook_logs
+    const [existingLogs] = await connection.query<RowDataPacket[]>(
+      `SELECT id FROM ${dbName}.webhook_logs 
+       WHERE evento IN ('documento.requiere_atencion', 'documento.listo_para_erp', 'documento.lote_procesado') 
+       AND JSON_EXTRACT(payload, '$.data.upload_id_original') = ? LIMIT 1`,
+      [uploadId]
+    );
+
+    if (existingLogs.length > 0) {
+      console.log(`ℹ️ [Webhook-Dispatch] Ya se disparó webhook para ${uploadId}`);
+      return;
+    }
+
+    if (childRows.length > 0) {
+      // 🚀 CASO: LOTE (BATCH DE DOCUMENTOS)
+      console.log(`🔔 [Webhook-Dispatch] Lote detectado (${childRows.length} documentos). Generando payload...`);
+      
+      const docIds = childRows.map(r => r.documento_id);
+      const docsData = [];
+      let totalIncidencias = 0;
+
+      for (const docId of docIds) {
+        const [dRows] = await connection.query<RowDataPacket[]>(
+          `SELECT id, file_hash, tipo_documento, numero_documento, importe_total FROM ${dbName}.documentos WHERE id = ? LIMIT 1`,
+          [docId]
+        );
+        const [aRows] = await connection.query<RowDataPacket[]>(
+          `SELECT ruta_archivo FROM ${dbName}.archivos_documento WHERE documento_id = ? ORDER BY fecha_subida DESC LIMIT 1`,
+          [docId]
+        );
+        const [iRows] = await connection.query<RowDataPacket[]>(
+          `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ? AND validado = 0`,
+          [docId]
+        );
+        const [hcRows] = await connection.query<RowDataPacket[]>(
+          `SELECT verified FROM ${dbName}.health_check_status WHERE documento_id = ? LIMIT 1`,
+          [docId]
+        );
+
+        if (dRows.length > 0) {
+          const docIncidenciasCount = iRows[0]?.count || 0;
+          const failedHC = hcRows.length > 0 && hcRows[0].verified === 0;
+          const hasInc = docIncidenciasCount > 0 || failedHC;
+
+          if (hasInc) totalIncidencias++;
+
+          docsData.push({
+            ...dRows[0],
+            url_archivo: aRows[0]?.ruta_archivo ?? null,
+            tiene_incidencias: hasInc,
+            cantidad_incidencias: docIncidenciasCount
+          });
+        }
+      }
+
+      const payload = {
+        upload_id_original: uploadId,
+        total_documentos: docsData.length,
+        con_incidencias: totalIncidencias,
+        listos: docsData.length - totalIncidencias,
+        documentos: docsData
+      };
+
+      await fireWebhook(empresaId, 'documento.lote_procesado', payload);
+
+    } else {
+      // 🚀 CASO: DOCUMENTO ÚNICO
+      let docId = mainRecord.documento_id;
+
+      if (!docId) {
+        // En caso de que el upload original tarde unos ms extra en guardar el doc
+        console.log(`⏳ [Webhook-Dispatch] Sin documento_id, esperando 3s...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const [recheck] = await connection.query<RowDataPacket[]>(
+          `SELECT documento_id FROM ${dbName}.actividad WHERE upload_id = ?`,
+          [uploadId]
+        );
+        docId = recheck[0]?.documento_id;
+      }
+
+      if (!docId) {
+        console.warn(`⚠️ [Webhook-Dispatch] Webhook cancelado: No se encontró documento_id para ${uploadId}`);
+        return;
+      }
+
+      const [dRows] = await connection.query<RowDataPacket[]>(
+        `SELECT id, file_hash, tipo_documento, numero_documento, importe_total FROM ${dbName}.documentos WHERE id = ? LIMIT 1`,
+        [docId]
+      );
+      const [aRows] = await connection.query<RowDataPacket[]>(
+        `SELECT ruta_archivo FROM ${dbName}.archivos_documento WHERE documento_id = ? ORDER BY fecha_subida DESC LIMIT 1`,
+        [docId]
+      );
+      const [iRows] = await connection.query<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ? AND validado = 0`,
+        [docId]
+      );
+      const [hcRows] = await connection.query<RowDataPacket[]>(
+        `SELECT verified FROM ${dbName}.health_check_status WHERE documento_id = ? LIMIT 1`,
+        [docId]
+      );
+
+      const failedHC = hcRows.length > 0 && hcRows[0].verified === 0;
+      const hasIncidents = iRows[0]?.count > 0 || failedHC;
+
+      if (dRows.length > 0) {
+        const docData = { 
+          ...dRows[0], 
+          url_archivo: aRows[0]?.ruta_archivo ?? null,
+          upload_id_original: uploadId
+        };
+        
+        console.log(`🔔 [Webhook-Dispatch] Disparando webhook para doc ${docId} (Incidencias: ${hasIncidents})`);
+        if (hasIncidents) {
+          await fireWebhook(empresaId, 'documento.requiere_atencion', docData);
+        } else {
+          await fireWebhook(empresaId, 'documento.listo_para_erp', docData);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ [Webhook-Dispatch] Error en dispatchCompletionWebhook:', error);
   }
 }
 
@@ -201,11 +365,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('🔍 [GET] Solicitando estado de:', uploadId);
-
     // Obtener el registro principal
     const [rows] = await connection.query(
-      `SELECT * FROM actividad WHERE upload_id = ? LIMIT 1`,
+      `SELECT * FROM ${dbName}.actividad WHERE upload_id = ? LIMIT 1`,
       [uploadId]
     ) as any;
 
@@ -227,59 +389,57 @@ export async function GET(request: NextRequest) {
 
     const mainRecord = rows[0];
 
-    // 🔥 SI ES UN PADRE (archivo comprimido), obtener sus hijos
+    // 🔥 SI ES UN PADRE (archivo comprimido o lote pdf), obtener sus hijos
     let children = [];
     if (mainRecord.parent_upload_id === null) {
       const [childRows] = await connection.query(
-        `SELECT * FROM actividad WHERE parent_upload_id = ? ORDER BY created_at ASC`,
+        `SELECT * FROM ${dbName}.actividad WHERE parent_upload_id = ? ORDER BY created_at ASC`,
         [uploadId]
       ) as any;
       children = childRows;
     }
 
-    // 🆕 VERIFICAR SI EL DOCUMENTO TIENE INCIDENCIAS
+    // 🆕 VERIFICAR SI EL DOCUMENTO ÚNICO TIENE INCIDENCIAS (solo display UI)
     let hasIncidents = false;
-    console.log(`🔍 [GET] mainRecord:`, {
-      status: mainRecord.status,
-      documento_id: mainRecord.documento_id,
-      upload_id: mainRecord.upload_id
-    });
-
-    if (mainRecord.status === 'Completado' && mainRecord.documento_id) {
-      const [incidentRows] = await connection.query(
-        `SELECT COUNT(*) as count FROM incidencias_documento 
-         WHERE documento_id = ?`,
-        [mainRecord.documento_id]
-      ) as any;
-      hasIncidents = incidentRows[0]?.count > 0;
-      console.log(`🔍 [GET] Documento ID ${mainRecord.documento_id} tiene incidencias:`, hasIncidents, `(${incidentRows[0]?.count} incidencias)`);
-    } else {
-      console.log(`⚠️ [GET] No se puede verificar incidencias - Status: ${mainRecord.status}, documento_id: ${mainRecord.documento_id}`);
+    
+    // 🔔 WEBHOOK TRIGGER desde GET: Asegura disparo en caso que POST haya fallado
+    if (mainRecord.status === 'Completado') {
+      if (mainRecord.documento_id && children.length === 0) {
+        const [incidentRows] = await connection.query(
+          `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ?`,
+          [mainRecord.documento_id]
+        ) as any;
+        hasIncidents = incidentRows[0]?.count > 0;
+      }
+      
+      // Disparamos el webhook usando la misma función central. 
+      // El dedup interno en dispatchCompletionWebhook evita que se envíe duplicado.
+      ;(async () => {
+        await dispatchCompletionWebhook(uploadId);
+      })();
     }
 
     const response = {
-      id: mainRecord.id, // 🆕 Necesario para reintentos
+      id: mainRecord.id,
       status: mainRecord.status,
       step: mainRecord.step,
       progress: mainRecord.progress,
       message: mainRecord.mensaje,
-      retryCount: mainRecord.retry_count || 0, // 🆕
+      retryCount: mainRecord.retry_count || 0,
       timestamp: Date.now(),
       isCompressed: children.length > 0,
-      hasIncidents, 
+      hasIncidents,
       children: children.map((child: any) => ({
-        id: child.id, // 🆕
+        id: child.id,
         uploadId: child.upload_id,
         fileName: child.documento_nombre,
         status: child.status,
         step: child.step,
         progress: child.progress,
         message: child.mensaje,
-        retryCount: child.retry_count || 0 // 🆕
+        retryCount: child.retry_count || 0
       }))
     };
-
-    console.log(`✅ [GET] Retornando: ${uploadId} - ${mainRecord.step} (${mainRecord.progress}%)${children.length > 0 ? ` + ${children.length} hijos` : ''}`);
 
     return NextResponse.json(response, {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
