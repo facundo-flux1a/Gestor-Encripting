@@ -43,20 +43,20 @@ Devuelve las incidencias de todos los documentos de la empresa vinculada al toke
 
 #### Obtener todas las incidencias pendientes de la empresa
 ```bash
-curl -X GET "https://[tu-dominio.com]/api/v1/incidents" \
+curl -X GET "https://gestor.muvail.com/api/v1/incidents" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Accept: application/json"
 ```
 
 #### Obtener todas las incidencias (pendientes + resueltas)
 ```bash
-curl -X GET "https://[tu-dominio.com]/api/v1/incidents?estado=todas" \
+curl -X GET "https://gestor.muvail.com/api/v1/incidents?estado=todas" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui"
 ```
 
 #### Obtener incidencias de un documento específico
 ```bash
-curl -X GET "https://[tu-dominio.com]/api/v1/incidents?documento_id=2564" \
+curl -X GET "https://gestor.muvail.com/api/v1/incidents?documento_id=2564" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui"
 ```
 
@@ -148,7 +148,7 @@ Marca una incidencia como **validada** (resuelta manualmente). Esto indica al si
 
 #### Resolución básica (sin comentarios adicionales)
 ```bash
-curl -X POST "https://[tu-dominio.com]/api/v1/incidents" \
+curl -X POST "https://gestor.muvail.com/api/v1/incidents" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Content-Type: application/json" \
      -d '{"incidencia_id": 38}'
@@ -156,7 +156,7 @@ curl -X POST "https://[tu-dominio.com]/api/v1/incidents" \
 
 #### Resolución con trazabilidad completa
 ```bash
-curl -X POST "https://[tu-dominio.com]/api/v1/incidents" \
+curl -X POST "https://gestor.muvail.com/api/v1/incidents" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Content-Type: application/json" \
      -d '{
@@ -220,7 +220,7 @@ El ciclo de resolución de incidencias **siempre empieza con un GET**. Como medi
 Hacé un `GET /api/v1/incidents` (sin parámetros, o con `estado=pendientes`) para obtener todas las alertas sin resolver. La respuesta te devuelve un array `data[]` donde cada elemento tiene un `incidencia_id` y el contexto del documento asociado (proveedor, importe, descripción del problema).
 
 ```bash
-curl -X GET "https://[tu-dominio.com]/api/v1/incidents" \
+curl -X GET "https://gestor.muvail.com/api/v1/incidents" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui"
 # → Guardá el campo "incidencia_id" de cada elemento que querés resolver
 ```
@@ -234,7 +234,7 @@ Si necesitás ver el detalle completo del documento antes de aprobarlo, usá el 
 Una vez identificada la incidencia a aprobar, hacé el `POST` usando el `incidencia_id` del paso 1:
 
 ```bash
-curl -X POST "https://[tu-dominio.com]/api/v1/incidents" \
+curl -X POST "https://gestor.muvail.com/api/v1/incidents" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Content-Type: application/json" \
      -d '{"incidencia_id": 38, "observaciones": "Revisado y aceptado.", "validado_por": "erp_sync@empresa.com"}'

@@ -26,6 +26,7 @@ export type ProviderAnalyticsData = {
 
 interface ProviderAnalyticsProps {
     data: ProviderAnalyticsData;
+    isClient?: boolean;
 }
 
 // 🎯 FUNCIÓN DE FORMATO MANUAL
@@ -68,7 +69,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
+export function ProviderAnalytics({ data, isClient = false }: ProviderAnalyticsProps) {
     // 🎯 Determinar tipo de gráfico según cantidad de datos
     const monthCount = data.monthlySpend.length;
     const useBarChart = monthCount === 1; // Si solo hay 1 mes, usar barra
@@ -80,10 +81,10 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                 <div className="relative group cursor-help z-50">
                     <div className="h-full rounded-xl transition-all duration-300">
                         <StatsCard
-                            title="Gasto Total"
+                            title={isClient ? "Ingreso Total" : "Gasto Total"}
                             value={formatCurrency(data.totalSpent)}
                             icon={Euro}
-                            description="Suma histórica de compras"
+                            description={isClient ? "Suma histórica de ventas" : "Suma histórica de compras"}
                         />
                     </div>
                     {Math.abs(data.totalSpent - (data.totalProductsSpent || 0)) > 0.01 && (
@@ -94,7 +95,7 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                             <div className="absolute top-[80%] right-0 mt-3 w-72 p-4 bg-popover border border-border shadow-2xl rounded-lg text-xs invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-[60]">
                                 <p className="font-bold text-sm mb-2 text-foreground border-b border-border/50 pb-2">Desglose Contable</p>
                                 <p className="text-muted-foreground mb-3 leading-relaxed">
-                                    El <strong>Gasto Total</strong> arriba indica la salida de caja final facturada (contiene todos los impuestos, recargos y descuentos del pie de factura).
+                                    El <strong>{isClient ? "Ingreso Total" : "Gasto Total"}</strong> arriba indica {isClient ? "la entrada" : "la salida"} de caja final facturada (contiene todos los impuestos, recargos y descuentos del pie de factura).
                                 </p>
                                 <div className="space-y-1.5 font-mono bg-muted/20 p-2 rounded-md">
                                     <div className="flex justify-between">
@@ -120,10 +121,10 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                     title="Productos Únicos"
                     value={data.uniqueProducts.toString()}
                     icon={Package}
-                    description="Productos distintos comprados"
+                    description={isClient ? "Productos distintos vendidos" : "Productos distintos comprados"}
                 />
                 <StatsCard
-                    title="Gasto Promedio / Doc."
+                    title={isClient ? "Ingreso Promedio / Doc." : "Gasto Promedio / Doc."}
                     value={formatCurrency(data.averagePurchaseValue)}
                     icon={Hash}
                     description="Valor medio por documento"
@@ -138,12 +139,12 @@ export function ProviderAnalytics({ data }: ProviderAnalyticsProps) {
                         <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
                             <CardTitle className="text-base sm:text-lg bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text flex items-center gap-2">
                                 <TrendingUp className="h-5 w-5" />
-                                Evolución del Gasto Mensual
+                                {isClient ? "Evolución de Ingresos" : "Evolución del Gasto Mensual"}
                             </CardTitle>
                             <CardDescription className="text-xs sm:text-sm">
                                 {monthCount === 1
-                                    ? 'Único mes con compras registradas'
-                                    : `Historial de compras con este proveedor (${monthCount} meses)`
+                                    ? `Único mes con ${isClient ? 'ventas' : 'compras'} registradas`
+                                    : `Historial de ${isClient ? 'ventas con este cliente' : 'compras con este proveedor'} (${monthCount} meses)`
                                 }
                             </CardDescription>
                         </CardHeader>

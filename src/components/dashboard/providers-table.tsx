@@ -382,9 +382,10 @@ export const createColumns = (
       header: 'Proveedor',
       cell: ({ row }) => {
         const provider = row.original;
+        const typeQuery = (provider.rol === 'cliente' || provider.rol === 'receptor') ? '?type=cliente' : '?type=proveedor';
         return (
           <Link
-            href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}
+            href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}${typeQuery}`}
             className="font-medium text-primary hover:underline flex items-center gap-1.5 sm:gap-2 group"
           >
             <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
@@ -540,7 +541,7 @@ export const createColumns = (
               asChild
               className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs sm:text-sm transition-all duration-200 hover:scale-105 group"
             >
-              <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}`}>
+              <Link href={`/proveedores/${encodeURIComponent(provider.identificador_fiscal!)}${(provider.rol === 'cliente' || provider.rol === 'receptor') ? '?type=cliente' : '?type=proveedor'}`}>
                 <span className="hidden xs:inline">Ver</span>
                 <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
               </Link>

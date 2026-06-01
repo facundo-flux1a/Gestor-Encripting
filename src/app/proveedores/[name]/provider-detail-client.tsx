@@ -36,7 +36,11 @@ import {
     getDocumentsByProviderName,
     getProductsByProviderName,
     getProviderAnalytics,
-    getAllProductLinesByProviderName
+    getAllProductLinesByProviderName,
+    getDocumentsByClientName,
+    getProductsByClientName,
+    getClientAnalytics,
+    getAllProductLinesByClientName
 } from "@/services/document-service";
 import { ProviderFilterBar, type ProviderFilterState } from "@/components/proveedores/provider-filter-bar";
 
@@ -46,6 +50,7 @@ interface ProviderDetailClientProps {
     initialProducts: DocumentLine[];
     initialAllProducts: DocumentLine[];
     initialAnalyticsData: ProviderAnalyticsData;
+    isClient?: boolean;
 }
 
 export function ProviderDetailClient({
@@ -53,7 +58,8 @@ export function ProviderDetailClient({
     initialDocuments,
     initialProducts,
     initialAllProducts,
-    initialAnalyticsData
+    initialAnalyticsData,
+    isClient = false
 }: ProviderDetailClientProps) {
     const { selectedCompanyIds, companies } = useCompanyContext();
 
@@ -138,12 +144,19 @@ export function ProviderDetailClient({
             try {
                 const empresaIds = selectedCompanyIds.length > 0 ? selectedCompanyIds : currentCompanies.map(c => c.id);
                 const fiscalId = initialProvider.identificador_fiscal || '';
-                const [newDocs, newProds, newAnalytics, newAllProds] = await Promise.all([
-                    getDocumentsByProviderName(fiscalId, empresaIds),
-                    getProductsByProviderName(fiscalId, empresaIds),
-                    getProviderAnalytics(fiscalId, empresaIds),
-                    getAllProductLinesByProviderName(fiscalId, empresaIds)
-                ]);
+                const [newDocs, newProds, newAnalytics, newAllProds] = await Promise.all(
+                    isClient ? [
+                        getDocumentsByClientName(fiscalId, empresaIds),
+                        getProductsByClientName(fiscalId, empresaIds),
+                        getClientAnalytics(fiscalId, empresaIds),
+                        getAllProductLinesByClientName(fiscalId, empresaIds)
+                    ] : [
+                        getDocumentsByProviderName(fiscalId, empresaIds),
+                        getProductsByProviderName(fiscalId, empresaIds),
+                        getProviderAnalytics(fiscalId, empresaIds),
+                        getAllProductLinesByProviderName(fiscalId, empresaIds)
+                    ]
+                );
 
                 // ✅ CARGAR SUGERENCIAS IA PERSISTENTES
                 if (empresaIds.length === 1) {
@@ -538,7 +551,7 @@ export function ProviderDetailClient({
                 </TabsList>
 
                 <TabsContent value="summary" className="space-y-6 animate-fade-in">
-                    <ProviderAnalytics data={analyticsData} />
+                    <ProviderAnalytics data={analyticsData} isClient={isClient} />
                 </TabsContent>
 
                 <TabsContent value="documents" className="space-y-6 animate-fade-in">
@@ -660,6 +673,7 @@ export function ProviderDetailClient({
                                 }}
                                 onAccountUpdate={handleManualAccountSave}
                                 currentEmpresaId={mainEmpresaId}
+                                isClient={isClient}
                             />
                         </div>
                     )}

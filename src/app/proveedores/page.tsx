@@ -15,11 +15,12 @@ function ProveedoresPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
     const [providers, setProviders] = useState<ProviderWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'proveedores' | 'clientes'>('proveedores');
 
     const showCompanyColumn = selectedCompanyIds.length > 1;
 
-    // ✅ Función para cargar proveedores
-    const fetchProviders = async () => {
+    // ✅ Carga proveedores o clientes según el tab activo
+    const fetchData = async (tab: 'proveedores' | 'clientes') => {
         if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
             setProviders([]);
             setIsLoading(false);
@@ -28,7 +29,8 @@ function ProveedoresPageContent() {
 
         try {
             setIsLoading(true);
-            const response = await fetch('/api/proveedores', {
+            const endpoint = tab === 'clientes' ? '/api/clientes' : '/api/proveedores';
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ companyIds: selectedCompanyIds }),
@@ -40,9 +42,10 @@ function ProveedoresPageContent() {
             }
 
             const data = await response.json();
-            setProviders(data.providers || []);
+            // proveedores => { providers: [] }, clientes => { clients: [] }
+            setProviders(data.providers || data.clients || []);
         } catch (error) {
-            console.error('Error cargando proveedores:', error);
+            console.error('Error cargando entidades:', error);
             setProviders([]);
         } finally {
             setIsLoading(false);
@@ -50,17 +53,58 @@ function ProveedoresPageContent() {
     };
 
     useEffect(() => {
-        fetchProviders();
-    }, [selectedCompanyIds]);
+        fetchData(activeTab);
+    }, [selectedCompanyIds, activeTab]);
+
+    const tabSelector = (
+        <div
+            data-tutorial="proveedores-tabs"
+            style={{
+            display: 'inline-flex',
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: '9999px',
+            padding: '4px',
+            gap: '2px',
+        }}>
+            {(['proveedores', 'clientes'] as const).map((tab) => (
+                <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                        padding: '6px 20px',
+                        borderRadius: '9999px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        letterSpacing: '0.03em',
+                        textTransform: 'uppercase',
+                        transition: 'all 0.2s ease',
+                        background: activeTab === tab
+                            ? 'hsl(var(--primary))'
+                            : 'transparent',
+                        color: activeTab === tab
+                            ? 'hsl(var(--primary-foreground))'
+                            : 'hsl(var(--muted-foreground))',
+                    }}
+                >
+                    {tab === 'proveedores' ? 'Proveedores' : 'Clientes'}
+                </button>
+            ))}
+        </div>
+    );
 
     if (isLoading) {
         return (
             <MainLayout>
                 <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                    <PageHeader
-                        title="Proveedores"
-                        icon={Building2}
-                    />
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <PageHeader
+                            title="Entidades"
+                            icon={Building2}
+                        />
+                        {tabSelector}
+                    </div>
                     <div className="space-y-4 sm:space-y-6">
                         <Skeleton className="h-[500px] w-full animate-pulse" />
                     </div>
@@ -72,11 +116,18 @@ function ProveedoresPageContent() {
     return (
         <MainLayout>
             <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
-                <PageHeader
-                    title="Proveedores"
-                    icon={Building2}
-                    description="Explora todos tus proveedores y sus métricas clave"
-                />
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                    <PageHeader
+                        title="Entidades"
+                        icon={Building2}
+                        description={
+                            activeTab === 'proveedores'
+                                ? 'Explora todos tus proveedores y sus métricas clave'
+                                : 'Explora todos tus clientes y sus métricas clave'
+                        }
+                    />
+                    {tabSelector}
+                </div>
 
                 <div
                     className="animate-fade-in transition-all duration-300 hover:scale-[1.005]"
@@ -86,7 +137,7 @@ function ProveedoresPageContent() {
                     <ProvidersTable
                         providers={providers}
                         showCompanyColumn={showCompanyColumn}
-                        onProviderUpdated={fetchProviders} // ✅ AGREGAR ESTA LÍNEA
+                        onProviderUpdated={() => fetchData(activeTab)}
                         companyId={selectedCompanyIds?.length === 1 ? selectedCompanyIds[0] : undefined}
                     />
                 </div>
@@ -94,35 +145,17 @@ function ProveedoresPageContent() {
 
             <style jsx global>{`
                 @keyframes fade-in {
-                    from {
-                        opacity: 0;
-                        transform: translateY(10px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
-
                 .animate-fade-in {
                     animation: fade-in 0.5s ease-out forwards;
                     opacity: 0;
                 }
-
                 @media (prefers-reduced-motion: reduce) {
-                    .animate-fade-in {
-                        animation: none;
-                        opacity: 1;
-                        transform: none;
-                    }
-                    
-                    .transition-all {
-                        transition: none !important;
-                    }
-                    
-                    .hover\\:scale-\\[1\\.005\\]:hover {
-                        transform: none !important;
-                    }
+                    .animate-fade-in { animation: none; opacity: 1; transform: none; }
+                    .transition-all { transition: none !important; }
+                    .hover\\:scale-\\[1\\.005\\]:hover { transform: none !important; }
                 }
             `}</style>
         </MainLayout>

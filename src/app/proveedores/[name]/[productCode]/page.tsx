@@ -1,7 +1,7 @@
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Package, TrendingUp, TrendingDown, Calendar, Euro, FileText, Minus } from "lucide-react";
-import { getProductHistory, getProviderByFiscalId } from "@/services/document-service";
+import { getProductHistory, getProviderByFiscalId, getClientProductHistory, getClientByFiscalId } from "@/services/document-service";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,13 +43,14 @@ export default async function ProductDetailPage({
     searchParams
 }: {
     params: Promise<{ name: string; productCode: string }>,
-    searchParams: Promise<{ desc?: string, view?: 'grid' | 'list' }>
+    searchParams: Promise<{ desc?: string, view?: 'grid' | 'list', type?: string }>
 }) {
     const resolvedParams = await params;
     const resolvedSearchParams = await searchParams;
     const providerFiscalId = decodeURIComponent(resolvedParams.name);
     let identifier = decodeURIComponent(resolvedParams.productCode);
     const descriptionFilter = resolvedSearchParams.desc;
+    const isClient = resolvedSearchParams.type === 'cliente';
     let searchBy: 'code' | 'description' = 'code';
 
     if (identifier.startsWith('DESC_')) {
@@ -57,10 +58,16 @@ export default async function ProductDetailPage({
         identifier = identifier.replace(/^DESC_/, '');
     }
 
+    console.log(`🔍 [ProductDetailPage] fiscalId=${providerFiscalId}, isClient=${isClient}, searchBy=${searchBy}`);
     const [productData, provider] = await Promise.all([
-        getProductHistory(providerFiscalId, identifier, searchBy, descriptionFilter),
-        getProviderByFiscalId(providerFiscalId)
+        isClient
+            ? getClientProductHistory(providerFiscalId, identifier, searchBy, descriptionFilter)
+            : getProductHistory(providerFiscalId, identifier, searchBy, descriptionFilter),
+        isClient
+            ? getClientByFiscalId(providerFiscalId)
+            : getProviderByFiscalId(providerFiscalId)
     ]);
+    console.log(`📊 [ProductDetailPage] productInfo=${productData?.productInfo?.descripcion}, history=${productData?.history?.length}`);
 
     if (!productData.productInfo || !provider) {
         notFound();
@@ -97,7 +104,7 @@ export default async function ProductDetailPage({
         <MainLayout>
             <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
                 <div className="flex items-center gap-4">
-                    <Link href={`/proveedores/${encodeURIComponent(providerFiscalId)}?tab=products&view=${resolvedSearchParams.view || 'list'}`}>
+                    <Link href={`/proveedores/${encodeURIComponent(providerFiscalId)}?${isClient ? 'type=cliente&' : ''}tab=products&view=${resolvedSearchParams.view || 'list'}`}>
                         <Button variant="outline" size="sm">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Volver a {provider.nombre}

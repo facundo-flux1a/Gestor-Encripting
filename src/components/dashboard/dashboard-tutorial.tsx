@@ -274,7 +274,7 @@ export function DashboardTutorial() {
             element: '[data-sidebar="sidebar"], [data-sidebar="content"]',
             popover: {
               title: 'Menú de navegación 🗂️',
-              description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Proveedores.',
+              description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Entidades.',
               side: 'right' as any,
               align: 'center' as any
             }

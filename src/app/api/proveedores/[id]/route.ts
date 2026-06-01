@@ -33,7 +33,7 @@ export async function PUT(
         `SELECT email 
          FROM entidades_documento 
          WHERE identificador_fiscal = ? 
-           AND rol IN ('proveedor', 'emisor') 
+           AND rol IN ('proveedor', 'emisor', 'cliente', 'receptor') 
          LIMIT 1`,
         [currentFiscalId]
       );
@@ -52,7 +52,7 @@ export async function PUT(
        JOIN documentos d ON ed.documento_id = d.id
        JOIN empresas e ON d.id_de_empresa = e.id
        WHERE ed.identificador_fiscal = ? 
-         AND ed.rol IN ('proveedor', 'emisor')
+         AND ed.rol IN ('proveedor', 'emisor', 'cliente', 'receptor')
          AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
        LIMIT 1`,
       [currentFiscalId, user.id]
@@ -79,7 +79,7 @@ export async function PUT(
              ed.telefono = ?, 
              ed.email = ?
          WHERE ed.identificador_fiscal = ? 
-           AND ed.rol IN ('proveedor', 'emisor')
+           AND ed.rol IN ('proveedor', 'emisor', 'cliente', 'receptor')
            AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
         [nombre, direccion, telefono, email, currentFiscalId, user.id]
       );
@@ -103,7 +103,7 @@ export async function PUT(
        JOIN documentos d ON ed.documento_id = d.id
        JOIN empresas e ON d.id_de_empresa = e.id
        WHERE ed.identificador_fiscal = ? 
-         AND ed.rol IN ('proveedor', 'emisor')
+         AND ed.rol IN ('proveedor', 'emisor', 'cliente', 'receptor')
          AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
        LIMIT 1`,
       [identificador_fiscal, user.id]
@@ -126,7 +126,7 @@ export async function PUT(
            ed.telefono = ?, 
            ed.email = ?
        WHERE ed.identificador_fiscal = ? 
-         AND ed.rol IN ('proveedor', 'emisor')
+         AND ed.rol IN ('proveedor', 'emisor', 'cliente', 'receptor')
          AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))`,
       [
         nombre, 

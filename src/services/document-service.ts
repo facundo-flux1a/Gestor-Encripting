@@ -1733,6 +1733,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
       LEFT JOIN entidades_config ec ON ec.identificador_fiscal = e.identificador_fiscal AND ec.empresa_id = d.id_de_empresa
       WHERE e.rol IN ('proveedor', 'emisor')
         AND d.id_de_empresa IN (${placeholders})
+        AND e.identificador_fiscal != emp.cif
         ${whereDocType}
   `, companyIds);
 
@@ -1871,6 +1872,170 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
   });
 
   return providers;
+}
+
+export async function getClientsWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
+  if (!companyIds || companyIds.length === 0) return [];
+
+  const placeholders = companyIds.map(() => '?').join(',');
+  const showCompanyName = companyIds.length > 1;
+
+  const whereDocType = `AND(
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+    )
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
+
+  const [clientRows] = await db.query<any[]>(`
+      SELECT
+        e.nombre,
+        e.rol,
+        e.identificador_fiscal,
+        e.direccion,
+        e.telefono,
+        e.email,
+        e.datos_extra,
+        e.fecha_creacion,
+        emp.nombre_de_empresa AS empresaNombre,
+        d.id as documento_id,
+        d.importe_total,
+        ec.cuenta_compra,
+        ec.cuenta_venta
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      LEFT JOIN entidades_config ec ON ec.identificador_fiscal = e.identificador_fiscal AND ec.empresa_id = d.id_de_empresa
+      WHERE e.rol IN ('cliente', 'receptor')
+        AND d.id_de_empresa IN (${placeholders})
+        AND e.identificador_fiscal != emp.cif
+        ${whereDocType}
+  `, companyIds);
+
+  console.log('📊 [getClientsWithStats] Filas obtenidas:', clientRows.length);
+
+  const docIds = [...new Set(clientRows.map((r: any) => r.documento_id))];
+
+  const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
+      SELECT DISTINCT
+        documento_id,
+        codigo,
+        descripcion
+      FROM lineas_documento
+      WHERE documento_id IN(${docIds.map(() => '?').join(',')})
+        AND (
+          (codigo IS NOT NULL AND codigo != '')
+          OR
+          (descripcion IS NOT NULL AND descripcion != '')
+        )
+  `, docIds) : [[]];
+
+  console.log('📦 [getClientsWithStats] Productos únicos:', productRows.length);
+
+  const productsByDoc = new Map<number, Set<string>>();
+  productRows.forEach((p: any) => {
+    if (!productsByDoc.has(p.documento_id)) {
+      productsByDoc.set(p.documento_id, new Set());
+    }
+    const key = (p.codigo && p.codigo !== '') ? p.codigo : normalizeProductDescription(p.descripcion || '');
+    if (key) productsByDoc.get(p.documento_id)!.add(key);
+  });
+
+  const clientMap = new Map<string, {
+    rol: string;
+    nombre: string;
+    direccion: string | null;
+    identificador_fiscal: string;
+    telefono: string | null;
+    email: string | null;
+    datos_extra: any;
+    fecha_creacion: string | null;
+    cuenta_compra: string | null;
+    cuenta_venta: string | null;
+    empresas: Set<string>;
+    totalSpent: number;
+    documentos: Set<number>;
+    productos: Set<string>;
+  }>();
+
+  clientRows.forEach((row: any) => {
+    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+
+    if (!clientMap.has(fiscalId)) {
+      clientMap.set(fiscalId, {
+        rol: row.rol,
+        nombre: row.nombre,
+        direccion: row.direccion,
+        identificador_fiscal: row.identificador_fiscal,
+        telefono: row.telefono,
+        email: row.email,
+        datos_extra: row.datos_extra,
+        fecha_creacion: row.fecha_creacion,
+        cuenta_compra: row.cuenta_compra,
+        cuenta_venta: row.cuenta_venta,
+        empresas: new Set(),
+        totalSpent: 0,
+        documentos: new Set(),
+        productos: new Set(),
+      });
+    }
+
+    const client = clientMap.get(fiscalId)!;
+
+    if (row.empresaNombre) {
+      client.empresas.add(row.empresaNombre);
+    }
+
+    if (!client.documentos.has(row.documento_id)) {
+      client.totalSpent += Number(row.importe_total || 0);
+      client.documentos.add(row.documento_id);
+    }
+
+    const docProducts = productsByDoc.get(row.documento_id);
+    if (docProducts) {
+      docProducts.forEach(codigo => client.productos.add(codigo));
+    }
+  });
+
+  const clients: ProviderWithStats[] = Array.from(clientMap.values()).map(p => {
+    let datosExtra: DatosExtra = {};
+    try {
+      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+    } catch { }
+
+    const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
+
+    const empresasArray = Array.from(p.empresas);
+    const empresaNombre = showCompanyName && empresasArray.length > 0
+      ? empresasArray.join(', ')
+      : undefined;
+
+    return {
+      rol: p.rol || 'N/A',
+      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
+      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
+      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
+      email: p.email || empresaEmisora.EMAIL || 'N/A',
+      totalSpent: p.totalSpent,
+      totalDocuments: p.documentos.size,
+      uniqueProducts: p.productos.size,
+      datos_extra: p.datos_extra || null,
+      fecha_creacion: p.fecha_creacion || null,
+      empresaNombre: empresaNombre,
+      cuenta_compra: p.cuenta_compra || null,
+      cuenta_venta: p.cuenta_venta || null,
+    };
+  });
+
+  clients.sort((a, b) => b.totalSpent - a.totalSpent);
+
+  console.log('✅ [getClientsWithStats] Clientes procesados:', clients.length);
+  clients.slice(0, 5).forEach(c => {
+    console.log(`   ${c.nombre}: ${c.totalSpent.toFixed(2)} EUR(${c.totalDocuments} docs, ${c.uniqueProducts} productos)`);
+  });
+
+  return clients;
 }
 
 export async function getAllProducts(): Promise<number> {
@@ -3515,6 +3680,39 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     fiscalId: p.identificador_fiscal
   }));
 
+  const [clientStatsRows] = await db.query<RowDataPacket[]>(`
+        SELECT 
+            e.nombre,
+            e.identificador_fiscal,
+            SUM(d.importe_total) as totalEarned,
+            COUNT(DISTINCT d.id) as totalDocs,
+            MAX(d.fecha_emision) as lastDate
+        FROM documentos d
+        JOIN entidades_documento e ON d.id = e.documento_id
+        WHERE e.rol IN ('cliente', 'receptor')
+          AND e.identificador_fiscal NOT IN (${cifPlaceholders})
+          AND e.nombre NOT IN (${namePlaceholders})
+          AND d.importe_total > 0
+          AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+          AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+          ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
+          ${wherePeriodFilter}
+        GROUP BY e.identificador_fiscal, e.nombre
+        ORDER BY totalEarned DESC
+        LIMIT 5
+    `, [
+    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_NAMES,
+    ...(hasEmpresaFilter ? [empresaIds] : []),
+    ...periodQueryParams
+  ]);
+
+  const topClients = clientStatsRows.map(p => ({
+    name: p.nombre || 'Desconocido',
+    total: Number(p.totalEarned),
+    fiscalId: p.identificador_fiscal
+  }));
+
   const analyticsData = {
     kpis: {
       // ✅ Usamos los valores exactos extraídos de BDD, en lugar del cálculo teórico del redondeo.
@@ -3551,6 +3749,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     ivaYearlySummary,
     multiYearIvaSummary,
     topProviders,
+    topClients,
     yearUsed: yearToUse
   };
 
@@ -4784,3 +4983,555 @@ export async function confirmHealthCheckDocument(documentId: number): Promise<vo
   );
 }
 
+
+
+// ==========================================
+// CLIENT FUNCTIONS (Duplicated from Providers)
+// ==========================================
+
+export async function getClientByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
+  const [providerRows] = await db.query<EntidadPacket[]>(`
+SELECT *
+  FROM entidades_documento
+        WHERE identificador_fiscal = ? AND(rol = 'cliente' OR rol = 'receptor')
+        LIMIT 1
+  `, [fiscalId]);
+
+  if (providerRows.length === 0) {
+    return null;
+  }
+  const p = providerRows[0];
+  const provider: DocumentEntity = {
+    id: p.id,
+    rol: p.rol,
+    nombre: p.nombre,
+    direccion: p.direccion,
+    identificador_fiscal: p.identificador_fiscal,
+    telefono: p.telefono,
+    email: p.email,
+    datos_extra: safeJsonParse(p.datos_extra),
+    fecha_creacion: p.fecha_creacion
+  };
+
+  return JSON.parse(JSON.stringify(provider));
+}
+
+export async function getDocumentsByClientName(
+  fiscalId: string,
+  empresaIds?: number[]
+): Promise<Document[]> {
+  console.log('🔍 [getDocumentsByClientName] Iniciando:', { fiscalId, empresaIds });
+
+  let query = `
+        SELECT DISTINCT d.*,
+  e.nombre_de_empresa as empresa_nombre,
+  e.cif as empresa_cif
+        FROM documentos d
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        LEFT JOIN empresas e ON d.id_de_empresa = e.id
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+          AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+    `;
+
+  const params: any[] = [fiscalId];
+
+  // ✅ Agregar filtro de empresas si se especifica
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    query += ` AND d.id_de_empresa IN(${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  query += ' ORDER BY d.fecha_emision DESC';
+
+  console.log('📝 [getDocumentsByClientName] Query:', query);
+  console.log('📝 [getDocumentsByClientName] Params:', params);
+
+  const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+
+  console.log('📊 [getDocumentsByClientName] Documentos encontrados:', documentRows.length);
+
+  return mapDocumentPacketsToDocuments(documentRows);
+}
+
+export async function getProductsByClientName(
+  fiscalId: string,
+  empresaIds?: number[]
+): Promise<DocumentLine[]> {
+  console.log('🔍 [getProductsByClientName] Iniciando:', { fiscalId, empresaIds });
+
+  // 🛠️ Subquery para limpiar duplicados del JOIN antes de aplicar Window Functions
+  let baseQuery = `
+        WITH FilteredLines AS(
+    SELECT DISTINCT
+                ld.id as line_id,
+    ld.documento_id,
+    ld.codigo,
+    ld.descripcion,
+    ld.cantidad,
+    ld.unidad,
+    ld.precio_unitario,
+    ld.descuento_porcentaje,
+    ld.precio_neto,
+    ld.importe_linea,
+    ld.datos_extra,
+    ld.cuenta_contable,
+    d.id_de_empresa,
+    d.fecha_emision
+            FROM lineas_documento ld
+            JOIN documentos d ON ld.documento_id = d.id
+            JOIN entidades_documento ed ON d.id = ed.documento_id
+            WHERE ed.identificador_fiscal = ?
+    AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+              AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+              AND(
+      (ld.codigo IS NOT NULL AND ld.codigo != '') 
+                OR
+      (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+  )
+    `;
+
+  const params: any[] = [fiscalId];
+
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    baseQuery += ` AND d.id_de_empresa IN(${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  baseQuery += `
+        ),
+        RankedLines AS(
+    SELECT
+    *,
+    -- ✅ Ahora el COUNT funciona bien porque FilteredLines ya no tiene duplicados de JOIN
+                COUNT(*) OVER(
+      PARTITION BY(CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END)
+    ) as veces_comprado,
+    SUM(cantidad) OVER(
+      PARTITION BY(CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END)
+    ) as total_cantidad_comprada,
+    ROW_NUMBER() OVER(
+      PARTITION BY(CASE 
+                        WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
+                        ELSE descripcion 
+                    END) 
+                    ORDER BY fecha_emision DESC
+    ) as rn
+            FROM FilteredLines
+  )
+SELECT * FROM RankedLines WHERE rn = 1
+        ORDER BY descripcion ASC
+  `;
+
+  const [lineaRows] = await db.query<any[]>(baseQuery, params);
+
+  const products: DocumentLine[] = lineaRows.map(l => ({
+    id: l.line_id,
+    documento_id: l.documento_id,
+    id_de_empresa: l.id_de_empresa || l.empresa_id,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje,
+    precio_neto: l.precio_neto,
+    importe_linea: l.importe_linea,
+    datos_extra: safeJsonParse(l.datos_extra),
+    fecha_emision: l.fecha_emision,
+    cuenta_contable: l.cuenta_contable,
+    total_cantidad_comprada: l.total_cantidad_comprada,
+    veces_comprado: l.veces_comprado,
+  }));
+
+  return JSON.parse(JSON.stringify(products));
+}
+
+export async function getAllProductLinesByClientName(
+  fiscalId: string,
+  empresaIds?: number[]
+): Promise<DocumentLine[]> {
+  console.log('🔍 [getAllProductLinesByClientName] Iniciando:', { fiscalId, empresaIds });
+
+  let baseQuery = `
+SELECT
+ld.*,
+  d.id_de_empresa,
+  d.fecha_emision,
+  d.numero_documento
+      FROM lineas_documento ld
+      JOIN documentos d ON ld.documento_id = d.id
+      JOIN entidades_documento ed ON d.id = ed.documento_id
+      WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+        AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+AND(
+  (ld.codigo IS NOT NULL AND ld.codigo != '')
+OR
+  (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+        )
+`;
+
+  const params: any[] = [fiscalId];
+
+  // ✅ Agregar filtro de empresas si se especifica
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    baseQuery += ` AND d.id_de_empresa IN(${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  baseQuery += ` ORDER BY d.fecha_emision DESC`;
+
+  console.log('📝 [getAllProductLinesByClientName] Query:', baseQuery);
+
+  const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
+
+  console.log('📊 [getAllProductLinesByClientName] Productos encontrados:', lineaRows.length);
+
+  const products: DocumentLine[] = lineaRows.map(l => ({
+    id: l.id,
+    documento_id: l.documento_id,
+    id_de_empresa: l.id_de_empresa,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio_unitario: l.precio_unitario,
+    descuento_porcentaje: l.descuento_porcentaje,
+    precio_neto: l.precio_neto,
+    importe_linea: l.importe_linea,
+    datos_extra: safeJsonParse(l.datos_extra),
+    fecha_creacion: l.fecha_creacion,
+    fecha_emision: l.fecha_emision,
+    numero_documento: l.numero_documento,
+    cuenta_contable: l.cuenta_contable,
+  }));
+
+  return JSON.parse(JSON.stringify(products));
+}
+
+export async function getClientAnalytics(
+  fiscalId: string,
+  empresaIds?: number[]
+): Promise<ProviderAnalyticsData | null> {
+  const provider = await getClientByFiscalId(fiscalId);
+  if (!provider) {
+    return null;
+  }
+
+  // ✅ Construir filtro de empresa
+  let whereEmpresa = '';
+  let params: any[] = [fiscalId];
+
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    whereEmpresa = `AND d.id_de_empresa IN(${placeholders})`;
+    params.push(...empresaIds);
+  }
+
+  // ✅ Filtro de tipo de documento (FACTURAS Y ABONOS)
+  const whereDocType = `AND(
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+    )
+    AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
+
+  // ✅ CAMBIO CRÍTICO: Usar DISTINCT para evitar duplicados
+  const [docs] = await db.query<DocumentPacket[]>(`
+        SELECT DISTINCT d.*
+  FROM documentos d
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+          ${whereDocType}
+          ${whereEmpresa}
+`, params);
+
+  console.log(`📊[getClientAnalytics] Documentos encontrados para ${fiscalId}: `, docs.length);
+  console.log(`🏢[getClientAnalytics] Empresas filtradas: `, empresaIds);
+
+  // ✅ FIX: Aplicar el mismo filtro de empresaIds a la query de líneas
+  let lineQuery = `
+    SELECT ld.importe_linea
+    FROM lineas_documento ld
+    JOIN documentos d ON ld.documento_id = d.id
+    JOIN entidades_documento ed ON d.id = ed.documento_id
+    WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+      AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+AND(
+  (ld.codigo IS NOT NULL AND ld.codigo != '')
+OR
+  (ld.descripcion IS NOT NULL AND ld.descripcion != '')
+      )
+`;
+  let lineParams: any[] = [fiscalId];
+
+  if (empresaIds && empresaIds.length > 0) {
+    const placeholders = empresaIds.map(() => '?').join(',');
+    lineQuery += ` AND d.id_de_empresa IN(${placeholders})`;
+    lineParams.push(...empresaIds);
+  }
+
+  const [lineRows] = await db.query<LineaPacket[]>(lineQuery, lineParams);
+
+  let totalProductsSpent = lineRows.reduce((acc, l) => acc + Number(l.importe_linea || 0), 0);
+
+  const totalSpent = docs.reduce((acc, doc) => acc + Number(doc.importe_total || 0), 0);
+  const totalDocuments = docs.length;
+  const averagePurchaseValue = totalDocuments > 0 ? totalSpent / totalDocuments : 0;
+
+  // ✅ Top Products (filtro de Facturas/Abonos para consistencia financiera)
+  const docIds = docs.map(d => d.id);
+  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN(?)`, [docIds]) : [[]];
+
+  const productSpend: { [key: string]: { codigo: string; descripcion: string; total: number } } = {};
+  lines.forEach(line => {
+    const amt = Number(line.importe_linea || 0);
+    // Identificador único (Código o descripción normalizada)
+    const key = (line.codigo && line.codigo !== '') ? line.codigo : normalizeProductDescription(line.descripcion || '');
+
+    if (key) {
+      if (!productSpend[key]) {
+        productSpend[key] = {
+          codigo: line.codigo || '',
+          descripcion: line.descripcion || '',
+          total: 0
+        };
+      }
+      productSpend[key].total += amt;
+    }
+  });
+
+  const topProductsBySpend = Object.values(productSpend)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const monthlySpendMap: { [key: string]: number } = {};
+  docs.forEach(doc => {
+    if (doc.fecha_emision) {
+      const month = new Date(doc.fecha_emision).toISOString().substring(0, 7);
+      monthlySpendMap[month] = (monthlySpendMap[month] || 0) + Number(doc.importe_total || 0);
+    }
+  });
+
+  let monthlySpend: { month: string, total: number }[] = [];
+  const monthKeys = Object.keys(monthlySpendMap).sort();
+
+  if (monthKeys.length > 0) {
+    const minMonthStr = monthKeys[0];
+    const now = new Date();
+    const currentMonthStr = now.toISOString().substring(0, 7);
+    const maxMonthStr = monthKeys[monthKeys.length - 1] > currentMonthStr
+      ? monthKeys[monthKeys.length - 1]
+      : currentMonthStr;
+
+    let currentDate = new Date(`${minMonthStr}-01T12:00:00Z`);
+    const endDate = new Date(`${maxMonthStr}-01T12:00:00Z`);
+
+    while (currentDate <= endDate) {
+      const mStr = currentDate.toISOString().substring(0, 7);
+      monthlySpend.push({
+        month: mStr,
+        total: monthlySpendMap[mStr] || 0
+      });
+      currentDate.setUTCMonth(currentDate.getUTCMonth() + 1);
+    }
+  }
+
+  console.log(`💰[getClientAnalytics] Total gastado: ${totalSpent.toFixed(2)} EUR`);
+  console.log(`💰[getClientAnalytics] Total productos: ${totalProductsSpent.toFixed(2)} EUR`);
+  console.log(`📈[getClientAnalytics] Meses con compras: ${monthlySpend.length} `);
+
+  const analyticsData = {
+    provider,
+    totalSpent,
+    totalProductsSpent,
+    totalDocuments,
+    uniqueProducts: Object.keys(productSpend).length,
+    averagePurchaseValue,
+    topProductsBySpend,
+    monthlySpend
+  };
+
+  return JSON.parse(JSON.stringify(analyticsData));
+}
+
+export async function getClientProductHistory(
+  fiscalId: string,
+  identifier: string,
+  searchBy: 'code' | 'description' = 'code',
+  descriptionFilter?: string
+): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
+  let query = `
+    WITH UniqueHistory AS(
+  SELECT 
+            ld.id,
+  ld.documento_id,
+  ld.codigo,
+  ld.descripcion,
+  ld.cantidad,
+  ld.unidad,
+  ld.precio_unitario,
+  ld.descuento_porcentaje,
+  ld.precio_neto,
+  ld.importe_linea,
+  ld.cuenta_contable,
+  d.fecha_emision,
+  d.numero_documento,
+  ROW_NUMBER() OVER(
+    PARTITION BY ld.id 
+                ORDER BY d.fecha_emision DESC
+  ) as rn
+        FROM lineas_documento ld
+        JOIN documentos d ON ld.documento_id = d.id
+        JOIN entidades_documento ed ON d.id = ed.documento_id
+        WHERE ed.identificador_fiscal = ?
+  AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
+          AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+          AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'
+`;
+
+  if (searchBy === 'code') {
+    query += '          AND ld.codigo = ?\n';
+  } else {
+    query += '          AND ld.descripcion LIKE ?\n';
+  }
+
+  query += `
+)
+SELECT * FROM UniqueHistory 
+    WHERE rn = 1 
+    ORDER BY fecha_emision DESC;
+`;
+
+  const queryParams: any[] = [fiscalId];
+  if (searchBy === 'code') {
+    queryParams.push(identifier);
+  } else {
+    const searchPattern = identifier.split(/\s+/).filter(Boolean).join('%');
+    queryParams.push(`%${searchPattern}%`);
+  }
+
+  const [lineaRows] = await db.query<any[]>(query, queryParams);
+
+  if (lineaRows.length === 0) {
+    return { productInfo: null, history: [] };
+  }
+
+  const history: DocumentLine[] = lineaRows
+    .filter(l => {
+      const filterToUse = descriptionFilter || (searchBy === 'description' ? identifier : null);
+      if (!filterToUse) return true;
+      return normalizeProductDescription(l.descripcion) === filterToUse;
+    })
+    .map(l => ({
+      id: l.id,
+      documento_id: l.documento_id,
+      codigo: l.codigo,
+      descripcion: l.descripcion,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precio_unitario: l.precio_unitario,
+      descuento_porcentaje: l.descuento_porcentaje || 0,
+      precio_neto: l.precio_neto || l.precio_unitario,
+      importe_linea: l.importe_linea,
+      fecha_emision: l.fecha_emision,
+      numero_documento: l.numero_documento,
+      cuenta_contable: l.cuenta_contable,
+      datos_extra: {},
+      fecha_creacion: null,
+    }));
+
+  const productInfo = history[0] || null;
+
+  return JSON.parse(JSON.stringify({ productInfo, history }));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DOCS PLAYGROUND — funciones de filtro con documentos confirmados
+// No tocan las funciones existentes (getUniqueProvidersNames / getUniqueClients)
+// ─────────────────────────────────────────────────────────────────
+
+export async function getDocsProviderNames(empresaIds?: number[]): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+    let query = `
+      SELECT DISTINCT e.nombre
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE (e.rol = 'proveedor' OR e.rol = 'emisor')
+        AND e.nombre IS NOT NULL AND e.nombre != ''
+        AND (
+          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        )
+        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
+    `;
+    const params: any[] = [user.id];
+    if (empresaIds && empresaIds.length > 0) {
+      query += ` AND d.id_de_empresa IN(${empresaIds.map(() => '?').join(',')})`;
+      params.push(...empresaIds);
+    }
+    query += ` ORDER BY e.nombre ASC`;
+    const [rows] = await (db as any).query(query, params);
+    return (rows as any[]).map((r: any) => r.nombre);
+  } catch (error) {
+    console.error('❌ [getDocsProviderNames] Error:', error);
+    return [];
+  }
+}
+
+export async function getDocsClientNames(empresaIds?: number[]): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+    let query = `
+      SELECT DISTINCT e.nombre
+      FROM entidades_documento e
+      JOIN documentos d ON e.documento_id = d.id
+      JOIN empresas emp ON d.id_de_empresa = emp.id
+      WHERE (e.rol = 'receptor' OR e.rol = 'cliente')
+        AND e.nombre IS NOT NULL AND e.nombre != ''
+        AND (
+          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        )
+        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
+        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
+    `;
+    const params: any[] = [user.id];
+    if (empresaIds && empresaIds.length > 0) {
+      query += ` AND d.id_de_empresa IN(${empresaIds.map(() => '?').join(',')})`;
+      params.push(...empresaIds);
+    }
+    query += ` ORDER BY e.nombre ASC`;
+    const [rows] = await (db as any).query(query, params);
+    return (rows as any[]).map((r: any) => r.nombre);
+  } catch (error) {
+    console.error('❌ [getDocsClientNames] Error:', error);
+    return [];
+  }
+}

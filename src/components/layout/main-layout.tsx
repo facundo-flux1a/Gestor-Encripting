@@ -29,6 +29,7 @@ import {
   Sparkles,
   Calendar,
   Webhook,
+  BookOpen,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -310,7 +311,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
-    { href: '/proveedores', label: 'Proveedores', icon: Users },
+    { href: '/proveedores', label: 'Entidades', icon: Users },
+    // { href: '/docs', label: 'API Docs', icon: BookOpen }, // Hidden from users for now
     // { href: '/dashboard/webhooks', label: 'Webhooks (Beta)', icon: Webhook }
   ];
 

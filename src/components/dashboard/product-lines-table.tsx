@@ -62,6 +62,7 @@ interface ProductLinesTableProps {
     onSelectionChange?: (keys: string[]) => void;
     aiSuggestions?: Record<string, { account: string; justification: string }>;
     currentEmpresaId?: number;
+    isClient?: boolean;
 }
 
 interface ProductLineGroupProps {
@@ -73,6 +74,7 @@ interface ProductLineGroupProps {
     onClassificationUpdate?: () => void;
     onAccountUpdate?: (data: { description: string, normalizedDescription: string, code?: string, account: string }) => Promise<void>;
     currentEmpresaId?: number;
+    isClient?: boolean;
 }
 
 function ProductLineGroup({
@@ -84,6 +86,7 @@ function ProductLineGroup({
     onClassificationUpdate,
     onAccountUpdate,
     currentEmpresaId,
+    isClient = false,
 }: ProductLineGroupProps) {
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
@@ -125,7 +128,7 @@ function ProductLineGroup({
     const identifier = line.codigo
         ? `${encodeURIComponent(line.codigo)}?desc=${encodeURIComponent(normDesc)}`
         : `DESC_${encodeURIComponent(normDesc)}`;
-    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}${identifier.includes('?') ? '&' : '?'}view=list`;
+    const productUrl = `/proveedores/${encodeURIComponent(providerFiscalId)}/${identifier}${identifier.includes('?') ? '&' : '?'}view=list${isClient ? '&type=cliente' : ''}`;
 
     const ViewDetailButton = () => (
         <Link href={productUrl} onClick={(e) => e.stopPropagation()}>
@@ -527,7 +530,8 @@ export function ProductLinesTable({
     selectedGroupKeys = [],
     onSelectionChange,
     aiSuggestions,
-    currentEmpresaId
+    currentEmpresaId,
+    isClient = false
 }: ProductLinesTableProps) {
     const totalCantidad = lines.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
     const totalImporte = lines.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
@@ -624,6 +628,7 @@ export function ProductLinesTable({
                                     onClassificationUpdate={onClassificationUpdate}
                                     onAccountUpdate={onAccountUpdate}
                                     currentEmpresaId={currentEmpresaId}
+                                    isClient={isClient}
                                 />
                             );
                         })}

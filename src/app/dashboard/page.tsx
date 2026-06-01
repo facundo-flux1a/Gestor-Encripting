@@ -78,6 +78,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { TopProviders } from '@/components/dashboard/top-providers';
+import { TopClients } from '@/components/dashboard/top-clients';
 
 
 export default function DashboardPage() {
@@ -862,8 +863,9 @@ export default function DashboardPage() {
                   defaultYear={selectedAño?.toString() || null}
                 />
               </div>
-              <div className="col-span-3">
+              <div className="col-span-3 flex flex-col gap-4">
                 <TopProviders data={analytics.topProviders} />
+                <TopClients data={analytics.topClients} />
               </div>
             </div>
           </TabsContent>
