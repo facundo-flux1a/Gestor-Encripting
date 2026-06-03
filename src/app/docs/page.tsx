@@ -488,6 +488,205 @@ export default function DocsPage() {
           </div>
         </section>
 
+        {/* ====================== WEBHOOKS ====================== */}
+        <section className="space-y-6" id="webhooks">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+            <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Webhooks (Notificaciones Push)
+            </h2>
+          </div>
+
+          <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Los Webhooks envían peticiones HTTP POST automáticamente a tu ERP cuando ocurre un evento relevante, sin que tengas que hacer polling. Se configuran desde <strong>Dashboard → Webhooks</strong>.
+          </p>
+
+          <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800/50 rounded-lg p-5 space-y-3 shadow-sm">
+            <h4 className="font-semibold text-sky-800 dark:text-sky-300 flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5" />
+              Comportamiento del Motor de Webhooks
+            </h4>
+            <ul className="list-disc list-inside text-sm text-sky-700 dark:text-sky-400/90 space-y-2 ml-1">
+              <li className="leading-relaxed">
+                <strong className="text-sky-900 dark:text-sky-200">Eventos concurrentes individuales (No hay lotes):</strong> Para simplificar y estabilizar las integraciones externas, el sistema no agrupa operaciones masivas en un solo payload gigante. Si subís un ZIP con 50 facturas, o eliminás 20 juntas, recibirás 50 peticiones individuales concurrentes. Tu endpoint debe estar preparado para absorber múltiples llamadas en paralelo.
+              </li>
+              <li className="leading-relaxed">
+                <strong className="text-sky-900 dark:text-sky-200">Cascada de resolución:</strong> Cuando resolvés una incidencia manualmente desde el dashboard, se dispara un evento <code className="font-mono text-xs bg-sky-100 dark:bg-sky-900/50 px-1 rounded">incidencia.resuelta_manualmente</code>. Si tras esa resolución el documento queda limpio de errores y pasa a estado válido, el motor disparará inmediatamente después un segundo evento <code className="font-mono text-xs bg-sky-100 dark:bg-sky-900/50 px-1 rounded">documento.listo_para_erp</code> (siempre y cuando estés suscrito a él).
+              </li>
+            </ul>
+          </div>
+
+          <div className="space-y-8 mt-6">
+            <h3 className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-800 pb-2">Ejemplos de Payload por Evento</h3>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.listo_para_erp</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Se dispara cuando el documento es validado (o al liberarse desde <code className="font-mono text-xs">incidencia.resuelta_manualmente</code>). Contiene toda la metadata contable para asentar el documento de inmediato en tu ERP.</p>
+              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+{`{
+  "webhook_id": 42,
+  "evento": "documento.listo_para_erp",
+  "fecha_evento": "2026-06-03T15:30:00Z",
+  "empresa_id": 15,
+  "data": {
+    "id": 4158,
+    "tipo_documento": "Factura",
+    "numero_documento": "INV-2026-001",
+    "fecha_emision": "2026-05-15",
+    "importe_total": 1250.50,
+    "moneda": "EUR",
+    "entidades": [
+      { "rol": "emisor", "nombre": "Empresa Ficticia S.A.", "identificador_fiscal": "A12345678" }
+    ],
+    "iva_details": [
+      { "tipo_impuesto": "IVA 21%", "base_imponible": 1000, "cuota": 210 }
+    ]
+  }
+}`}
+              </pre>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.modificado</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Incluye un array estricto (<code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">campos_actualizados</code>) detallando qué propiedades mutaron <strong>realmente</strong> tras una edición en el dashboard. Útil para hacer updates quirúrgicos en tu base de datos.</p>
+              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+{`{
+  "webhook_id": 42,
+  "evento": "documento.modificado",
+  "fecha_evento": "2026-06-03T15:35:12Z",
+  "empresa_id": 15,
+  "data": {
+    "documento_id": 4158,
+    "campos_actualizados": ["importe_total", "iva_details"],
+    "tipo_documento": "Factura",
+    "numero_documento": "2/108",
+    "importe_total": 1500.00,
+    "fecha_emision": "2026-05-15"
+  }
+}`}
+              </pre>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.requiere_atencion</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Evento de alerta. Avisa que un documento quedó retenido en el dashboard debido a descuadres matemáticos o validaciones fallidas.</p>
+              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+{`{
+  "webhook_id": 42,
+  "evento": "documento.requiere_atencion",
+  "fecha_evento": "2026-06-03T15:40:00Z",
+  "empresa_id": 15,
+  "data": {
+    "id": 4159,
+    "tipo_documento": "Ticket",
+    "file_hash": "a1b2c3d4..."
+  }
+}`}
+              </pre>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">incidencia.resuelta_manualmente</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Indica que un usuario forzó la resolución de una incidencia. Inmediatamente después suele dispararse un evento <code className="font-mono text-xs">listo_para_erp</code>.</p>
+              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+{`{
+  "webhook_id": 42,
+  "evento": "incidencia.resuelta_manualmente",
+  "fecha_evento": "2026-06-03T15:45:00Z",
+  "empresa_id": 15,
+  "data": {
+    "documento_id": 4159,
+    "validado_por": "dashboard",
+    "quedan_incidencias_pendientes": false,
+    "documento_metadata": {
+       "numero_documento": "TKT-002",
+       "importe_total": 45.00
+    }
+  }
+}`}
+              </pre>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.eliminado</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Indica que un documento fue borrado del sistema. Útil para anular el registro de forma síncrona en tu ERP.</p>
+              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+{`{
+  "webhook_id": 42,
+  "evento": "documento.eliminado",
+  "fecha_evento": "2026-06-03T15:50:00Z",
+  "empresa_id": 15,
+  "data": {
+    "id": 4158
+  }
+}`}
+              </pre>
+            </div>
+
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Eventos disponibles</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-800/80">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Evento</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Cuándo se dispara</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {([
+                    ['documento.listo_para_erp', 'Documento procesado o liberado de incidencias, listo para contabilizar. Incluye metadata contable completa (Entidades, IVA).'],
+                    ['documento.requiere_atencion', 'Documento procesado con incidencias o descuadres contables.'],
+                    ['documento.modificado', 'Se actualizaron datos. El payload incluye el array exacto de campos_actualizados que sufrieron cambios reales.'],
+                    ['incidencia.resuelta_manualmente', 'Incidencia resuelta desde el dashboard. Acompañada casi siempre de un evento listo_para_erp subsiguiente.'],
+                    ['documento.eliminado', 'Un documento fue eliminado del sistema.'],
+                  ] as [string, string][]).map(([evento, desc]) => (
+                    <tr key={evento} className="bg-white dark:bg-slate-900/50">
+                      <td className="px-4 py-3 font-mono text-xs text-pink-600 dark:text-pink-400">{evento}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Verificación de Firma HMAC SHA-256</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Cada petición incluye el header <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono text-pink-600 dark:text-pink-400">X-Muvail-Signature</code> generado con HMAC SHA-256 usando el secreto único del webhook. <strong className="text-slate-700 dark:text-slate-200">Siempre verificá la firma</strong> antes de procesar.
+            </p>
+            <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed">
+{`import crypto from 'crypto';
+
+function verifyMuvailWebhook(rawBody: string, signature: string, secret: string): boolean {
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(rawBody);
+  const expected = hmac.digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+// En tu endpoint (Next.js / Express):
+export async function POST(req: Request) {
+  const sig = req.headers.get('x-muvail-signature') ?? '';
+  const body = await req.text(); // RAW body, antes de parsear
+  
+  if (!verifyMuvailWebhook(body, sig, process.env.WEBHOOK_SECRET!)) {
+    return Response.json({ error: 'Firma inválida' }, { status: 401 });
+  }
+  
+  const event = JSON.parse(body);
+  // Procesá el evento según event.evento
+  return Response.json({ ok: true });
+}`}
+            </pre>
+          </div>
+        </section>
+
       </div>
     </MainLayout>
   );

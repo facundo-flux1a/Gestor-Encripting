@@ -91,6 +91,7 @@ export function InteractiveEndpoint({
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
   const [responseStatus, setResponseStatus] = useState<number | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ limit: number; remaining: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [showResponse, setShowResponse] = useState(false);
   const [downloadedFile, setDownloadedFile] = useState(false);
@@ -111,7 +112,7 @@ export function InteractiveEndpoint({
   }, [method, path, activeParams]);
 
   const curlCommand = useMemo(() => {
-    const baseUrl = `https://gestor.allbase.com${path}`;
+    const baseUrl = `https://gestor.muvail.com${path}`;
     // If using proxy mode (selectedKeyId), show a redacted placeholder — the key is never in the browser
     const key = selectedKeyId ? '<CLAVE_GESTIONADA_POR_EL_SERVIDOR>' : (apiKey || 'TU_API_KEY_AQUI');
 
@@ -178,6 +179,26 @@ export function InteractiveEndpoint({
     setResponseStatus(null);
 
     try {
+      const handleRateLimitHeaders = (res: Response) => {
+        const limitHeader = res.headers.get('x-ratelimit-limit') || res.headers.get('X-RateLimit-Limit');
+        const remainingHeader = res.headers.get('x-ratelimit-remaining') || res.headers.get('X-RateLimit-Remaining');
+        
+        console.log('🛡️ [API-Docs] Rate Limit Headers:', { limitHeader, remainingHeader });
+
+        if (limitHeader && remainingHeader) {
+          setRateLimitInfo({
+            limit: parseInt(limitHeader, 10),
+            remaining: parseInt(remainingHeader, 10)
+          });
+        } else {
+          if (res.status === 429) {
+            setRateLimitInfo({ limit: 20, remaining: 0 });
+          } else {
+            setRateLimitInfo(null);
+          }
+        }
+      };
+
       // ── Proxy mode: key ID resolved server-side, raw key never in browser ──
       if (usingProxy && !isMockOnly) {
         const queryParams = Object.fromEntries(activeParams.map(p => [p.key, p.value]));
@@ -187,6 +208,7 @@ export function InteractiveEndpoint({
           body: JSON.stringify({ keyId: selectedKeyId, path, queryParams }),
         });
         setResponseStatus(res.status);
+        handleRateLimitHeaders(res);
         const text = await res.text();
         try { setResponse(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResponse(text); }
         setShowResponse(true);
@@ -207,6 +229,7 @@ export function InteractiveEndpoint({
 
       const res = await fetch(fetchUrl, fetchOptions);
       setResponseStatus(res.status);
+      handleRateLimitHeaders(res);
 
       if (isBinaryResponse && res.ok) {
         const blob = await res.blob();
@@ -449,11 +472,25 @@ export function InteractiveEndpoint({
               >
                 Respuesta
                 {responseStatus && (
-                  <span className={cn('font-mono font-bold', statusColor)}>
+                  <span className={cn('font-mono font-bold ml-2', statusColor)}>
                     — HTTP {responseStatus}
                   </span>
                 )}
-                {showResponse ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {rateLimitInfo && (
+                  <span className={cn(
+                    "ml-3 px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                    rateLimitInfo.remaining <= 5 
+                      ? "bg-red-500/10 text-red-500 border-red-500/30" 
+                      : rateLimitInfo.remaining <= 10
+                        ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                        : "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                  )}>
+                    Límite: {rateLimitInfo.remaining}/{rateLimitInfo.limit}
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {showResponse ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </div>
               </button>
             </div>
 

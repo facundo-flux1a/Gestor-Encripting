@@ -312,8 +312,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Entidades', icon: Users },
-    // { href: '/docs', label: 'API Docs', icon: BookOpen }, // Hidden from users for now
-    // { href: '/dashboard/webhooks', label: 'Webhooks (Beta)', icon: Webhook }
+    { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
+    { href: '/docs', label: 'Docs', icon: BookOpen },
   ];
 
   return (

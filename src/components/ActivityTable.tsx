@@ -186,9 +186,14 @@ export default function ActivityTable({
       const currentRetryCount = activity.retry_count || 0;
       const lastScheduledCount = scheduledRetries.get(activity.id);
       
+      const stepLower = activity.step?.toLowerCase() || '';
+      const msgLower = activity.mensaje?.toLowerCase() || '';
+      const isDuplicate = stepLower.includes('duplicado') || msgLower.includes('duplicado');
+
       return (
         isFailed && 
         currentRetryCount < 3 && 
+        !isDuplicate &&
         (lastScheduledCount === undefined || currentRetryCount > lastScheduledCount) &&
         new Date(activity.updated_at).getTime() > now - 30000
       );

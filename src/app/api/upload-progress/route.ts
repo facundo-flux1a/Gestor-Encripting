@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import connection, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
-import { fireWebhook } from '@/services/webhook-service';
+import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
 
 // ==========================================
 // POST: Recibir callback de n8n / microservicio
@@ -113,10 +114,10 @@ export async function POST(request: NextRequest) {
     // Usamos una función centralizada para manejar Lotes vs Documentos únicos
     // ─────────────────────────────────────────────────────────────────────────────
     if (isCompleted) {
-      // 🔥 BACKGROUND: no bloqueamos la respuesta HTTP — n8n recibe 200 de inmediato
-      ;(async () => {
+      // 🔥 BACKGROUND: no bloqueamos la respuesta HTTP — usamos after() de Next.js
+      after(async () => {
         await dispatchCompletionWebhook(effectiveUploadId);
-      })();
+      });
     }
 
     return NextResponse.json({
@@ -252,7 +253,14 @@ async function dispatchCompletionWebhook(uploadId: string) {
 
       for (const docId of docIds) {
         const [dRows] = await connection.query<RowDataPacket[]>(
-          `SELECT id, file_hash, tipo_documento, numero_documento, importe_total FROM ${dbName}.documentos WHERE id = ? LIMIT 1`,
+          `SELECT 
+             d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,
+             d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,
+             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre,
+             e.nombre_de_empresa as empresa_nombre, e.cif as empresa_cif
+           FROM ${dbName}.documentos d
+           LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+           WHERE d.id = ? LIMIT 1`,
           [docId]
         );
         const [aRows] = await connection.query<RowDataPacket[]>(
@@ -284,15 +292,14 @@ async function dispatchCompletionWebhook(uploadId: string) {
         }
       }
 
-      const payload = {
-        upload_id_original: uploadId,
-        total_documentos: docsData.length,
-        con_incidencias: totalIncidencias,
-        listos: docsData.length - totalIncidencias,
-        documentos: docsData
-      };
-
-      await fireWebhook(empresaId, 'documento.lote_procesado', payload);
+      // El webhook individual que queremos disparar si no está agrupado
+      // Sería "documento.listo_para_erp" si todo bien, o "requiere_atencion". 
+      // Dado que el lote puede tener mezcla, dejaremos "documento.procesado" como evento singular base (aunque idealmente el usuario agrupará).
+      // Para respetar el código viejo, si eligen agrupar (default nuevo), le mandamos todo a 'documento.lote_procesado'.
+      
+      // Construimos el array para enviarlo a fireBatchWebhook.
+      // Acá usaremos el singular "documento.listo_para_erp" y el plural "documento.lote_procesado"
+      await fireBatchWebhook(empresaId, 'documento.listo_para_erp', 'documento.lote_procesado', docsData);
 
     } else {
       // 🚀 CASO: DOCUMENTO ÚNICO
@@ -315,7 +322,14 @@ async function dispatchCompletionWebhook(uploadId: string) {
       }
 
       const [dRows] = await connection.query<RowDataPacket[]>(
-        `SELECT id, file_hash, tipo_documento, numero_documento, importe_total FROM ${dbName}.documentos WHERE id = ? LIMIT 1`,
+        `SELECT 
+           d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,
+           d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,
+           d.trimestre_cerrado, d.año_trimestre, d.num_trimestre,
+           e.nombre_de_empresa as empresa_nombre, e.cif as empresa_cif
+         FROM ${dbName}.documentos d
+         LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+         WHERE d.id = ? LIMIT 1`,
         [docId]
       );
       const [aRows] = await connection.query<RowDataPacket[]>(
@@ -343,9 +357,9 @@ async function dispatchCompletionWebhook(uploadId: string) {
         
         console.log(`🔔 [Webhook-Dispatch] Disparando webhook para doc ${docId} (Incidencias: ${hasIncidents})`);
         if (hasIncidents) {
-          await fireWebhook(empresaId, 'documento.requiere_atencion', docData);
+          await fireBatchWebhook(empresaId, 'documento.requiere_atencion', 'documento.lote_requiere_atencion', [docData]);
         } else {
-          await fireWebhook(empresaId, 'documento.listo_para_erp', docData);
+          await fireBatchWebhook(empresaId, 'documento.listo_para_erp', 'documento.lote_procesado', [docData]);
         }
       }
     }
@@ -412,11 +426,10 @@ export async function GET(request: NextRequest) {
         hasIncidents = incidentRows[0]?.count > 0;
       }
       
-      // Disparamos el webhook usando la misma función central. 
-      // El dedup interno en dispatchCompletionWebhook evita que se envíe duplicado.
-      ;(async () => {
+      // Disparamos el webhook usando la misma función central en background
+      after(async () => {
         await dispatchCompletionWebhook(uploadId);
-      })();
+      });
     }
 
     const response = {

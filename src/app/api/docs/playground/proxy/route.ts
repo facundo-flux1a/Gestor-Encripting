@@ -51,20 +51,22 @@ export async function POST(request: NextRequest) {
 
     // ── RATE LIMITING (PLAYGROUND) ──
     // Límites de seguridad para evitar abusos (auto-clickers, bucles)
-    // Para depuración: 1 petición cada 30 segundos
-    // En producción: Cambiar a 20 peticiones cada 60 segundos
-    const RATE_LIMIT = 1;
-    const RATE_WINDOW_SEC = 30;
+    // Producción: 20 peticiones cada 60 segundos
+    const RATE_LIMIT = 20;
+    const RATE_WINDOW_SEC = 60;
     
     const rateLimit = await checkRateLimit(user.id, RATE_LIMIT, RATE_WINDOW_SEC);
     if (!rateLimit.success) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { 
           error: 'Rate limit exceeded',
           mensaje: 'Has excedido el límite de peticiones del Playground. Por favor, espera un momento.'
         }, 
         { status: 429 }
       );
+      res.headers.set('X-RateLimit-Limit', RATE_LIMIT.toString());
+      res.headers.set('X-RateLimit-Remaining', '0');
+      return res;
     }
     // ────────────────────────────────
 
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Route to the correct handler
     const normalizedPath = path.replace(/^\/api\/v1/, '').replace(/\/$/, '');
+    let finalResponse: NextResponse | null = null;
 
     // ── GET /documents/full ────────────────────────────────────────────────
     if (normalizedPath === '/documents/full' || normalizedPath === '/documents') {
@@ -128,7 +131,9 @@ export async function POST(request: NextRequest) {
       query += ` ORDER BY d.fecha_emision DESC`;
 
       const [documentos] = await db.query<RowDataPacket[]>(query, params);
-      if (documentos.length === 0) return NextResponse.json({ total: 0, data: [] });
+      if (documentos.length === 0) {
+        finalResponse = NextResponse.json({ total: 0, data: [] });
+      } else {
 
       const docIds = documentos.map((d: any) => d.id);
       const [[entidadesRows], [lineasRows], [impuestosRows]] = await Promise.all([
@@ -172,7 +177,8 @@ export async function POST(request: NextRequest) {
         enriched = enriched.filter(d => tipo === 'emitidas' ? d.is_issued : !d.is_issued);
       }
 
-      return NextResponse.json({ total: enriched.length, data: enriched });
+      finalResponse = NextResponse.json({ total: enriched.length, data: enriched });
+      } // end else
     }
 
     // ── GET /products ──────────────────────────────────────────────────────
@@ -194,7 +200,7 @@ export async function POST(request: NextRequest) {
       query += ` ORDER BY d.fecha_emision DESC LIMIT 1000`;
 
       const [rows] = await db.query<RowDataPacket[]>(query, params);
-      return NextResponse.json({
+      finalResponse = NextResponse.json({
         total_resultados: rows.length,
         data: rows.map((r: any) => ({
           id: r.linea_id,
@@ -221,7 +227,7 @@ export async function POST(request: NextRequest) {
       const healthScore = healthCheckData.summary.total > 0
         ? Math.round(((healthCheckData.summary.total - totalIssues) / healthCheckData.summary.total) * 100)
         : 100;
-      return NextResponse.json({
+      finalResponse = NextResponse.json({
         filtros: { año: año || 'Todos', trimestre: trimestre || 'Todos' },
         metricas_financieras: {
           total_ingresos: dashboardData.kpis.totalIngresos,
@@ -263,7 +269,7 @@ export async function POST(request: NextRequest) {
          ORDER BY i.validado ASC, d.fecha_emision DESC`,
         [empresaId]
       );
-      return NextResponse.json({
+      finalResponse = NextResponse.json({
         total: rows.length,
         filtros: { estado },
         data: rows.map((r: any) => ({
@@ -287,7 +293,7 @@ export async function POST(request: NextRequest) {
 
     // ── POST /incidents (MOCK — playground never mutates) ──────────────────
     if (normalizedPath === '/incidents/resolve') {
-      return NextResponse.json({
+      finalResponse = NextResponse.json({
         playground_mock: true,
         mensaje: 'Esta es una simulación. En producción, esta llamada marcaría la incidencia como validada.',
         incidencia_id: body.incidencia_id || null,
@@ -297,7 +303,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: `Ruta "${path}" no soportada en el playground.` }, { status: 404 });
+    if (!finalResponse) {
+      finalResponse = NextResponse.json({ error: `Ruta "${path}" no soportada en el playground.` }, { status: 404 });
+    }
+
+    finalResponse.headers.set('X-RateLimit-Limit', RATE_LIMIT.toString());
+    finalResponse.headers.set('X-RateLimit-Remaining', Math.max(0, rateLimit.remaining).toString());
+    
+    return finalResponse;
 
   } catch (error: any) {
     console.error('❌ [docs/playground/proxy] Error:', error);

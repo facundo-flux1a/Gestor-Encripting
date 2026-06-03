@@ -669,6 +669,13 @@ export async function uploadDocument(
       };
     }
 
+    // Nota: no tratamos webhookResult.error como fallo fatal porque n8n puede devolver
+    // warnings internos de nodos (ej: S3 item pairing) aunque el documento se haya
+    // procesado exitosamente. El estado real lo manda n8n via callback a /api/upload-progress.
+    if (webhookResult.error) {
+      console.warn(`⚠️ [${normalizedFileName}] n8n reportó un warning interno: ${webhookResult.error} — continuando, el callback confirmará el estado real.`);
+    }
+
     console.log(`✅ [${normalizedFileName}] PROCESO COMPLETADO EXITOSAMENTE`);
 
     return {

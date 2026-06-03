@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { createWebhookAction, deleteWebhookAction } from './actions';
+import { createWebhookAction, deleteWebhookAction, toggleWebhookStatusAction, toggleWebhookEventAction, toggleWebhookConfigAction, inlineUpdateWebhookAction } from './actions';
 
 const TODOS_LOS_EVENTOS = [
   { id: 'documento.listo_para_erp', label: 'Documento Listo para ERP', desc: 'Se dispara cuando un documento se procesa limpio, sin incidencias ni descuadres.' },
@@ -12,19 +12,33 @@ const TODOS_LOS_EVENTOS = [
 ];
 
 export default function WebhooksClient({ empresas, initialWebhooks }: { empresas: any[], initialWebhooks: any[] }) {
+  const [webhooks, setWebhooks] = useState(initialWebhooks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [editingUrlId, setEditingUrlId] = useState<number | null>(null);
+  const [editingUrlValue, setEditingUrlValue] = useState('');
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setSuccessMsg(`${label} copiado al portapapeles`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      setErrorMsg('Error al copiar al portapapeles');
+    }
+  };
 
   const confirmDelete = async () => {
     if (deleteConfirmId === null) return;
     setIsSubmitting(true);
     try {
-      const wh = initialWebhooks.find(w => w.id === deleteConfirmId);
+      const wh = webhooks.find(w => w.id === deleteConfirmId);
       if (!wh) return;
       await deleteWebhookAction(wh.id_de_empresa, deleteConfirmId);
+      setWebhooks(prev => prev.filter(w => w.id !== deleteConfirmId));
       setSuccessMsg('Webhook eliminado correctamente.');
       setTimeout(() => setSuccessMsg(null), 3000);
       setDeleteConfirmId(null);
@@ -51,8 +65,8 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
       const empresaId = formEmpresaId === 'ALL' ? 'ALL' : parseInt(formEmpresaId, 10);
       await createWebhookAction(empresaId, formData);
       setIsModalOpen(false);
-      setSuccessMsg('Webhook creado exitosamente.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      setSuccessMsg('Webhook creado exitosamente. Recargando página...');
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Ocurrió un error inesperado.');
     } finally {
@@ -66,19 +80,121 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
     setErrorMsg(null);
   };
 
+  const handleToggleStatus = async (whId: number, empresaId: number, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    // Optimistic UI update
+    setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, activo: newStatus } : w));
+    try {
+      await toggleWebhookStatusAction(empresaId, whId, newStatus);
+    } catch (err: any) {
+      // Revert on error
+      setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, activo: currentStatus } : w));
+      setErrorMsg('Error al actualizar el estado del webhook');
+    }
+  };
+
+  const handleToggleEvent = async (whId: number, empresaId: number, eventId: string, isCurrentlySubscribed: boolean) => {
+    // Find webhook
+    const wh = webhooks.find(w => w.id === whId);
+    if (!wh) return;
+
+    let newEvents = [...wh.eventos_suscritos];
+    if (isCurrentlySubscribed) {
+      newEvents = newEvents.filter(e => e !== eventId);
+    } else {
+      newEvents.push(eventId);
+    }
+
+    // Optimistic update
+    setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, eventos_suscritos: newEvents } : w));
+    
+    try {
+      await toggleWebhookEventAction(empresaId, whId, newEvents);
+    } catch (err: any) {
+      // Revert on error
+      setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, eventos_suscritos: wh.eventos_suscritos } : w));
+      setErrorMsg('Error al actualizar los eventos del webhook');
+    }
+  };
+
+  const handleToggleConfig = async (whId: number, empresaId: number, currentConfig: any) => {
+    const isAgrupado = currentConfig?.agrupar_eventos ?? false;
+    const newAgrupado = !isAgrupado;
+    const newConfig = { ...(currentConfig || {}), agrupar_eventos: newAgrupado };
+
+    // Optimistic UI update
+    setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, config: newConfig } : w));
+    try {
+      await toggleWebhookConfigAction(empresaId, whId, newAgrupado);
+    } catch (err: any) {
+      // Revert on error
+      setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, config: currentConfig } : w));
+      setErrorMsg('Error al actualizar la configuración del webhook');
+    }
+  };
+
+  const handleEmpresaChange = async (whId: number, currentEmpresaId: number, newEmpresaId: number) => {
+    setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, id_de_empresa: newEmpresaId } : w));
+    try {
+      await inlineUpdateWebhookAction(currentEmpresaId, whId, { id_de_empresa: newEmpresaId });
+      setSuccessMsg('Empresa del webhook actualizada');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, id_de_empresa: currentEmpresaId } : w));
+      setErrorMsg('Error al actualizar la empresa');
+    }
+  };
+
+  const handleSaveUrl = async (whId: number, currentEmpresaId: number, originalUrl: string) => {
+    if (!editingUrlValue || editingUrlValue === originalUrl) {
+      setEditingUrlId(null);
+      return;
+    }
+    const newUrl = editingUrlValue;
+    setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, url_destino: newUrl } : w));
+    setEditingUrlId(null);
+    try {
+      await inlineUpdateWebhookAction(currentEmpresaId, whId, { url_destino: newUrl });
+      setSuccessMsg('URL actualizada correctamente');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setWebhooks(prev => prev.map(w => w.id === whId ? { ...w, url_destino: originalUrl } : w));
+      setErrorMsg('Error al actualizar la URL');
+    }
+  };
+
   return (
     <>
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Webhooks</h1>
-          <p className="text-gray-500 text-sm mt-1">Configuración oculta — solo admin/testing</p>
+        <div className="flex items-center gap-4">
+          <a
+            href="/dashboard"
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Volver
+          </a>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Webhooks</h1>
+            <p className="text-gray-500 text-sm mt-1">Configuración e integración externa</p>
+          </div>
         </div>
-        <button 
-          onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          + Nuevo Webhook
-        </button>
+        <div className="flex items-center gap-3">
+          <a
+            href="/docs#webhooks"
+            className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+            Ver Documentación
+          </a>
+          <button 
+            onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Nuevo Webhook
+          </button>
+        </div>
       </div>
 
       {/* Notificación de éxito */}
@@ -95,14 +211,22 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {initialWebhooks.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-gray-400 text-sm mb-1">Todavía no hay webhooks configurados.</p>
-            <p className="text-gray-500 text-xs">Creá uno para empezar a recibir notificaciones en tu ERP.</p>
-          </div>
-        ) : (
-          <table className="w-full text-left text-sm">
+      {/* Lista de Webhooks */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full">
+        <div className="overflow-x-auto">
+          {webhooks.length === 0 ? (
+            <div className="p-12 text-center">
+              <p className="text-gray-400 text-sm mb-1">Todavía no hay webhooks configurados.</p>
+              <p className="text-gray-500 text-xs mb-4">Creá uno para empezar a recibir notificaciones en tu ERP.</p>
+              <button 
+                onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
+                className="inline-flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                + Crear el primer Webhook
+              </button>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
             <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
               <tr>
                 {empresas.length > 1 && <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Empresa</th>}
@@ -114,36 +238,115 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {initialWebhooks.map((wh) => (
-                <tr key={wh.id} className="hover:bg-gray-50 dark:hover:bg-gray-750">
+              {webhooks.map((wh) => (
+                <tr key={wh.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
                   {empresas.length > 1 && (
-                    <td className="px-6 py-4 text-xs font-medium text-gray-600 dark:text-gray-300">
-                      {empresas.find(e => e.id === wh.id_de_empresa)?.nombre_de_empresa || `ID: ${wh.id_de_empresa}`}
+                    <td className="px-6 py-4 align-middle">
+                      <select 
+                        value={wh.id_de_empresa}
+                        onChange={(e) => handleEmpresaChange(wh.id, wh.id_de_empresa, parseInt(e.target.value, 10))}
+                        className="text-sm font-medium text-gray-900 dark:text-gray-200 bg-transparent border-0 border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:ring-0 focus:outline-none cursor-pointer py-1 px-0 focus:border-blue-500 max-w-[150px]"
+                        title="Cambiar empresa"
+                      >
+                        {empresas.map(e => (
+                          <option 
+                            key={e.id} 
+                            value={e.id}
+                            className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200"
+                          >
+                            {e.nombre_de_empresa || `Empresa ${e.id}`}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                   )}
-                  <td className="px-6 py-4">
-                    <span className="truncate block max-w-[260px] text-blue-600 dark:text-blue-400 font-mono text-xs" title={wh.url_destino}>
-                      {wh.url_destino}
-                    </span>
+                  <td className="px-6 py-4 align-middle">
+                    {editingUrlId === wh.id ? (
+                      <div className="flex items-center gap-2 max-w-[300px]">
+                        <input 
+                          type="url" 
+                          value={editingUrlValue} 
+                          onChange={e => setEditingUrlValue(e.target.value)} 
+                          className="flex-1 px-2.5 py-1 text-xs font-mono bg-white dark:bg-gray-900 border border-blue-500 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-gray-200 min-w-[200px]"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveUrl(wh.id, wh.id_de_empresa, wh.url_destino);
+                            if (e.key === 'Escape') setEditingUrlId(null);
+                          }}
+                        />
+                        <button onClick={() => handleSaveUrl(wh.id, wh.id_de_empresa, wh.url_destino)} className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors" title="Guardar">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </button>
+                        <button onClick={() => setEditingUrlId(null)} className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors" title="Cancelar">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 max-w-[300px]">
+                        <button 
+                          onClick={() => copyToClipboard(wh.url_destino, 'URL')}
+                          className="text-left group/url flex items-center gap-2 flex-1 bg-gray-100 dark:bg-gray-800/80 px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-copy truncate"
+                          title="Copiar URL"
+                        >
+                          <span className="truncate block text-gray-600 dark:text-gray-300 font-mono text-xs">
+                            {wh.url_destino}
+                          </span>
+                          <svg className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover/url:opacity-100 transition-opacity flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                        </button>
+                        <button 
+                          onClick={() => { setEditingUrlId(wh.id); setEditingUrlValue(wh.url_destino); }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors flex-shrink-0"
+                          title="Editar URL"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {wh.eventos_suscritos.map((ev: string, i: number) => (
-                        <span key={i} className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs px-2 py-0.5 rounded-full">
-                          {ev.split('.')[1]}
-                        </span>
-                      ))}
+                  <td className="px-6 py-4 align-middle">
+                    <div className="flex flex-wrap gap-1.5 max-w-[320px]">
+                      {TODOS_LOS_EVENTOS.map((evt) => {
+                        const isSubscribed = wh.eventos_suscritos.includes(evt.id);
+                        return (
+                          <button
+                            key={evt.id}
+                            onClick={() => handleToggleEvent(wh.id, wh.id_de_empresa, evt.id, isSubscribed)}
+                            className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
+                              isSubscribed
+                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 hover:bg-blue-100 dark:hover:bg-blue-500/20'
+                                : 'bg-gray-50 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                            title={isSubscribed ? 'Click para desuscribir' : 'Click para suscribir'}
+                          >
+                            {evt.id.split('.')[1]}
+                          </button>
+                        );
+                      })}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${wh.activo ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-red-100 text-red-700'}`}>
-                      {wh.activo ? '● Activo' : '● Inactivo'}
-                    </span>
+                  <td className="px-6 py-4 align-middle">
+                    <button 
+                      onClick={() => handleToggleStatus(wh.id, wh.id_de_empresa, wh.activo)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                      wh.activo 
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20' 
+                        : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${wh.activo ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                      {wh.activo ? 'Activo' : 'Inactivo'}
+                    </button>
                   </td>
-                  <td className="px-6 py-4 text-xs font-mono text-gray-400">
-                    {wh.secreto_firma.substring(0, 12)}...
+                  <td className="px-6 py-4 align-middle text-xs font-mono text-gray-400 dark:text-gray-500">
+                    <button 
+                      onClick={() => copyToClipboard(wh.secreto_firma, 'Secreto HMAC')}
+                      className="group/sec flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-300 transition-colors cursor-copy"
+                      title="Copiar secreto completo"
+                    >
+                      <span>{wh.secreto_firma.substring(0, 12)}...</span>
+                      <svg className="w-3.5 h-3.5 opacity-0 group-hover/sec:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </button>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 align-middle text-right">
                     <button 
                       onClick={() => setDeleteConfirmId(wh.id)}
                       className="text-red-500 hover:text-red-700 text-xs hover:underline transition-colors"
@@ -156,6 +359,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
             </tbody>
           </table>
         )}
+        </div>
       </div>
 
       {/* Modal Confirmación de Eliminación */}

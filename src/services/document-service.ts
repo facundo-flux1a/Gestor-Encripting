@@ -13,7 +13,7 @@ import { normalizeProductDescription } from "@/lib/utils";
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
-import { fireWebhook } from '@/services/webhook-service';
+import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
 
 
 
@@ -647,6 +647,13 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload): P
     await connection.beginTransaction();
     console.log('✅ [updateDocument] Transacción iniciada');
 
+    let oldSnapshot = null;
+    try {
+      oldSnapshot = await getSnapshotBeforeUpdate(id, connection);
+    } catch (e) {
+      console.warn('⚠️ [updateDocument] Falló captura de snapshot previo:', e);
+    }
+
     // ═══════════════════════════════════════════════════════════
     // PASO 1: Verificar documento y trimestre cerrado
     // ═══════════════════════════════════════════════════════════
@@ -1128,9 +1135,36 @@ codigo = ?,
     });
 
     // 🔔 WEBHOOKS TRIGGER: Documento Modificado
-    fireWebhook(empresaId, 'documento.modificado', { documento_id: id }).catch(err => {
-      console.error('❌ [Background] Error disparando webhook de modificación:', err);
-    });
+    const [updatedDocRows] = await db.query<RowDataPacket[]>(
+      'SELECT tipo_documento, numero_documento, importe_total, fecha_emision FROM documentos WHERE id = ?',
+      [id]
+    );
+
+    if (updatedDocRows.length > 0) {
+      let camposReales: string[] = [];
+      try {
+        camposReales = compareDocumentStates(oldSnapshot, data);
+        if (camposReales.length === 0) {
+          console.log('✅ [updateDocument] Sin cambios reales detectados, webhook saltado.');
+          return { success: true };
+        }
+      } catch (err) {
+        console.warn('⚠️ [updateDocument] Falló cálculo exacto de campos, usando fallback:', err);
+        camposReales = Object.keys(data);
+      }
+
+      fireWebhook(empresaId, 'documento.modificado', { 
+        documento_id: id,
+        campos_actualizados: camposReales,
+        tipo_documento: updatedDocRows[0].tipo_documento,
+        numero_documento: updatedDocRows[0].numero_documento,
+        importe_total: updatedDocRows[0].importe_total,
+        fecha_emision: updatedDocRows[0].fecha_emision
+      }).catch(err => {
+        console.error('❌ [Background] Error disparando webhook de modificación:', err);
+      });
+    }
+
 
     return { success: true };
   } catch (error: any) {
@@ -1491,7 +1525,7 @@ export async function deleteDocument(
 
     // Verificar que el documento pertenece a una empresa del usuario y si está cerrado
     const [docCheck] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre, d.id_de_empresa, d.numero_documento 
+      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre, d.id_de_empresa, d.numero_documento, d.tipo_documento, d.importe_total, d.fecha_emision 
              FROM documentos d
              INNER JOIN empresas e ON d.id_de_empresa = e.id
              WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
@@ -1528,7 +1562,11 @@ export async function deleteDocument(
     // 🔔 WEBHOOKS TRIGGER: Documento Eliminado
     fireWebhook(docData.id_de_empresa, 'documento.eliminado', { 
       documento_id: documentId,
-      numero_documento: docData.numero_documento || null
+      numero_documento: docData.numero_documento || null,
+      tipo_documento: docData.tipo_documento || null,
+      importe_total: docData.importe_total || null,
+      fecha_emision: docData.fecha_emision || null
+
     }).catch(err => {
       console.error('❌ [Background] Error disparando webhook de eliminación:', err);
     });
@@ -2653,6 +2691,8 @@ SELECT
 d.id,
   d.id_de_empresa,
   d.numero_documento,
+  d.tipo_documento,
+  d.fecha_emision,
   d.importe_total,
   d.importe_sin_impuestos,
   (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
@@ -2678,13 +2718,16 @@ d.id,
           );
           newIncidentsFound++;
           fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
-            documento_id: doc.id,
-            motivo: description
+            id: doc.id,
+            tipo_documento: doc.tipo_documento,
+            numero_documento: doc.numero_documento,
+            importe_total: doc.importe_total,
+            fecha_emision: doc.fecha_emision,
+            motivo_incidencia: description
           }).catch(console.error);
         }
       }
     }
-
     const validDocsForAnalysis = docsWithDetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);
 
     // ✅ CAMBIO CRÍTICO: Incluir empresa en la clave de duplicados
@@ -2719,9 +2762,16 @@ d.id,
             );
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
-              documento_id: doc.id,
-              motivo: description
+              id: doc.id,
+              tipo_documento: doc.tipo_documento,
+              numero_documento: doc.numero_documento,
+              importe_total: doc.importe_total,
+              fecha_emision: doc.fecha_emision,
+              motivo_incidencia: description
             }).catch(console.error);
+
+
+
           }
         }
       }
@@ -2745,8 +2795,13 @@ d.id,
             );
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
-              documento_id: doc.id,
-              motivo: description
+              id: doc.id,
+              tipo_documento: doc.tipo_documento,
+              numero_documento: doc.numero_documento,
+              importe_total: doc.importe_total,
+              fecha_emision: doc.fecha_emision,
+              motivo_incidencia: description
+
             }).catch(console.error);
           }
         }
@@ -2769,8 +2824,13 @@ d.id,
             );
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
-              documento_id: doc.id,
-              motivo: description
+              id: doc.id,
+              tipo_documento: doc.tipo_documento,
+              numero_documento: doc.numero_documento,
+              importe_total: doc.importe_total,
+              fecha_emision: doc.fecha_emision,
+              motivo_incidencia: description
+
             }).catch(console.error);
           }
         }
@@ -4777,6 +4837,15 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
       };
     }
 
+    // Fetch docs data for webhooks BEFORE deleting
+    const [docsToWebhook] = await connection.query<RowDataPacket[]>(`
+      SELECT d.id as documento_id, d.numero_documento, d.id_de_empresa 
+      FROM documentos d
+      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+      WHERE d.id IN (?) 
+        AND (JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
+    `, [ids, userId]);
+
     // Primero borramos dependencias
     await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (?)', [ids]);
     await connection.query('DELETE FROM entidades_documento WHERE documento_id IN (?)', [ids]);
@@ -4795,6 +4864,25 @@ AND(JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     console.log(`✅[deleteDocuments] Eliminados: ${result.affectedRows} `);
 
     await connection.commit();
+    // 🔔 WEBHOOKS TRIGGER: Eliminación masiva (o individual según config)
+    if (docsToWebhook && docsToWebhook.length > 0) {
+      const docsByEmpresa: Record<number, any[]> = {};
+      for (const doc of docsToWebhook) {
+        if (!doc.id_de_empresa) continue;
+        if (!docsByEmpresa[doc.id_de_empresa]) docsByEmpresa[doc.id_de_empresa] = [];
+        docsByEmpresa[doc.id_de_empresa].push({
+          documento_id: doc.documento_id,
+          numero_documento: doc.numero_documento || null
+        });
+      }
+
+      for (const [empresaIdStr, docs] of Object.entries(docsByEmpresa)) {
+        const empId = parseInt(empresaIdStr, 10);
+        fireBatchWebhook(empId, 'documento.eliminado', 'documentos.eliminados_masivo', docs).catch(err => {
+          console.error('❌ [Background] Error disparando webhook batch de eliminación:', err);
+        });
+      }
+    }
     revalidatePath('/documents');
     return { success: true };
 
@@ -5534,4 +5622,100 @@ export async function getDocsClientNames(empresaIds?: number[]): Promise<string[
     console.error('❌ [getDocsClientNames] Error:', error);
     return [];
   }
+}
+
+export async function getWebhookDocumentPayload(documentId: number): Promise<any> {
+  const [docRows] = await db.query<RowDataPacket[]>(
+    `SELECT 
+      d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.fecha_emision, 
+      d.fecha_vencimiento, d.importe_total, d.importe_sin_impuestos, d.moneda, 
+      d.observaciones, d.fecha_creacion, d.id_de_empresa, e.nombre_de_empresa, e.cif as empresa_cif
+     FROM documentos d
+     LEFT JOIN empresas e ON d.id_de_empresa = e.id
+     WHERE d.id = ? LIMIT 1`,
+    [documentId]
+  );
+
+  if (docRows.length === 0) return null;
+  const doc = docRows[0];
+
+  const [entidades] = await db.query<RowDataPacket[]>(
+    `SELECT rol, nombre, identificador_fiscal, direccion, telefono, email 
+     FROM entidades_documento WHERE documento_id = ? AND rol IN ('emisor', 'cliente')`,
+    [documentId]
+  );
+
+  const [impuestos] = await db.query<RowDataPacket[]>(
+    `SELECT tipo_impuesto, porcentaje, base_imponible, cuota 
+     FROM impuestos_documento WHERE documento_id = ?`,
+    [documentId]
+  );
+
+  return {
+    ...doc,
+    entidades,
+    iva_details: impuestos
+  };
+}
+
+export async function getSnapshotBeforeUpdate(id: number, connection: any): Promise<any> {
+  const [docRows] = await connection.query(
+    `SELECT numero_documento, tipo_documento, importe_total, importe_sin_impuestos, fecha_emision, fecha_vencimiento, moneda, observaciones
+     FROM documentos WHERE id = ? LIMIT 1`,
+    [id]
+  );
+  if (docRows.length === 0) return null;
+  const doc = docRows[0];
+
+  const [entidades] = await connection.query(
+    `SELECT rol, nombre, identificador_fiscal FROM entidades_documento WHERE documento_id = ?`,
+    [id]
+  );
+  
+  const [impuestos] = await connection.query(
+    `SELECT tipo_impuesto, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?`,
+    [id]
+  );
+
+  const [lineas] = await connection.query(
+    `SELECT descripcion, cantidad, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?`,
+    [id]
+  );
+
+  return {
+    ...doc,
+    entidades,
+    iva_details: impuestos,
+    lineas
+  };
+}
+
+function compareDocumentStates(oldSnapshot: any, newData: any): string[] {
+  const mod: string[] = [];
+  if (!oldSnapshot || !newData) return Object.keys(newData || {});
+
+  if (oldSnapshot.numero_documento !== newData.numero_documento) mod.push('numero_documento');
+  if (oldSnapshot.tipo_documento !== newData.tipo_documento) mod.push('tipo_documento');
+  if (Number(oldSnapshot.importe_total) !== Number(newData.total)) mod.push('total', 'importe_total');
+  if (Number(oldSnapshot.importe_sin_impuestos) !== Number(newData.base_imponible)) mod.push('base_imponible', 'importe_sin_impuestos');
+  if (oldSnapshot.moneda !== newData.moneda) mod.push('moneda');
+  if ((oldSnapshot.observaciones || '') !== (newData.observaciones || '')) mod.push('observaciones');
+
+  const pDate = (d: any) => d ? new Date(d).toISOString().split('T')[0] : null;
+  if (pDate(oldSnapshot.fecha_emision) !== pDate(newData.fecha_emision)) mod.push('fecha_emision');
+  if (pDate(oldSnapshot.fecha_vencimiento) !== pDate(newData.fecha_vencimiento)) mod.push('fecha_vencimiento');
+
+  const oldEnt = (oldSnapshot.entidades || []).map((e: any) => `${e.rol}-${e.nombre}-${e.identificador_fiscal}`).sort().join('|');
+  const newEnt = (newData.entidades || []).map((e: any) => `${e.rol}-${e.nombre}-${e.identificador_fiscal}`).sort().join('|');
+  if (oldEnt !== newEnt) mod.push('entidades');
+
+  const oldIva = (oldSnapshot.iva_details || []).map((i: any) => `${i.tipo_impuesto}-${Number(i.base_imponible)}-${Number(i.cuota)}`).sort().join('|');
+  const newIva = (newData.iva_details || []).map((i: any) => `${i.tipo_impuesto}-${Number(i.base_imponible)}-${Number(i.cuota)}`).sort().join('|');
+  if (oldIva !== newIva) mod.push('iva_details');
+
+  const oldLin = (oldSnapshot.lineas || []).map((l: any) => `${l.descripcion}-${Number(l.cantidad)}-${Number(l.importe_linea)}`).sort().join('|');
+  const newLin = (newData.lineas || []).map((l: any) => `${l.descripcion}-${Number(l.cantidad)}-${Number(l.importe_linea)}`).sort().join('|');
+  if (oldLin !== newLin) mod.push('lineas');
+
+  return mod;
 }

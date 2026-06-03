@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
       WHERE a.status IN ('Fallido', 'Error', 'failed')
         AND (a.retry_count IS NULL OR a.retry_count < 3)
+        AND a.step != 'Verificación de duplicados'
+        AND a.mensaje NOT LIKE '%duplicado%'
         AND a.updated_at > NOW() - INTERVAL 30 MINUTE
         AND a.updated_at < NOW() - INTERVAL 15 SECOND
         AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
