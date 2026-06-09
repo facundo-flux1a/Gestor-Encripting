@@ -11,6 +11,8 @@ const publicRoutes = [
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/accept-invitation',
+  '/auth/2fa',
+  '/auth/verify-email',
   '/legal(.*)',
 ];
 const rootRoute = '/';

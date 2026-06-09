@@ -12,7 +12,7 @@ import { EditableEntityCard } from './editable-entity-card';
 import { type Document, type DocumentUpdatePayload } from '@/lib/types';
 import { UseFormReturn, useFieldArray } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
-import { cn } from '@/lib/utils';
+import { cn, fixMinioUrl } from '@/lib/utils';
 import { toggleContextItem, deleteHistoryItem, type Incident as AIIncident } from '@/services/vertex-ai-service';
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,6 +25,8 @@ interface AuditSplitViewProps {
     onSubmit: (data: DocumentUpdatePayload) => Promise<void>;
     isSaving: boolean;
     onHistoryUpdate: () => void;
+    checkType?: string;
+    motivo?: string;
 }
 
 export function AuditSplitView({
@@ -35,7 +37,9 @@ export function AuditSplitView({
     isFixed,
     onSubmit,
     isSaving,
-    onHistoryUpdate
+    onHistoryUpdate,
+    checkType = 'MISMATCH_MATEMATICO',
+    motivo = ''
 }: AuditSplitViewProps) {
     const { toast } = useToast();
     const [iframeKey, setIframeKey] = React.useState(0);
@@ -47,7 +51,7 @@ export function AuditSplitView({
         name: "entidades"
     });
 
-    const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(documentUrl || '')}&embedded=true`;
+    const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fixMinioUrl(documentUrl || ''))}&embedded=true&t=${Date.now()}`;
 
     const handleToggleContext = async (id: number, current: boolean) => {
         const res = await toggleContextItem(id, !current);
@@ -94,6 +98,10 @@ export function AuditSplitView({
                             {isFixed ? (
                                 <Badge variant="secondary" className="bg-green-500/10 text-green-500 border-none text-[10px] py-0 h-4 uppercase font-bold tracking-tighter">
                                     <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Documento Cuadrado
+                                </Badge>
+                            ) : checkType === 'FECHA_ANOMALA' || checkType === 'ENTIDAD_DUPLICADA' ? (
+                                <Badge variant="secondary" className="bg-orange-500/10 text-orange-500 border-none text-[10px] py-0 h-4 uppercase font-bold tracking-tighter">
+                                    <AlertCircle className="h-2.5 w-2.5 mr-1" /> Alerta Lógica Activa
                                 </Badge>
                             ) : (
                                 <Badge variant="secondary" className="bg-violet-500/10 text-violet-500 border-none text-[10px] py-0 h-4 uppercase font-bold tracking-tighter">
@@ -168,8 +176,23 @@ export function AuditSplitView({
                 <div className="w-1/2 flex flex-col bg-background overflow-hidden">
                     <ScrollArea className="flex-1">
                         <div className="p-6 space-y-8 pb-20">
-                            {/* AI Context & History Manager - SOLO SI NO ESTÁ CUADRADO */}
-                            {!isFixed && (
+                            {/* Logic Alert Panel */}
+                            {!isFixed && checkType !== 'MISMATCH_MATEMATICO' && (
+                                <div className="p-6 rounded-3xl bg-orange-500/5 border border-orange-500/20 text-center space-y-3 animate-in zoom-in-95 duration-500">
+                                    <div className="h-12 w-12 bg-orange-500/20 text-orange-600 rounded-full flex items-center justify-center mx-auto">
+                                        <AlertCircle className="h-6 w-6" />
+                                    </div>
+                                    <h4 className="text-sm font-bold text-orange-700 dark:text-orange-400">
+                                        {checkType === 'FECHA_ANOMALA' ? 'Fecha Anómala' : 'Entidad Duplicada'}
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground italic">
+                                        {motivo || 'Revisa la información del documento.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* AI Context & History Manager - SOLO SI NO ESTÁ CUADRADO Y ES DESCUADRE MATEMATICO */}
+                            {!isFixed && checkType === 'MISMATCH_MATEMATICO' && (
                                 <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
                                     <h3 className="text-sm font-bold flex items-center justify-between text-violet-500 dark:text-violet-400">
                                         <div className="flex items-center gap-2">

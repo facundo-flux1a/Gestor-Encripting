@@ -266,7 +266,8 @@ export default function RootPage() {
           </section>
 
           {/* Pricing Section */}
-          <section id="pricing" className="py-24 bg-muted/30">
+          {false && (
+            <section id="pricing" className="py-24 bg-muted/30">
             <div className="container mx-auto px-4">
               <div className="text-center max-w-3xl mx-auto mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold mb-4">Planes que crecen contigo</h2>
@@ -321,7 +322,7 @@ export default function RootPage() {
               </div>
             </div>
           </section>
-
+          )}
           {/* Feature Showcase Sections */}
           <section id="showcase" className="py-20">
             <div className="container mx-auto px-4 space-y-32">

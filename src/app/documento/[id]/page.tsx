@@ -114,6 +114,14 @@ function DocumentoPageContent() {
   // Calcular si el documento está cuadrado (para el auto-ocultado de sugerencias)
   const isFixed = useMemo(() => {
     if (!doc) return true;
+    
+    // Si hay una alerta lógica activa (ej. FECHA_ANOMALA), el documento NO está fixed, 
+    // independientemente de la matemática.
+    const checkType = searchParams.get('checkType');
+    if (checkType && checkType !== 'MISMATCH_MATEMATICO') {
+      return false;
+    }
+
     const formValues = form.getValues();
     const base = Number(formValues.base_imponible ?? doc.base_imponible ?? 0);
     const total = Number(formValues.total ?? doc.total ?? 0);
@@ -123,7 +131,7 @@ function DocumentoPageContent() {
 
     const diff = Math.abs(total - (base + taxes));
     return diff <= 0.05;
-  }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details')]);
+  }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details'), searchParams]);
 
   useEffect(() => {
     const auditParam = searchParams.get('audit');
@@ -385,6 +393,9 @@ function DocumentoPageContent() {
 
   // El return de AuditSplitView se mantiene aquí
   if (isAuditMode && doc) {
+    const checkType = searchParams.get('checkType') || 'MISMATCH_MATEMATICO';
+    const motivo = searchParams.get('motivo') || '';
+    
     return (
       <AuditSplitView
         doc={doc}
@@ -395,6 +406,8 @@ function DocumentoPageContent() {
         onSubmit={onSubmit}
         isSaving={isSaving}
         onHistoryUpdate={refreshHistory}
+        checkType={checkType}
+        motivo={motivo}
       />
     );
   }

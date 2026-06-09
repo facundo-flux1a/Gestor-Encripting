@@ -460,13 +460,21 @@ export default function HealthCheckPage() {
                                                             ) : (
                                                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                                             )}
-                                                            Confirmar
+                                                            Validar
                                                         </Button>
-                                                        <Link href={`/documento/${doc.id_documento}?audit=true`} passHref>
-                                                            <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary">
-                                                                Validar <ArrowRight className="h-3 w-3" />
-                                                            </Button>
-                                                        </Link>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="h-8 gap-1 text-primary hover:text-primary"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const checkType = (doc as any).hcs_check_type || 'MISMATCH_MATEMATICO';
+                                                                const motivo = (doc as any).hcs_motivo || '';
+                                                                router.push(`/documento/${doc.id_documento}?audit=true&checkType=${checkType}&motivo=${encodeURIComponent(motivo)}`);
+                                                            }}
+                                                        >
+                                                            Ver <ArrowRight className="h-3 w-3" />
+                                                        </Button>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

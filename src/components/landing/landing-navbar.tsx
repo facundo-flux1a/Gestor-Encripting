@@ -17,7 +17,7 @@ export function LandingNavbar({ user }: { user: any }) {
 
                 <div className="hidden md:flex items-center gap-8">
                     <Link href="#features" className="text-sm font-medium hover:text-primary transition-colors">Funcionalidades</Link>
-                    <Link href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">Planes</Link>
+                    {/* <Link href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">Planes</Link> */}
                     <Link href="#about" className="text-sm font-medium hover:text-primary transition-colors">Nosotros</Link>
                 </div>
 

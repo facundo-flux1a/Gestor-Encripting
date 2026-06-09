@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 import crypto from 'crypto';
 import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
 import { acceptInvitation } from './invitation-service';
+import { sendEmail } from './email-service';
 
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
@@ -213,38 +214,40 @@ export async function login(formData: FormData) {
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    await createSession(
-      user.id,
-      user.email,
-      user.nombre,
-      user.tutorial,
-      user.tutorial_documentos,
-      user.tutorial_trimestres,
-      user.tutorial_actividad,
-      user.tutorial_individual,
-      user.tutorial_incidencias,
-      user.tutorial_proveedores,
-      user.tutorial_health_check,
-      user.organization_rol
-    );
-
-    if (inviteToken) {
-      console.log('🎁 [auth-service] Token de invitación detectado en LOGIN:', inviteToken);
-      const inviteResult = await acceptInvitation(inviteToken, user.id);
-      console.log('🎁 [auth-service] Resultado acceptInvitation en LOGIN:', inviteResult);
-      if (!inviteResult.success) {
-        // ... (keep redirect)
-        return redirect(`/auth/login?error=invitation_error&message=${encodeURIComponent(inviteResult.error || '')}`);
-      }
+    if (user.email_verified === 0) {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await db.query('UPDATE usuarios SET two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?', [code, expiresAt, user.id]);
+      await send2FAEmail(user.email, user.nombre, code, true);
+      return redirect(`/auth/verify-email?email=${encodeURIComponent(user.email)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
     }
 
-    redirect('/dashboard');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await db.query('UPDATE usuarios SET two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?', [code, expiresAt, user.id]);
+    await send2FAEmail(user.email, user.nombre, code, false);
+
+    const pendingSession = await new SignJWT({ userId: user.id, email: user.email, inviteToken })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('10m')
+      .sign(secretKey);
+    
+    const cookieStore = await cookies();
+    cookieStore.set('pending_2fa', pendingSession, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/'
+    });
+
+    redirect('/auth/2fa');
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;
     console.error('Login error:', error);
     return redirect('/auth/login?error=server_error');
   }
 }
+
 
 export async function register(formData: FormData) {
   const nombre = formData.get('name') as string;
@@ -263,28 +266,115 @@ export async function register(formData: FormData) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
     const [result] = await db.query<OkPacket>(
-      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1)',
-      [nombre, email, hashedPassword]
+      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check, email_verified, two_factor_code, two_factor_expires_at) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, ?, ?)',
+      [nombre, email, hashedPassword, code, expiresAt]
     );
 
     const newUserId = result.insertId;
 
     await createDefaultAIConfig(newUserId);
+    await send2FAEmail(email, nombre, code, true);
 
-    await createSession(newUserId, email, nombre, 1, 1, 1, 1, 1, 1, 1, 1);
-
-    if (inviteToken) {
-      console.log('🎁 [auth-service] Token de invitación detectado en REGISTER:', inviteToken);
-      const inviteResult = await acceptInvitation(inviteToken, newUserId);
-      console.log('🎁 [auth-service] Resultado acceptInvitation en REGISTER:', inviteResult);
-    }
-
-    redirect('/dashboard');
+    redirect(`/auth/verify-email?email=${encodeURIComponent(email)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;
     console.error('Registration error:', error);
     return redirect('/auth/register?error=server_error');
+  }
+}
+
+
+export async function send2FAEmail(email: string, nombre: string, code: string, isVerification: boolean) {
+  const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/magic-login?email=${encodeURIComponent(email)}&code=${code}&type=${isVerification ? 'verify' : '2fa'}`;
+  const subject = isVerification ? 'Verifica tu cuenta en Muvail' : 'Tu código de acceso a Muvail';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px;">
+      <h2 style="color: #4F46E5; text-align: center;">Gestor Documental Muvail</h2>
+      <p>Hola ${nombre},</p>
+      <p>${isVerification ? 'Para activar tu cuenta y empezar a usar el Gestor Documental' : 'Para acceder a tu cuenta'}, por favor haz clic en el siguiente botón:</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${magicLink}" style="background-color: #4F46E5; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          ${isVerification ? 'Verificar mi cuenta' : 'Iniciar sesión automáticamente'}
+        </a>
+      </div>
+      <p style="color: #666; font-size: 14px; text-align: center;">Si estás intentando iniciar sesión desde otro dispositivo, ingresa este código manualmente:</p>
+      <div style="text-align: center; margin: 20px 0;">
+        <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #111;">${code}</span>
+      </div>
+      <p style="color: #999; font-size: 12px; text-align: center; margin-top: 40px;">Este código expira en ${isVerification ? '15' : '10'} minutos.<br>Si no solicitaste este acceso, puedes ignorar este correo.</p>
+    </div>
+  `;
+  await sendEmail({ to: email, subject, html, fromName: 'Muvail Seguridad' });
+}
+
+export async function verifyEmailCode(formData: FormData) {
+  const email = formData.get('email') as string;
+  const code = formData.get('code') as string;
+  const inviteToken = formData.get('invite_token') as string;
+
+  if (!email || !code) return { success: false, error: 'Código inválido' };
+
+  try {
+    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [email]);
+    if (rows.length === 0) return { success: false, error: 'Usuario no encontrado' };
+    const user = rows[0];
+
+    if (user.two_factor_code !== code.trim()) return { success: false, error: 'Código incorrecto' };
+    if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at) < new Date()) {
+      return { success: false, error: 'El código ha expirado' };
+    }
+
+    await db.query('UPDATE usuarios SET email_verified = 1, two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?', [user.id]);
+
+    await createSession(user.id, user.email, user.nombre, user.tutorial, user.tutorial_documentos, user.tutorial_trimestres, user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores, user.tutorial_health_check, user.organization_rol);
+
+    if (inviteToken) {
+      await acceptInvitation(inviteToken, user.id);
+    }
+    return { success: true };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: 'Error interno' };
+  }
+}
+
+export async function verify2FACode(formData: FormData) {
+  const code = formData.get('code') as string;
+  if (!code) return { success: false, error: 'Código inválido' };
+
+  const cookieStore = await cookies();
+  const pendingSession = cookieStore.get('pending_2fa')?.value;
+  if (!pendingSession) return { success: false, error: 'Sesión expirada. Por favor, inicia sesión nuevamente.' };
+
+  try {
+    const { payload } = await jwtVerify(pendingSession, secretKey, { algorithms: ['HS256'] });
+    const { userId, inviteToken } = payload as any;
+
+    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [userId]);
+    if (rows.length === 0) return { success: false, error: 'Usuario no encontrado' };
+    const user = rows[0];
+
+    if (user.two_factor_code !== code.trim()) return { success: false, error: 'Código incorrecto' };
+    if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at) < new Date()) {
+      return { success: false, error: 'El código ha expirado' };
+    }
+
+    await db.query('UPDATE usuarios SET two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?', [user.id]);
+    cookieStore.delete('pending_2fa');
+
+    await createSession(user.id, user.email, user.nombre, user.tutorial, user.tutorial_documentos, user.tutorial_trimestres, user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores, user.tutorial_health_check, user.organization_rol);
+
+    if (inviteToken) {
+      await acceptInvitation(inviteToken, user.id);
+    }
+    return { success: true };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: 'Sesión inválida o expirada' };
   }
 }
 
