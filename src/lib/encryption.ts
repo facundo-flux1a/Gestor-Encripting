@@ -38,3 +38,11 @@ export function decrypt(encryptedText: string): string {
   
   return decrypted;
 }
+
+/**
+ * Calcula el Blind Index SHA-256 para búsquedas seguras en campos encriptados.
+ * Siempre normaliza a minúsculas antes de hashear.
+ */
+export function hashField(value: string): string {
+  return crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex');
+}

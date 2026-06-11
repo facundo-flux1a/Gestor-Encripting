@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
-import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+import { hashField } from '@/lib/encryption';
 import { createSession } from '@/services/auth-service';
 import { acceptInvitation } from '@/services/invitation-service';
 
@@ -17,27 +17,30 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [email]);
-    if (rows.length === 0) {
+    // Buscar usuario por hash del email (blind index) porque el email está encriptado en DB
+    const emailHash = hashField(email);
+    const user = await prisma.usuarios.findUnique({
+      where: { email_hash: emailHash }
+    });
+
+    if (!user) {
       return NextResponse.redirect(new URL('/auth/login?error=user_not_found', req.url));
     }
-    
-    const user = rows[0];
 
     // Verificar código y expiración
     if (user.two_factor_code !== code) {
       return NextResponse.redirect(new URL('/auth/login?error=magic_link_invalid_code', req.url));
     }
-    
+
     if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at) < new Date()) {
       return NextResponse.redirect(new URL('/auth/login?error=magic_link_expired', req.url));
     }
 
     // Código válido: limpiar y verificar email
-    await db.query(
-      'UPDATE usuarios SET email_verified = 1, two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?',
-      [user.id]
-    );
+    await prisma.usuarios.update({
+      where: { id: user.id },
+      data: { email_verified: true, two_factor_code: null, two_factor_expires_at: null }
+    });
 
     // Si había una cookie temporal pending_2fa, no es fácil borrarla desde un Server Component en ruta de API sin Response cookies,
     // pero al setear la cookie real de sesión, la pending_2fa dejará de importar.
@@ -62,6 +65,20 @@ export async function GET(req: NextRequest) {
       user.tutorial_health_check,
       user.organization_rol
     );
+
+    // Registrar evento de login (VeriFactu / Log de Eventos)
+    try {
+      await prisma.eventos_sistema.create({
+        data: {
+          usuario: user.email,
+          tipo_evento: 'LOGIN',
+          metadata: JSON.stringify({ ip: req.headers.get('x-forwarded-for') || 'unknown', agent: req.headers.get('user-agent') }),
+          fecha: new Date()
+        }
+      });
+    } catch (e) {
+      console.warn('⚠️ No se pudo registrar el evento de LOGIN en eventos_sistema', e);
+    }
 
     if (inviteToken) {
       await acceptInvitation(inviteToken, user.id);

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
-import db from '@/lib/db';
-import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { validateCompanyDocuments } from '@/services/incidents-service';
-
+import db from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 // GET - Contar documentos de una empresa
@@ -145,85 +143,65 @@ export async function PATCH(
     }
 
     // ✅ CONSTRUCCIÓN DINÁMICA: Solo actualiza campos presentes en el body
-    const fieldsToUpdate: string[] = [];
-    const values: any[] = [];
+    const updateData: any = {};
 
-    if ('name' in body) {
-      fieldsToUpdate.push('nombre_de_empresa = ?');
-      values.push(body.name.trim());
-    }
-
-    if ('nombreFiscal' in body) {
-      fieldsToUpdate.push('nombre_fiscal = ?');
-      values.push(body.nombreFiscal?.trim() || null);
-    }
-
-    if ('cif' in body) {
-      fieldsToUpdate.push('CIF = ?');
-      values.push(body.cif?.trim() || null);
-    }
-
-    if ('mailDeCarga' in body) {
-      fieldsToUpdate.push('mail_de_carga = ?');
-      values.push(body.mailDeCarga?.trim() || null);
-    }
-
+    if ('name' in body) updateData.nombre_de_empresa = body.name.trim();
+    if ('nombreFiscal' in body) updateData.nombre_fiscal = body.nombreFiscal?.trim() || null;
+    if ('cif' in body) updateData.CIF = body.cif?.trim() || null;
+    if ('mailDeCarga' in body) updateData.mail_de_carga = body.mailDeCarga?.trim() || null;
     if ('recargo' in body) {
-      fieldsToUpdate.push('recargo = ?');
-      // Safer boolean conversion handling string "false"
       const rawRecargo = body.recargo;
-      let recargoValue = 0;
-
-      if (rawRecargo === true || rawRecargo === 1 || rawRecargo === 'true') {
-        recargoValue = 1;
-      }
-
-      console.log(`🔌 [API-UPDATE] Recargo parsing: raw=${rawRecargo} (${typeof rawRecargo}) -> db=${recargoValue}`);
-      values.push(recargoValue);
+      updateData.recargo = (rawRecargo === true || rawRecargo === 1 || rawRecargo === 'true');
+      console.log(`🔌 [API-UPDATE] Recargo parsing: raw=${rawRecargo} (${typeof rawRecargo}) -> db=${updateData.recargo}`);
     }
 
-    // Verificar que haya al menos un campo para actualizar
-    if (fieldsToUpdate.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { error: 'No hay campos para actualizar' },
         { status: 400 }
       );
     }
 
-    // Agregar condiciones WHERE
-    values.push(empresaId, user.id);
+    console.log('💾 [API-UPDATE-COMPANY] Actualizando campos:', updateData);
 
-    console.log('💾 [API-UPDATE-COMPANY] Actualizando campos:', fieldsToUpdate);
-    console.log('💾 [API-UPDATE-COMPANY] Con valores:', values);
+    const { prisma } = await import('@/lib/prisma');
 
-    // Actualizar empresa con query dinámico
-    const [result] = await db.query<ResultSetHeader>(
-      `UPDATE empresas 
-       SET ${fieldsToUpdate.join(', ')}
-       WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
-      values
-    );
-
-    if (result.affectedRows === 0) {
-      console.error('❌ [API-UPDATE-COMPANY] No se actualizó ninguna fila');
-      return NextResponse.json(
-        { error: 'Error al actualizar la empresa' },
-        { status: 500 }
-      );
-    }
-
-    // Obtener la empresa actualizada
-    const [updatedCompany] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo FROM empresas WHERE id = ?',
-      [empresaId]
-    );
-
-    // Mapear recargo a boolean
-    if (updatedCompany.length > 0) {
-      updatedCompany[0].recargo = !!updatedCompany[0].recargo;
-    }
+    // Actualizar empresa usando Prisma para que aplique la encriptación automáticamente
+    const updatedRecord = await prisma.empresas.update({
+      where: { id: BigInt(empresaId) },
+      data: updateData
+    });
 
     console.log('✅ [API-UPDATE-COMPANY] Empresa actualizada exitosamente');
+
+    const companyResponse = {
+      id: Number(updatedRecord.id),
+      name: updatedRecord.nombre_de_empresa,
+      nombre_fiscal: updatedRecord.nombre_fiscal,
+      CIF: updatedRecord.CIF,
+      mail_de_carga: updatedRecord.mail_de_carga,
+      recargo: updatedRecord.recargo
+    };
+
+    console.log('✅ [API-UPDATE-COMPANY] Empresa actualizada exitosamente');
+
+    // Registrar evento de cambio de configuración (Orden HAC/1177/2024)
+    try {
+      await prisma.eventos_sistema.create({
+        data: {
+          id_de_empresa: BigInt(empresaId),
+          usuario: user.email,
+          tipo_evento: 'CONFIG_CHANGE',
+          metadata: JSON.stringify({
+            ip: request.headers.get('x-forwarded-for') || 'unknown',
+            userAgent: request.headers.get('user-agent') || 'unknown',
+            cambios: updateData
+          })
+        }
+      });
+    } catch (e) {
+      console.warn('⚠️ [API-UPDATE-COMPANY] No se pudo guardar log de auditoría del sistema:', e);
+    }
 
     // ✅ FIRE AND FORGET: Revalidar incidencias por cambio de contexto
     validateCompanyDocuments(empresaId).catch(err => {
@@ -233,7 +211,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       message: 'Empresa actualizada correctamente',
-      company: updatedCompany[0]
+      company: companyResponse
     });
 
   } catch (error) {

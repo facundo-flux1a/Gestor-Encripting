@@ -64,7 +64,7 @@ export async function PUT(
       }, { status: 400 });
     }
 
-    const result = await updateDocument(documentId, validation.data);
+    const result = await updateDocument(documentId, validation.data, user.email);
     
     if (!result.success) {
       return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });

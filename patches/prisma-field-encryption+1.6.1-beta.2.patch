@@ -1,0 +1,17 @@
+diff --git a/node_modules/prisma-field-encryption/dist/index.js b/node_modules/prisma-field-encryption/dist/index.js
+index e35ae0d..02a7ceb 100644
+--- a/node_modules/prisma-field-encryption/dist/index.js
++++ b/node_modules/prisma-field-encryption/dist/index.js
+@@ -50,9 +50,9 @@ const debug$1 = {
+ //#region src/types.ts
+ const dmmfFieldParser = zod.z.object({
+ 	name: zod.z.string(),
+-	isList: zod.z.boolean(),
+-	isUnique: zod.z.boolean(),
+-	isId: zod.z.boolean(),
++	isList: zod.z.boolean().optional().default(false),
++	isUnique: zod.z.boolean().optional().default(false),
++	isId: zod.z.boolean().optional().default(false),
+ 	type: zod.z.any(),
+ 	documentation: zod.z.string().optional()
+ }).readonly();

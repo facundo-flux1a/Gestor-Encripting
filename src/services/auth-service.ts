@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import db, { dbName } from '@/lib/db';
+import db from '@/lib/db'; // Mantenido como fallback durante migración a Prisma
 import type { RowDataPacket, OkPacket } from 'mysql2';
 import type { User, SessionPayload } from '@/lib/types';
 import { redirect } from 'next/navigation';
@@ -12,10 +12,70 @@ import crypto from 'crypto';
 import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
 import { acceptInvitation } from './invitation-service';
 import { sendEmail } from './email-service';
+import { prisma } from '@/lib/prisma';
+import { hashField } from '@/lib/encryption';
+import { headers } from 'next/headers';
+
+/**
+ * Helper para registrar eventos de sesión en eventos_sistema (VeriFactu / Orden HAC/1177/2024)
+ * No lanza excepciones: un fallo de log nunca debe bloquear el flujo de autenticación.
+ */
+async function logAuthEvent(tipo: 'LOGIN' | 'LOGOUT', userEmail: string) {
+  try {
+    const h = await headers();
+    const ip = h.get('x-forwarded-for') || h.get('x-real-ip') || 'unknown';
+    const agent = h.get('user-agent') || 'unknown';
+    await prisma.eventos_sistema.create({
+      data: {
+        usuario: userEmail,
+        tipo_evento: tipo,
+        metadata: JSON.stringify({ ip, agent }),
+        fecha: new Date()
+      }
+    });
+  } catch (e) {
+    console.warn(`⚠️ [logAuthEvent] No se pudo registrar evento ${tipo}:`, e);
+  }
+}
 
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
 const SESSION_COOKIE_NAME = 'session';
+
+// ==========================================
+// HELPERS DE SEGURIDAD (BLIND INDEX)
+// ==========================================
+
+// Import hashField from encryption.ts
+
+/**
+ * Busca un usuario por email de forma segura.
+ * 1. Intenta por Blind Index (email_hash) → funciona después de migrar.
+ * 2. Si no encuentra, cae en fallback a texto plano → funciona antes de migrar.
+ *    Además, aprovecha para rellenar el email_hash del usuario (migración lazy).
+ */
+async function findUserByEmail(email: string) {
+  const emailHash = hashField(email);
+
+  // Intento 1: Blind Index (post-migración)
+  const userByHash = await prisma.usuarios.findUnique({
+    where: { email_hash: emailHash }
+  });
+  if (userByHash) return userByHash;
+
+  // Intento 2: Texto plano (pre-migración, fallback legacy)
+  const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [email.trim()]);
+  if (rows[0]) {
+    // Backfill lazy: rellenar email_hash para este usuario
+    try {
+      await prisma.usuarios.update({
+        where: { id: BigInt(rows[0].id) },
+        data: { email_hash: emailHash }
+      });
+    } catch (_) { /* Ignorar error de backfill */ }
+  }
+  return rows[0] || null;
+}
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)
@@ -86,16 +146,12 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
   if (!session) return null;
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT activo FROM usuarios WHERE id = ?',
-      [session.userId]
-    );
+    const user = await prisma.usuarios.findUnique({
+      where: { id: BigInt(session.userId) },
+      select: { activo: true }
+    });
 
-    const isActive = rows[0] && (
-      Buffer.isBuffer(rows[0].activo)
-        ? rows[0].activo[0] === 1
-        : Number(rows[0].activo) === 1
-    );
+    const isActive = user?.activo === true;
 
     if (!isActive) {
       console.warn(`⚠️ [getSession] Usuario ${session.userId} inactivo o eliminado. Limpiando cookie zombie.`);
@@ -154,13 +210,17 @@ export async function createSession(
 
 async function createDefaultAIConfig(userId: number) {
   try {
-    await db.query(
-      `INSERT INTO ${dbName}.ai_user_config 
-       (user_id, use_own_key, daily_limit_openai, daily_limit_gemini, is_unlimited)
-       VALUES (?, FALSE, 5, 50, FALSE)
-       ON DUPLICATE KEY UPDATE user_id = user_id`,
-      [userId]
-    );
+    await prisma.ai_user_config.upsert({
+      where: { user_id: BigInt(userId) },
+      create: {
+        user_id: BigInt(userId),
+        use_own_key: false,
+        daily_limit_openai: 5,
+        daily_limit_gemini: 50,
+        is_unlimited: false,
+      },
+      update: {} // Si ya existe, no cambiar nada
+    });
     console.log('✅ [createDefaultAIConfig] Config de IA creada para usuario:', userId);
   } catch (error) {
     console.error('❌ [createDefaultAIConfig] Error creando config:', error);
@@ -170,10 +230,10 @@ async function createDefaultAIConfig(userId: number) {
 async function migratePasswordToHash(userId: number, plainPassword: string) {
   try {
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
-    await db.query(
-      'UPDATE usuarios SET password = ? WHERE id = ?',
-      [hashedPassword, userId]
-    );
+    await prisma.usuarios.update({
+      where: { id: BigInt(userId) },
+      data: { password: hashedPassword }
+    });
     console.log('🔄 [migratePasswordToHash] Contraseña migrada a hash para usuario:', userId);
   } catch (error) {
     console.error('❌ [migratePasswordToHash] Error migrando:', error);
@@ -190,44 +250,48 @@ export async function login(formData: FormData) {
   }
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM usuarios WHERE email = ?',
-      [email.trim()]
-    );
+    // Búsqueda segura: Blind Index primero, fallback a texto plano para legacy
+    const user = await findUserByEmail(email);
 
-    if (rows.length === 0) {
+    if (!user) {
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    const user = rows[0];
+    const userId = BigInt(user.id);
+    const userEmail = (user.email as string) || '';
+    const userName = (user.nombre as string) || '';
 
     let passwordValid = false;
     if (user.password === password.trim()) {
       // Migración automática si estaba en texto plano
-      await migratePasswordToHash(user.id, password.trim());
+      await migratePasswordToHash(Number(userId), password.trim());
       passwordValid = true;
     } else {
-      passwordValid = await bcrypt.compare(password.trim(), user.password || '');
+      passwordValid = await bcrypt.compare(password.trim(), (user.password as string) || '');
     }
 
     if (!passwordValid) {
       return redirect('/auth/login?error=invalid_credentials');
     }
 
-    if (user.email_verified === 0) {
+    const emailVerified = typeof user.email_verified === 'boolean'
+      ? user.email_verified
+      : Number(user.email_verified) === 1;
+
+    if (!emailVerified) {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-      await db.query('UPDATE usuarios SET two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?', [code, expiresAt, user.id]);
-      await send2FAEmail(user.email, user.nombre, code, true);
-      return redirect(`/auth/verify-email?email=${encodeURIComponent(user.email)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
+      await prisma.usuarios.update({ where: { id: userId }, data: { two_factor_code: code, two_factor_expires_at: expiresAt } });
+      await send2FAEmail(userEmail, userName, code, true);
+      return redirect(`/auth/verify-email?email=${encodeURIComponent(userEmail)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await db.query('UPDATE usuarios SET two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?', [code, expiresAt, user.id]);
-    await send2FAEmail(user.email, user.nombre, code, false);
+    await prisma.usuarios.update({ where: { id: userId }, data: { two_factor_code: code, two_factor_expires_at: expiresAt } });
+    await send2FAEmail(userEmail, userName, code, false);
 
-    const pendingSession = await new SignJWT({ userId: user.id, email: user.email, inviteToken })
+    const pendingSession = await new SignJWT({ userId: Number(userId), email: userEmail, inviteToken })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('10m')
       .sign(secretKey);
@@ -260,8 +324,10 @@ export async function register(formData: FormData) {
   }
 
   try {
-    const [existingUser] = await db.query<RowDataPacket[]>('SELECT id FROM usuarios WHERE email = ?', [email]);
-    if (existingUser.length > 0) {
+    // Buscar por Blind Index para verificar unicidad
+    const emailHash = hashField(email);
+    const existing = await prisma.usuarios.findUnique({ where: { email_hash: emailHash } });
+    if (existing) {
       return redirect('/auth/register?error=user_exists');
     }
 
@@ -269,14 +335,28 @@ export async function register(formData: FormData) {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const [result] = await db.query<OkPacket>(
-      'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check, email_verified, two_factor_code, two_factor_expires_at) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, ?, ?)',
-      [nombre, email, hashedPassword, code, expiresAt]
-    );
+    const newUser = await prisma.usuarios.create({
+      data: {
+        nombre,
+        email,           // Prisma encriptará automáticamente (/// @encrypted)
+        email_hash: emailHash, // Blind Index para búsquedas futuras
+        password: hashedPassword,
+        activo: true,
+        tutorial: true,
+        tutorial_documentos: true,
+        tutorial_trimestres: true,
+        tutorial_actividad: true,
+        tutorial_individual: true,
+        tutorial_incidencias: true,
+        tutorial_proveedores: true,
+        tutorial_health_check: true,
+        email_verified: false,
+        two_factor_code: code,
+        two_factor_expires_at: expiresAt,
+      }
+    });
 
-    const newUserId = result.insertId;
-
-    await createDefaultAIConfig(newUserId);
+    await createDefaultAIConfig(Number(newUser.id));
     await send2FAEmail(email, nombre, code, true);
 
     redirect(`/auth/verify-email?email=${encodeURIComponent(email)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
@@ -319,22 +399,28 @@ export async function verifyEmailCode(formData: FormData) {
   if (!email || !code) return { success: false, error: 'Código inválido' };
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [email]);
-    if (rows.length === 0) return { success: false, error: 'Usuario no encontrado' };
-    const user = rows[0];
+    const user = await findUserByEmail(email);
+    if (!user) return { success: false, error: 'Usuario no encontrado' };
 
     if (user.two_factor_code !== code.trim()) return { success: false, error: 'Código incorrecto' };
-    if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at) < new Date()) {
+    if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at as any) < new Date()) {
       return { success: false, error: 'El código ha expirado' };
     }
 
-    await db.query('UPDATE usuarios SET email_verified = 1, two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?', [user.id]);
+    await prisma.usuarios.update({
+      where: { id: BigInt(user.id) },
+      data: { email_verified: true, two_factor_code: null, two_factor_expires_at: null }
+    });
 
-    await createSession(user.id, user.email, user.nombre, user.tutorial, user.tutorial_documentos, user.tutorial_trimestres, user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores, user.tutorial_health_check, user.organization_rol);
+    const t = (v: any) => (typeof v === 'boolean' ? Number(v) : Number(v ?? 1));
+    await createSession(Number(user.id), user.email as string, user.nombre as string,
+      t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
+      t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
+      t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      (user.organization_rol as any) || 'EDITOR');
+    await logAuthEvent('LOGIN', user.email as string);
 
-    if (inviteToken) {
-      await acceptInvitation(inviteToken, user.id);
-    }
+    if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
     return { success: true };
   } catch (err) {
     console.error(err);
@@ -354,23 +440,29 @@ export async function verify2FACode(formData: FormData) {
     const { payload } = await jwtVerify(pendingSession, secretKey, { algorithms: ['HS256'] });
     const { userId, inviteToken } = payload as any;
 
-    const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE id = ?', [userId]);
-    if (rows.length === 0) return { success: false, error: 'Usuario no encontrado' };
-    const user = rows[0];
+    const user = await prisma.usuarios.findUnique({ where: { id: BigInt(userId) } });
+    if (!user) return { success: false, error: 'Usuario no encontrado' };
 
     if (user.two_factor_code !== code.trim()) return { success: false, error: 'Código incorrecto' };
     if (!user.two_factor_expires_at || new Date(user.two_factor_expires_at) < new Date()) {
       return { success: false, error: 'El código ha expirado' };
     }
 
-    await db.query('UPDATE usuarios SET two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?', [user.id]);
+    await prisma.usuarios.update({
+      where: { id: user.id },
+      data: { two_factor_code: null, two_factor_expires_at: null }
+    });
     cookieStore.delete('pending_2fa');
 
-    await createSession(user.id, user.email, user.nombre, user.tutorial, user.tutorial_documentos, user.tutorial_trimestres, user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores, user.tutorial_health_check, user.organization_rol);
+    const t = (v: any) => (typeof v === 'boolean' ? Number(v) : Number(v ?? 1));
+    await createSession(Number(user.id), user.email as string, user.nombre as string,
+      t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
+      t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
+      t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      (user.organization_rol as any) || 'EDITOR');
+    await logAuthEvent('LOGIN', user.email as string);
 
-    if (inviteToken) {
-      await acceptInvitation(inviteToken, user.id);
-    }
+    if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
     return { success: true };
   } catch (err) {
     console.error(err);
@@ -383,45 +475,41 @@ export async function handleGoogleSignInOnServer(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { email, displayName, uid } = firebaseUser;
-    if (!email) {
-      return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
-    }
+    if (!email) return { success: false, error: 'El proveedor de Google no proporcionó un email.' };
 
-    const [existingUsers] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check, organization_rol FROM usuarios WHERE email = ?',
-      [email]
-    );
+    const existingUser = await findUserByEmail(email);
 
-    let user;
-    if (existingUsers.length > 0) {
-      user = existingUsers[0];
-      if (!user.activo || user.activo === 0) {
-        return { success: false, error: 'Usuario inactivo. Contacte al administrador.' };
-      }
+    let user: any;
+    if (existingUser) {
+      const isActive = typeof existingUser.activo === 'boolean' ? existingUser.activo : Number(existingUser.activo) === 1;
+      if (!isActive) return { success: false, error: 'Usuario inactivo. Contacte al administrador.' };
+      user = existingUser;
     } else {
       const nombre = displayName || email.split('@')[0] || 'Nuevo Usuario';
-      const [result] = await db.query<OkPacket>(
-        'INSERT INTO usuarios (nombre, email, password, activo, tutorial, tutorial_documentos, tutorial_trimestres, tutorial_actividad, tutorial_individual, tutorial_incidencias, tutorial_proveedores, tutorial_health_check) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1)',
-        [nombre, email, GOOGLE_PASSWORD_MARKER + uid]
-      );
-      const newUserId = result.insertId;
-      await createDefaultAIConfig(newUserId);
-      user = {
-        id: newUserId, email, nombre,
-        tutorial: 1, tutorial_documentos: 1, tutorial_trimestres: 1,
-        tutorial_actividad: 1, tutorial_individual: 1, tutorial_incidencias: 1, tutorial_proveedores: 1,
-        tutorial_health_check: 1,
-        organization_rol: 'EDITOR'
-      };
+      const emailHash = hashField(email);
+      const newUser = await prisma.usuarios.create({
+        data: {
+          nombre, email, email_hash: emailHash,
+          password: GOOGLE_PASSWORD_MARKER + uid,
+          activo: true,
+          tutorial: true, tutorial_documentos: true, tutorial_trimestres: true,
+          tutorial_actividad: true, tutorial_individual: true, tutorial_incidencias: true,
+          tutorial_proveedores: true, tutorial_health_check: true,
+        }
+      });
+      await createDefaultAIConfig(Number(newUser.id));
+      user = { ...newUser, tutorial: 1, tutorial_documentos: 1, tutorial_trimestres: 1,
+        tutorial_actividad: 1, tutorial_individual: 1, tutorial_incidencias: 1,
+        tutorial_proveedores: 1, tutorial_health_check: 1, organization_rol: 'EDITOR' };
     }
 
-    await createSession(
-      user.id, user.email, user.nombre,
-      user.tutorial, user.tutorial_documentos, user.tutorial_trimestres,
-      user.tutorial_actividad, user.tutorial_individual, user.tutorial_incidencias, user.tutorial_proveedores,
-      user.tutorial_health_check,
-      user.organization_rol
-    );
+    const t = (v: any) => (typeof v === 'boolean' ? Number(v) : Number(v ?? 1));
+    await createSession(Number(user.id), user.email as string, user.nombre as string,
+      t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
+      t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
+      t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      (user.organization_rol as any) || 'EDITOR');
+    await logAuthEvent('LOGIN', email);
 
     return { success: true };
   } catch (error) {
@@ -432,6 +520,10 @@ export async function handleGoogleSignInOnServer(
 
 export async function logout() {
   const cookieStore = await cookies();
+  const session = await getSession();
+  if (session?.email) {
+    await logAuthEvent('LOGOUT', session.email);
+  }
   cookieStore.delete(SESSION_COOKIE_NAME);
   redirect('/auth/login?logout=true');
 }
@@ -457,16 +549,17 @@ async function updateUserTutorialField(field: string, value: number = 0) {
 
     console.log(`🔄 [auth-service] Actualizando "${field}" a ${value} para usuario ${session.userId}`);
 
-    // 1. Actualizar en Base de Datos
-    const [result]: any = await db.query(
-      `UPDATE usuarios SET ${field} = ? WHERE id = ?`,
-      [value, session.userId]
-    );
+    // 1. Actualizar en Base de Datos con Prisma (los campos de tutorial son Boolean en el schema)
+    const boolValue = value === 0 ? false : true;
+    const updated = await prisma.usuarios.update({
+      where: { id: BigInt(session.userId) },
+      data: { [field]: boolValue } as any
+    });
 
-    if (result.affectedRows === 0) {
+    if (!updated) {
       console.warn(`⚠️ [auth-service] El UPDATE no afectó a ninguna fila. ¿El usuario ${session.userId} existe?`);
     } else {
-      console.log(`✅ [auth-service] DB actualizada: ${result.affectedRows} fila(s) afectada(s)`);
+      console.log(`✅ [auth-service] DB actualizada para usuario ${session.userId}`);
     }
 
     // 2. Re-crear sesión con el valor actualizado para sincronizar la cookie

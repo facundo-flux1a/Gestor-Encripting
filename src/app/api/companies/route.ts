@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
-import db from '@/lib/db';
-import type { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +9,6 @@ export async function GET() {
   try {
     console.log('🏢 [API-COMPANIES] Iniciando GET...');
 
-    // Verificar usuario
     const user = await getCurrentUser();
     console.log('👤 [API-COMPANIES] Usuario actual:', user?.id, user?.email);
 
@@ -20,28 +17,41 @@ export async function GET() {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
 
-    // ✅ QUERY DIRECTA: Asegurar que traiga TODOS los campos incluido mail_de_carga
-    const [companies] = await db.query<RowDataPacket[]>(
-      `SELECT 
-        id,
-        nombre_de_empresa as name,
-        nombre_fiscal,
-        CIF,
-        mail_de_carga,
-        recargo
-      FROM empresas 
-      WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))
-      ORDER BY nombre_de_empresa ASC`,
-      [user.id]
-    );
+    const { prisma } = await import('@/lib/prisma');
 
-    const formattedCompanies = companies.map((c: any) => ({
-      ...c,
-      recargo: !!c.recargo
-    }));
+    // Usar Prisma para que los campos encriptados se desencripten automáticamente
+    // ⚠️ Sin orderBy en nombre_de_empresa — no se puede ordenar sobre campos encriptados en BD
+    const allRows = await prisma.empresas.findMany({
+      select: {
+        id: true,
+        nombre_de_empresa: true,
+        nombre_fiscal: true,
+        CIF: true,
+        mail_de_carga: true,
+        recargo: true,
+        id_de_usuario: true,
+        config_roles: true
+      }
+    });
+
+    // Filtrar por usuario y ordenar en memoria DESPUÉS de desencriptar
+    const formattedCompanies = allRows
+      .filter(row => {
+        const ids: number[] = Array.isArray(row.id_de_usuario) ? row.id_de_usuario as any[] : [];
+        return ids.includes(user.id);
+      })
+      .map(row => ({
+        id: Number(row.id),
+        name: row.nombre_de_empresa,
+        nombre_fiscal: row.nombre_fiscal,
+        CIF: row.CIF,
+        mail_de_carga: row.mail_de_carga,
+        recargo: !!row.recargo,
+      }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }));
 
     console.log('✅ [API-COMPANIES] Empresas obtenidas:', formattedCompanies.length);
-    console.log('📋 [API-COMPANIES] Empresas con mail_de_carga:',
+    console.log('📋 [API-COMPANIES] Empresas:',
       formattedCompanies.map((c: any) => ({ id: c.id, name: c.name, mail: c.mail_de_carga, recargo: c.recargo }))
     );
 

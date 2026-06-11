@@ -1,0 +1,663 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+generator fieldEncryptionMigrations {
+  provider = "prisma-field-encryption"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model usuarios {
+  id                         BigInt                     @id @default(autoincrement())
+  /// @encrypted
+  nombre                     String?                    @db.Text
+  /// @encrypted
+  email                      String?                    @db.Text
+  /// @encrypted
+  phone                      String?                    @db.Text
+  password                   String                     @db.VarChar(255)
+  activo                     Boolean                    @default(true)
+  fecha_creacion             DateTime?                  @default(now()) @db.Timestamp(0)
+  fecha_actualizacion        DateTime?                  @default(now()) @db.Timestamp(0)
+  id_de_empresa              BigInt?
+  has_permits                Boolean                    @default(false)
+  tutorial                   Boolean?                   @default(true)
+  tutorial_documentos        Boolean?                   @default(true)
+  tutorial_trimestres        Boolean?                   @default(true)
+  tutorial_actividad         Boolean?                   @default(true)
+  tutorial_individual        Boolean?                   @default(true)
+  tutorial_incidencias       Boolean?                   @default(true)
+  tutorial_proveedores       Boolean?                   @default(true)
+  rol                        usuarios_rol               @default(usuario)
+  config_otros_tipos         Json?
+  dinamizar_actividad        Boolean?                   @default(true)
+  dinamizar_incidencias      Boolean?                   @default(true)
+  sin_seleccion_mostrar_todo Boolean?                   @default(true)
+  organization_rol           usuarios_organization_rol? @default(EDITOR)
+  tutorial_health_check      Boolean?                   @default(true)
+  email_verified             Boolean?                   @default(false)
+  two_factor_code            String?                    @db.VarChar(10)
+  two_factor_expires_at      DateTime?                  @db.DateTime(0)
+  email_hash                 String?                    @unique(map: "email_hash") @db.VarChar(64)
+  ai_daily_usage             ai_daily_usage[]
+  ai_usage_log               ai_usage_log[]
+  ai_user_config             ai_user_config?
+  exports                    exports[]
+  incidencias_documento      incidencias_documento[]
+  password_reset_tokens      password_reset_tokens[]
+  empresas                   empresas?                  @relation(fields: [id_de_empresa], references: [id], map: "fk_usuarios_empresa")
+
+  @@index([id_de_empresa], map: "fk_usuarios_empresa")
+  @@index([activo], map: "idx_usuario_activo")
+}
+
+model empresas {
+  id                    BigInt                  @id @default(autoincrement())
+  /// @encrypted
+  nombre_de_empresa     String?                 @db.Text
+  id_de_usuario         Json?
+  /// @encrypted
+  nombre_fiscal         String?                 @db.Text
+  CIF                   String?                 @db.Text
+  /// @encrypted
+  mail_de_carga         String?                 @db.Text
+  recargo               Boolean                 @default(false)
+  config_roles          Json?                   @default(dbgenerated("(json_object())"))
+  cif_hash              String?                 @unique(map: "cif_hash") @db.VarChar(64)
+  mail_de_carga_hash    String?                 @unique(map: "mail_de_carga_hash") @db.VarChar(64)
+  actividad             actividad[]
+  archivos_documento    archivos_documento[]
+  documentos            documentos[]
+  documentos_auditoria  documentos_auditoria[]
+  entidades_config      entidades_config[]
+  entidades_documento   entidades_documento[]
+  impuestos_documento   impuestos_documento[]
+  incidencias_documento incidencias_documento[]
+  lineas_documento      lineas_documento[]
+  trimestres            trimestres[]
+  usuarios              usuarios[]
+  webhooks_empresa      webhooks_empresa[]
+}
+
+model entidades_documento {
+  id                        BigInt     @id @default(autoincrement())
+  documento_id              BigInt
+  rol                       String     @db.VarChar(50)
+  /// @encrypted
+  nombre                    String?    @db.Text
+  /// @encrypted
+  direccion                 String?    @db.Text
+  /// @encrypted
+  identificador_fiscal      String?    @db.Text
+  /// @encrypted
+  telefono                  String?    @db.Text
+  /// @encrypted
+  email                     String?    @db.Text
+  datos_extra               Json?
+  fecha_creacion            DateTime?  @default(now()) @db.Timestamp(0)
+  id_de_empresa             BigInt?
+  cuenta_contable           String?    @db.VarChar(10)
+  identificador_fiscal_hash String?    @db.VarChar(64)
+  documentos                documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_entidad_documento")
+  empresas                  empresas?  @relation(fields: [id_de_empresa], references: [id], map: "fk_entidades_documento_empresa")
+
+  @@index([documento_id], map: "fk_entidad_documento")
+  @@index([id_de_empresa], map: "fk_entidades_documento_empresa")
+  @@index([rol], map: "idx_entidad_rol")
+}
+
+model invitaciones_empresa {
+  id               Int                          @id @default(autoincrement())
+  empresa_id       BigInt
+  /// @encrypted
+  email            String?                      @db.Text
+  rol              invitaciones_empresa_rol?    @default(EDITOR)
+  status           invitaciones_empresa_status? @default(PENDING)
+  token            String                       @unique(map: "token") @db.VarChar(255)
+  fecha_expiracion DateTime                     @db.DateTime(0)
+  fecha_creacion   DateTime?                    @default(now()) @db.Timestamp(0)
+  metadata         Json?
+  email_hash       String?                      @db.VarChar(64)
+
+  @@index([empresa_id], map: "empresa_id")
+}
+
+model archivos_documento {
+  id             BigInt     @id @default(autoincrement())
+  documento_id   BigInt
+  tipo_archivo   String?    @db.VarChar(50)
+  /// @encrypted
+  nombre_archivo String?    @db.Text
+  /// @encrypted
+  ruta_archivo   String?    @db.Text
+  hash_archivo   String?    @db.Char(64)
+  fecha_subida   DateTime?  @default(now()) @db.Timestamp(0)
+  id_de_empresa  BigInt?
+  documentos     documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_archivo_documento")
+  empresas       empresas?  @relation(fields: [id_de_empresa], references: [id], map: "fk_archivos_documento_empresa")
+
+  @@index([documento_id], map: "fk_archivo_documento")
+  @@index([id_de_empresa], map: "fk_archivos_documento_empresa")
+}
+
+model documentos {
+  id                       BigInt                     @id @default(autoincrement())
+  file_hash                String?                    @db.VarChar(64)
+  tipo_documento           String?                    @db.VarChar(100)
+  numero_documento         String?                    @db.VarChar(100)
+  fecha_emision            DateTime?                  @db.Date
+  fecha_vencimiento        DateTime?                  @db.Date
+  importe_total            Decimal?                   @db.Decimal(14, 2)
+  importe_sin_impuestos    Decimal?                   @db.Decimal(14, 2)
+  moneda                   String?                    @default("EUR") @db.Char(3)
+  observaciones            String?                    @db.Text
+  datos_extra              Json?
+  fecha_creacion           DateTime?                  @default(now()) @db.Timestamp(0)
+  id_de_empresa            BigInt?
+  is_new                   Int?                       @default(1)
+  trimestre_cerrado        Boolean?                   @default(false)
+  enviado_sii              Boolean?                   @default(false)
+  fecha_cierre_trimestre   DateTime?                  @db.DateTime(0)
+  año_trimestre           Int?
+  num_trimestre            Int?
+  dashboard_correo         String?                    @map("dashboard-correo") @db.VarChar(50)
+  ai_incidencias_documento ai_incidencias_documento[]
+  ai_suggestions           ai_suggestions[]
+  archivos_documento       archivos_documento[]
+  empresas                 empresas?                  @relation(fields: [id_de_empresa], references: [id], map: "fk_documento_empresa")
+  documentos_auditoria     documentos_auditoria[]
+  entidades_documento      entidades_documento[]
+  impuestos_documento      impuestos_documento[]
+  incidencias_documento    incidencias_documento[]
+  lineas_documento         lineas_documento[]
+
+  @@unique([file_hash, id_de_empresa], map: "unique_hash_empresa")
+  @@index([id_de_empresa], map: "fk_documento_empresa")
+  @@index([numero_documento], map: "idx_documento_numero")
+  @@index([tipo_documento, fecha_emision], map: "idx_documento_tipo_fecha")
+  @@index([is_new], map: "idx_documentos_is_new")
+  @@index([año_trimestre, num_trimestre], map: "idx_trimestre")
+  @@index([trimestre_cerrado], map: "idx_trimestre_cerrado")
+}
+
+model lineas_documento {
+  id                   BigInt     @id @default(autoincrement())
+  documento_id         BigInt
+  codigo               String?    @db.VarChar(100)
+  descripcion          String?    @db.Text
+  cantidad             Decimal?   @db.Decimal(14, 3)
+  unidad               String?    @db.VarChar(20)
+  precio_unitario      Decimal?   @db.Decimal(14, 4)
+  descuento_porcentaje Decimal?   @db.Decimal(5, 2)
+  precio_neto          Decimal?   @db.Decimal(14, 4)
+  importe_linea        Decimal?   @db.Decimal(14, 4)
+  datos_extra          Json?
+  fecha_creacion       DateTime?  @default(now()) @db.Timestamp(0)
+  id_de_empresa        BigInt?
+  cuenta_contable      String?    @db.VarChar(20)
+  documentos           documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_linea_documento")
+  empresas             empresas?  @relation(fields: [id_de_empresa], references: [id], map: "fk_lineas_documento_empresa")
+
+  @@index([documento_id], map: "fk_linea_documento")
+  @@index([id_de_empresa], map: "fk_lineas_documento_empresa")
+  @@index([codigo], map: "idx_linea_codigo")
+}
+
+model impuestos_documento {
+  id                 BigInt     @id @default(autoincrement())
+  documento_id       BigInt
+  tipo_impuesto      String     @db.VarChar(50)
+  porcentaje         Decimal    @db.Decimal(5, 2)
+  base_imponible     Decimal    @db.Decimal(14, 2)
+  cuota              Decimal    @db.Decimal(14, 2)
+  total_con_impuesto Decimal    @db.Decimal(14, 2)
+  fecha_creacion     DateTime?  @default(now()) @db.Timestamp(0)
+  id_de_empresa      BigInt?
+  documentos         documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_impuesto_documento")
+  empresas           empresas?  @relation(fields: [id_de_empresa], references: [id], map: "fk_impuestos_documento_empresa")
+
+  @@index([documento_id], map: "fk_impuesto_documento")
+  @@index([id_de_empresa], map: "fk_impuestos_documento_empresa")
+  @@index([tipo_impuesto], map: "idx_impuesto_tipo")
+}
+
+model incidencias_documento {
+  id                       BigInt     @id @default(autoincrement())
+  documento_id             BigInt
+  incidencia               Boolean    @default(true)
+  fecha_incidencia         DateTime?  @default(now()) @db.Timestamp(0)
+  descripcion              String?    @db.Text
+  validado                 Boolean    @default(false)
+  fecha_validacion         DateTime?  @db.Timestamp(0)
+  validado_por             String?    @db.VarChar(100)
+  usuario_validado_id      BigInt?
+  observaciones_validacion String?    @db.Text
+  fecha_creacion           DateTime?  @default(now()) @db.Timestamp(0)
+  fecha_actualizacion      DateTime?  @default(now()) @db.Timestamp(0)
+  id_de_empresa            BigInt?
+  documentos               documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_incidencia_documento")
+  usuarios                 usuarios?  @relation(fields: [usuario_validado_id], references: [id], onUpdate: NoAction, map: "fk_incidencia_usuario_validado")
+  empresas                 empresas?  @relation(fields: [id_de_empresa], references: [id], map: "fk_incidencias_documento_empresa")
+
+  @@index([documento_id], map: "fk_incidencia_documento")
+  @@index([id_de_empresa], map: "fk_incidencias_documento_empresa")
+  @@index([incidencia, validado], map: "idx_incidencia_estado")
+  @@index([fecha_incidencia], map: "idx_incidencia_fecha")
+  @@index([validado, fecha_incidencia], map: "idx_incidencias_validado_fecha")
+  @@index([usuario_validado_id], map: "idx_usuario_validado")
+  @@index([validado_por], map: "idx_validado_por")
+}
+
+model health_check_status {
+  documento_id Int       @id
+  empresa_id   Int
+  verified     Boolean?  @default(false)
+  created_at   DateTime? @default(now()) @db.DateTime(0)
+  check_type   String    @default("MISMATCH_MATEMATICO") @db.VarChar(50)
+  motivo       String?   @db.Text
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model actividad {
+  id                 Int       @id @default(autoincrement())
+  upload_id          String    @unique(map: "upload_id") @db.VarChar(255)
+  parent_upload_id   String?   @db.VarChar(255)
+  id_de_empresa      BigInt
+  documento_id       BigInt?
+  documento_nombre   String?   @db.VarChar(500)
+  documento_tipo     String?   @db.VarChar(100)
+  status             String?   @db.VarChar(100)
+  step               String?   @db.VarChar(255)
+  progress           Int?      @default(0)
+  mensaje            String?   @db.Text
+  error_detalle      String?   @db.Text
+  created_at         DateTime? @default(now()) @db.Timestamp(0)
+  updated_at         DateTime? @default(now()) @db.Timestamp(0)
+  completed_at       DateTime? @db.Timestamp(0)
+  file_path          String?   @db.Text
+  file_hash          String?   @db.VarChar(128)
+  cif                String?   @db.VarChar(20)
+  retry_count        Int?      @default(0)
+  webhook_payload    Json?
+  is_retry           Boolean?  @default(false)
+  original_upload_id String?   @db.VarChar(255)
+  is_new             Boolean?  @default(true)
+  dashboard_correo   String?   @map("dashboard-correo") @db.VarChar(50)
+  notificado         Boolean   @default(false)
+  empresas           empresas  @relation(fields: [id_de_empresa], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "actividad_ibfk_1")
+
+  @@index([created_at], map: "idx_created_at")
+  @@index([documento_id], map: "idx_documento_id")
+  @@index([id_de_empresa], map: "idx_id_de_empresa")
+  @@index([status], map: "idx_status")
+  @@index([upload_id], map: "idx_upload_id")
+}
+
+model ai_daily_usage {
+  id            BigInt                  @id @default(autoincrement())
+  user_id       BigInt
+  provider      ai_daily_usage_provider
+  usage_date    DateTime                @db.Date
+  request_count Int?                    @default(0)
+  tokens_used   Int?                    @default(0)
+  created_at    DateTime?               @default(now()) @db.Timestamp(0)
+  updated_at    DateTime?               @default(now()) @db.Timestamp(0)
+  usuarios      usuarios                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_daily_usage_ibfk_1")
+
+  @@unique([user_id, provider, usage_date], map: "unique_user_provider_date")
+  @@index([usage_date], map: "idx_usage_date")
+  @@index([user_id, provider], map: "idx_user_provider")
+}
+
+
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ai_incidencias_documento {
+  id             BigInt                             @id @default(autoincrement())
+  documento_id   BigInt
+  id_de_empresa  BigInt?
+  tipo           String                             @db.VarChar(100)
+  descripcion    String                             @db.Text
+  severidad      ai_incidencias_documento_severidad @default(baja)
+  fecha_creacion DateTime?                          @default(now()) @db.Timestamp(0)
+  analisis_id    BigInt?
+  provider       String?                            @db.VarChar(20)
+  model          String?                            @db.VarChar(50)
+  documentos     documentos                         @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_incidencias_documento_ibfk_1")
+
+  @@index([documento_id], map: "idx_documento")
+  @@index([fecha_creacion], map: "idx_fecha")
+  @@index([provider], map: "idx_provider")
+  @@index([severidad], map: "idx_severidad")
+}
+
+model ai_suggestions {
+  id                 BigInt                    @id @default(autoincrement())
+  documento_id       BigInt
+  empresa_id         BigInt
+  tipo               String?                   @db.VarChar(100)
+  descripcion        String?                   @db.Text
+  severidad          ai_suggestions_severidad?
+  sugerencia         String?                   @db.Text
+  created_at         DateTime?                 @default(now()) @db.Timestamp(0)
+  analisis_nro       Int?                      @default(1)
+  historial          String?                   @db.Text
+  include_in_context Boolean?                  @default(true)
+  documentos         documentos                @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_suggestions_ibfk_1")
+
+  @@index([documento_id], map: "documento_id")
+  @@index([empresa_id], map: "empresa_id")
+}
+
+model ai_usage_log {
+  id              BigInt    @id @default(autoincrement())
+  user_id         BigInt
+  document_id     BigInt
+  provider        String?   @db.VarChar(50)
+  model           String?   @db.VarChar(100)
+  used_own_key    Boolean?  @default(false)
+  tokens_used     Int?
+  incidents_found Int?      @default(0)
+  created_at      DateTime? @default(now()) @db.Timestamp(0)
+  usuarios        usuarios  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_usage_log_ibfk_1")
+
+  @@index([document_id], map: "idx_document")
+  @@index([user_id, created_at], map: "idx_user_date")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ai_user_config {
+  id                    BigInt                          @id @default(autoincrement())
+  user_id               BigInt                          @unique(map: "unique_user_config")
+  use_own_key           Boolean?                        @default(false)
+  own_provider          ai_user_config_own_provider?
+  own_api_key_encrypted String?                         @db.VarChar(500)
+  custom_prompt         String?                         @db.Text
+  preferred_model       String?                         @default("gpt-4o-mini") @db.VarChar(100)
+  shared_provider       ai_user_config_shared_provider? @default(gemini)
+  created_at            DateTime?                       @default(now()) @db.Timestamp(0)
+  updated_at            DateTime?                       @default(now()) @db.Timestamp(0)
+  daily_limit_openai    Int                             @default(5)
+  daily_limit_gemini    Int                             @default(50)
+  is_unlimited          Boolean                         @default(false)
+  usuarios              usuarios                        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ai_user_config_ibfk_1")
+}
+
+model api_keys {
+  id             Int       @id @default(autoincrement())
+  nombre         String    @db.VarChar(255)
+  key_hash       String    @db.VarChar(64)
+  key_prefix     String    @db.VarChar(20)
+  empresa_id     Int
+  usuario_id     Int
+  activa         Boolean   @default(true)
+  ultimo_uso     DateTime? @db.DateTime(0)
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(0)
+
+  @@index([empresa_id], map: "idx_empresa_id")
+  @@index([key_hash], map: "idx_key_hash")
+  @@index([usuario_id], map: "idx_usuario_id")
+}
+
+
+
+model correos_inhabilitados {
+  id                  Int       @id @default(autoincrement())
+  email               String    @db.VarChar(255)
+  envios              String    @default("0") @db.VarChar(10)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(0)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model documentos_auditoria {
+  id            BigInt      @id @default(autoincrement())
+  documento_id  BigInt?
+  accion        String?     @db.VarChar(100)
+  usuario       String?     @db.Text
+  detalle       String?     @db.Text
+  fecha_accion  DateTime?   @default(now()) @db.Timestamp(0)
+  id_de_empresa BigInt?
+  documentos    documentos? @relation(fields: [documento_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_audit_documento")
+  empresas      empresas?   @relation(fields: [id_de_empresa], references: [id], map: "fk_documentos_auditoria_empresa")
+
+  @@index([documento_id], map: "fk_audit_documento")
+  @@index([id_de_empresa], map: "fk_documentos_auditoria_empresa")
+}
+
+
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model entidades_config {
+  id                   BigInt   @id @default(autoincrement())
+  empresa_id           BigInt
+  identificador_fiscal String   @db.VarChar(50)
+  nombre_referencia    String?  @db.VarChar(255)
+  cuenta_venta         String?  @default("430") @db.VarChar(10)
+  cuenta_compra        String?  @default("400") @db.VarChar(10)
+  fecha_modificacion   DateTime @default(now()) @db.Timestamp(0)
+  empresas             empresas @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_entconf_empresa")
+
+  @@unique([empresa_id, identificador_fiscal], map: "uk_empresa_fiscal")
+}
+
+
+
+model exports {
+  id                BigInt          @id @default(autoincrement())
+  id_de_usuario     BigInt
+  tipo_export       String          @db.VarChar(50)
+  fecha_generacion  DateTime?       @default(now()) @db.DateTime(0)
+  a_o_filtro        Int?            @map("año_filtro")
+  trimestre_filtro  Int?
+  empresas_ids      Json?
+  total_documentos  Int?            @default(0)
+  documento_ids     Json?
+  filtros_aplicados Json?
+  estado            exports_estado? @default(pending)
+  url_archivo       String?         @db.VarChar(500)
+  nombre_archivo    String?         @db.VarChar(255)
+  error_mensaje     String?         @db.Text
+  fecha_completado  DateTime?       @db.DateTime(0)
+  usuarios          usuarios        @relation(fields: [id_de_usuario], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "exports_ibfk_1")
+
+  @@index([estado], map: "idx_estado")
+  @@index([fecha_generacion], map: "idx_fecha")
+  @@index([id_de_usuario], map: "idx_usuario")
+}
+
+model fallos_de_mails {
+  id                 Int       @id @default(autoincrement())
+  fecha_creacion     DateTime? @default(now()) @db.Timestamp(0)
+  fecha_modificacion DateTime? @default(now()) @db.Timestamp(0)
+  email              String    @db.VarChar(255)
+  documento          String    @db.VarChar(50)
+  fecha              String?   @db.VarChar(100)
+  motivo             String?   @db.VarChar(500)
+  mailenviado        Int?      @default(0)
+  execution_id       String?   @db.VarChar(45)
+}
+
+
+
+model password_reset_tokens {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  token      String   @unique(map: "token") @db.VarChar(255)
+  email      String   @db.VarChar(255)
+  expires_at DateTime @db.DateTime(0)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  used       Boolean? @default(false)
+  usuarios   usuarios @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_reset_tokens_ibfk_1")
+
+  @@index([email], map: "idx_email")
+  @@index([expires_at], map: "idx_expires")
+  @@index([token], map: "idx_token")
+  @@index([user_id], map: "idx_user_id")
+}
+
+model productos_config {
+  id              Int       @id @default(autoincrement())
+  id_de_empresa   Int
+  proveedor_cif   String?   @db.VarChar(20)
+  patron          String    @db.VarChar(255)
+  cuenta_contable String    @db.VarChar(20)
+  is_ai_suggested Boolean?  @default(false)
+  created_at      DateTime? @default(now()) @db.Timestamp(0)
+  updated_at      DateTime? @default(now()) @db.Timestamp(0)
+  justification   String?   @db.Text
+
+  @@index([id_de_empresa, patron], map: "idx_empresa_patron")
+  @@index([proveedor_cif], map: "idx_proveedor")
+}
+
+model sugerencias {
+  id         BigInt    @id @default(autoincrement())
+  id_usuario BigInt
+  mensaje    String    @db.Text
+  media_urls Json?
+  estado     String?   @default("pendiente") @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model sys_config {
+  variable String    @id @db.VarChar(128)
+  value    String?   @db.VarChar(128)
+  set_time DateTime? @default(now()) @db.Timestamp(0)
+  set_by   String?   @db.VarChar(128)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model trimestres {
+  id                  BigInt    @id @default(autoincrement())
+  a_o                 Int       @map("año")
+  num_trimestre       Int       @db.TinyInt
+  id_de_empresa       BigInt?
+  cerrado             Boolean?  @default(false)
+  fecha_cierre        DateTime? @db.DateTime(0)
+  total_documentos    Int?      @default(0)
+  total_ingresos      Decimal?  @default(0.00) @db.Decimal(14, 2)
+  total_gastos        Decimal?  @default(0.00) @db.Decimal(14, 2)
+  iva_repercutido     Decimal?  @default(0.00) @db.Decimal(14, 2)
+  iva_soportado       Decimal?  @default(0.00) @db.Decimal(14, 2)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(0)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(0)
+  empresas            empresas? @relation(fields: [id_de_empresa], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "trimestres_ibfk_1")
+
+  @@unique([a_o, num_trimestre, id_de_empresa], map: "unique_trimestre_empresa")
+  @@index([cerrado], map: "idx_cerrado")
+  @@index([id_de_empresa, a_o], map: "idx_empresa_año")
+}
+
+
+
+model validacion_impuestos {
+  id            BigInt   @id @unique(map: "id") @default(autoincrement()) @db.UnsignedBigInt
+  vigente       Boolean? @default(false)
+  date_init     DateTime @db.Date
+  date_finish   DateTime @db.Date
+  tipo_impuesto String   @db.VarChar(50)
+  porcentaje    Decimal  @db.Decimal(5, 2)
+}
+
+model webhook_logs {
+  id               Int              @id @default(autoincrement())
+  webhook_id       Int
+  evento           String           @db.VarChar(128)
+  payload          Json
+  http_status      Int?
+  response_body    String?          @db.Text
+  created_at       DateTime?        @default(now()) @db.Timestamp(0)
+  webhooks_empresa webhooks_empresa @relation(fields: [webhook_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "webhook_logs_ibfk_1")
+
+  @@index([webhook_id], map: "webhook_id")
+}
+
+model webhooks_empresa {
+  id                Int            @id @default(autoincrement())
+  id_de_empresa     BigInt
+  url_destino       String         @db.VarChar(1024)
+  secreto_firma     String         @db.VarChar(64)
+  eventos_suscritos Json
+  activo            Boolean?       @default(true)
+  created_at        DateTime?      @default(now()) @db.Timestamp(0)
+  updated_at        DateTime?      @default(now()) @db.Timestamp(0)
+  config            Json?          @default(dbgenerated("(json_object(_utf8mb4\\'agrupar_eventos\\',false))"))
+  webhook_logs      webhook_logs[]
+  empresas          empresas       @relation(fields: [id_de_empresa], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "webhooks_empresa_ibfk_1")
+
+  @@index([id_de_empresa], map: "id_de_empresa")
+}
+
+enum ai_daily_usage_provider {
+  openai
+  gemini
+}
+
+enum ai_user_config_own_provider {
+  openai
+  gemini
+}
+
+enum invitaciones_empresa_rol {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum invitaciones_empresa_status {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum ai_incidencias_documento_severidad {
+  baja
+  media
+  alta
+}
+
+enum ai_suggestions_severidad {
+  baja
+  media
+  alta
+}
+
+enum ai_user_config_shared_provider {
+  gemini
+  openai
+}
+
+enum exports_estado {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum usuarios_rol {
+  usuario
+  admin
+}
+
+enum usuarios_organization_rol {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model eventos_sistema {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id_de_empresa BigInt?   @db.UnsignedBigInt
+  usuario       String?   @db.Text
+  tipo_evento   String    @db.VarChar(100)
+  metadata      String?   @db.LongText
+  fecha         DateTime  @default(now()) @db.DateTime(0)
+
+  @@index([id_de_empresa], map: "idx_eventos_empresa")
+  @@index([fecha], map: "idx_eventos_fecha")
+}

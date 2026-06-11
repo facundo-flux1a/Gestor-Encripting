@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
         console.log(`📦 [BulkUpdate] Updating ${ids.length} documents: ${fieldName} = ${value}`);
 
         const results = await Promise.all(
-            ids.map(id => updateDocumentField(id, fieldName, value).catch(err => ({ success: false, error: err.message })))
+            ids.map(id => updateDocumentField(id, fieldName, value, user.email).catch(err => ({ success: false, error: err.message })))
         );
 
         const failures = results.filter(r => !r.success);

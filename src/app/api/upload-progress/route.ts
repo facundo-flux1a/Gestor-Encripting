@@ -287,7 +287,8 @@ async function dispatchCompletionWebhook(uploadId: string) {
             ...dRows[0],
             url_archivo: aRows[0]?.ruta_archivo ?? null,
             tiene_incidencias: hasInc,
-            cantidad_incidencias: docIncidenciasCount
+            cantidad_incidencias: docIncidenciasCount,
+            upload_id_original: uploadId
           });
         }
       }

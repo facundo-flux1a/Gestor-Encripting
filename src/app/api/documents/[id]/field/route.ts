@@ -35,7 +35,7 @@ export async function PATCH(
 
     console.log('📝 [API-UPDATE-FIELD] Actualizando:', { documentId, fieldName, value });
 
-    const result = await updateDocumentField(documentId, fieldName, value);
+    const result = await updateDocumentField(documentId, fieldName, value, user.email);
 
     if (!result.success) {
       return NextResponse.json({ error: 'Error al actualizar campo' }, { status: 400 });

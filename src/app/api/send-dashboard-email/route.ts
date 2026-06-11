@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/services/user-service';
 import { createExport } from '@/services/document-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 
 const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/6d62acdb-a2d3-4e2d-a4f7-41a49be815d4';
 
@@ -37,20 +38,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Obtener datos completos de la empresa
-    const [empresaRows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM empresas WHERE id = ?',
-      [empresaId]
-    );
+    // Obtener datos completos de la empresa (Prisma descifra nombre_de_empresa automáticamente)
+    const empresaRow = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { id: true, nombre_de_empresa: true, CIF: true }
+    });
 
-    if (empresaRows.length === 0) {
+    if (!empresaRow) {
       return NextResponse.json(
         { error: 'Empresa no encontrada' },
         { status: 404 }
       );
     }
 
-    const empresa = empresaRows[0];
+    const empresa = {
+      id: Number(empresaRow.id),
+      nombre: empresaRow.nombre_de_empresa || '',
+      cif: empresaRow.CIF || ''
+    };
 
     // 1. Generar el PDF primero (usando la misma lógica que export-dashboard)
     const exportResult = await createExport({

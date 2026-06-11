@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// TABLAS CON PII (ENCRIPTACIÓN ACTIVA)
+// ==========================================
+
+model usuarios {
+  id                  BigInt    @id @default(autoincrement())
+  
+  /// @encrypted
+  email               String    @db.Text
+  email_hash          String?   @unique @db.VarChar(64)
+  
+  /// @encrypted
+  nombre              String    @db.Text
+  
+  /// @encrypted
+  phone               String?   @db.Text
+  
+  password            String?   @db.VarChar(255)
+  two_factor_code     String?   @db.VarChar(255)
+  
+  tutorial            Int?      @default(0)
+  tutorial_documentos Int?      @default(0)
+  tutorial_trimestres Int?      @default(0)
+  tutorial_actividad  Int?      @default(0)
+  tutorial_individual Int?      @default(0)
+  tutorial_incidencias Int?     @default(0)
+  tutorial_proveedores Int?     @default(0)
+  
+  config_otros_tipos  String?   @db.Text
+  organization_rol    String?   @default("ADMIN") @db.VarChar(50)
+}
+
+model empresas {
+  id                  BigInt    @id @default(autoincrement())
+  
+  /// @encrypted
+  nombre_de_empresa   String    @db.Text
+  
+  /// @encrypted
+  nombre_fiscal       String?   @db.Text
+  
+  /// @encrypted
+  cif                 String?   @db.Text
+  cif_hash            String?   @unique @db.VarChar(64)
+  
+  /// @encrypted
+  mail_de_carga       String?   @db.Text
+  mail_de_carga_hash  String?   @unique @db.VarChar(64)
+  
+  recargo             Boolean?  @default(false)
+  id_de_usuario       Json?
+  config_roles        Json?
+}
+
+model entidades_documento {
+  id                   BigInt    @id @default(autoincrement())
+  documento_id         BigInt
+  rol                  String    @db.VarChar(50)
+  
+  /// @encrypted
+  nombre               String?   @db.Text
+  
+  /// @encrypted
+  direccion            String?   @db.Text
+  
+  /// @encrypted
+  identificador_fiscal String?   @db.Text
+  identificador_fiscal_hash String? @db.VarChar(64)
+  
+  /// @encrypted
+  telefono             String?   @db.Text
+  
+  /// @encrypted
+  email                String?   @db.Text
+  
+  datos_extra          Json?
+  fecha_creacion       DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa        BigInt?
+  cuenta_contable      String?   @db.VarChar(10)
+}
+
+model invitaciones_empresa {
+  id                  BigInt    @id @default(autoincrement())
+  empresa_id          BigInt
+  
+  /// @encrypted
+  email               String    @db.Text
+  email_hash          String?   @db.VarChar(64)
+  
+  rol                 String    @db.VarChar(50)
+  status              String    @default("PENDING") @db.VarChar(50)
+  token               String    @db.VarChar(255)
+  metadata            Json?
+  fecha_expiracion    DateTime  @db.DateTime(0)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model archivos_documento {
+  id                  BigInt    @id @default(autoincrement())
+  documento_id        BigInt
+  tipo_archivo        String?   @db.VarChar(50)
+  
+  /// @encrypted
+  nombre_archivo      String?   @db.Text
+  
+  /// @encrypted
+  ruta_archivo        String?   @db.Text
+  
+  hash_archivo        String?   @db.Char(64)
+  fecha_subida        DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa       BigInt?
+}
+
+// ==========================================
+// TABLAS OPERACIONALES (TEXTO PLANO)
+// Basadas exactamente en el dump de la DB
+// ==========================================
+
+model documentos {
+  id                        BigInt    @id @default(autoincrement())
+  file_hash                 String?   @db.VarChar(64)
+  tipo_documento            String?   @db.VarChar(100)
+  numero_documento          String?   @db.VarChar(100)
+  fecha_emision             DateTime? @db.Date
+  fecha_vencimiento         DateTime? @db.Date
+  importe_total             Decimal?  @db.Decimal(14, 2)
+  importe_sin_impuestos     Decimal?  @db.Decimal(14, 2)
+  moneda                    String?   @default("EUR") @db.Char(3)
+  observaciones             String?   @db.Text
+  datos_extra               Json?
+  fecha_creacion            DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa             BigInt?
+  is_new                    Int?      @default(1)
+  trimestre_cerrado         Boolean?  @default(false)
+  enviado_sii               Boolean?  @default(false)
+  fecha_cierre_trimestre    DateTime? @db.DateTime(0)
+  año_trimestre             Int?
+  num_trimestre             Int?
+  dashboard_correo          String?   @map("dashboard-correo") @db.VarChar(50)
+}
+
+model lineas_documento {
+  id                    BigInt    @id @default(autoincrement())
+  documento_id          BigInt
+  codigo                String?   @db.VarChar(100)
+  descripcion           String?   @db.Text
+  cantidad              Decimal?  @db.Decimal(14, 3)
+  unidad                String?   @db.VarChar(20)
+  precio_unitario       Decimal?  @db.Decimal(14, 4)
+  descuento_porcentaje  Decimal?  @db.Decimal(5, 2)
+  precio_neto           Decimal?  @db.Decimal(14, 4)
+  importe_linea         Decimal?  @db.Decimal(14, 4)
+  datos_extra           Json?
+  fecha_creacion        DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa         BigInt?
+  cuenta_contable       String?   @db.VarChar(20)
+}
+
+model impuestos_documento {
+  id                    BigInt    @id @default(autoincrement())
+  documento_id          BigInt
+  tipo_impuesto         String?   @db.VarChar(50)
+  porcentaje            Decimal   @db.Decimal(5, 2)
+  base_imponible        Decimal   @db.Decimal(14, 2)
+  cuota                 Decimal   @db.Decimal(14, 2)
+  total_con_impuesto    Decimal   @db.Decimal(14, 2)
+  fecha_creacion        DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa         BigInt?
+}
+
+model incidencias_documento {
+  id                       BigInt    @id @default(autoincrement())
+  documento_id             BigInt
+  incidencia               Boolean   @default(true)
+  fecha_incidencia         DateTime? @default(now()) @db.Timestamp(0)
+  descripcion              String?   @db.Text
+  validado                 Boolean   @default(false)
+  fecha_validacion         DateTime? @db.Timestamp(0)
+  validado_por             String?   @db.VarChar(100)
+  usuario_validado_id      BigInt?
+  observaciones_validacion String?   @db.Text
+  fecha_creacion           DateTime? @default(now()) @db.Timestamp(0)
+  fecha_actualizacion      DateTime? @default(now()) @db.Timestamp(0)
+  id_de_empresa            BigInt?
+}
+
+model health_check_status {
+  documento_id             Int       @id
+  empresa_id               Int
+  verified                 Boolean?  @default(false)
+  created_at               DateTime? @default(now()) @db.DateTime(0)
+  check_type               String    @default("MISMATCH_MATEMATICO") @db.VarChar(50)
+  motivo                   String?   @db.Text
+}

@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
+    serverExternalPackages: [
+      '@genkit-ai/core',
+      '@genkit-ai/googleai',
+      '@opentelemetry/instrumentation',
+      '@opentelemetry/sdk-node',
+      'genkit',
+    ],
   },
 };
 

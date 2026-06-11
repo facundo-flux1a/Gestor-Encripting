@@ -10,6 +10,10 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 import { normalizeProductDescription } from "@/lib/utils";
+import { prisma } from '@/lib/prisma';
+import { hashField } from '@/lib/encryption';
+
+const serializeData = (data: any) => JSON.parse(JSON.stringify(data, (k, v) => typeof v === 'bigint' ? Number(v) : v));
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
@@ -160,18 +164,22 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
   }
   const docIds = documentRows.map(doc => doc.id);
 
-  const [fileRows] = await db.query<ArchivoPacket[]>('SELECT * FROM archivos_documento WHERE documento_id IN (?)', [docIds]);
-  const [entidadRows] = await db.query<EntidadPacket[]>("SELECT * FROM entidades_documento WHERE documento_id IN (?)", [docIds]);
-  const [lineaRows] = await db.query<LineaPacket[]>('SELECT * FROM lineas_documento WHERE documento_id IN (?)', [docIds]);
-  const [impuestoRows] = await db.query<ImpuestoPacket[]>('SELECT * FROM impuestos_documento WHERE documento_id IN (?)', [docIds]);
-  const [incidenciaRows] = await db.query<IncidenciaPacket[]>('SELECT * FROM incidencias_documento WHERE documento_id IN (?)', [docIds]);
+  const bigDocIds = docIds.map(id => BigInt(id));
+  const [fileRows, entidadRows, lineaRows, impuestoRows, incidenciaRows] = await Promise.all([
+    prisma.archivos_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+    prisma.entidades_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+    prisma.lineas_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+    prisma.impuestos_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+    prisma.incidencias_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+  ]);
 
   const documents = documentRows.map(doc => {
-    const currentFiles = fileRows.filter(f => f.documento_id === doc.id);
-    const currentEntidades = entidadRows.filter(e => e.documento_id === doc.id);
-    const currentLineas = lineaRows.filter(l => l.documento_id === doc.id);
-    const currentImpuestos = impuestoRows.filter(i => i.documento_id === doc.id);
-    const currentIncidencias = incidenciaRows.filter(i => i.documento_id === doc.id);
+    const currentFiles = fileRows.filter(f => Number(f.documento_id) === Number(doc.id));
+    const currentEntidades = entidadRows.filter(e => Number(e.documento_id) === Number(doc.id));
+    const currentLineas = lineaRows.filter(l => Number(l.documento_id) === Number(doc.id));
+    const currentImpuestos = impuestoRows.filter(i => Number(i.documento_id) === Number(doc.id));
+    const currentIncidencias = incidenciaRows.filter(i => Number(i.documento_id) === Number(doc.id));
+
 
     const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
     const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
@@ -280,7 +288,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     };
   });
 
-  return JSON.parse(JSON.stringify(documents));
+  return serializeData(documents);
 }
 
 /**
@@ -301,30 +309,45 @@ export async function getCompanies(): Promise<Company[]> {
 
     console.log('🔍 [getCompanies] Buscando empresas para usuario ID:', user.id);
 
-    const query = 'SELECT id, nombre_de_empresa as name, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario, config_roles FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY nombre_de_empresa ASC';
+    // Prisma: fetch all companies and filter in-memory (JSON array field)
+    // ⚠️ No usar orderBy en campos encriptados — se ordena en memoria después de desencriptar
+    const allRows = await prisma.empresas.findMany({
+      select: {
+        id: true,
+        nombre_de_empresa: true,
+        nombre_fiscal: true,
+        CIF: true,
+        mail_de_carga: true,
+        recargo: true,
+        id_de_usuario: true,
+        config_roles: true
+      }
+    });
 
-    console.log('📝 [getCompanies] Query:', query);
-    console.log('📝 [getCompanies] Params:', [user.id]);
-
-    const [rows] = await db.query<any[]>(query, [user.id]);
+    const rows = allRows.filter(row => {
+      const ids: number[] = Array.isArray(row.id_de_usuario) ? row.id_de_usuario as any[] : [];
+      return ids.includes(user.id);
+    });
 
     console.log('📊 [getCompanies] Filas obtenidas:', rows.length);
-    console.log('📋 [getCompanies] Datos RAW:', rows);
 
     if (!rows || rows.length === 0) {
       return [];
     }
 
-    const companies = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      nombreFiscal: row.nombre_fiscal,
-      cif: row.CIF,
-      mail_de_carga: row.mail_de_carga,
-      recargo: !!row.recargo,
-      id_de_usuario: row.id_de_usuario,
-      config_roles: row.config_roles
-    }));
+    const companies = rows
+      .map(row => ({
+        id: Number(row.id),
+        name: row.nombre_de_empresa,         // desencriptado automáticamente por Prisma
+        nombreFiscal: row.nombre_fiscal,       // desencriptado automáticamente por Prisma
+        cif: row.CIF,
+        mail_de_carga: row.mail_de_carga,     // desencriptado automáticamente por Prisma
+        recargo: !!row.recargo,
+        id_de_usuario: row.id_de_usuario,
+        config_roles: row.config_roles
+      }))
+      // Ordenar en memoria DESPUÉS de desencriptar (no se puede ordenar en BD sobre campo encriptado)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }));
 
     console.log('✅ [getCompanies] Empresas mapeadas:', companies);
 
@@ -369,53 +392,63 @@ export async function createCompany(data: {
       throw new Error('El CIF es obligatorio');
     }
 
-    // Verificar si ya existe una empresa con el mismo CIF para este usuario
-    const [existingCompanies] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
-      [data.cif.trim(), user.id]
-    );
+    // Hashes para búsquedas seguras (Blind Indexes)
+    const cifHash = hashField(data.cif.trim());
+    const mailDeCargaHash = data.mailDeCarga?.trim() ? hashField(data.mailDeCarga.trim()) : null;
 
-    if (existingCompanies.length > 0) {
+    // Verificar si ya existe una empresa con el mismo CIF para este usuario
+    const existingCompanies = await prisma.empresas.findMany({
+      where: { cif_hash: cifHash }
+    });
+
+    const isCompanyForUser = existingCompanies.some(c => {
+      let ids: number[] = [];
+      try {
+        ids = typeof c.id_de_usuario === 'string' ? JSON.parse(c.id_de_usuario) : (c.id_de_usuario || []);
+      } catch(e) {}
+      return Array.isArray(ids) && ids.includes(user.id);
+    });
+
+    if (isCompanyForUser) {
       throw new Error('Ya existe una empresa con este CIF');
     }
 
     // Si se proporciona email, verificar que sea único globalmente
-    if (data.mailDeCarga?.trim()) {
-      const [existingEmail] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE mail_de_carga = ?',
-        [data.mailDeCarga.trim()]
-      );
+    if (mailDeCargaHash) {
+      const existingEmail = await prisma.empresas.findFirst({
+        where: { mail_de_carga_hash: mailDeCargaHash }
+      });
 
-      if (existingEmail.length > 0) {
+      if (existingEmail) {
         throw new Error('Ya existe una empresa con ese mail de carga');
       }
     }
 
-    const initialConfigRoles = JSON.stringify({ [user.id]: 'ADMIN' });
-    const [result] = await db.query<OkPacket>(
-      'INSERT INTO empresas (nombre_de_empresa, nombre_fiscal, CIF, mail_de_carga, recargo, id_de_usuario, config_roles) VALUES (?, ?, ?, ?, ?, JSON_ARRAY(?), CAST(? AS JSON))',
-      [
-        data.name.trim(),
-        data.nombreFiscal?.trim() || null,
-        data.cif.trim(),
-        data.mailDeCarga?.trim() || null,
-        data.recargo ? 1 : 0,
-        user.id,
-        initialConfigRoles
-      ]
-    );
+    const initialConfigRoles = { [user.id.toString()]: 'ADMIN' };
+    
+    const newCompanyData = await prisma.empresas.create({
+      data: {
+        nombre_de_empresa: data.name.trim(),
+        nombre_fiscal: data.nombreFiscal?.trim() || null,
+        CIF: data.cif.trim(),
+        cif_hash: cifHash,
+        mail_de_carga: data.mailDeCarga?.trim() || null,
+        mail_de_carga_hash: mailDeCargaHash,
+        recargo: data.recargo ? true : false,
+        id_de_usuario: [user.id],
+        config_roles: initialConfigRoles
+      }
+    });
 
-    console.log('✅ [createCompany] Empresa creada con ID:', result.insertId);
+    console.log('✅ [createCompany] Empresa creada con ID:', newCompanyData.id);
 
     const newCompany: Company = {
-      id: result.insertId,
+      id: Number(newCompanyData.id),
       name: data.name.trim(),
       nombreFiscal: data.nombreFiscal?.trim() || null,
       cif: data.cif.trim(),
       recargo: !!data.recargo,
-      config_roles: {
-        [user.id.toString()]: 'ADMIN'
-      },
+      config_roles: initialConfigRoles,
       members: [{
         id: user.id,
         nombre: user.nombre,
@@ -455,68 +488,81 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
       return [];
     }
 
-    let query = `
-      SELECT 
-        d.id, 
-        d.tipo_documento, 
-        d.numero_documento, 
-        d.fecha_emision, 
-        d.fecha_vencimiento, 
-        d.importe_total, 
-        d.importe_sin_impuestos, 
-        d.moneda, 
-        d.observaciones, 
-        d.datos_extra, 
-        d.fecha_creacion, 
-        d.id_de_empresa, 
-        d.is_new,
-        d.trimestre_cerrado,
-        d.año_trimestre, 
-        d.num_trimestre,
-        e.nombre_de_empresa as empresa_nombre, 
-        e.cif as empresa_cif,
-        (
-          SELECT MAX(CASE 
-            WHEN ed2.rol IN ('emisor', 'proveedor') AND ed2.identificador_fiscal = e.cif THEN 1 
-            ELSE 0 
-          END)
-          FROM entidades_documento ed2
-          WHERE ed2.documento_id = d.id
-        ) as is_issued
-      FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      WHERE JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
-    `;
-
-    const params: any[] = [user.id];
+    // Prisma ORM implementation for getDocuments
+    const whereClause: any = {
+      OR: [
+        { id_de_empresa: null }, // If needed, though usually docs belong to an empresa
+        { empresas: { id_de_usuario: { array_contains: user.id } } }
+      ]
+    };
 
     if (empresaIds && empresaIds.length > 0) {
-      query += ' AND d.id_de_empresa IN (?)';
-      params.push(empresaIds);
+      whereClause.id_de_empresa = { in: empresaIds.map(id => BigInt(id)) };
     }
 
-    // ✅ NUEVO: Filtro para excluir documentos con incidencias pendientes o descuadres no verificados
     if (excludeIncidents) {
-      query += ` AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-    AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
-      query += ` AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
+      whereClause.incidencias_documento = { none: { validado: false } };
+      
+      // Excluir manualmente los documentos con fallos en el health check 
+      // (no se puede por relación Prisma porque documento_id es Int y documentos.id es BigInt)
+      const unverifiedHealthChecks = await prisma.health_check_status.findMany({
+        where: { verified: false },
+        select: { documento_id: true }
+      });
+      
+      if (unverifiedHealthChecks.length > 0) {
+        const unverifiedIds = unverifiedHealthChecks.map(hc => BigInt(hc.documento_id));
+        whereClause.id = { notIn: unverifiedIds };
+      }
     }
 
-    query += ' ORDER BY d.fecha_emision DESC';
+    const docs = await prisma.documentos.findMany({
+      where: whereClause,
+      orderBy: { fecha_emision: 'desc' },
+      include: {
+        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
+        entidades_documento: {
+          where: { rol: { in: ['emisor', 'proveedor'] } },
+          select: { identificador_fiscal_hash: true }
+        }
+      }
+    });
 
-    console.log('📝 [document-service] Query:', query);
-    console.log('📝 [document-service] Params:', params);
+    console.log('📊 [document-service] Filas obtenidas de BD:', docs.length);
 
-    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+    const documentRows = docs.map((d: any) => {
+      const is_issued = d.entidades_documento.some(ed => 
+        ed.identificador_fiscal_hash && d.empresas?.cif_hash && ed.identificador_fiscal_hash === d.empresas.cif_hash
+      ) ? 1 : 0;
 
-    console.log('📊 [document-service] Filas obtenidas de BD:', documentRows.length);
+      return {
+        id: Number(d.id),
+        tipo_documento: d.tipo_documento,
+        numero_documento: d.numero_documento,
+        fecha_emision: d.fecha_emision,
+        fecha_vencimiento: d.fecha_vencimiento,
+        importe_total: d.importe_total,
+        importe_sin_impuestos: d.importe_sin_impuestos,
+        moneda: d.moneda,
+        observaciones: d.observaciones,
+        datos_extra: d.datos_extra,
+        fecha_creacion: d.fecha_creacion,
+        id_de_empresa: d.id_de_empresa ? Number(d.id_de_empresa) : null,
+        is_new: d.is_new,
+        trimestre_cerrado: d.trimestre_cerrado ? 1 : 0,
+        año_trimestre: d.año_trimestre,
+        num_trimestre: d.num_trimestre,
+        empresa_nombre: d.empresas?.nombre_de_empresa || null,
+        empresa_cif: d.empresas?.CIF || null,
+        is_issued
+      };
+    }) as any[];
 
-    // ⬅️ DEBUG: Ver trimestre_cerrado en los datos RAW
     if (documentRows.length > 0) {
       console.log('🔍 [document-service] Primer documento RAW:', {
         id: documentRows[0].id,
         is_new: documentRows[0].is_new,
-        trimestre_cerrado: documentRows[0].trimestre_cerrado,  // ⬅️ AGREGADO
+        trimestre_cerrado: documentRows[0].trimestre_cerrado,
         numero: documentRows[0].numero_documento
       });
     }
@@ -542,43 +588,47 @@ export async function getDocumentById(id: number): Promise<Document | null> {
       return null;
     }
 
-    const query = `
-      SELECT 
-        d.id, 
-        d.tipo_documento, 
-        d.numero_documento, 
-        d.fecha_emision, 
-        d.fecha_vencimiento, 
-        d.importe_total, 
-        d.importe_sin_impuestos, 
-        d.moneda, 
-        d.observaciones, 
-        d.datos_extra, 
-        d.fecha_creacion, 
-        d.id_de_empresa, 
-        d.is_new,
-        d.trimestre_cerrado, 
-        d.año_trimestre, 
-        d.num_trimestre,
-        e.nombre_de_empresa as empresa_nombre, 
-        e.cif as empresa_cif
-      FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))
-    `;
+    console.log('📝 [document-service] getDocumentById:', { id, userId: user.id });
 
-    console.log('📝 [document-service] getDocumentById Query:', { id, userId: user.id });
+    const d = await prisma.documentos.findFirst({
+      where: {
+        id: BigInt(id),
+        empresas: { id_de_usuario: { array_contains: user.id } }
+      },
+      include: {
+        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } }
+      }
+    });
 
-    const [documentRows] = await db.query<DocumentPacket[]>(query, [id, user.id]);
-
-    if (documentRows.length === 0) {
+    if (!d) {
       console.log('⚠️ [document-service] Documento no encontrado:', id);
       return null;
     }
 
+    const documentRows = [{
+      id: Number(d.id),
+      tipo_documento: d.tipo_documento,
+      numero_documento: d.numero_documento,
+      fecha_emision: d.fecha_emision,
+      fecha_vencimiento: d.fecha_vencimiento,
+      importe_total: d.importe_total,
+      importe_sin_impuestos: d.importe_sin_impuestos,
+      moneda: d.moneda,
+      observaciones: d.observaciones,
+      datos_extra: d.datos_extra,
+      fecha_creacion: d.fecha_creacion,
+      id_de_empresa: d.id_de_empresa ? Number(d.id_de_empresa) : null,
+      is_new: d.is_new,
+      trimestre_cerrado: d.trimestre_cerrado ? 1 : 0,
+      año_trimestre: d.año_trimestre,
+      num_trimestre: d.num_trimestre,
+      empresa_nombre: d.empresas?.nombre_de_empresa || null,
+      empresa_cif: d.empresas?.CIF || null
+    }] as any[];
+
     console.log('✅ [document-service] Documento encontrado:', {
       id: documentRows[0].id,
-      trimestre_cerrado: documentRows[0].trimestre_cerrado  // ⬅️ DEBUG
+      trimestre_cerrado: documentRows[0].trimestre_cerrado
     });
 
     const documents = await mapDocumentPacketsToDocuments(documentRows);
@@ -636,156 +686,117 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
 }
 
 
-export async function updateDocument(id: number, data: DocumentUpdatePayload): Promise<{ success: boolean }> {
-  const connection = await db.getConnection();
+export async function updateDocument(id: number, data: DocumentUpdatePayload, userIdentifier: string = 'Sistema'): Promise<{ success: boolean }> {
+  if (userIdentifier === 'Sistema') {
+    const sessionUser = await getCurrentUser();
+    if (sessionUser?.email) userIdentifier = sessionUser.email;
+  }
 
   try {
     console.log('═══════════════════════════════════════════════════════════');
     console.log('🚀 [updateDocument] INICIO - ID:', id);
     console.log('═══════════════════════════════════════════════════════════');
 
-    await connection.beginTransaction();
-    console.log('✅ [updateDocument] Transacción iniciada');
+    let camposReales: string[] = [];
+    let empresaId: number = 0;
 
-    let oldSnapshot = null;
-    try {
-      oldSnapshot = await getSnapshotBeforeUpdate(id, connection);
-    } catch (e) {
-      console.warn('⚠️ [updateDocument] Falló captura de snapshot previo:', e);
-    }
+    await prisma.$transaction(async (tx) => {
+      console.log('✅ [updateDocument] Transacción iniciada via Prisma');
 
-    // ═══════════════════════════════════════════════════════════
-    // PASO 1: Verificar documento y trimestre cerrado
-    // ═══════════════════════════════════════════════════════════
-    const [docRows] = await connection.query<RowDataPacket[]>(
-      'SELECT tipo_documento, trimestre_cerrado, año_trimestre, num_trimestre, id_de_empresa FROM documentos WHERE id = ?',
-      [id]
-    );
-
-    if (docRows.length === 0) {
-      throw new Error('Documento no encontrado');
-    }
-
-    if (docRows[0].trimestre_cerrado) {
-      throw new Error('No se puede modificar un documento de un trimestre cerrado');
-    }
-
-    const empresaId = docRows[0].id_de_empresa;
-    console.log('📋 [updateDocument] Empresa ID:', empresaId);
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 2: Validar y crear trimestre si es necesario
-    // ═══════════════════════════════════════════════════════════
-    if (data.año_trimestre !== undefined && data.num_trimestre !== undefined) {
-      console.log('🔄 [updateDocument] Validando cambio de trimestre...');
-      console.log(`   Nuevo trimestre: ${data.año_trimestre} -T${data.num_trimestre} `);
-
-      // ✅ Verificar si el trimestre de destino existe
-      const [trimestreExistente] = await connection.query<RowDataPacket[]>(
-        `SELECT DISTINCT
-año_trimestre,
-  num_trimestre,
-  MAX(trimestre_cerrado) as cerrado
-                 FROM documentos 
-                 WHERE id_de_empresa = ?
-  AND año_trimestre = ?
-    AND num_trimestre = ?
-      GROUP BY año_trimestre, num_trimestre`,
-        [empresaId, data.año_trimestre, data.num_trimestre]
-      );
-
-      if (trimestreExistente.length > 0) {
-        // ✅ Trimestre existe - verificar que no esté cerrado
-        if (trimestreExistente[0].cerrado) {
-          throw new Error('No se puede mover el documento a un trimestre cerrado');
-        }
-        console.log('✅ [updateDocument] Trimestre destino existe y está abierto');
-      } else {
-        // ✅ Trimestre NO existe - verificar que no exista en tabla trimestres cerrado
-        const [trimestreTabla] = await connection.query<RowDataPacket[]>(
-          `SELECT cerrado FROM trimestres 
-                     WHERE id_de_empresa = ?
-  AND año = ?
-    AND num_trimestre = ? `,
-          [empresaId, data.año_trimestre, data.num_trimestre]
-        );
-
-        if (trimestreTabla.length > 0 && trimestreTabla[0].cerrado) {
-          throw new Error('No se puede crear/mover a un trimestre cerrado');
-        }
-
-        // ✅ Crear entrada en tabla trimestres (abierto por defecto)
-        console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
-        await connection.query(
-          `INSERT INTO trimestres
-  (año, num_trimestre, id_de_empresa, cerrado, total_documentos, total_ingresos, total_gastos, iva_repercutido, iva_soportado, fecha_creacion, fecha_actualizacion)
-VALUES(?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
-                     ON DUPLICATE KEY UPDATE fecha_actualizacion = NOW()`,
-          [data.año_trimestre, data.num_trimestre, empresaId]
-        );
-        console.log('✅ [updateDocument] Trimestre creado en tabla trimestres');
+      let oldSnapshot = null;
+      try {
+        oldSnapshot = await getSnapshotBeforeUpdate(id, tx);
+      } catch (e) {
+        console.warn('⚠️ [updateDocument] Falló captura de snapshot previo:', e);
       }
-    }
 
-    // ═══════════════════════════════════════════════════════════
-    // PASO 2.5: Conversión de signos por cambio de tipo
-    //══════════════════════════════════════════════════════════
-    if (data.tipo_documento) {
-      const oldTipo = docRows[0].tipo_documento?.toLowerCase() || '';
-      const newTipo = data.tipo_documento.toLowerCase();
+      // ═══════════════════════════════════════════════════════════
+      // PASO 1: Verificar documento y trimestre cerrado
+      // ═══════════════════════════════════════════════════════════
+      const doc = await tx.documentos.findUnique({
+        where: { id: BigInt(id) },
+        select: { tipo_documento: true, trimestre_cerrado: true, año_trimestre: true, num_trimestre: true, id_de_empresa: true, importe_total: true, importe_sin_impuestos: true, datos_extra: true }
+      });
 
-      const wasAbono = oldTipo.includes('abono');
-      const isAbono = newTipo.includes('abono');
+      if (!doc) throw new Error('Documento no encontrado');
+      if (doc.trimestre_cerrado) throw new Error('No se puede modificar un documento de un trimestre cerrado');
 
-      // Solo convertir si hay cambio entre Abono y Factura/Albarán
-      if (wasAbono !== isAbono) {
-        console.log('🔄 [updateDocument] Conversión de tipo detectada:');
-        console.log(`   Tipo anterior: "${docRows[0].tipo_documento}"`);
-        console.log(`   Tipo nuevo: "${data.tipo_documento}"`);
+      empresaId = Number(doc.id_de_empresa);
+      console.log('📋 [updateDocument] Empresa ID:', empresaId);
 
-        // Obtener valores actuales del documento
-        const [currentDoc] = await connection.query<RowDataPacket[]>(
-          `SELECT importe_total, importe_sin_impuestos
-           FROM documentos WHERE id = ? `,
-          [id]
-        );
+      // ═══════════════════════════════════════════════════════════
+      // PASO 2: Validar y crear trimestre si es necesario
+      // ═══════════════════════════════════════════════════════════
+      if (data.año_trimestre !== undefined && data.num_trimestre !== undefined) {
+        console.log('🔄 [updateDocument] Validando cambio de trimestre...');
+        
+        const trimestreExistente = await tx.documentos.groupBy({
+          by: ['año_trimestre', 'num_trimestre'],
+          where: { id_de_empresa: BigInt(empresaId), año_trimestre: data.año_trimestre, num_trimestre: data.num_trimestre },
+          _max: { trimestre_cerrado: true }
+        });
 
-        if (currentDoc.length > 0) {
-          const current = currentDoc[0];
+        if (trimestreExistente.length > 0) {
+          if (trimestreExistente[0]._max.trimestre_cerrado) {
+            throw new Error('No se puede mover el documento a un trimestre cerrado');
+          }
+        } else {
+          const trimestreTabla = await tx.trimestres.findUnique({
+            where: { año_num_trimestre_id_de_empresa: { año: data.año_trimestre, num_trimestre: data.num_trimestre, id_de_empresa: BigInt(empresaId) } },
+            select: { cerrado: true }
+          });
 
-          if (isAbono) {
-            // ✅ Convertir a ABONO (todos los valores a negativo)
-            console.log('   🔽 Convirtiendo a ABONO (valores → negativos)');
-            data.total = current.importe_total != null ? -Math.abs(current.importe_total) : current.importe_total;
-            data.base_imponible = current.importe_sin_impuestos != null ? -Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
+          if (trimestreTabla && trimestreTabla.cerrado) {
+            throw new Error('No se puede crear/mover a un trimestre cerrado');
+          }
 
-            console.log(`   💰 Total: ${current.importe_total} → ${data.total} `);
-
-            // Convertir líneas de documento DIRECTAMENTE EN LA BD
-            const [existingLines] = await connection.query<RowDataPacket[]>(
-              'SELECT id, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?',
-              [id]
-            );
-
-            if (existingLines.length > 0) {
-              console.log(`   📦 Convirtiendo ${existingLines.length} líneas en BD a negativo`);
-              for (const line of existingLines) {
-                await connection.query(
-                  `UPDATE lineas_documento 
-                   SET precio_unitario = ?, importe_linea = ?
-  WHERE id = ? `,
-                  [
-                    line.precio_unitario != null ? -Math.abs(line.precio_unitario) : line.precio_unitario,
-                    line.importe_linea != null ? -Math.abs(line.importe_linea) : line.importe_linea,
-                    line.id
-                  ]
-                );
-              }
+          console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
+          await tx.trimestres.upsert({
+            where: { año_num_trimestre_id_de_empresa: { año: data.año_trimestre, num_trimestre: data.num_trimestre, id_de_empresa: BigInt(empresaId) } } as any,
+            update: { fecha_actualizacion: new Date() },
+            create: {
+              año: data.año_trimestre,
+              num_trimestre: data.num_trimestre,
+              id_de_empresa: BigInt(empresaId),
+              cerrado: false,
+              total_documentos: 0,
+              total_ingresos: 0,
+              total_gastos: 0,
+              iva_repercutido: 0,
+              iva_soportado: 0,
+              fecha_creacion: new Date(),
+              fecha_actualizacion: new Date()
             }
+          });
+        }
+      }
 
-            // También convertir líneas en payload si vienen
+      // ═══════════════════════════════════════════════════════════
+      // PASO 2.5: Conversión de signos por cambio de tipo
+      // ═══════════════════════════════════════════════════════════
+      if (data.tipo_documento) {
+        const oldTipo = doc.tipo_documento?.toLowerCase() || '';
+        const newTipo = data.tipo_documento.toLowerCase();
+
+        const wasAbono = oldTipo.includes('abono');
+        const isAbono = newTipo.includes('abono');
+
+        if (wasAbono !== isAbono) {
+          if (isAbono) {
+            data.total = doc.importe_total != null ? -Math.abs(Number(doc.importe_total)) : Number(doc.importe_total);
+            data.base_imponible = doc.importe_sin_impuestos != null ? -Math.abs(Number(doc.importe_sin_impuestos)) : Number(doc.importe_sin_impuestos);
+
+            const existingLines = await tx.lineas_documento.findMany({ where: { documento_id: BigInt(id) } });
+            for (const line of existingLines) {
+              await tx.lineas_documento.update({
+                where: { id: line.id },
+                data: {
+                  precio_unitario: line.precio_unitario != null ? -Math.abs(Number(line.precio_unitario)) : line.precio_unitario,
+                  importe_linea: line.importe_linea != null ? -Math.abs(Number(line.importe_linea)) : line.importe_linea
+                }
+              });
+            }
             if (data.lineas && data.lineas.length > 0) {
-              console.log(`   📦 Convirtiendo ${data.lineas.length} líneas en payload a negativo`);
               data.lineas.forEach((linea: any) => {
                 if (linea.precio_unitario != null) linea.precio_unitario = -Math.abs(linea.precio_unitario);
                 if (linea.importe_sin_iva != null) linea.importe_sin_iva = -Math.abs(linea.importe_sin_iva);
@@ -794,38 +805,20 @@ VALUES(?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
               });
             }
           } else {
-            // ✅ Convertir a FACTURA/ALBARÁN (todos los valores a positivo)
-            console.log('   🔼 Convirtiendo a FACTURA/ALBARÁN (valores → positivos)');
-            data.total = current.importe_total != null ? Math.abs(current.importe_total) : current.importe_total;
-            data.base_imponible = current.importe_sin_impuestos != null ? Math.abs(current.importe_sin_impuestos) : current.importe_sin_impuestos;
+            data.total = doc.importe_total != null ? Math.abs(Number(doc.importe_total)) : Number(doc.importe_total);
+            data.base_imponible = doc.importe_sin_impuestos != null ? Math.abs(Number(doc.importe_sin_impuestos)) : Number(doc.importe_sin_impuestos);
 
-            console.log(`   💰 Total: ${current.importe_total} → ${data.total} `);
-
-            // Convertir líneas de documento DIRECTAMENTE EN LA BD
-            const [existingLinesPos] = await connection.query<RowDataPacket[]>(
-              'SELECT id, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?',
-              [id]
-            );
-
-            if (existingLinesPos.length > 0) {
-              console.log(`   📦 Convirtiendo ${existingLinesPos.length} líneas en BD a positivo`);
-              for (const line of existingLinesPos) {
-                await connection.query(
-                  `UPDATE lineas_documento 
-                   SET precio_unitario = ?, importe_linea = ?
-  WHERE id = ? `,
-                  [
-                    line.precio_unitario != null ? Math.abs(line.precio_unitario) : line.precio_unitario,
-                    line.importe_linea != null ? Math.abs(line.importe_linea) : line.importe_linea,
-                    line.id
-                  ]
-                );
-              }
+            const existingLinesPos = await tx.lineas_documento.findMany({ where: { documento_id: BigInt(id) } });
+            for (const line of existingLinesPos) {
+              await tx.lineas_documento.update({
+                where: { id: line.id },
+                data: {
+                  precio_unitario: line.precio_unitario != null ? Math.abs(Number(line.precio_unitario)) : line.precio_unitario,
+                  importe_linea: line.importe_linea != null ? Math.abs(Number(line.importe_linea)) : line.importe_linea
+                }
+              });
             }
-
-            // También convertir líneas en payload si vienen
             if (data.lineas && data.lineas.length > 0) {
-              console.log(`   📦 Convirtiendo ${data.lineas.length} líneas en payload a positivo`);
               data.lineas.forEach((linea: any) => {
                 if (linea.precio_unitario != null) linea.precio_unitario = Math.abs(linea.precio_unitario);
                 if (linea.importe_sin_iva != null) linea.importe_sin_iva = Math.abs(linea.importe_sin_iva);
@@ -835,297 +828,201 @@ VALUES(?, ?, ?, 0, 0, 0, 0, 0, 0, NOW(), NOW())
             }
           }
 
-          // Convertir impuestos en tabla impuestos_documento
-          const [existingTaxes] = await connection.query<RowDataPacket[]>(
-            'SELECT id, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?',
-            [id]
-          );
-
-          if (existingTaxes.length > 0) {
-            console.log(`   💰 Convirtiendo ${existingTaxes.length} impuestos en BD a ${isAbono ? 'negativo' : 'positivo'} `);
-            for (const tax of existingTaxes) {
-              await connection.query(
-                `UPDATE impuestos_documento 
-                 SET base_imponible = ?, cuota = ?
-  WHERE id = ? `,
-                [
-                  isAbono
-                    ? (tax.base_imponible != null ? -Math.abs(tax.base_imponible) : tax.base_imponible)
-                    : (tax.base_imponible != null ? Math.abs(tax.base_imponible) : tax.base_imponible),
-                  isAbono
-                    ? (tax.cuota != null ? -Math.abs(tax.cuota) : tax.cuota)
-                    : (tax.cuota != null ? Math.abs(tax.cuota) : tax.cuota),
-                  tax.id
-                ]
-              );
-            }
+          const existingTaxes = await tx.impuestos_documento.findMany({ where: { documento_id: BigInt(id) } });
+          for (const tax of existingTaxes) {
+            await tx.impuestos_documento.update({
+              where: { id: tax.id },
+              data: {
+                base_imponible: isAbono
+                  ? (tax.base_imponible != null ? -Math.abs(Number(tax.base_imponible)) : tax.base_imponible)
+                  : (tax.base_imponible != null ? Math.abs(Number(tax.base_imponible)) : tax.base_imponible),
+                cuota: isAbono
+                  ? (tax.cuota != null ? -Math.abs(Number(tax.cuota)) : tax.cuota)
+                  : (tax.cuota != null ? Math.abs(Number(tax.cuota)) : tax.cuota)
+              }
+            });
           }
 
-          // CRÍTICO: Convertir payload iva_details para que persista
           if (data.iva_details && data.iva_details.length > 0) {
-            console.log(`   💰 Convirtiendo ${data.iva_details.length} impuestos en payload a ${isAbono ? 'negativo' : 'positivo'} `);
             data.iva_details = data.iva_details.map((iva: any) => ({
               ...iva,
-              base_imponible: iva.base_imponible != null
-                ? (isAbono ? -Math.abs(iva.base_imponible) : Math.abs(iva.base_imponible))
-                : iva.base_imponible,
-              cuota: iva.cuota != null
-                ? (isAbono ? -Math.abs(iva.cuota) : Math.abs(iva.cuota))
-                : iva.cuota,
+              base_imponible: iva.base_imponible != null ? (isAbono ? -Math.abs(iva.base_imponible) : Math.abs(iva.base_imponible)) : iva.base_imponible,
+              cuota: iva.cuota != null ? (isAbono ? -Math.abs(iva.cuota) : Math.abs(iva.cuota)) : iva.cuota,
             }));
           }
 
-          // Limpiar observaciones: eliminar mensajes obsoletos sobre abonos/conversiones
           if (data.observaciones) {
             let cleanedObs = data.observaciones;
-            // Eliminar mensajes de conversión y tipo
             cleanedObs = cleanedObs.replace(/⚠️ DOCUMENTO ES ABONO \| /g, '');
             cleanedObs = cleanedObs.replace(/💰 Valores convertidos a negativos \(Abono\) \| /g, '');
             cleanedObs = cleanedObs.replace(/💰 Valores convertidos a positivos \(Factura\/Albarán\) \| /g, '');
-
-            // Agregar nuevo mensaje según el nuevo tipo
-            const newTypePrefix = isAbono
-              ? '💰 Convertido a Abono | '
-              : '💰 Convertido a Factura/Albarán | ';
-
-            if (!cleanedObs.startsWith('💰 Convertido')) {
-              cleanedObs = newTypePrefix + cleanedObs;
-            }
-
+            const newTypePrefix = isAbono ? '💰 Convertido a Abono | ' : '💰 Convertido a Factura/Albarán | ';
+            if (!cleanedObs.startsWith('💰 Convertido')) cleanedObs = newTypePrefix + cleanedObs;
             data.observaciones = cleanedObs;
           }
-
-          console.log('✅ [updateDocument] Conversión de signos completada');
         }
       }
-    }
 
-    // ═══════════════════════════════════════════════════════════
-    // PASO 3: Actualizar documento principal
-    // ═══════════════════════════════════════════════════════════
-    console.log('📝 [updateDocument] Actualizando documento principal...');
+      // ═══════════════════════════════════════════════════════════
+      // PASO 3: Actualizar documento principal
+      // ═══════════════════════════════════════════════════════════
+      const updateData: any = {
+        tipo_documento: data.tipo_documento,
+        numero_documento: data.numero_documento,
+        fecha_emision: data.fecha_emision ? new Date(data.fecha_emision) : undefined,
+        fecha_vencimiento: data.fecha_vencimiento ? new Date(data.fecha_vencimiento) : null,
+        observaciones: data.observaciones,
+        importe_sin_impuestos: data.base_imponible,
+        importe_total: data.total,
+        moneda: data.moneda || 'EUR',
+      };
+      if (data.año_trimestre !== undefined) updateData.año_trimestre = data.año_trimestre;
+      if (data.num_trimestre !== undefined) updateData.num_trimestre = data.num_trimestre;
 
-    const updateFields = [];
-    const updateValues = [];
+      await tx.documentos.update({ where: { id: BigInt(id) }, data: updateData });
 
-    updateFields.push('tipo_documento = ?');
-    updateValues.push(data.tipo_documento);
+      // ═══════════════════════════════════════════════════════════
+      // PASO 3.5: Actualizar CIF en datos_extra
+      // ═══════════════════════════════════════════════════════════
+      if ((data as any).cif !== undefined) {
+        let datosExtra: any = {};
+        try {
+          datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra || {};
+        } catch (e) {
+          datosExtra = {};
+        }
 
-    updateFields.push('numero_documento = ?');
-    updateValues.push(data.numero_documento);
+        if (datosExtra.CLIENTE) datosExtra.CLIENTE.CIF = (data as any).cif;
+        if (datosExtra.METADATOS) datosExtra.METADATOS.NIF_CIF_RELACIONADO = (data as any).cif;
+        if (datosExtra.EMPRESA_EMISORA) datosExtra.EMPRESA_EMISORA.CIF = (data as any).cif;
+        if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
+          datosExtra.CLIENTE = { CIF: (data as any).cif };
+        }
 
-    updateFields.push('fecha_emision = ?');
-    updateValues.push(data.fecha_emision);
+        await tx.documentos.update({ where: { id: BigInt(id) }, data: { datos_extra: datosExtra } });
+      }
 
-    updateFields.push('fecha_vencimiento = ?');
-    updateValues.push(data.fecha_vencimiento);
+      // ═══════════════════════════════════════════════════════════
+      // PASO 4: Actualizar entidades
+      // ═══════════════════════════════════════════════════════════
+      await tx.entidades_documento.deleteMany({ where: { documento_id: BigInt(id) } });
+      if ((data.entidades || []).length > 0) {
+        await tx.entidades_documento.createMany({
+          data: (data.entidades || []).map(entidad => ({
+            documento_id: BigInt(id),
+            nombre: entidad.nombre,
+            identificador_fiscal: entidad.identificador_fiscal,
+            identificador_fiscal_hash: entidad.identificador_fiscal ? require('crypto').createHash('sha256').update(entidad.identificador_fiscal.toLowerCase().trim()).digest('hex') : null,
+            direccion: entidad.direccion,
+            telefono: entidad.telefono || '',
+            email: entidad.email || '',
+            rol: entidad.rol,
+            datos_extra: entidad.datos_extra || {},
+            id_de_empresa: empresaId ? BigInt(empresaId) : null
+          }))
+        });
+      }
 
-    updateFields.push('observaciones = ?');
-    updateValues.push(data.observaciones);
+      // ═══════════════════════════════════════════════════════════
+      // PASO 5: Actualizar líneas (estrategia PATCH)
+      // ═══════════════════════════════════════════════════════════
+      const lineasExistentes = await tx.lineas_documento.findMany({ where: { documento_id: BigInt(id) }, orderBy: { id: 'asc' } });
+      const lineasNuevas = data.lineas || [];
+      const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
 
-    updateFields.push('importe_sin_impuestos = ?');
-    updateValues.push(data.base_imponible);
+      for (let i = 0; i < maxLineas; i++) {
+        const lineaExistente = lineasExistentes[i];
+        const lineaNueva = lineasNuevas[i];
 
-    updateFields.push('importe_total = ?');
-    updateValues.push(data.total);
+        if (lineaExistente && lineaNueva) {
+          await tx.lineas_documento.update({
+            where: { id: lineaExistente.id },
+            data: {
+              codigo: lineaNueva.codigo || '',
+              descripcion: lineaNueva.descripcion,
+              cantidad: lineaNueva.cantidad,
+              unidad: lineaNueva.unidad,
+              precio_unitario: lineaNueva.precio_unitario,
+              descuento_porcentaje: lineaNueva.descuento_porcentaje,
+              precio_neto: lineaNueva.precio_neto,
+              importe_linea: lineaNueva.importe_linea,
+              datos_extra: lineaNueva.datos_extra || {},
+              id_de_empresa: empresaId ? BigInt(empresaId) : null
+            }
+          });
+        } else if (!lineaExistente && lineaNueva) {
+          await tx.lineas_documento.create({
+            data: {
+              documento_id: BigInt(id),
+              codigo: lineaNueva.codigo || '',
+              descripcion: lineaNueva.descripcion,
+              cantidad: lineaNueva.cantidad,
+              unidad: lineaNueva.unidad,
+              precio_unitario: lineaNueva.precio_unitario,
+              descuento_porcentaje: lineaNueva.descuento_porcentaje,
+              precio_neto: lineaNueva.precio_neto,
+              importe_linea: lineaNueva.importe_linea,
+              datos_extra: lineaNueva.datos_extra || {},
+              id_de_empresa: empresaId ? BigInt(empresaId) : null
+            }
+          });
+        } else if (lineaExistente && !lineaNueva) {
+          await tx.lineas_documento.delete({ where: { id: lineaExistente.id } });
+        }
+      }
 
-    updateFields.push('moneda = ?');
-    updateValues.push(data.moneda || 'EUR');
+      // ═══════════════════════════════════════════════════════════
+      // PASO 6: Actualizar impuestos
+      // ═══════════════════════════════════════════════════════════
+      await tx.impuestos_documento.deleteMany({ where: { documento_id: BigInt(id) } });
+      if ((data.iva_details || []).length > 0) {
+        await tx.impuestos_documento.createMany({
+          data: (data.iva_details || []).map(iva => ({
+            documento_id: BigInt(id),
+            tipo_impuesto: iva.tipo_impuesto || 'IVA',
+            porcentaje: iva.porcentaje,
+            base_imponible: iva.base_imponible,
+            cuota: iva.cuota,
+            total_con_impuesto: iva.base_imponible + iva.cuota,
+            id_de_empresa: empresaId ? BigInt(empresaId) : null
+          }))
+        });
+      }
 
-    // ✅ Actualizar trimestre si se especificó
-    if (data.año_trimestre !== undefined) {
-      updateFields.push('año_trimestre = ?');
-      updateValues.push(data.año_trimestre);
-    }
-
-    if (data.num_trimestre !== undefined) {
-      updateFields.push('num_trimestre = ?');
-      updateValues.push(data.num_trimestre);
-    }
-
-    updateValues.push(id);
-
-    await connection.query(
-      `UPDATE documentos SET ${updateFields.join(', ')} WHERE id = ? `,
-      updateValues
-    );
-
-    console.log('✅ [updateDocument] Documento principal actualizado');
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 3.5: Actualizar CIF en datos_extra si viene en el payload
-    // ═══════════════════════════════════════════════════════════
-    if ((data as any).cif !== undefined) {
-      console.log('🔄 [updateDocument] Actualizando CIF en datos_extra...');
-
-      const [docRows] = await connection.query<RowDataPacket[]>(
-        'SELECT datos_extra FROM documentos WHERE id = ?',
-        [id]
-      );
-
-      let datosExtra: any = {};
+      // ═══════════════════════════════════════════════════════════
+      // PASO 6.5: Auditoría (VeriFactu)
+      // ═══════════════════════════════════════════════════════════
       try {
-        datosExtra = typeof docRows[0].datos_extra === 'string'
-          ? JSON.parse(docRows[0].datos_extra)
-          : docRows[0].datos_extra || {};
-      } catch (e) {
-        console.warn('⚠️ datos_extra no es JSON válido, creando nuevo objeto');
-        datosExtra = {};
+        camposReales = compareDocumentStates(oldSnapshot, data);
+      } catch (err) {
+        camposReales = Object.keys(data);
       }
 
-      // Actualizar CIF en todas las ubicaciones posibles
-      if (datosExtra.CLIENTE) {
-        datosExtra.CLIENTE.CIF = (data as any).cif;
-      }
-      if (datosExtra.METADATOS) {
-        datosExtra.METADATOS.NIF_CIF_RELACIONADO = (data as any).cif;
-      }
-      if (datosExtra.EMPRESA_EMISORA) {
-        datosExtra.EMPRESA_EMISORA.CIF = (data as any).cif;
+      let newSnapshot = null;
+      try {
+        newSnapshot = await getSnapshotBeforeUpdate(id, tx);
+      } catch (err) {
+        console.warn('⚠️ [updateDocument] Falló captura de snapshot nuevo:', err);
       }
 
-      // Si no existe ninguna estructura, crear CLIENTE
-      if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
-        datosExtra.CLIENTE = { CIF: (data as any).cif };
+      if (camposReales.length > 0) {
+        await tx.documentos_auditoria.create({
+          data: {
+            documento_id: BigInt(id),
+            id_de_empresa: empresaId ? BigInt(empresaId) : BigInt(0),
+            accion: 'UPDATE',
+            usuario: userIdentifier,
+            detalle: JSON.stringify({ modificados: camposReales, previo: oldSnapshot, actual: newSnapshot }),
+            fecha_accion: new Date()
+          }
+        });
       }
 
-      await connection.query(
-        'UPDATE documentos SET datos_extra = ? WHERE id = ?',
-        [JSON.stringify(datosExtra), id]
-      );
+    }, {
+      maxWait: 5000,
+      timeout: 15000,
+    });
 
-      console.log('✅ [updateDocument] CIF actualizado en datos_extra');
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 4: Actualizar entidades
-    // ═══════════════════════════════════════════════════════════
-    console.log('🔄 [updateDocument] Procesando entidades...');
-    await connection.query('DELETE FROM entidades_documento WHERE documento_id = ?', [id]);
-
-    for (const entidad of data.entidades || []) {
-      await connection.query(
-        'INSERT INTO entidades_documento (documento_id, nombre, identificador_fiscal, direccion, telefono, email, rol, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          id,
-          entidad.nombre,
-          entidad.identificador_fiscal,
-          entidad.direccion,
-          entidad.telefono || '',
-          entidad.email || '',
-          entidad.rol,
-          JSON.stringify(entidad.datos_extra || {}),
-          empresaId || null
-        ]
-      );
-    }
-    console.log('✅ [updateDocument] Entidades actualizadas');
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 5: Actualizar líneas (estrategia PATCH)
-    // ═══════════════════════════════════════════════════════════
-    console.log('🔄 [updateDocument] Procesando líneas (PATCH)...');
-
-    await connection.query('SET FOREIGN_KEY_CHECKS=0');
-
-    const [lineasExistentes] = await connection.query<RowDataPacket[]>(
-      'SELECT id FROM lineas_documento WHERE documento_id = ? ORDER BY id',
-      [id]
-    );
-
-    const lineasNuevas = data.lineas || [];
-    const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
-
-    for (let i = 0; i < maxLineas; i++) {
-      const lineaExistente = lineasExistentes[i];
-      const lineaNueva = lineasNuevas[i];
-
-      if (lineaExistente && lineaNueva) {
-        // UPDATE
-        await connection.query(
-          `UPDATE lineas_documento SET
-codigo = ?,
-  descripcion = ?,
-  cantidad = ?,
-  unidad = ?,
-  precio_unitario = ?,
-  descuento_porcentaje = ?,
-  precio_neto = ?,
-  importe_linea = ?,
-  datos_extra = ?,
-  id_de_empresa = ?
-    WHERE id = ? `,
-          [
-            lineaNueva.codigo || '',
-            lineaNueva.descripcion,
-            lineaNueva.cantidad,
-            lineaNueva.unidad,
-            lineaNueva.precio_unitario,
-            lineaNueva.descuento_porcentaje,
-            lineaNueva.precio_neto,
-            lineaNueva.importe_linea,
-            JSON.stringify(lineaNueva.datos_extra || {}),
-            empresaId || null,
-            lineaExistente.id
-          ]
-        );
-      } else if (!lineaExistente && lineaNueva) {
-        // INSERT
-        await connection.query(
-          'INSERT INTO lineas_documento (documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra, id_de_empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            id,
-            lineaNueva.codigo || '',
-            lineaNueva.descripcion,
-            lineaNueva.cantidad,
-            lineaNueva.unidad,
-            lineaNueva.precio_unitario,
-            lineaNueva.descuento_porcentaje,
-            lineaNueva.precio_neto,
-            lineaNueva.importe_linea,
-            JSON.stringify(lineaNueva.datos_extra || {}),
-            empresaId || null
-          ]
-        );
-      } else if (lineaExistente && !lineaNueva) {
-        // DELETE (marcar)
-        await connection.query(
-          'UPDATE lineas_documento SET documento_id = -999999 WHERE id = ?',
-          [lineaExistente.id]
-        );
-      }
-    }
-
-    // Limpiar líneas marcadas
-    try {
-      await connection.query('DELETE FROM lineas_documento WHERE documento_id = -999999');
-    } catch (err) {
-      // Ignorar si no hay líneas para limpiar
-    }
-
-    console.log('✅ [updateDocument] Líneas actualizadas');
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 6: Actualizar impuestos
-    // ═══════════════════════════════════════════════════════════
-    console.log('🔄 [updateDocument] Procesando impuestos...');
-    await connection.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [id]);
-
-    for (const iva of data.iva_details || []) {
-      const totalConImpuesto = (iva.base_imponible + iva.cuota);
-      await connection.query(
-        'INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota, total_con_impuesto) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, iva.tipo_impuesto, iva.porcentaje, iva.base_imponible, iva.cuota, totalConImpuesto]
-      );
-    }
-    console.log('✅ [updateDocument] Impuestos actualizados');
-
-    await connection.query('SET FOREIGN_KEY_CHECKS=1');
-
-    // ═══════════════════════════════════════════════════════════
-    // PASO 7: Commit
-    // ═══════════════════════════════════════════════════════════
-    await connection.commit();
     console.log('🎉 [updateDocument] Transacción completada exitosamente');
     console.log('═══════════════════════════════════════════════════════════');
 
@@ -1135,36 +1032,25 @@ codigo = ?,
     });
 
     // 🔔 WEBHOOKS TRIGGER: Documento Modificado
-    const [updatedDocRows] = await db.query<RowDataPacket[]>(
-      'SELECT tipo_documento, numero_documento, importe_total, fecha_emision FROM documentos WHERE id = ?',
-      [id]
-    );
-
-    if (updatedDocRows.length > 0) {
-      let camposReales: string[] = [];
-      try {
-        camposReales = compareDocumentStates(oldSnapshot, data);
-        if (camposReales.length === 0) {
-          console.log('✅ [updateDocument] Sin cambios reales detectados, webhook saltado.');
-          return { success: true };
-        }
-      } catch (err) {
-        console.warn('⚠️ [updateDocument] Falló cálculo exacto de campos, usando fallback:', err);
-        camposReales = Object.keys(data);
-      }
-
-      fireWebhook(empresaId, 'documento.modificado', { 
-        documento_id: id,
-        campos_actualizados: camposReales,
-        tipo_documento: updatedDocRows[0].tipo_documento,
-        numero_documento: updatedDocRows[0].numero_documento,
-        importe_total: updatedDocRows[0].importe_total,
-        fecha_emision: updatedDocRows[0].fecha_emision
-      }).catch(err => {
-        console.error('❌ [Background] Error disparando webhook de modificación:', err);
+    if (camposReales.length > 0) {
+      const updatedDoc = await prisma.documentos.findUnique({
+        where: { id: BigInt(id) },
+        select: { tipo_documento: true, numero_documento: true, importe_total: true, fecha_emision: true }
       });
+
+      if (updatedDoc) {
+        fireWebhook(empresaId, 'documento.modificado', { 
+          documento_id: id,
+          campos_actualizados: camposReales,
+          tipo_documento: updatedDoc.tipo_documento,
+          numero_documento: updatedDoc.numero_documento,
+          importe_total: updatedDoc.importe_total,
+          fecha_emision: updatedDoc.fecha_emision
+        }).catch(err => {
+          console.error('❌ [Background] Error disparando webhook de modificación:', err);
+        });
+      }
     }
-
 
     return { success: true };
   } catch (error: any) {
@@ -1174,194 +1060,218 @@ codigo = ?,
     console.error('❌ Error:', error);
     console.error('❌ Error message:', error?.message);
     console.error('═══════════════════════════════════════════════════════════');
-
-    await connection.rollback();
-    console.log('🔄 [updateDocument] Rollback ejecutado');
-    throw error;
-  } finally {
-    connection.release();
-    console.log('🔌 [updateDocument] Conexión liberada');
-    console.log('═══════════════════════════════════════════════════════════');
+    
+    // We no longer need to manually rollback since Prisma handles it
+    return { success: false };
   }
 }
 
-// ✅ ARREGLADO: Tipado de connection como PoolConnection
-async function recalculateDocumentTotals(docId: number, connection: any) {
-  // Recalculate base_imponible from lines
-  const [lineSumResult] = await connection.query(
-    'SELECT SUM(importe_linea) as total_lines FROM lineas_documento WHERE documento_id = ?',
-    [docId]
-  ) as [RowDataPacket[], any];
-  const baseImponible = Number(lineSumResult[0].total_lines) || 0;
+
+// ✅ ARREGLADO: Tipado de tx como Prisma client
+async function recalculateDocumentTotals(docId: number, tx: any = prisma) {
+  // Recalculate base_imponible from lines via Prisma aggregation
+  const lineSum = await tx.lineas_documento.aggregate({
+    where: { documento_id: BigInt(docId) },
+    _sum: { importe_linea: true }
+  });
+  const baseImponible = Number(lineSum._sum.importe_linea) || 0;
 
   // Recalculate total_iva from taxes (excluding retentions)
-  const [taxSumResult] = await connection.query(
-    'SELECT SUM(cuota) as total_tax FROM impuestos_documento WHERE documento_id = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)',
-    [docId, '%retencion%']
-  ) as [RowDataPacket[], any];
-  const totalIva = Number(taxSumResult[0].total_tax) || 0;
+  const taxSum = await tx.impuestos_documento.aggregate({
+    where: { documento_id: BigInt(docId), NOT: { tipo_impuesto: { contains: 'retencion' } } },
+    _sum: { cuota: true }
+  });
+  const totalIva = Number(taxSum._sum.cuota) || 0;
 
   // Get total retentions
-  const [retentionSumResult] = await connection.query(
-    'SELECT SUM(cuota) as total_retention FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?',
-    [docId, '%retencion%']
-  ) as [RowDataPacket[], any];
-  const totalRetention = Number(retentionSumResult[0].total_retention) || 0;
+  const retentionSum = await tx.impuestos_documento.aggregate({
+    where: { documento_id: BigInt(docId), tipo_impuesto: { contains: 'retencion' } },
+    _sum: { cuota: true }
+  });
+  const totalRetention = Number(retentionSum._sum.cuota) || 0;
 
   // The total is base + taxes - retentions
   const total = baseImponible + totalIva + totalRetention;
 
-  await connection.query(
-    'UPDATE documentos SET importe_sin_impuestos = ?, importe_total = ? WHERE id = ?',
-    [baseImponible, total, docId]
-  );
+  await tx.documentos.update({
+    where: { id: BigInt(docId) },
+    data: { importe_sin_impuestos: baseImponible, importe_total: total }
+  });
 }
 
-export async function updateDocumentField(id: number, fieldName: string, value: any): Promise<{ success: boolean }> {
-  const connection = await db.getConnection();
+export async function updateDocumentField(id: number, fieldName: string, value: any, userIdentifier: string = 'Sistema'): Promise<{ success: boolean }> {
+  if (userIdentifier === 'Sistema') {
+    const sessionUser = await getCurrentUser();
+    if (sessionUser?.email) userIdentifier = sessionUser.email;
+  }
+
   try {
-    await connection.beginTransaction();
-
-    // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
-    const [docRows] = await connection.query<DocumentPacket[]>(
-      'SELECT trimestre_cerrado FROM documentos WHERE id = ?',
-      [id]
-    );
-
-    if (docRows.length === 0) {
-      throw new Error('Documento no encontrado.');
-    }
-
-    // ⚠️ EXCEPCIÓN: Permitir cambiar tipo_documento aunque el trimestre esté cerrado
-    // Esto es para la sección "Otros" donde mover docs entre carpetas NO afecta contabilidad
-    const isChangingTipoDocumento = fieldName === 'tipo_documento';
-
-    if (docRows[0].trimestre_cerrado === 1 && !isChangingTipoDocumento) {
-      throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
-    }
-
-    const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
-
-    if (directDocumentFields.includes(fieldName)) {
-      const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' :
-        fieldName === 'total' ? 'importe_total' :
-          fieldName;
-      await connection.query(`UPDATE documentos SET ?? = ? WHERE id = ? `, [dbFieldName, value, id]);
-    } else if (fieldName === 'cif') {
-      // 🆕 Editar CIF en datos_extra
-      const [docRows] = await connection.query<RowDataPacket[]>(
-        'SELECT datos_extra FROM documentos WHERE id = ?',
-        [id]
-      );
-
-      if (docRows.length === 0) {
-        throw new Error('Documento no encontrado.');
-      }
-
-      let datosExtra: any = {};
+    await prisma.$transaction(async (tx) => {
+      let oldSnapshot = null;
       try {
-        datosExtra = typeof docRows[0].datos_extra === 'string'
-          ? JSON.parse(docRows[0].datos_extra)
-          : docRows[0].datos_extra || {};
+        oldSnapshot = await getSnapshotBeforeUpdate(id, tx);
       } catch (e) {
-        console.warn('⚠️ datos_extra no es JSON válido, creando nuevo objeto');
-        datosExtra = {};
+        console.warn('⚠️ [updateDocumentField] Falló captura de snapshot previo:', e);
       }
 
-      // Actualizar CIF en múltiples ubicaciones posibles
-      if (datosExtra.CLIENTE) {
-        datosExtra.CLIENTE.CIF = value;
-      }
-      if (datosExtra.METADATOS) {
-        datosExtra.METADATOS.NIF_CIF_RELACIONADO = value;
-      }
-      if (datosExtra.EMPRESA_EMISORA) {
-        datosExtra.EMPRESA_EMISORA.CIF = value;
-      }
+      // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
+      const doc = await tx.documentos.findUnique({
+        where: { id: BigInt(id) },
+        select: { trimestre_cerrado: true, datos_extra: true, id_de_empresa: true }
+      });
 
-      // Si no existe ninguna estructura, crear METADATOS
-      if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
-        datosExtra.METADATOS = { NIF_CIF_RELACIONADO: value };
+      if (!doc) throw new Error('Documento no encontrado.');
+
+      const isChangingTipoDocumento = fieldName === 'tipo_documento';
+      if (doc.trimestre_cerrado === true && !isChangingTipoDocumento) {
+        throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
       }
 
-      await connection.query(
-        'UPDATE documentos SET datos_extra = ? WHERE id = ?',
-        [JSON.stringify(datosExtra), id]
-      );
+      const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
 
-      console.log('✅ [updateDocumentField] CIF actualizado en datos_extra');
-    } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
-      const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
-      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM entidades_documento WHERE documento_id = ? AND (rol = ? OR rol = ?)', [id, 'proveedor', 'emisor']);
+      if (directDocumentFields.includes(fieldName)) {
+        const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' : fieldName === 'total' ? 'importe_total' : fieldName;
+        await tx.documentos.update({ where: { id: BigInt(id) }, data: { [dbFieldName]: value } });
+      } else if (fieldName === 'cif') {
+        let datosExtra: any = {};
+        try {
+          datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra || {};
+        } catch (e) {
+          datosExtra = {};
+        }
+        if (datosExtra.CLIENTE) datosExtra.CLIENTE.CIF = value;
+        if (datosExtra.METADATOS) datosExtra.METADATOS.NIF_CIF_RELACIONADO = value;
+        if (datosExtra.EMPRESA_EMISORA) datosExtra.EMPRESA_EMISORA.CIF = value;
+        if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
+          datosExtra.METADATOS = { NIF_CIF_RELACIONADO: value };
+        }
+        await tx.documentos.update({ where: { id: BigInt(id) }, data: { datos_extra: datosExtra } });
+      } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
+        const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
+        const existing = await tx.entidades_documento.findFirst({
+          where: { documento_id: BigInt(id), rol: { in: ['proveedor', 'emisor'] } }
+        });
 
-      if (existing.length > 0) {
-        await connection.query(`UPDATE entidades_documento SET ?? = ? WHERE id = ? `, [fieldToUpdate, value, existing[0].id]);
+        if (existing) {
+          await tx.entidades_documento.update({
+            where: { id: existing.id },
+            data: { [fieldToUpdate]: value }
+          });
+        } else {
+          await tx.entidades_documento.create({
+            data: { documento_id: BigInt(id), rol: 'proveedor', [fieldToUpdate]: value } as any
+          });
+        }
+      } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
+        const parts = fieldName.split('_');
+        const type = parts[1]; // 'base' or 'cuota'
+        const percentage = parseInt(parts[2], 10);
+        const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
+
+        const existing = await tx.impuestos_documento.findFirst({
+          where: {
+            documento_id: BigInt(id),
+            porcentaje: percentage,
+            OR: [
+              { tipo_impuesto: null },
+              { NOT: { tipo_impuesto: { contains: 'retencion' } } }
+            ]
+          }
+        });
+
+        if (existing) {
+          await tx.impuestos_documento.update({
+            where: { id: existing.id },
+            data: { [fieldToUpdate]: value }
+          });
+        } else {
+          const base = type === 'base' ? value : 0;
+          const cuota = type === 'cuota' ? value : 0;
+          await tx.impuestos_documento.create({
+            data: { documento_id: BigInt(id), tipo_impuesto: 'IVA', porcentaje: percentage, base_imponible: base, cuota, total_con_impuesto: base + cuota } as any
+          });
+        }
+      } else if (fieldName === 'retencion') {
+        const existing = await tx.impuestos_documento.findFirst({
+          where: { documento_id: BigInt(id), tipo_impuesto: { contains: 'retencion' } }
+        });
+        if (existing) {
+          await tx.impuestos_documento.update({
+            where: { id: existing.id },
+            data: { cuota: value }
+          });
+        } else {
+          await tx.impuestos_documento.create({
+            data: { documento_id: BigInt(id), tipo_impuesto: 'Retencion', porcentaje: 0, base_imponible: 0, cuota: value, total_con_impuesto: value } as any
+          });
+        }
+      } else if (fieldName === 'recargo') {
+        const existing = await tx.impuestos_documento.findFirst({
+          where: { documento_id: BigInt(id), tipo_impuesto: { contains: 'recargo' } }
+        });
+        if (existing) {
+          await tx.impuestos_documento.update({
+            where: { id: existing.id },
+            data: { cuota: value }
+          });
+        } else {
+          await tx.impuestos_documento.create({
+            data: { documento_id: BigInt(id), tipo_impuesto: 'Recargo de Equivalencia', porcentaje: 0, base_imponible: 0, cuota: value, total_con_impuesto: value } as any
+          });
+        }
       } else {
-        await connection.query('INSERT INTO entidades_documento (documento_id, rol, ??) VALUES (?, ?, ?)', [fieldToUpdate, id, 'proveedor', value]);
-      }
-    } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {
-      const parts = fieldName.split('_');
-      const type = parts[1]; // 'base' or 'cuota'
-      const percentage = parseInt(parts[2], 10);
-      const fieldToUpdate = type === 'base' ? 'base_imponible' : 'cuota';
-
-      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND porcentaje = ? AND (tipo_impuesto IS NULL OR tipo_impuesto NOT LIKE ?)', [id, percentage, '%retencion%']);
-
-      if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET ?? = ? WHERE id = ? `, [fieldToUpdate, value, existing[0].id]);
-      } else {
-        const base = type === 'base' ? value : 0;
-        const cuota = type === 'cuota' ? value : 0;
-        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, `IVA`, percentage, base, cuota]);
+        throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
       }
 
-    } else if (fieldName === 'retencion') {
-      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%retencion%']);
-      if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ? `, [value, existing[0].id]);
-      } else {
-        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Retencion', 0, 0, value]);
+      await recalculateDocumentTotals(id, tx);
+
+      const empresaId = doc.id_de_empresa ? Number(doc.id_de_empresa) : 0;
+
+      let newSnapshot = null;
+      try {
+        newSnapshot = await getSnapshotBeforeUpdate(id, tx);
+      } catch (err) {
+        console.warn('⚠️ [updateDocumentField] Falló captura de snapshot nuevo:', err);
       }
-    } else if (fieldName === 'recargo') {
-      const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM impuestos_documento WHERE documento_id = ? AND tipo_impuesto LIKE ?', [id, '%recargo%']);
-      if (existing.length > 0) {
-        await connection.query(`UPDATE impuestos_documento SET cuota = ? WHERE id = ? `, [value, existing[0].id]);
-      } else {
-        await connection.query('INSERT INTO impuestos_documento (documento_id, tipo_impuesto, porcentaje, base_imponible, cuota) VALUES (?, ?, ?, ?, ?)', [id, 'Recargo de Equivalencia', 0, 0, value]);
-      }
-    } else {
-      throw new Error(`El campo '${fieldName}' no es editable o no se reconoce.`);
-    }
 
-    // Recalculate totals after any financial field is updated
-    await recalculateDocumentTotals(id, connection);
+      await tx.documentos_auditoria.create({
+        data: {
+          documento_id: BigInt(id),
+          id_de_empresa: BigInt(empresaId),
+          accion: 'UPDATE_FIELD',
+          usuario: userIdentifier,
+          detalle: JSON.stringify({ modificados: [fieldName], previo: oldSnapshot, actual: newSnapshot }),
+          fecha_accion: new Date()
+        }
+      });
+    }, {
+      maxWait: 5000,
+      timeout: 10000,
+    });
 
-    await connection.commit();
-
-    // 🚀 FIRE AND FORGET: Validación asíncrona de incidencias
     validateIncidentsAsync(id).catch(err => {
       console.error('❌ [Background] Error en validación de incidencias:', err);
     });
 
-    // 🔔 WEBHOOKS TRIGGER: Documento Modificado
-    // Buscamos el empresa_id porque no viene en el payload de updateDocumentField
-    db.query<RowDataPacket[]>('SELECT id_de_empresa FROM documentos WHERE id = ?', [id])
-      .then(([rows]) => {
-        if (rows.length > 0) {
-          fireWebhook(rows[0].id_de_empresa, 'documento.modificado', { documento_id: id });
-        }
-      })
-      .catch(err => console.error('❌ [Background] Error disparando webhook de modificación:', err));
+    const updatedDoc = await prisma.documentos.findUnique({
+      where: { id: BigInt(id) },
+      select: { id_de_empresa: true }
+    });
+
+    if (updatedDoc && updatedDoc.id_de_empresa) {
+      fireWebhook(Number(updatedDoc.id_de_empresa), 'documento.modificado', { documento_id: id }).catch(err => {
+        console.error('❌ [Background] Error disparando webhook de modificación:', err);
+      });
+    }
 
     return { success: true };
   } catch (error) {
-    await connection.rollback();
     console.error('Failed to update field:', error);
     throw error;
-  } finally {
-    connection.release();
   }
 }
+
+
 
 /**
  * Crea un nuevo documento
@@ -1388,15 +1298,22 @@ export async function createDocument(payload: CreateDocumentPayload): Promise<{ 
       empresa_id
     } = payload;
 
-    const [result] = await db.query<OkPacket>(
-      `INSERT INTO documentos
-  (tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, id_de_empresa)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tipo_documento, numero_documento, fecha_emision, fecha_vencimiento, importe_total, importe_sin_impuestos, moneda, observaciones, empresa_id]
-    );
+    const newDoc = await prisma.documentos.create({
+      data: {
+        tipo_documento,
+        numero_documento: numero_documento || 'S/N',
+        fecha_emision: new Date(fecha_emision),
+        fecha_vencimiento: fecha_vencimiento ? new Date(fecha_vencimiento) : null,
+        importe_total: importe_total || 0,
+        importe_sin_impuestos: importe_sin_impuestos || 0,
+        moneda: moneda || 'EUR',
+        observaciones,
+        id_de_empresa: empresa_id ? BigInt(empresa_id) : null
+      }
+    });
 
     revalidatePath('/documents');
-    return { success: true, id: result.insertId };
+    return { success: true, id: Number(newDoc.id) };
   } catch (error) {
     console.error('Error creating document:', error);
     return {
@@ -1417,15 +1334,12 @@ export async function moveDocument(
     console.log('🔄 [moveDocument] Iniciando - Doc:', documentId, 'Nueva empresa:', newEmpresaId);
 
     // Verificar que el documento existe y pertenece a una empresa del usuario
-    const [docRows] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.id_de_empresa, e.id_de_usuario, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre 
-         FROM documentos d
-         JOIN empresas e ON d.id_de_empresa = e.id
-         WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
-      [documentId, userId]
-    );
+    const docRow = await prisma.documentos.findFirst({
+      where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: userId } } },
+      select: { id: true, id_de_empresa: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true }
+    });
 
-    if (docRows.length === 0) {
+    if (!docRow) {
       console.error('❌ [moveDocument] Documento no encontrado o no pertenece al usuario');
       return {
         success: false,
@@ -1433,15 +1347,15 @@ export async function moveDocument(
       };
     }
 
-    if (docRows[0].trimestre_cerrado === 1) {
-      console.warn(`⚠️ [moveDocument] Intento de mover documento en trimestre cerrado: ${docRows[0].año_trimestre}Q${docRows[0].num_trimestre}`);
+    if (docRow.trimestre_cerrado) {
+      console.warn(`⚠️ [moveDocument] Intento de mover documento en trimestre cerrado: ${docRow.año_trimestre}Q${docRow.num_trimestre}`);
       return {
         success: false,
-        error: `No se puede mover el documento porque pertenece al trimestre ${docRows[0].año_trimestre}Q${docRows[0].num_trimestre}, el cual ya está cerrado.`
+        error: `No se puede mover el documento porque pertenece al trimestre ${docRow.año_trimestre}Q${docRow.num_trimestre}, el cual ya está cerrado.`
       };
     }
 
-    const currentEmpresaId = docRows[0].id_de_empresa;
+    const currentEmpresaId = Number(docRow.id_de_empresa);
 
     if (currentEmpresaId === newEmpresaId) {
       console.warn('⚠️ [moveDocument] El documento ya está en esa empresa');
@@ -1452,12 +1366,11 @@ export async function moveDocument(
     }
 
     // Verificar que la nueva empresa existe y pertenece al usuario
-    const [empresaRows] = await db.query<RowDataPacket[]>(
-      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
-      [newEmpresaId, userId]
-    );
+    const targetEmpresa = await prisma.empresas.findFirst({
+      where: { id: BigInt(newEmpresaId), id_de_usuario: { array_contains: userId } } as any
+    });
 
-    if (empresaRows.length === 0) {
+    if (!targetEmpresa) {
       console.error('❌ [moveDocument] Empresa destino no encontrada');
       return {
         success: false,
@@ -1466,12 +1379,12 @@ export async function moveDocument(
     }
 
     // Mover el documento
-    const [result] = await db.query<OkPacket>(
-      'UPDATE documentos SET id_de_empresa = ? WHERE id = ?',
-      [newEmpresaId, documentId]
-    );
+    await prisma.documentos.update({
+      where: { id: BigInt(documentId) },
+      data: { id_de_empresa: BigInt(newEmpresaId) }
+    });
 
-    if (result.affectedRows === 0) {
+    if (false) { // kept for structure
       console.error('❌ [moveDocument] No se pudo actualizar el documento');
       return {
         success: false,
@@ -1524,20 +1437,17 @@ export async function deleteDocument(
     }
 
     // Verificar que el documento pertenece a una empresa del usuario y si está cerrado
-    const [docCheck] = await db.query<RowDataPacket[]>(
-      `SELECT d.id, d.trimestre_cerrado, d.num_trimestre, d.año_trimestre, d.id_de_empresa, d.numero_documento, d.tipo_documento, d.importe_total, d.fecha_emision 
-             FROM documentos d
-             INNER JOIN empresas e ON d.id_de_empresa = e.id
-             WHERE d.id = ? AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) `,
-      [documentId, user.id]
-    );
+    const docRaw = await prisma.documentos.findFirst({
+      where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: user.id } } },
+      select: { id: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true, id_de_empresa: true, numero_documento: true, tipo_documento: true, importe_total: true, fecha_emision: true }
+    });
 
-    if (docCheck.length === 0) {
+    if (!docRaw) {
       console.error('❌ [deleteDocument] Documento no encontrado o no pertenece al usuario');
       return { success: false, error: 'Documento no encontrado' };
     }
 
-    const docData = docCheck[0];
+    const docData = { ...docRaw, id_de_empresa: Number(docRaw.id_de_empresa), trimestre_cerrado: docRaw.trimestre_cerrado ? 1 : 0 };
     if (docData.trimestre_cerrado === 1) {
       console.warn(`⚠️ [deleteDocument] Intento de borrar documento en trimestre cerrado: ${docData.año_trimestre}Q${docData.num_trimestre}`);
       return {
@@ -1546,18 +1456,29 @@ export async function deleteDocument(
       };
     }
 
-    // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
-    const [result] = await db.query<OkPacket>(
-      'DELETE FROM documentos WHERE id = ?',
-      [documentId]
-    );
-
-    if (result.affectedRows === 0) {
-      console.error('❌ [deleteDocument] No se pudo eliminar el documento');
-      return { success: false, error: 'No se pudo eliminar el documento' };
+    let snapshot = null;
+    try {
+      snapshot = await getSnapshotBeforeUpdate(documentId, db);
+    } catch (e) {
+      console.warn('⚠️ [deleteDocument] Falló captura de snapshot previo a eliminar:', e);
     }
 
-    console.log('✅ [deleteDocument] Documento eliminado correctamente');
+    // Insertar registro de auditoría (VeriFactu)
+    await prisma.documentos_auditoria.create({
+      data: {
+        documento_id: BigInt(documentId),
+        id_de_empresa: BigInt(docData.id_de_empresa),
+        accion: 'DELETE',
+        usuario: user.email || 'Desconocido',
+        detalle: JSON.stringify({ previo: snapshot }),
+        fecha_accion: new Date()
+      }
+    });
+
+    // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
+    await prisma.documentos.delete({ where: { id: BigInt(documentId) } });
+
+    console.log('✅ [deleteDocument] Documento y auditoría eliminados correctamente');
 
     // 🔔 WEBHOOKS TRIGGER: Documento Eliminado
     fireWebhook(docData.id_de_empresa, 'documento.eliminado', { 
@@ -1618,18 +1539,16 @@ export async function deleteCompany(
 
     // Eliminar todos los documentos de la empresa
     if (documentsToDelete > 0) {
-      await db.query(
-        'DELETE FROM documentos WHERE id_de_empresa = ?',
-        [empresaId]
-      );
+      await prisma.documentos.deleteMany({
+        where: { id_de_empresa: BigInt(empresaId) }
+      });
       console.log(`✅[deleteCompany] ${documentsToDelete} documento(s) eliminado(s)`);
     }
 
-    // Eliminar la empresa
-    await db.query(
-      'DELETE FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
-      [empresaId, userId]
-    );
+    // Eliminar la empresa (permisos ya validados arriba)
+    await prisma.empresas.delete({
+      where: { id: BigInt(empresaId) }
+    });
 
     console.log('✅ [deleteCompany] Empresa eliminada correctamente');
 
@@ -1652,19 +1571,22 @@ export async function deleteCompany(
 }
 export async function validateDocumentIncidents(documentId: number): Promise<{ success: boolean }> {
   // ✅ Validar incidencias del documento
-  await db.query<OkPacket>(
-    'UPDATE incidencias_documento SET validado = 1, fecha_validacion = CURRENT_TIMESTAMP(), validado_por = ? WHERE documento_id = ? AND validado = 0',
-    ['system', documentId]
-  );
+  await prisma.incidencias_documento.updateMany({
+    where: { documento_id: BigInt(documentId), validado: false },
+    data: { validado: true, fecha_validacion: new Date(), validado_por: 'system' }
+  });
 
   // ✅ Marcar documento como confirmado (is_new = 0)
-  await db.query<OkPacket>(
-    `UPDATE documentos 
-     SET is_new = 0,
-  tipo_documento = TRIM(REPLACE(tipo_documento, '(SIN CONFIRMAR)', ''))
-     WHERE id = ? `,
-    [documentId]
-  );
+  const doc = await prisma.documentos.findUnique({ where: { id: BigInt(documentId) }, select: { tipo_documento: true } });
+  if (doc) {
+    await prisma.documentos.update({
+      where: { id: BigInt(documentId) },
+      data: {
+        is_new: 0,
+        tipo_documento: doc.tipo_documento?.replace('(SIN CONFIRMAR)', '').trim() || ''
+      }
+    });
+  }
 
   // 🔔 WEBHOOKS TRIGGER: Incidencia resuelta manualmente desde el dashboard
   try {
@@ -1732,7 +1654,7 @@ WHERE(rol = 'proveedor' OR rol = 'emisor')
     fecha_creacion: p.fecha_creacion,
   }));
 
-  return JSON.parse(JSON.stringify(providers));
+  return serializeData(providers);
 }
 
 export async function getProvidersWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
@@ -2151,7 +2073,7 @@ SELECT *
     fecha_creacion: p.fecha_creacion
   };
 
-  return JSON.parse(JSON.stringify(provider));
+  return serializeData(provider);
 }
 
 export async function getProductsByProviderName(
@@ -2252,7 +2174,7 @@ SELECT * FROM RankedLines WHERE rn = 1
     veces_comprado: l.veces_comprado,
   }));
 
-  return JSON.parse(JSON.stringify(products));
+  return serializeData(products);
 }
 
 export async function getAllProductLinesByProviderName(
@@ -2317,7 +2239,7 @@ OR
     cuenta_contable: l.cuenta_contable,
   }));
 
-  return JSON.parse(JSON.stringify(products));
+  return serializeData(products);
 }
 
 export async function getProductHistory(
@@ -2408,7 +2330,7 @@ SELECT * FROM UniqueHistory
 
   const productInfo = history[0];
 
-  return JSON.parse(JSON.stringify({ productInfo, history }));
+  return serializeData({ productInfo, history });
 }
 
 export async function getProviderAnalytics(
@@ -2557,7 +2479,7 @@ OR
     monthlySpend
   };
 
-  return JSON.parse(JSON.stringify(analyticsData));
+  return serializeData(analyticsData);
 }
 
 export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<IncidentsAnalyticsData> {
@@ -2653,7 +2575,7 @@ END as name,
 
     console.log('📊 [getIncidentsAnalytics] Resultado:', analyticsData);
 
-    return JSON.parse(JSON.stringify(analyticsData));
+    return serializeData(analyticsData);
   } catch (error) {
     console.error("❌ [getIncidentsAnalytics] Error:", error);
     return {
@@ -2712,10 +2634,9 @@ d.id,
           [doc.id, 'Datos incompletos%']
         );
         if (existing.length === 0) {
-          await connection.query(
-            'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
-            [doc.id, doc.id_de_empresa, description]
-          );
+          await prisma.incidencias_documento.create({
+            data: { documento_id: BigInt(doc.id), id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, descripcion: description } as any
+          });
           newIncidentsFound++;
           fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
             id: doc.id,
@@ -2732,7 +2653,7 @@ d.id,
 
     // ✅ CAMBIO CRÍTICO: Incluir empresa en la clave de duplicados
     // Check for duplicates (solo DENTRO de cada empresa)
-    const docMap = new Map<string, Array<{ id: number, id_de_empresa: number }>>();
+    const docMap = new Map<string, Array<any>>();
     for (const doc of validDocsForAnalysis) {
       // ✅ ANTES: const key = `${ doc.provider_cif }| ${ doc.numero_documento }| ${ doc.importe_total } `;
       // ✅ AHORA: Incluir empresa en la clave
@@ -2741,7 +2662,7 @@ d.id,
       if (!docMap.has(key)) {
         docMap.set(key, []);
       }
-      docMap.get(key)!.push({ id: doc.id, id_de_empresa: doc.id_de_empresa });
+      docMap.get(key)!.push(doc); // Push full doc for webhook
     }
 
     for (const [key, docs] of docMap.entries()) {
@@ -2756,10 +2677,9 @@ d.id,
             [doc.id, 'Documento duplicado%']
           );
           if (existing.length === 0) {
-            await connection.query(
-              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
-              [doc.id, doc.id_de_empresa, description]
-            );
+            await prisma.incidencias_documento.create({
+              data: { documento_id: BigInt(doc.id), id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, descripcion: description } as any
+            });
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
               id: doc.id,
@@ -2789,10 +2709,9 @@ d.id,
             [doc.id, 'Error de cálculo en el subtotal%']
           );
           if (existing.length === 0) {
-            await connection.query(
-              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
-              [doc.id, doc.id_de_empresa, description]
-            );
+            await prisma.incidencias_documento.create({
+              data: { documento_id: BigInt(doc.id), id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, descripcion: description } as any
+            });
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
               id: doc.id,
@@ -2818,10 +2737,9 @@ d.id,
             [doc.id, 'Error de cálculo en el total%']
           );
           if (existing.length === 0) {
-            await connection.query(
-              'INSERT INTO incidencias_documento (documento_id, id_de_empresa, descripcion) VALUES (?, ?, ?)',
-              [doc.id, doc.id_de_empresa, description]
-            );
+            await prisma.incidencias_documento.create({
+              data: { documento_id: BigInt(doc.id), id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, descripcion: description } as any
+            });
             newIncidentsFound++;
             fireWebhook(doc.id_de_empresa, 'documento.requiere_atencion', {
               id: doc.id,
@@ -2866,16 +2784,16 @@ export async function markDocumentAsRead(documentId: number) {
   try {
     console.log('🔄 [MARK-READ] Marcando documento como leído:', documentId);
 
-    const [result] = await db.query<OkPacket>(
-      'UPDATE documentos SET is_new = 0 WHERE id = ? AND is_new = 1',
-      [documentId]
-    );
+    await prisma.documentos.update({
+      where: { id: BigInt(documentId) },
+      data: { is_new: 0 }
+    });
 
-    console.log('✅ [MARK-READ] Resultado:', { affectedRows: result.affectedRows });
+    console.log('✅ [MARK-READ] Resultado:', { affectedRows: ids.length });
 
     return {
       success: true,
-      updated: result.affectedRows > 0
+      updated: ids.length > 0
     };
   } catch (error) {
     console.error('❌ [MARK-READ] Error:', error);
@@ -3255,7 +3173,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     ...periodQueryParams
   ]);
 
-  console.log('🔍 [getDashboardAnalytics] QuarterlyRows RAW:', JSON.stringify(quarterlyRows, null, 2));
+  console.log('🔍 [getDashboardAnalytics] QuarterlyRows RAW:', JSON.stringify(quarterlyRows, (k, v) => typeof v === 'bigint' ? Number(v) : v, 2));
 
   const quarterlySummary = {
     T1: { ingresos: 0, gastos: 0 },
@@ -3273,7 +3191,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     }
   });
 
-  console.log('📊 [getDashboardAnalytics] QuarterlySummary:', JSON.stringify(quarterlySummary, null, 2));
+  console.log('📊 [getDashboardAnalytics] QuarterlySummary:', JSON.stringify(quarterlySummary, (k, v) => typeof v === 'bigint' ? Number(v) : v, 2));
 
   // ✅ MULTI-YEAR QUARTERLY (Desglose por Año y Trimestre)
   const [multiYearRows] = await db.query<RowDataPacket[]>(`
@@ -3505,7 +3423,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     ...periodQueryParams
   ]);
 
-  console.log('🔍 [getDashboardAnalytics] IvaRows RAW:', JSON.stringify(ivaRows, null, 2));
+  console.log('🔍 [getDashboardAnalytics] IvaRows RAW:', JSON.stringify(ivaRows, (k, v) => typeof v === 'bigint' ? Number(v) : v, 2));
 
   const ivaSummary = {
     T1: { repercutido: 0, soportado: 0 },
@@ -3523,7 +3441,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     }
   });
 
-  console.log('📊 [getDashboardAnalytics] IvaSummary:', JSON.stringify(ivaSummary, null, 2));
+  console.log('📊 [getDashboardAnalytics] IvaSummary:', JSON.stringify(ivaSummary, (k, v) => typeof v === 'bigint' ? Number(v) : v, 2));
 
   // ✅ MULTI-YEAR IVA (Desglose por Año y Trimestre)
   const [multiYearIvaRows] = await db.query<RowDataPacket[]>(`
@@ -3815,7 +3733,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
 
   console.log('📊 [getDashboardAnalytics] Resultado final:', analyticsData.kpis);
 
-  return JSON.parse(JSON.stringify(analyticsData));
+  return serializeData(analyticsData);
 }
 
 
@@ -4250,12 +4168,11 @@ d.trimestre_cerrado = 1,
     console.log('📝 [cerrarTrimestre] Query UPDATE documentos:', query);
     console.log('📝 [cerrarTrimestre] Params:', params);
 
-    const [result] = await conn.query<OkPacket>(query, params);
+    const affectedCount = await prisma.$executeRawUnsafe(query, ...params);
 
-    console.log('✅ [cerrarTrimestre] Documentos actualizados:', result.affectedRows);
+    console.log('✅ [cerrarTrimestre] Documentos actualizados:', affectedCount);
 
-    if (result.affectedRows === 0) {
-      await conn.rollback();
+    if (affectedCount === 0) {
       console.warn('⚠️ [cerrarTrimestre] No se encontraron documentos para cerrar');
       console.log('═══════════════════════════════════════════════════════════');
       return { affected: 0 };
@@ -4397,13 +4314,12 @@ dt.año_trimestre as año,
     console.log('📊 [cerrarTrimestre] Query estadísticas:', statsQuery);
     console.log('📊 [cerrarTrimestre] Params:', [...MY_COMPANY_FISCAL_IDS, ...statsParams]);
 
-    const [statsRows] = await conn.query<RowDataPacket[]>(statsQuery, [...MY_COMPANY_FISCAL_IDS, ...statsParams]);
+    const statsRows = await prisma.$queryRawUnsafe<any[]>(statsQuery, ...MY_COMPANY_FISCAL_IDS, ...statsParams);
 
     console.log('📊 [cerrarTrimestre] Filas de estadísticas obtenidas:', statsRows.length);
 
     if (statsRows.length === 0) {
       console.warn('⚠️ [cerrarTrimestre] No se encontraron estadísticas para guardar');
-      await conn.rollback();
       console.log('═══════════════════════════════════════════════════════════');
       return { affected: 0 };
     }
@@ -4450,26 +4366,36 @@ cerrado = 1,
   fecha_actualizacion = NOW()
     `;
 
-      const [insertResult] = await conn.query<OkPacket>(insertQuery, [
-        stats.año,
-        stats.trimestre,
-        stats.empresa_id,
-        stats.total_documentos,
-        stats.total_ingresos,        // ✅ CON IVA
-        stats.total_gastos,          // ✅ CON IVA
-        stats.iva_repercutido,
-        stats.iva_soportado
-      ]);
+      const upsertData = {
+        cerrado: true,
+        fecha_cierre: new Date(),
+        total_documentos: stats.total_documentos,
+        total_ingresos: stats.total_ingresos,
+        total_gastos: stats.total_gastos,
+        iva_repercutido: stats.iva_repercutido,
+        iva_soportado: stats.iva_soportado,
+        fecha_actualizacion: new Date()
+      };
+      await prisma.trimestres.upsert({
+        where: { año_num_trimestre_id_de_empresa: { año: stats.año, num_trimestre: stats.trimestre, id_de_empresa: BigInt(stats.empresa_id) } } as any,
+        update: upsertData as any,
+        create: {
+          año: stats.año,
+          num_trimestre: stats.trimestre,
+          id_de_empresa: BigInt(stats.empresa_id),
+          ...upsertData,
+          fecha_creacion: new Date()
+        } as any
+      });
 
-      console.log(`✅[cerrarTrimestre] Registro guardado en trimestres(insertId: ${insertResult.insertId}, affectedRows: ${insertResult.affectedRows})`);
+      console.log(`✅[cerrarTrimestre] Registro guardado en trimestres (empresa: ${stats.empresa_id})`);
     }
 
     console.log('───────────────────────────────────────────────────────────');
-    await conn.commit();
     console.log('🎉 [cerrarTrimestre] TRANSACCIÓN COMPLETADA EXITOSAMENTE');
     console.log('═══════════════════════════════════════════════════════════');
 
-    return { affected: result.affectedRows };
+    return { affected: affectedCount || 1 }; // legacy: return { affected: ids.length };
   } catch (error) {
     await conn.rollback();
     console.error('═══════════════════════════════════════════════════════════');
@@ -4516,23 +4442,21 @@ export async function createExport(payload: {
   filtrosAplicados?: any;
 }): Promise<{ success: boolean; exportId?: number; error?: string }> {
   try {
-    const [result] = await db.query<OkPacket>(
-      `INSERT INTO exports
-  (id_de_usuario, tipo_export, año_filtro, trimestre_filtro, empresas_ids, documento_ids, total_documentos, filtros_aplicados, estado)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [
-        payload.userId,
-        payload.tipoExport,
-        payload.añoFiltro || null,
-        payload.trimestreFiltro || null,
-        payload.empresasIds ? JSON.stringify(payload.empresasIds) : null,
-        payload.documentoIds ? JSON.stringify(payload.documentoIds) : null,
-        payload.documentoIds?.length || 0,
-        payload.filtrosAplicados ? JSON.stringify(payload.filtrosAplicados) : null
-      ]
-    );
+    const newExport = await prisma.exports.create({
+      data: {
+        id_de_usuario: payload.userId,
+        tipo_export: payload.tipoExport,
+        año_filtro: payload.añoFiltro || null,
+        trimestre_filtro: payload.trimestreFiltro || null,
+        empresas_ids: payload.empresasIds ? payload.empresasIds : [],
+        documento_ids: payload.documentoIds ? payload.documentoIds : [],
+        total_documentos: payload.documentoIds?.length || 0,
+        filtros_aplicados: payload.filtrosAplicados || null,
+        estado: 'pending'
+      } as any
+    });
 
-    return { success: true, exportId: result.insertId };
+    return { success: true, exportId: Number(newExport.id) };
   } catch (error) {
     console.error('❌ [createExport] Error:', error);
     return {
@@ -4553,18 +4477,16 @@ export async function updateExportStatus(
   errorMensaje?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const fechaCompletado = status === 'completed' ? 'NOW()' : 'NULL';
-
-    await db.query<OkPacket>(
-      `UPDATE exports 
-       SET estado = ?,
-  url_archivo = ?,
-  nombre_archivo = ?,
-  error_mensaje = ?,
-  fecha_completado = ${fechaCompletado}
-       WHERE id = ? `,
-      [status, urlArchivo || null, nombreArchivo || null, errorMensaje || null, exportId]
-    );
+    await prisma.exports.update({
+      where: { id: exportId },
+      data: {
+        estado: status,
+        url_archivo: urlArchivo || null,
+        nombre_archivo: nombreArchivo || null,
+        error_mensaje: errorMensaje || null,
+        fecha_completado: status === 'completed' ? new Date() : null
+      } as any
+    });
 
     return { success: true };
   } catch (error) {
@@ -4581,13 +4503,11 @@ export async function updateExportStatus(
  */
 export async function getUserExports(userId: number): Promise<any[]> {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT * FROM exports 
-       WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))
-  ORDER BY fecha_generacion DESC 
-       LIMIT 50`,
-      [userId]
-    );
+    const rows = await prisma.exports.findMany({
+      where: { id_de_usuario: userId } as any,
+      orderBy: { fecha_generacion: 'desc' } as any,
+      take: 50
+    });
 
     return rows;
   } catch (error) {
@@ -4668,38 +4588,38 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
     const user = await getCurrentUser();
     if (!user) return [];
 
-    let query = `
-      SELECT DISTINCT e.nombre
-      FROM entidades_documento e
-      JOIN documentos d ON e.documento_id = d.id
-      JOIN empresas emp ON d.id_de_empresa = emp.id
-WHERE(e.rol = 'receptor' OR e.rol = 'cliente')
-        AND e.nombre IS NOT NULL
-        AND e.nombre != ''
-        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
-  `;
+    // Obtenemos las empresas permitidas para el usuario usando Prisma (ya incluye filtro de seguridad JSON)
+    const allowedCompanies = await getCompanies();
+    const allowedEmpresaIds = allowedCompanies.map(c => c.id);
 
-    const params: any[] = [user.id];
+    // Cruzamos con las pedidas (si hay) para asegurar que no se pidan empresas ajenas
+    const targetEmpresaIds = empresaIds && empresaIds.length > 0 
+      ? empresaIds.filter(id => allowedEmpresaIds.includes(id))
+      : allowedEmpresaIds;
 
-    // ✅ Filtro por empresas si se especifica
-    if (empresaIds && empresaIds.length > 0) {
-      const placeholders = empresaIds.map(() => '?').join(',');
-      query += ` AND d.id_de_empresa IN(${placeholders})`;
-      params.push(...empresaIds);
-    }
+    if (targetEmpresaIds.length === 0) return [];
 
-    query += ` ORDER BY e.nombre ASC`;
+    const entidades = await prisma.entidades_documento.findMany({
+      where: {
+        documentos: {
+          id_de_empresa: { in: targetEmpresaIds.map(id => BigInt(id)) }
+        },
+        rol: { in: ['receptor', 'cliente'] }
+      },
+      select: {
+        nombre: true
+      }
+    });
 
-    console.log('📝 [getUniqueClients] Query:', query);
-    console.log('📝 [getUniqueClients] Params:', params);
+    // Filtramos en memoria nulos/vacíos y sacamos valores únicos, luego ordenamos (post-desencriptación)
+    const nombres = entidades
+      .map(e => e.nombre)
+      .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
 
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
 
-    const clientes = rows.map(r => r.nombre);
-
-    console.log('✅ [getUniqueClients] Clientes encontrados:', clientes.length);
-
-    return clientes;
+    console.log('✅ [getUniqueClients] Clientes únicos (Prisma):', uniqueNombres.length);
+    return uniqueNombres;
   } catch (error) {
     console.error('❌ [getUniqueClients] Error:', error);
     return [];
@@ -4715,38 +4635,35 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
     const user = await getCurrentUser();
     if (!user) return [];
 
-    let query = `
-      SELECT DISTINCT e.nombre
-      FROM entidades_documento e
-      JOIN documentos d ON e.documento_id = d.id
-      JOIN empresas emp ON d.id_de_empresa = emp.id
-WHERE(e.rol = 'proveedor' OR e.rol = 'emisor')
-        AND e.nombre IS NOT NULL
-        AND e.nombre != ''
-        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
-  `;
+    const allowedCompanies = await getCompanies();
+    const allowedEmpresaIds = allowedCompanies.map(c => c.id);
 
-    const params: any[] = [user.id];
+    const targetEmpresaIds = empresaIds && empresaIds.length > 0 
+      ? empresaIds.filter(id => allowedEmpresaIds.includes(id))
+      : allowedEmpresaIds;
 
-    // ✅ Filtro por empresas si se especifica
-    if (empresaIds && empresaIds.length > 0) {
-      const placeholders = empresaIds.map(() => '?').join(',');
-      query += ` AND d.id_de_empresa IN(${placeholders})`;
-      params.push(...empresaIds);
-    }
+    if (targetEmpresaIds.length === 0) return [];
 
-    query += ` ORDER BY e.nombre ASC`;
+    const entidades = await prisma.entidades_documento.findMany({
+      where: {
+        documentos: {
+          id_de_empresa: { in: targetEmpresaIds.map(id => BigInt(id)) }
+        },
+        rol: { in: ['proveedor', 'emisor'] }
+      },
+      select: {
+        nombre: true
+      }
+    });
 
-    console.log('📝 [getUniqueProvidersNames] Query:', query);
-    console.log('📝 [getUniqueProvidersNames] Params:', params);
+    const nombres = entidades
+      .map(e => e.nombre)
+      .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
 
-    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
 
-    const proveedores = rows.map(r => r.nombre);
-
-    console.log('✅ [getUniqueProvidersNames] Proveedores encontrados:', proveedores.length);
-
-    return proveedores;
+    console.log('✅ [getUniqueProvidersNames] Proveedores únicos (Prisma):', uniqueNombres.length);
+    return uniqueNombres;
   } catch (error) {
     console.error('❌ [getUniqueProvidersNames] Error:', error);
     return [];
@@ -4846,22 +4763,42 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
         AND (JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     `, [ids, userId]);
 
-    // Primero borramos dependencias
-    await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (?)', [ids]);
-    await connection.query('DELETE FROM entidades_documento WHERE documento_id IN (?)', [ids]);
-    await connection.query('DELETE FROM lineas_documento WHERE documento_id IN (?)', [ids]);
-    await connection.query('DELETE FROM impuestos_documento WHERE documento_id IN (?)', [ids]);
-    await connection.query('DELETE FROM incidencias_documento WHERE documento_id IN (?)', [ids]);
+    // Obtener información del usuario para auditoría
+    const userEmail = (await getCurrentUser())?.email || 'Desconocido';
 
-    // Finalmente el documento
-    const [result] = await connection.query<OkPacket>(`
-        DELETE d FROM documentos d 
-        LEFT JOIN empresas e ON d.id_de_empresa = e.id 
-        WHERE d.id IN(?)
-AND(JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
-    `, [ids, userId]);
+    // Capturar snapshots e insertar auditoría
+    for (const doc of docsToWebhook) {
+      let snapshot = null;
+      try {
+        snapshot = await getSnapshotBeforeUpdate(doc.documento_id, db);
+      } catch (e) {
+        console.warn(`⚠️ [deleteDocuments] Falló captura de snapshot previo a eliminar doc ${doc.documento_id}:`, e);
+      }
 
-    console.log(`✅[deleteDocuments] Eliminados: ${result.affectedRows} `);
+      await prisma.documentos_auditoria.create({
+        data: {
+          documento_id: BigInt(doc.documento_id),
+          id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : BigInt(0),
+          accion: 'DELETE',
+          usuario: userEmail,
+          detalle: JSON.stringify({ previo: snapshot }),
+          fecha_accion: new Date()
+        }
+      });
+    }
+
+    // Eliminar documentos en cascada (las relaciones en el schema tienen onDelete: Cascade)
+    const result = await prisma.documentos.deleteMany({
+      where: {
+        id: { in: ids.map(id => BigInt(id)) },
+        OR: [
+          { id_de_empresa: null },
+          { empresas: { id_de_usuario: { array_contains: userId } } }
+        ]
+      }
+    });
+
+    console.log(`✅[deleteDocuments] Eliminados: ${ids.length || ids.length} `);
 
     await connection.commit();
     // 🔔 WEBHOOKS TRIGGER: Eliminación masiva (o individual según config)
@@ -4929,11 +4866,10 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
 
   for (const doc of fechaAnomalas as any[]) {
     const motivo = `Fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR.`;
-    await db.query(
-      `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo)
-       VALUES (?, ?, 0, 'FECHA_ANOMALA', ?)`,
-      [doc.id, doc.id_de_empresa, motivo]
-    );
+    await prisma.health_check_status.createMany({
+      data: [{ documento_id: BigInt(doc.id), empresa_id: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, verified: false, check_type: 'FECHA_ANOMALA', motivo }] as any[],
+      skipDuplicates: true
+    });
     console.log(`📅 [HealthCheck] Fecha anómala registrada para doc #${doc.id}`);
   }
 
@@ -4952,11 +4888,10 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
 
   for (const doc of entidadesDuplicadas as any[]) {
     const motivo = `La entidad "${doc.entidad_key}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
-    await db.query(
-      `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo)
-       VALUES (?, ?, 0, 'ENTIDAD_DUPLICADA', ?)`,
-      [doc.documento_id, doc.id_de_empresa, motivo]
-    );
+    await prisma.health_check_status.createMany({
+      data: [{ documento_id: BigInt(doc.documento_id), empresa_id: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, verified: false, check_type: 'ENTIDAD_DUPLICADA', motivo }] as any[],
+      skipDuplicates: true
+    });
     console.log(`🔁 [HealthCheck] Entidad duplicada registrada para doc #${doc.documento_id}`);
   }
 
@@ -4985,10 +4920,10 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   // Auto-register newly detected mismatched documents and trigger first diagnosis
   for (const doc of docRows as any[]) {
     if (Number(doc.mismatch_amount || 0) > 0.05) {
-      const [insertResult] = await db.query<any>(
-        `INSERT IGNORE INTO ${dbName}.health_check_status (documento_id, empresa_id, verified, check_type, motivo) VALUES (?, ?, 0, 'MISMATCH_MATEMATICO', ?)`,
-        [doc.id, doc.id_de_empresa, `Descuadre de ${Number(doc.mismatch_amount).toFixed(2)}€ entre importe total y la suma de base + impuestos.`]
-      );
+      const insertResult = await prisma.health_check_status.createMany({
+        data: [{ documento_id: Number(doc.id), empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null, verified: false, check_type: 'MISMATCH_MATEMATICO', motivo: `Descuadre de ${Number(doc.mismatch_amount).toFixed(2)}€ entre importe total y la suma de base + impuestos.` }] as any[],
+        skipDuplicates: true
+      });
       // Only diagnose if this is a NEW registration AND has no prior suggestions
       if (insertResult.affectedRows > 0) {
         const [existingSuggestions] = await db.query<any[]>(
@@ -5065,10 +5000,10 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
  * Confirms a document in health_check_status so it disappears from the Health Check dashboard.
  */
 export async function confirmHealthCheckDocument(documentId: number): Promise<void> {
-  await db.query(
-    `UPDATE ${dbName}.health_check_status SET verified = 1 WHERE documento_id = ?`,
-    [documentId]
-  );
+  await prisma.health_check_status.updateMany({
+    where: { documento_id: BigInt(documentId) },
+    data: { verified: true }
+  });
 }
 
 
@@ -5101,7 +5036,7 @@ SELECT *
     fecha_creacion: p.fecha_creacion
   };
 
-  return JSON.parse(JSON.stringify(provider));
+  return serializeData(provider);
 }
 
 export async function getDocumentsByClientName(
@@ -5242,7 +5177,7 @@ SELECT * FROM RankedLines WHERE rn = 1
     veces_comprado: l.veces_comprado,
   }));
 
-  return JSON.parse(JSON.stringify(products));
+  return serializeData(products);
 }
 
 export async function getAllProductLinesByClientName(
@@ -5307,7 +5242,7 @@ OR
     cuenta_contable: l.cuenta_contable,
   }));
 
-  return JSON.parse(JSON.stringify(products));
+  return serializeData(products);
 }
 
 export async function getClientAnalytics(
@@ -5456,7 +5391,7 @@ OR
     monthlySpend
   };
 
-  return JSON.parse(JSON.stringify(analyticsData));
+  return serializeData(analyticsData);
 }
 
 export async function getClientProductHistory(
@@ -5548,7 +5483,7 @@ SELECT * FROM UniqueHistory
 
   const productInfo = history[0] || null;
 
-  return JSON.parse(JSON.stringify({ productInfo, history }));
+  return serializeData({ productInfo, history });
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -5658,35 +5593,66 @@ export async function getWebhookDocumentPayload(documentId: number): Promise<any
   };
 }
 
-export async function getSnapshotBeforeUpdate(id: number, connection: any): Promise<any> {
-  const [docRows] = await connection.query(
-    `SELECT numero_documento, tipo_documento, importe_total, importe_sin_impuestos, fecha_emision, fecha_vencimiento, moneda, observaciones
-     FROM documentos WHERE id = ? LIMIT 1`,
-    [id]
-  );
-  if (docRows.length === 0) return null;
-  const doc = docRows[0];
+export async function getSnapshotBeforeUpdate(id: number, tx: any = prisma): Promise<any> {
+  const doc = await tx.documentos.findUnique({
+    where: { id: BigInt(id) },
+    select: {
+      numero_documento: true,
+      tipo_documento: true,
+      importe_total: true,
+      importe_sin_impuestos: true,
+      fecha_emision: true,
+      fecha_vencimiento: true,
+      moneda: true,
+      observaciones: true,
+      entidades_documento: {
+        select: {
+          rol: true,
+          nombre: true,
+          identificador_fiscal: true,
+        }
+      },
+      impuestos_documento: {
+        select: {
+          tipo_impuesto: true,
+          base_imponible: true,
+          cuota: true,
+        }
+      },
+      lineas_documento: {
+        select: {
+          descripcion: true,
+          cantidad: true,
+          precio_unitario: true,
+          importe_linea: true,
+        }
+      }
+    }
+  });
 
-  const [entidades] = await connection.query(
-    `SELECT rol, nombre, identificador_fiscal FROM entidades_documento WHERE documento_id = ?`,
-    [id]
-  );
-  
-  const [impuestos] = await connection.query(
-    `SELECT tipo_impuesto, base_imponible, cuota FROM impuestos_documento WHERE documento_id = ?`,
-    [id]
-  );
-
-  const [lineas] = await connection.query(
-    `SELECT descripcion, cantidad, precio_unitario, importe_linea FROM lineas_documento WHERE documento_id = ?`,
-    [id]
-  );
+  if (!doc) return null;
 
   return {
-    ...doc,
-    entidades,
-    iva_details: impuestos,
-    lineas
+    numero_documento: doc.numero_documento,
+    tipo_documento: doc.tipo_documento,
+    importe_total: doc.importe_total !== null ? Number(doc.importe_total) : null,
+    importe_sin_impuestos: doc.importe_sin_impuestos !== null ? Number(doc.importe_sin_impuestos) : null,
+    fecha_emision: doc.fecha_emision,
+    fecha_vencimiento: doc.fecha_vencimiento,
+    moneda: doc.moneda,
+    observaciones: doc.observaciones,
+    entidades: doc.entidades_documento,
+    iva_details: doc.impuestos_documento.map((i: any) => ({
+      ...i,
+      base_imponible: i.base_imponible !== null ? Number(i.base_imponible) : null,
+      cuota: i.cuota !== null ? Number(i.cuota) : null,
+    })),
+    lineas: doc.lineas_documento.map((l: any) => ({
+      ...l,
+      cantidad: l.cantidad !== null ? Number(l.cantidad) : null,
+      precio_unitario: l.precio_unitario !== null ? Number(l.precio_unitario) : null,
+      importe_linea: l.importe_linea !== null ? Number(l.importe_linea) : null,
+    }))
   };
 }
 

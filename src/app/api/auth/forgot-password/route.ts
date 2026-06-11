@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { sendEmail } from '@/services/email-service';
+import { prisma } from '@/lib/prisma';
+import { hashField } from '@/lib/encryption';
 
 export async function POST(request: NextRequest) {
     try {
@@ -11,13 +13,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
         }
 
-        // 1. Buscar usuario
-        const [users] = await db.query<RowDataPacket[]>(
-            'SELECT id, nombre, email FROM usuarios WHERE email = ?',
-            [email]
-        );
+        // 1. Buscar usuario por hash del email (blind index) porque el email está encriptado en DB
+        const emailHash = hashField(email);
+        const user = await prisma.usuarios.findUnique({
+            where: { email_hash: emailHash },
+            select: { id: true, nombre: true, email: true }
+        });
 
-        if (users.length === 0) {
+        if (!user) {
             // Caso: Usuario no existe (Aviso de seguridad)
             const { success, error: emailError } = await sendEmail({
                 to: email,
@@ -32,7 +35,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, message: 'Si el correo existe, recibirás instrucciones.' });
         }
 
-        const user = users[0];
+        // user is already obtained from Prisma above
+        const userId = user.id;
 
         // 2. Insertar token en DB
         // Formatear expiresAt (si viene como ISO string) para MySQL. Default 1 hora.
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
         await db.query<ResultSetHeader>(
             `INSERT INTO password_reset_tokens (user_id, token, email, expires_at, used)
        VALUES (?, ?, ?, ?, 0)`,
-            [user.id, token, email, expiresAtMySQL]
+            [Number(userId), token, email, expiresAtMySQL]
         );
 
         // 3. Enviar mail de éxito

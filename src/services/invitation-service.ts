@@ -1,7 +1,6 @@
-import db, { dbName } from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
 import { sendEmail } from './email-service';
 import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
 
 export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string) {
   try {
@@ -9,13 +8,26 @@ export async function createInvitation(empresaId: string, email: string, rol: st
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
-    const [emp] = await db.query<RowDataPacket[]>('SELECT nombre_de_empresa as nombre FROM empresas WHERE id = ?', [empresaId]);
-    const empresaNombre = emp[0]?.nombre || 'la empresa';
+    const emp = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { nombre_de_empresa: true }
+    });
+    const empresaNombre = emp?.nombre_de_empresa || 'la empresa';
 
-    const [result]: any = await db.query(
-      'INSERT INTO invitaciones_empresa (empresa_id, email, rol, token, fecha_expiracion, metadata, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [empresaId, email, rol, token, fechaExpiracion.toISOString().slice(0, 19).replace('T', ' '), JSON.stringify({ senderName, empresaNombre }), 'PENDING']
-    );
+    const emailHash = crypto.createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
+
+    const inv = await prisma.invitaciones_empresa.create({
+      data: {
+        empresa_id: BigInt(empresaId),
+        email,
+        email_hash: emailHash,
+        rol: rol as any,
+        token,
+        fecha_expiracion: fechaExpiracion,
+        metadata: { senderName, empresaNombre },
+        status: 'PENDING'
+      }
+    });
 
     const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${token}`;
 
@@ -70,7 +82,7 @@ export async function createInvitation(empresaId: string, email: string, rol: st
       throw new Error('No se pudo enviar el mail de invitación. Revisá la configuración SMTP.');
     }
 
-    return { success: true, id: result.insertId, token };
+    return { success: true, id: Number(inv.id), token };
   } catch (error) {
     console.error('❌ [createInvitation] Error:', error);
     return { success: false, error: 'No se pudo enviar la invitación' };
@@ -80,53 +92,67 @@ export async function createInvitation(empresaId: string, email: string, rol: st
 export async function acceptInvitation(token: string, userId: string | number) {
   try {
     console.log('🎁 [invitation-service] Intentando aceptar invitación:', { token, userId });
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM invitaciones_empresa WHERE token = ? AND status = ? AND fecha_expiracion > NOW()',
-      [token, 'PENDING']
-    );
+    const inv = await prisma.invitaciones_empresa.findFirst({
+      where: {
+        token: token,
+        status: 'PENDING',
+        fecha_expiracion: { gt: new Date() }
+      }
+    });
 
-    if (rows.length === 0) {
+    if (!inv) {
       console.warn('⚠️ [invitation-service] Invitación no encontrada o inválida. Token:', token);
       return { success: false, error: 'Invitación no encontrada, expirada o ya utilizada' };
     }
 
-    const inv = rows[0];
-    console.log('✅ [invitation-service] Invitación válida para empresa:', inv.id_empresa || inv.empresa_id);
+    console.log('✅ [invitation-service] Invitación válida para empresa:', inv.empresa_id);
 
-    const empresaId = inv.id_empresa || inv.empresa_id;
+    const empresaId = Number(inv.empresa_id);
 
-    const [empresaRows] = await db.query<RowDataPacket[]>(`SELECT id_de_usuario FROM ${dbName}.empresas WHERE id = ?`, [empresaId]);
-    if (empresaRows.length > 0) {
-      let userIds = [];
+    const empresa = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { id_de_usuario: true, config_roles: true }
+    });
+
+    if (empresa) {
+      let userIds: number[] = [];
       try {
-        userIds = typeof empresaRows[0].id_de_usuario === 'string' ? JSON.parse(empresaRows[0].id_de_usuario || '[]') : (empresaRows[0].id_de_usuario || []);
+        userIds = typeof empresa.id_de_usuario === 'string' ? JSON.parse(empresa.id_de_usuario) : (empresa.id_de_usuario || []);
       } catch (e) {
         userIds = [];
       }
       if (!Array.isArray(userIds)) userIds = [];
 
-      if (!userIds.includes(parseInt(String(userId)))) {
-        userIds.push(parseInt(String(userId)));
+      const parsedUserId = parseInt(String(userId));
+      if (!userIds.includes(parsedUserId)) {
+        userIds.push(parsedUserId);
       }
+
+      let configRoles: Record<string, string> = {};
+      try {
+        configRoles = typeof empresa.config_roles === 'string' ? JSON.parse(empresa.config_roles) : (empresa.config_roles || {});
+      } catch (e) {
+        configRoles = {};
+      }
+      configRoles[parsedUserId.toString()] = inv.rol as string;
 
       console.log('🏢 [invitation-service] Actualizando miembros y roles:', { userIds, userId, rol: inv.rol });
 
-      // Actualizamos el array de IDs Y el objeto de roles
-      await db.query(
-        `UPDATE ${dbName}.empresas SET 
-                 id_de_usuario = ?, 
-                 config_roles = JSON_SET(COALESCE(config_roles, JSON_OBJECT()), ?, ?) 
-                 WHERE id = ?`,
-        [JSON.stringify(userIds), `$."${userId}"`, inv.rol, empresaId]
-      );
+      await prisma.empresas.update({
+        where: { id: BigInt(empresaId) },
+        data: {
+          id_de_usuario: userIds,
+          config_roles: configRoles
+        } as any
+      });
     }
 
     console.log('🏁 [invitation-service] Finalizando con UPDATE ACCEPTED para el token:', token);
-    const [updateResult]: any = await db.query(
-      'UPDATE invitaciones_empresa SET status = ? WHERE token = ?',
-      ['ACCEPTED', token]
-    );
-    console.log('🏁 [invitation-service] Filas actualizadas a ACCEPTED:', updateResult?.affectedRows);
+    const updated = await prisma.invitaciones_empresa.updateMany({
+      where: { token },
+      data: { status: 'ACCEPTED' }
+    });
+    console.log('🏁 [invitation-service] Filas actualizadas a ACCEPTED:', updated.count);
 
     return { success: true };
   } catch (error: any) {
@@ -137,7 +163,10 @@ export async function acceptInvitation(token: string, userId: string | number) {
 
 export async function revokeInvitation(invitationId: string) {
   try {
-    await db.query('UPDATE invitaciones_empresa SET status = ? WHERE id = ?', ['REVOKED', invitationId]);
+    await prisma.invitaciones_empresa.update({
+      where: { id: parseInt(invitationId) },
+      data: { status: 'REVOKED' }
+    });
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -146,7 +175,9 @@ export async function revokeInvitation(invitationId: string) {
 
 export async function deleteInvitation(invitationId: string) {
   try {
-    await db.query('DELETE FROM invitaciones_empresa WHERE id = ?', [invitationId]);
+    await prisma.invitaciones_empresa.delete({
+      where: { id: parseInt(invitationId) }
+    });
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -155,15 +186,13 @@ export async function deleteInvitation(invitationId: string) {
 
 export async function resendInvitation(invitationId: string) {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM invitaciones_empresa WHERE id = ? AND status = ?',
-      [invitationId, 'PENDING']
-    );
-    if (rows.length === 0) {
+    const inv = await prisma.invitaciones_empresa.findFirst({
+      where: { id: parseInt(invitationId), status: 'PENDING' }
+    });
+    if (!inv) {
       return { success: false, error: 'Invitación no encontrada o no pendiente' };
     }
-    const inv = rows[0];
-    const metadata = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata || '{}') : inv.metadata;
+    const metadata: any = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : (inv.metadata || {});
     const magicLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invitation?token=${inv.token}`;
 
     const { success, error: emailError } = await sendEmail({
@@ -202,11 +231,16 @@ export async function resendInvitation(invitationId: string) {
 
 export async function getInvitationByToken(token: string) {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT i.*, e.nombre_de_empresa FROM invitaciones_empresa i JOIN empresas e ON i.empresa_id = e.id WHERE i.token = ? AND i.status = "PENDING" AND i.fecha_expiracion > NOW()',
-      [token]
-    );
-    return rows[0] || null;
+    const inv = await prisma.invitaciones_empresa.findFirst({
+      where: { token, status: 'PENDING', fecha_expiracion: { gt: new Date() } },
+      include: { empresas: { select: { nombre_de_empresa: true } } }
+    });
+    if (!inv) return null;
+
+    return {
+      ...inv,
+      nombre_de_empresa: inv.empresas?.nombre_de_empresa
+    };
   } catch (e: any) {
     console.error('❌ [getInvitationByToken] Error:', e);
     return null;
@@ -215,11 +249,15 @@ export async function getInvitationByToken(token: string) {
 
 export async function getInvitationsByEmpresa(empresaId: string | number) {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT * FROM invitaciones_empresa WHERE empresa_id = ? ORDER BY id DESC',
-      [empresaId]
-    );
-    return rows as any[];
+    const invitations = await prisma.invitaciones_empresa.findMany({
+      where: { empresa_id: BigInt(empresaId) },
+      orderBy: { id: 'desc' }
+    });
+    return invitations.map(inv => ({
+      ...inv,
+      empresa_id: Number(inv.empresa_id),
+      metadata: typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : inv.metadata
+    })) as any[];
   } catch (e: any) {
     console.error('❌ [getInvitationsByEmpresa] Error:', e);
     return [];

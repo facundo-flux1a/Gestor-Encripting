@@ -131,10 +131,24 @@ async function sendWebhookToTarget(wh: any, evento: string, data: any, empresaId
   }
 
   try {
+    let originalId = data?.upload_id_original;
+    if (!originalId && data?.lote && Array.isArray(data.lote) && data.lote.length > 0) {
+      originalId = data.lote[0]?.upload_id_original;
+    }
+
+    const redactedPayload = {
+      evento,
+      data: {
+        upload_id_original: originalId
+      },
+      _redacted_for_privacy: true
+    };
+    const redactedPayloadString = JSON.stringify(redactedPayload);
+
     await connection.query(
       `INSERT INTO ${dbName}.webhook_logs (webhook_id, evento, payload, http_status, response_body)
        VALUES (?, ?, ?, ?, ?)`,
-      [wh.id, evento, payloadString, httpStatus, responseBody]
+      [wh.id, evento, redactedPayloadString, httpStatus, responseBody]
     );
   } catch (dbLogErr) {
     console.error('[Webhooks] Error guardando log en BD:', dbLogErr);

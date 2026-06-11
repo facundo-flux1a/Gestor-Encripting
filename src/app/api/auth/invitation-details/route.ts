@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvitationByToken } from '@/services/invitation-service';
-import db from '@/lib/db';
-import { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+import { hashField } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
     try {
@@ -18,23 +18,24 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Invitación no encontrada o expirada' }, { status: 404 });
         }
 
-        // Obtener nombre de la empresa para mostrar en el UI de registro
-        const [empRows] = await db.query<RowDataPacket[]>(
-            'SELECT nombre_de_empresa FROM empresas WHERE id = ?',
-            [invitation.empresa_id]
-        );
+        // Obtener nombre de la empresa usando Prisma (descifra nombre_de_empresa automáticamente)
+        const empresa = await prisma.empresas.findUnique({
+            where: { id: BigInt(invitation.empresa_id) },
+            select: { nombre_de_empresa: true }
+        });
 
-        // Verificar si el usuario ya existe
-        const [userRows] = await db.query<RowDataPacket[]>(
-            'SELECT id FROM usuarios WHERE email = ?',
-            [invitation.email]
-        );
+        // Verificar si el usuario ya existe (buscar por email_hash, el email está encriptado)
+        const emailHash = hashField(invitation.email);
+        const existingUser = await prisma.usuarios.findUnique({
+            where: { email_hash: emailHash },
+            select: { id: true }
+        });
 
         return NextResponse.json({
             email: invitation.email,
-            empresaNombre: empRows[0]?.nombre_de_empresa || 'Empresa Colaboradora',
+            empresaNombre: empresa?.nombre_de_empresa || 'Empresa Colaboradora',
             rol: invitation.rol,
-            userExists: userRows.length > 0
+            userExists: !!existingUser
         });
     } catch (error) {
         console.error('❌ [API InvitationDetails] Error:', error);

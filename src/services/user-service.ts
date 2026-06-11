@@ -1,11 +1,11 @@
 'use server';
 
-import db, { dbName } from '@/lib/db';
 import type { User } from '@/lib/types';
 import { getSession, createSession } from './auth-service';
 import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
-import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 /**
  * Retrieves the full user object for the currently authenticated user.
@@ -22,17 +22,17 @@ export async function getCurrentUser(): Promise<User | null> {
   // Esto es un fallback por si la sesión se creó antes de agregar el campo
   if (session.tutorial === undefined) {
     console.log('⚠️ [getCurrentUser] Tutorial no está en sesión, consultando BD');
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT id, nombre, email, tutorial FROM usuarios WHERE id = ?',
-      [session.userId]
-    );
+    const user = await prisma.usuarios.findUnique({
+      where: { id: BigInt(session.userId) },
+      select: { id: true, nombre: true, email: true, tutorial: true }
+    });
 
-    if (rows.length > 0) {
+    if (user) {
       return {
-        id: rows[0].id,
-        nombre: rows[0].nombre,
-        email: rows[0].email,
-        tutorial: rows[0].tutorial,
+        id: Number(user.id),
+        nombre: user.nombre as string,
+        email: user.email as string,
+        tutorial: user.tutorial ? 1 : 0,
       };
     }
   }
@@ -51,29 +51,29 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function getUsersByIds(ids: number[], companyId?: number): Promise<Partial<User>[]> {
   if (!ids || ids.length === 0) return [];
 
-  const [rows] = await db.query<RowDataPacket[]>(
-    'SELECT id, nombre, email, organization_rol FROM usuarios WHERE id IN (?)',
-    [ids]
-  );
+  const users = await prisma.usuarios.findMany({
+    where: { id: { in: ids.map(id => BigInt(id)) } },
+    select: { id: true, nombre: true, email: true, organization_rol: true }
+  });
 
   let rolesMap: Record<string, string> = {};
   if (companyId) {
-    const [compRows] = await db.query<RowDataPacket[]>(
-      `SELECT config_roles FROM ${dbName}.empresas WHERE id = ?`,
-      [companyId]
-    );
-    if (compRows.length > 0 && compRows[0].config_roles) {
-      rolesMap = typeof compRows[0].config_roles === 'string'
-        ? JSON.parse(compRows[0].config_roles)
-        : compRows[0].config_roles;
+    const comp = await prisma.empresas.findUnique({
+      where: { id: BigInt(companyId) },
+      select: { config_roles: true }
+    });
+    if (comp?.config_roles) {
+      rolesMap = typeof comp.config_roles === 'string'
+        ? JSON.parse(comp.config_roles)
+        : comp.config_roles as any;
     }
   }
 
-  return rows.map(row => ({
-    id: row.id,
-    nombre: row.nombre,
-    email: row.email,
-    organization_rol: rolesMap[row.id.toString()] || row.organization_rol || 'EDITOR'
+  return users.map(user => ({
+    id: Number(user.id),
+    nombre: user.nombre as string,
+    email: user.email as string,
+    organization_rol: rolesMap[user.id.toString()] || (user.organization_rol as string) || 'EDITOR'
   }));
 }
 
@@ -84,16 +84,16 @@ export async function getUserConfigOtros(): Promise<string[] | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const [rows] = await db.query<RowDataPacket[]>(
-    'SELECT config_otros_tipos FROM usuarios WHERE id = ?',
-    [user.id]
-  );
+  const userRow = await prisma.usuarios.findUnique({
+    where: { id: BigInt(user.id) },
+    select: { config_otros_tipos: true }
+  });
 
-  if (rows.length > 0 && rows[0].config_otros_tipos) {
+  if (userRow?.config_otros_tipos) {
     try {
-      const config = typeof rows[0].config_otros_tipos === 'string'
-        ? JSON.parse(rows[0].config_otros_tipos)
-        : rows[0].config_otros_tipos;
+      const config = typeof userRow.config_otros_tipos === 'string'
+        ? JSON.parse(userRow.config_otros_tipos)
+        : userRow.config_otros_tipos as any;
       return config.tipos || null;
     } catch (e) {
       console.error('Error parsing config_otros_tipos:', e);
@@ -112,10 +112,10 @@ export async function updateUserConfigOtros(tipos: string[]): Promise<boolean> {
   if (!user) return false;
 
   try {
-    await db.query(
-      'UPDATE usuarios SET config_otros_tipos = ? WHERE id = ?',
-      [JSON.stringify({ tipos }), user.id]
-    );
+    await prisma.usuarios.update({
+      where: { id: BigInt(user.id) },
+      data: { config_otros_tipos: { tipos } as any }
+    });
     return true;
   } catch (e) {
     console.error('Error updating config_otros_tipos:', e);
@@ -131,10 +131,11 @@ export async function updateUserProfile(nombre: string, email: string): Promise<
   if (!session?.userId) return { success: false, message: 'No autenticado' };
 
   try {
-    await db.query(
-      'UPDATE usuarios SET nombre = ?, email = ? WHERE id = ?',
-      [nombre, email, session.userId]
-    );
+    const emailHash = crypto.createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
+    await prisma.usuarios.update({
+      where: { id: BigInt(session.userId) },
+      data: { nombre, email, email_hash: emailHash }
+    });
 
     // Refrescar la sesión con los nuevos datos
     await createSession(
@@ -165,14 +166,14 @@ export async function updateUserPassword(newPassword: string, currentPassword?: 
   if (!session?.userId) return { success: false, message: 'No autenticado' };
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      'SELECT password FROM usuarios WHERE id = ?',
-      [session.userId]
-    );
+    const user = await prisma.usuarios.findUnique({
+      where: { id: BigInt(session.userId) },
+      select: { password: true }
+    });
 
-    if (rows.length === 0) return { success: false, message: 'Usuario no encontrado' };
+    if (!user) return { success: false, message: 'Usuario no encontrado' };
 
-    const currentPasswordHash = rows[0].password;
+    const currentPasswordHash = user.password as string;
 
     // Verificar si es cuenta de Google
     if (currentPasswordHash && currentPasswordHash.startsWith(GOOGLE_PASSWORD_MARKER)) {
@@ -198,10 +199,10 @@ export async function updateUserPassword(newPassword: string, currentPassword?: 
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await db.query(
-      'UPDATE usuarios SET password = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ?',
-      [hashedPassword, session.userId]
-    );
+    await prisma.usuarios.update({
+      where: { id: BigInt(session.userId) },
+      data: { password: hashedPassword, fecha_actualizacion: new Date() }
+    });
 
     return { success: true };
   } catch (error) {
