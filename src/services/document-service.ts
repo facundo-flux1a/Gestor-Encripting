@@ -11,7 +11,7 @@ import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
 import { normalizeProductDescription } from "@/lib/utils";
 import { prisma } from '@/lib/prisma';
-import { hashField } from '@/lib/encryption';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 const serializeData = (data: any) => JSON.parse(JSON.stringify(data, (k, v) => typeof v === 'bigint' ? Number(v) : v));
 
@@ -398,7 +398,7 @@ export async function createCompany(data: {
 
     // Verificar si ya existe una empresa con el mismo CIF para este usuario
     const existingCompanies = await prisma.empresas.findMany({
-      where: { cif_hash: cifHash }
+      where: { OR: [{ cif_hash: cifHash }, { CIF: data.cif.trim() }] }
     });
 
     const isCompanyForUser = existingCompanies.some(c => {
@@ -414,9 +414,9 @@ export async function createCompany(data: {
     }
 
     // Si se proporciona email, verificar que sea único globalmente
-    if (mailDeCargaHash) {
+    if (mailDeCargaHash && data.mailDeCarga) {
       const existingEmail = await prisma.empresas.findFirst({
-        where: { mail_de_carga_hash: mailDeCargaHash }
+        where: { OR: [{ mail_de_carga_hash: mailDeCargaHash }, { mail_de_carga: data.mailDeCarga.trim() }] }
       });
 
       if (existingEmail) {
@@ -523,7 +523,7 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
         empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
         entidades_documento: {
           where: { rol: { in: ['emisor', 'proveedor'] } },
-          select: { identificador_fiscal_hash: true }
+          select: { identificador_fiscal_hash: true, identificador_fiscal: true }
         }
       }
     });
@@ -531,8 +531,9 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
     console.log('📊 [document-service] Filas obtenidas de BD:', docs.length);
 
     const documentRows = docs.map((d: any) => {
-      const is_issued = d.entidades_documento.some(ed => 
-        ed.identificador_fiscal_hash && d.empresas?.cif_hash && ed.identificador_fiscal_hash === d.empresas.cif_hash
+      const is_issued = d.entidades_documento.some((ed: any) => 
+        (ed.identificador_fiscal_hash && d.empresas?.cif_hash && ed.identificador_fiscal_hash === d.empresas.cif_hash) ||
+        (ed.identificador_fiscal && d.empresas?.CIF && ed.identificador_fiscal === d.empresas.CIF)
       ) ? 1 : 0;
 
       return {
@@ -655,9 +656,7 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
     }
 
     let query = `
-            SELECT DISTINCT d.*,
-  e.nombre_de_empresa as empresa_nombre,
-  e.cif as empresa_cif
+            SELECT DISTINCT d.*
             FROM documentos d
             JOIN incidencias_documento i ON d.id = i.documento_id
             LEFT JOIN empresas e ON d.id_de_empresa = e.id
@@ -684,7 +683,6 @@ export async function getIncidents(empresaIds?: number[]): Promise<Document[]> {
     return [];
   }
 }
-
 
 export async function updateDocument(id: number, data: DocumentUpdatePayload, userIdentifier: string = 'Sistema'): Promise<{ success: boolean }> {
   if (userIdentifier === 'Sistema') {
@@ -913,6 +911,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
             nombre: entidad.nombre,
             identificador_fiscal: entidad.identificador_fiscal,
             identificador_fiscal_hash: entidad.identificador_fiscal ? require('crypto').createHash('sha256').update(entidad.identificador_fiscal.toLowerCase().trim()).digest('hex') : null,
+            nombre_hash: entidad.nombre ? require('crypto').createHash('sha256').update(normalizeEntityName(entidad.nombre)).digest('hex') : null,
             direccion: entidad.direccion,
             telefono: entidad.telefono || '',
             email: entidad.email || '',
@@ -1613,45 +1612,46 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
 
 export async function getUniqueProvidersCount(): Promise<number> {
   const [providerRows] = await db.query<RowDataPacket[]>(`
-       SELECT COUNT(DISTINCT identificador_fiscal) as count
+       SELECT COUNT(DISTINCT COALESCE(identificador_fiscal_hash, nombre_hash, id)) as count
        FROM entidades_documento
-WHERE(rol = 'proveedor' OR rol = 'emisor')
-         AND identificador_fiscal IS NOT NULL AND identificador_fiscal != ''
+       WHERE (rol = 'proveedor' OR rol = 'emisor')
   `);
 
   return providerRows[0].count || 0;
 }
 
 export async function getUniqueProviders(): Promise<DocumentEntity[]> {
-  const [providerRows] = await db.query<EntidadPacket[]>(`
-SELECT
-identificador_fiscal,
-  nombre,
-  MAX(id) as id,
-  MAX(rol) as rol,
-  MAX(direccion) as direccion,
-  MAX(telefono) as telefono,
-  MAX(email) as email,
-  MAX(datos_extra) as datos_extra,
-  MAX(fecha_creacion) as fecha_creacion
-        FROM entidades_documento
-WHERE(rol = 'proveedor' OR rol = 'emisor')
-          AND identificador_fiscal IS NOT NULL 
-          AND identificador_fiscal != ''
-        GROUP BY identificador_fiscal, nombre
-        ORDER BY nombre ASC
-    `);
+  // 1. Obtener los IDs de los proveedores únicos agrupando por hash
+  const [providerRows] = await db.query<{ id: string }[]>(`
+    SELECT MAX(id) as id
+    FROM entidades_documento
+    WHERE (rol = 'proveedor' OR rol = 'emisor')
+    GROUP BY COALESCE(identificador_fiscal_hash, nombre_hash, id)
+  `);
 
-  const providers: DocumentEntity[] = providerRows.map(p => ({
-    id: p.id,
+  if (providerRows.length === 0) return [];
+
+  const ids = providerRows.map(p => BigInt(p.id));
+
+  // 2. Usar Prisma para traer los datos y desencriptarlos automáticamente
+  const providers = await prisma.entidades_documento.findMany({
+    where: { id: { in: ids } }
+  });
+
+  // 3. Ordenar en memoria (ya que Prisma no puede ordenar campos encriptados nativamente en SQL)
+  providers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+
+  return providers.map(p => ({
+    id: Number(p.id),
     rol: p.rol,
     nombre: p.nombre,
     direccion: p.direccion,
     identificador_fiscal: p.identificador_fiscal,
     telefono: p.telefono,
     email: p.email,
-    datos_extra: safeJsonParse(p.datos_extra),
-    fecha_creacion: p.fecha_creacion,
+    datos_extra: p.datos_extra,
+    fecha_creacion: p.fecha_creacion?.toISOString()
+
   }));
 
   return serializeData(providers);
@@ -1663,7 +1663,6 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   const placeholders = companyIds.map(() => '?').join(',');
   const showCompanyName = companyIds.length > 1;
 
-  // ✅ ARREGLADO: Filtro de tipo de documento (FACTURAS Y ABONOS)
   const whereDocType = `AND(
   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -1671,35 +1670,35 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
-  // ✅ PASO 1: Obtener proveedores, documentos y configuración contable
   const [providerRows] = await db.query<any[]>(`
       SELECT
+        e.id as entidad_id,
         e.nombre,
         e.rol,
         e.identificador_fiscal,
+        e.identificador_fiscal_hash,
+        e.nombre_hash,
         e.direccion,
         e.telefono,
         e.email,
         e.datos_extra,
         e.fecha_creacion,
-        emp.nombre_de_empresa AS empresaNombre,
+        d.id_de_empresa,
         d.id as documento_id,
-        d.importe_total,
-        ec.cuenta_compra,
-        ec.cuenta_venta
+        d.importe_total
       FROM entidades_documento e
       JOIN documentos d ON e.documento_id = d.id
       JOIN empresas emp ON d.id_de_empresa = emp.id
-      LEFT JOIN entidades_config ec ON ec.identificador_fiscal = e.identificador_fiscal AND ec.empresa_id = d.id_de_empresa
+      -- ✅ entidades_config JOIN removido: se hace en JS post-Prisma usando fiscal desencriptado
       WHERE e.rol IN ('proveedor', 'emisor')
         AND d.id_de_empresa IN (${placeholders})
-        AND e.identificador_fiscal != emp.cif
+        AND NOT (
+            (e.identificador_fiscal_hash = emp.cif_hash AND e.identificador_fiscal_hash IS NOT NULL AND e.identificador_fiscal_hash != '') OR
+            (e.identificador_fiscal = emp.CIF AND e.identificador_fiscal IS NOT NULL AND e.identificador_fiscal != '')
+        )
         ${whereDocType}
   `, companyIds);
 
-  console.log('📊 [getProvidersWithStats] Filas obtenidas:', providerRows.length);
-
-  // ✅ PASO 2: Obtener productos en query SEPARADA
   const docIds = [...new Set(providerRows.map(r => r.documento_id))];
 
   const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
@@ -1716,21 +1715,17 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
         )
   `, docIds) : [[]];
 
-  console.log('📦 [getProvidersWithStats] Productos únicos:', productRows.length);
-
-  // ✅ PASO 3: Crear mapa de productos por documento
   const productsByDoc = new Map<number, Set<string>>();
   productRows.forEach(p => {
     if (!productsByDoc.has(p.documento_id)) {
       productsByDoc.set(p.documento_id, new Set());
     }
-    // Usar código si existe, si no, descripción normalizada
     const key = (p.codigo && p.codigo !== '') ? p.codigo : normalizeProductDescription(p.descripcion || '');
     if (key) productsByDoc.get(p.documento_id)!.add(key);
   });
 
-  // ✅ PASO 4: Agrupar por identificador_fiscal
   const providerMap = new Map<string, {
+    entidad_id: number;
     rol: string;
     nombre: string;
     direccion: string | null;
@@ -1739,19 +1734,27 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     email: string | null;
     datos_extra: any;
     fecha_creacion: string | null;
-    cuenta_compra: string | null;
-    cuenta_venta: string | null;
+    cuenta_compra: string | null; // se rellena post-Prisma
+    cuenta_venta: string | null;  // se rellena post-Prisma
     empresas: Set<string>;
     totalSpent: number;
     documentos: Set<number>;
     productos: Set<string>;
   }>();
 
-  providerRows.forEach(row => {
-    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+  const empresaIds = [...new Set(providerRows.map(r => Number(r.id_de_empresa)))];
+  const empresasData = empresaIds.length > 0 ? await prisma.empresas.findMany({
+    where: { id: { in: empresaIds } },
+    select: { id: true, nombre_de_empresa: true }
+  }) : [];
+  const empresasMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || '']));
 
-    if (!providerMap.has(fiscalId)) {
-      providerMap.set(fiscalId, {
+  providerRows.forEach(row => {
+    const groupId = row.identificador_fiscal_hash || row.nombre_hash || row.nombre || `ID_${row.entidad_id}`;
+
+    if (!providerMap.has(groupId)) {
+      providerMap.set(groupId, {
+        entidad_id: Number(row.entidad_id),
         rol: row.rol,
         nombre: row.nombre,
         direccion: row.direccion,
@@ -1760,8 +1763,8 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
         email: row.email,
         datos_extra: row.datos_extra,
         fecha_creacion: row.fecha_creacion,
-        cuenta_compra: row.cuenta_compra,
-        cuenta_venta: row.cuenta_venta,
+        cuenta_compra: null, // se rellena tras Prisma hydration
+        cuenta_venta: null,  // se rellena tras Prisma hydration
         empresas: new Set(),
         totalSpent: 0,
         documentos: new Set(),
@@ -1769,33 +1772,49 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
       });
     }
 
-    const provider = providerMap.get(fiscalId)!;
+    const provider = providerMap.get(groupId)!;
 
-    // Agregar empresa
-    if (row.empresaNombre) {
-      provider.empresas.add(row.empresaNombre);
+    const empresaNombre = empresasMap.get(Number(row.id_de_empresa));
+    if (empresaNombre) {
+      provider.empresas.add(empresaNombre);
     }
 
-    // ✅ CRÍTICO: Solo sumar UNA VEZ cada documento
     if (!provider.documentos.has(row.documento_id)) {
       provider.totalSpent += Number(row.importe_total || 0);
       provider.documentos.add(row.documento_id);
-
-      console.log(`💰[${fiscalId}] Doc ${row.documento_id}: +${row.importe_total} EUR(Total: ${provider.totalSpent.toFixed(2)})`);
     }
 
-    // Agregar productos de este documento
     const docProducts = productsByDoc.get(row.documento_id);
     if (docProducts) {
       docProducts.forEach(codigo => provider.productos.add(codigo));
     }
   });
 
-  // ✅ PASO 5: Convertir Map a Array
-  const providers: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+  const entityIds = Array.from(providerMap.values()).map(p => BigInt(p.entidad_id));
+  const decryptedEntities = entityIds.length > 0 ? await prisma.entidades_documento.findMany({
+    where: { id: { in: entityIds } }
+  }) : [];
+  
+  const decryptedMap = new Map(decryptedEntities.map(e => [Number(e.id), e]));
+
+  // ✅ Lookup entidades_config usando fiscal ya desencriptado (sin tocar la BD)
+  const decryptedFiscals = decryptedEntities.map(e => e.identificador_fiscal).filter((f): f is string => !!f);
+  const configs = decryptedFiscals.length > 0 ? await prisma.entidades_config.findMany({
+    where: {
+      empresa_id: { in: companyIds.map(id => BigInt(id)) },
+      identificador_fiscal: { in: decryptedFiscals }
+    },
+    select: { empresa_id: true, identificador_fiscal: true, cuenta_compra: true, cuenta_venta: true }
+  }) : [];
+  const configMap = new Map(configs.map(c => [`${c.empresa_id}_${c.identificador_fiscal}`, c]));
+
+  const result: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+    const dec = decryptedMap.get(p.entidad_id);
+    const rawDatosExtra = dec?.datos_extra || p.datos_extra;
+    
     let datosExtra: DatosExtra = {};
     try {
-      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+      datosExtra = rawDatosExtra ? JSON.parse(rawDatosExtra as string) : {};
     } catch { }
 
     const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
@@ -1806,32 +1825,30 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
       : undefined;
 
     return {
-      rol: p.rol || 'N/A',
-      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
-      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
-      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
-      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
-      email: p.email || empresaEmisora.EMAIL || 'N/A',
+      rol: dec?.rol || p.rol || 'N/A',
+      nombre: dec?.nombre || empresaEmisora.NOMBRE || 'N/A',
+      direccion: dec?.direccion || empresaEmisora.DIRECCION || 'N/A',
+      identificador_fiscal: dec?.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+      telefono: dec?.telefono || empresaEmisora.TELEFONO || 'N/A',
+      email: dec?.email || empresaEmisora.EMAIL || 'N/A',
       totalSpent: p.totalSpent,
       totalDocuments: p.documentos.size,
       uniqueProducts: p.productos.size,
-      datos_extra: p.datos_extra || null,
-      fecha_creacion: p.fecha_creacion || null,
+      datos_extra: rawDatosExtra as any || null,
+      fecha_creacion: dec?.fecha_creacion?.toISOString() || p.fecha_creacion || null,
       empresaNombre: empresaNombre,
-      cuenta_compra: p.cuenta_compra || null,
-      cuenta_venta: p.cuenta_venta || null,
+      // ✅ Cuenta contable via configMap (fiscal desencriptado de Prisma → entidades_config plaintext)
+      ...(() => {
+        const decFiscal = dec?.identificador_fiscal;
+        const conf = decFiscal ? configMap.get(`${p.id_de_empresa}_${decFiscal}`) : undefined;
+        return { cuenta_compra: conf?.cuenta_compra ?? null, cuenta_venta: conf?.cuenta_venta ?? null };
+      })(),
     };
   });
 
-  // Ordenar por gasto total descendente
-  providers.sort((a, b) => b.totalSpent - a.totalSpent);
+  result.sort((a, b) => b.totalSpent - a.totalSpent);
 
-  console.log('✅ [getProvidersWithStats] Proveedores procesados:', providers.length);
-  providers.slice(0, 5).forEach(p => {
-    console.log(`   ${p.nombre}: ${p.totalSpent.toFixed(2)} EUR(${p.totalDocuments} docs, ${p.uniqueProducts} productos)`);
-  });
-
-  return providers;
+  return result;
 }
 
 export async function getClientsWithStats(companyIds: number[]): Promise<ProviderWithStats[]> {
@@ -1847,34 +1864,36 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
-  const [clientRows] = await db.query<any[]>(`
+  const [providerRows] = await db.query<any[]>(`
       SELECT
+        e.id as entidad_id,
         e.nombre,
         e.rol,
         e.identificador_fiscal,
+        e.identificador_fiscal_hash,
+        e.nombre_hash,
         e.direccion,
         e.telefono,
         e.email,
         e.datos_extra,
         e.fecha_creacion,
-        emp.nombre_de_empresa AS empresaNombre,
+        d.id_de_empresa,
         d.id as documento_id,
-        d.importe_total,
-        ec.cuenta_compra,
-        ec.cuenta_venta
+        d.importe_total
       FROM entidades_documento e
       JOIN documentos d ON e.documento_id = d.id
       JOIN empresas emp ON d.id_de_empresa = emp.id
-      LEFT JOIN entidades_config ec ON ec.identificador_fiscal = e.identificador_fiscal AND ec.empresa_id = d.id_de_empresa
+      -- ✅ entidades_config JOIN removido: se hace en JS post-Prisma usando fiscal desencriptado
       WHERE e.rol IN ('cliente', 'receptor')
         AND d.id_de_empresa IN (${placeholders})
-        AND e.identificador_fiscal != emp.cif
+        AND NOT (
+            (e.identificador_fiscal_hash = emp.cif_hash AND e.identificador_fiscal_hash IS NOT NULL AND e.identificador_fiscal_hash != '') OR
+            (e.identificador_fiscal = emp.CIF AND e.identificador_fiscal IS NOT NULL AND e.identificador_fiscal != '')
+        )
         ${whereDocType}
   `, companyIds);
 
-  console.log('📊 [getClientsWithStats] Filas obtenidas:', clientRows.length);
-
-  const docIds = [...new Set(clientRows.map((r: any) => r.documento_id))];
+  const docIds = [...new Set(providerRows.map(r => r.documento_id))];
 
   const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
       SELECT DISTINCT
@@ -1890,10 +1909,8 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
         )
   `, docIds) : [[]];
 
-  console.log('📦 [getClientsWithStats] Productos únicos:', productRows.length);
-
   const productsByDoc = new Map<number, Set<string>>();
-  productRows.forEach((p: any) => {
+  productRows.forEach(p => {
     if (!productsByDoc.has(p.documento_id)) {
       productsByDoc.set(p.documento_id, new Set());
     }
@@ -1901,7 +1918,8 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     if (key) productsByDoc.get(p.documento_id)!.add(key);
   });
 
-  const clientMap = new Map<string, {
+  const providerMap = new Map<string, {
+    entidad_id: number;
     rol: string;
     nombre: string;
     direccion: string | null;
@@ -1918,11 +1936,19 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     productos: Set<string>;
   }>();
 
-  clientRows.forEach((row: any) => {
-    const fiscalId = row.identificador_fiscal || 'SIN_CIF';
+  const empresaIds = [...new Set(providerRows.map(r => Number(r.id_de_empresa)))];
+  const empresasData = empresaIds.length > 0 ? await prisma.empresas.findMany({
+    where: { id: { in: empresaIds } },
+    select: { id: true, nombre_de_empresa: true }
+  }) : [];
+  const empresasMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || '']));
 
-    if (!clientMap.has(fiscalId)) {
-      clientMap.set(fiscalId, {
+  providerRows.forEach(row => {
+    const groupId = row.identificador_fiscal_hash || row.nombre_hash || row.nombre || `ID_${row.entidad_id}`;
+
+    if (!providerMap.has(groupId)) {
+      providerMap.set(groupId, {
+        entidad_id: Number(row.entidad_id),
         rol: row.rol,
         nombre: row.nombre,
         direccion: row.direccion,
@@ -1940,27 +1966,50 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
       });
     }
 
-    const client = clientMap.get(fiscalId)!;
+    const provider = providerMap.get(groupId)!;
 
-    if (row.empresaNombre) {
-      client.empresas.add(row.empresaNombre);
+    const empresaNombre = empresasMap.get(Number(row.id_de_empresa));
+    if (empresaNombre) {
+      provider.empresas.add(empresaNombre);
     }
 
-    if (!client.documentos.has(row.documento_id)) {
-      client.totalSpent += Number(row.importe_total || 0);
-      client.documentos.add(row.documento_id);
+    if (!provider.documentos.has(row.documento_id)) {
+      provider.totalSpent += Number(row.importe_total || 0);
+      provider.documentos.add(row.documento_id);
     }
 
     const docProducts = productsByDoc.get(row.documento_id);
     if (docProducts) {
-      docProducts.forEach(codigo => client.productos.add(codigo));
+      docProducts.forEach(codigo => provider.productos.add(codigo));
     }
   });
 
-  const clients: ProviderWithStats[] = Array.from(clientMap.values()).map(p => {
+  const entityIds = Array.from(providerMap.values()).map(p => BigInt(p.entidad_id));
+  const decryptedEntities = entityIds.length > 0 ? await prisma.entidades_documento.findMany({
+    where: { id: { in: entityIds } }
+  }) : [];
+  
+  const decryptedMap = new Map(decryptedEntities.map(e => [Number(e.id), e]));
+
+  // ✅ Lookup entidades_config usando fiscal ya desencriptado (sin tocar la BD)
+  const decryptedFiscals = decryptedEntities.map(e => e.identificador_fiscal).filter((f): f is string => !!f);
+  const configs = decryptedFiscals.length > 0 ? await prisma.entidades_config.findMany({
+    where: {
+      empresa_id: { in: companyIds.map(id => BigInt(id)) },
+      identificador_fiscal: { in: decryptedFiscals }
+    },
+    select: { empresa_id: true, identificador_fiscal: true, cuenta_compra: true, cuenta_venta: true }
+  }) : [];
+  const configMap = new Map(configs.map(c => [`${c.empresa_id}_${c.identificador_fiscal}`, c]));
+
+
+  const result: ProviderWithStats[] = Array.from(providerMap.values()).map(p => {
+    const dec = decryptedMap.get(p.entidad_id);
+    const rawDatosExtra = dec?.datos_extra || p.datos_extra;
+    
     let datosExtra: DatosExtra = {};
     try {
-      datosExtra = p.datos_extra ? JSON.parse(p.datos_extra) : {};
+      datosExtra = rawDatosExtra ? JSON.parse(rawDatosExtra as string) : {};
     } catch { }
 
     const empresaEmisora = datosExtra.EMPRESA_EMISORA || {};
@@ -1971,31 +2020,30 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
       : undefined;
 
     return {
-      rol: p.rol || 'N/A',
-      nombre: p.nombre || empresaEmisora.NOMBRE || 'N/A',
-      direccion: p.direccion || empresaEmisora.DIRECCION || 'N/A',
-      identificador_fiscal: p.identificador_fiscal || empresaEmisora.CIF || 'N/A',
-      telefono: p.telefono || empresaEmisora.TELEFONO || 'N/A',
-      email: p.email || empresaEmisora.EMAIL || 'N/A',
+      rol: dec?.rol || p.rol || 'N/A',
+      nombre: dec?.nombre || empresaEmisora.NOMBRE || 'N/A',
+      direccion: dec?.direccion || empresaEmisora.DIRECCION || 'N/A',
+      identificador_fiscal: dec?.identificador_fiscal || empresaEmisora.CIF || 'N/A',
+      telefono: dec?.telefono || empresaEmisora.TELEFONO || 'N/A',
+      email: dec?.email || empresaEmisora.EMAIL || 'N/A',
       totalSpent: p.totalSpent,
       totalDocuments: p.documentos.size,
       uniqueProducts: p.productos.size,
-      datos_extra: p.datos_extra || null,
-      fecha_creacion: p.fecha_creacion || null,
+      datos_extra: rawDatosExtra as any || null,
+      fecha_creacion: dec?.fecha_creacion?.toISOString() || p.fecha_creacion || null,
       empresaNombre: empresaNombre,
-      cuenta_compra: p.cuenta_compra || null,
-      cuenta_venta: p.cuenta_venta || null,
+      // ✅ Cuenta contable via configMap (fiscal desencriptado de Prisma → entidades_config plaintext)
+      ...(() => {
+        const decFiscal = dec?.identificador_fiscal;
+        const conf = decFiscal ? configMap.get(`${p.id_de_empresa}_${decFiscal}`) : undefined;
+        return { cuenta_compra: conf?.cuenta_compra ?? null, cuenta_venta: conf?.cuenta_venta ?? null };
+      })(),
     };
   });
 
-  clients.sort((a, b) => b.totalSpent - a.totalSpent);
+  result.sort((a, b) => b.totalSpent - a.totalSpent);
 
-  console.log('✅ [getClientsWithStats] Clientes procesados:', clients.length);
-  clients.slice(0, 5).forEach(c => {
-    console.log(`   ${c.nombre}: ${c.totalSpent.toFixed(2)} EUR(${c.totalDocuments} docs, ${c.uniqueProducts} productos)`);
-  });
-
-  return clients;
+  return result;
 }
 
 export async function getAllProducts(): Promise<number> {
@@ -2013,22 +2061,20 @@ export async function getDocumentsByProviderName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<Document[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getDocumentsByProviderName] Iniciando:', { fiscalId, empresaIds });
 
   let query = `
-        SELECT DISTINCT d.*,
-  e.nombre_de_empresa as empresa_nombre,
-  e.cif as empresa_cif
+        SELECT DISTINCT d.*
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        LEFT JOIN empresas e ON d.id_de_empresa = e.id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
     `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
@@ -2050,26 +2096,35 @@ export async function getDocumentsByProviderName(
 }
 
 export async function getProviderByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
-  const [providerRows] = await db.query<EntidadPacket[]>(`
-SELECT *
-  FROM entidades_documento
-        WHERE identificador_fiscal = ? AND(rol = 'proveedor' OR rol = 'emisor')
-        LIMIT 1
-  `, [fiscalId]);
+  if (!fiscalId) return null;
+  const hash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
 
-  if (providerRows.length === 0) {
-    return null;
-  }
-  const p = providerRows[0];
+  // Usamos SQL crudo primero para el ID, porque Prisma intercepta la consulta
+  // e intenta encriptar 'fiscalId', lo cual falla contra la base de datos pre-migración.
+  const [rows] = await db.query<{ id: string }[]>(`
+    SELECT id FROM entidades_documento
+    WHERE (identificador_fiscal_hash = ? OR identificador_fiscal = ?)
+    AND rol IN ('proveedor', 'emisor')
+    LIMIT 1
+  `, [hash, fiscalId]);
+
+  if (rows.length === 0) return null;
+
+  const p = await prisma.entidades_documento.findUnique({
+    where: { id: BigInt(rows[0].id) }
+  });
+
+  if (!p) return null;
+
   const provider: DocumentEntity = {
-    id: p.id,
+    id: Number(p.id),
     rol: p.rol,
     nombre: p.nombre,
     direccion: p.direccion,
     identificador_fiscal: p.identificador_fiscal,
     telefono: p.telefono,
     email: p.email,
-    datos_extra: safeJsonParse(p.datos_extra),
+    datos_extra: safeJsonParse(p.datos_extra as string),
     fecha_creacion: p.fecha_creacion
   };
 
@@ -2080,6 +2135,7 @@ export async function getProductsByProviderName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<DocumentLine[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getProductsByProviderName] Iniciando:', { fiscalId, empresaIds });
 
   // 🛠️ Subquery para limpiar duplicados del JOIN antes de aplicar Window Functions
@@ -2103,7 +2159,7 @@ export async function getProductsByProviderName(
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
             JOIN entidades_documento ed ON d.id = ed.documento_id
-            WHERE ed.identificador_fiscal = ?
+            WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
     AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
               AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -2114,7 +2170,7 @@ export async function getProductsByProviderName(
   )
     `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -2181,6 +2237,7 @@ export async function getAllProductLinesByProviderName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<DocumentLine[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getAllProductLinesByProviderName] Iniciando:', { fiscalId, empresaIds });
 
   let baseQuery = `
@@ -2192,7 +2249,7 @@ ld.*,
       FROM lineas_documento ld
       JOIN documentos d ON ld.documento_id = d.id
       JOIN entidades_documento ed ON d.id = ed.documento_id
-      WHERE ed.identificador_fiscal = ?
+      WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
         AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -2203,7 +2260,7 @@ OR
         )
 `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
@@ -2248,6 +2305,7 @@ export async function getProductHistory(
   searchBy: 'code' | 'description' = 'code',
   descriptionFilter?: string
 ): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(providerFiscalId.toLowerCase().trim()).digest('hex');
 
   // ✅ Usamos ROW_NUMBER con PARTITION BY d.numero_documento
   // Esto elige solo UNA fila por cada número de factura repetido
@@ -2274,7 +2332,7 @@ export async function getProductHistory(
         FROM lineas_documento ld
         JOIN documentos d ON ld.documento_id = d.id
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -2286,7 +2344,7 @@ SELECT * FROM UniqueHistory
     ORDER BY fecha_emision DESC;
 `;
 
-  const queryParams: any[] = [providerFiscalId];
+  const queryParams: any[] = [fiscalIdHash, providerFiscalId];
   if (searchBy === 'code') {
     queryParams.push(identifier);
   } else {
@@ -2337,6 +2395,7 @@ export async function getProviderAnalytics(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<ProviderAnalyticsData | null> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   const provider = await getProviderByFiscalId(fiscalId);
   if (!provider) {
     return null;
@@ -2344,7 +2403,7 @@ export async function getProviderAnalytics(
 
   // ✅ Construir filtro de empresa
   let whereEmpresa = '';
-  let params: any[] = [fiscalId];
+  let params: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -2365,7 +2424,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
         SELECT DISTINCT d.*
   FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
           ${whereDocType}
           ${whereEmpresa}
@@ -2380,7 +2439,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     FROM lineas_documento ld
     JOIN documentos d ON ld.documento_id = d.id
     JOIN entidades_documento ed ON d.id = ed.documento_id
-    WHERE ed.identificador_fiscal = ?
+    WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'proveedor' OR ed.rol = 'emisor')
       AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -2390,7 +2449,7 @@ OR
   (ld.descripcion IS NOT NULL AND ld.descripcion != '')
       )
 `;
-  let lineParams: any[] = [fiscalId];
+  let lineParams: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -2523,8 +2582,10 @@ SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
             WHERE 1 = 1 ${whereDocType} ${whereEmpresa}
 `, params);
 
-    const [byProvider] = await db.query<RowDataPacket[]>(`
-            SELECT e.nombre, COUNT(i.id) as count
+    const [byProviderRaw] = await db.query<RowDataPacket[]>(`
+            SELECT COALESCE(e.nombre_hash, e.nombre) as group_key,
+                   MAX(e.id) as entidad_id_sample,
+                   COUNT(i.id) as count
             FROM incidencias_documento i
             JOIN documentos d ON i.documento_id = d.id
             JOIN entidades_documento e ON i.documento_id = e.documento_id
@@ -2533,10 +2594,23 @@ SUM(CASE WHEN i.validado = 0 THEN 1 ELSE 0 END) as totalOpen,
 AND(e.rol = 'proveedor' OR e.rol = 'emisor')
               ${whereDocType}
               ${whereEmpresa}
-            GROUP BY e.nombre
+            GROUP BY group_key
             ORDER BY count DESC
             LIMIT 5
   `, params);
+
+    // ✅ Hidratar nombres desencriptados vía Prisma
+    const sampleIds = byProviderRaw.map(r => BigInt(r.entidad_id_sample)).filter(Boolean);
+    const hydrated = sampleIds.length > 0
+      ? await prisma.entidades_documento.findMany({ where: { id: { in: sampleIds } }, select: { id: true, nombre: true } })
+      : [];
+    const hydratedMap = new Map(hydrated.map(e => [Number(e.id), e.nombre]));
+
+    const byProvider = byProviderRaw.map(r => ({
+      name: hydratedMap.get(Number(r.entidad_id_sample)) || r.group_key || 'Desconocido',
+      count: r.count
+    }));
+
 
     const [byType] = await db.query<RowDataPacket[]>(`
 SELECT
@@ -2617,7 +2691,7 @@ d.id,
   d.fecha_emision,
   d.importe_total,
   d.importe_sin_impuestos,
-  (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
+  (SELECT COALESCE(identificador_fiscal_hash, identificador_fiscal) FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
     (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
       (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
         (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota_iva
@@ -2852,15 +2926,17 @@ export async function getDashboardAnalytics(
   let MY_COMPANY_NAMES: string[] = [];
 
   if (empresaIds && empresaIds.length > 0) {
-    const [empresasInfo] = await db.query<RowDataPacket[]>(
-      'SELECT cif, nombre_de_empresa as nombre, nombre_fiscal FROM empresas WHERE id IN (?)',
-      [empresaIds]
-    );
-    MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
-    MY_COMPANY_NAMES = empresasInfo.flatMap(e => [e.nombre, e.nombre_fiscal]).filter(Boolean);
+    const empresasInfo = await prisma.empresas.findMany({
+      where: { id: { in: empresaIds } },
+      select: { CIF: true, nombre_de_empresa: true, nombre_fiscal: true }
+    });
+    MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.CIF).filter(Boolean) as string[];
+    MY_COMPANY_NAMES = empresasInfo.flatMap(e => [e.nombre_de_empresa, e.nombre_fiscal]).filter(Boolean) as string[];
   }
 
   console.log('🏢 [getDashboardAnalytics] CIFs de empresas:', MY_COMPANY_FISCAL_IDS);
+
+  const MY_COMPANY_NAME_HASHES = MY_COMPANY_NAMES.map(n => require('crypto').createHash('sha256').update(normalizeEntityName(n)).digest('hex'));
 
   const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
   const hasTrimestreFilter = año !== undefined && trimestre !== undefined;
@@ -2905,12 +2981,20 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     console.log('📅 [getDashboardAnalytics] Auto-detected year:', yearToUse);
   }
 
-  const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
-    ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+  const MY_COMPANY_FISCAL_COMBINED = MY_COMPANY_FISCAL_IDS.length > 0
+    ? [...MY_COMPANY_FISCAL_IDS.map(cif => require('crypto').createHash('sha256').update(cif.toLowerCase().trim()).digest('hex')), ...MY_COMPANY_FISCAL_IDS]
+    : [];
+
+  const cifPlaceholders = MY_COMPANY_FISCAL_COMBINED.length > 0
+    ? MY_COMPANY_FISCAL_COMBINED.map(() => '?').join(',')
     : "'NEVER_MATCH'";
 
-  const namePlaceholders = MY_COMPANY_NAMES.length > 0
-    ? MY_COMPANY_NAMES.map(() => '?').join(',')
+  const MY_COMPANY_NAME_COMBINED = MY_COMPANY_NAMES.length > 0
+    ? [...MY_COMPANY_NAME_HASHES, ...MY_COMPANY_NAMES]
+    : [];
+
+  const namePlaceholders = MY_COMPANY_NAME_COMBINED.length > 0
+    ? MY_COMPANY_NAME_COMBINED.map(() => '?').join(',')
     : "'NEVER_MATCH'";
 
   // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) en lugar de importe_sin_impuestos
@@ -2956,7 +3040,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
                 (SELECT COALESCE(MAX(CASE 
                     WHEN ed2.rol IN('emisor', 'proveedor') 
-                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
                     THEN 1 
                     ELSE 0 
                 END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued,
@@ -3025,11 +3109,11 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
            ${hasEmpresaFilter ? 'AND d2.id_de_empresa IN (?)' : ''}
            ${wherePeriodFilter.replace(/d\./g, 'd2.')}) as incidenciasAbiertas,
           
-          (SELECT COUNT(DISTINCT identificador_fiscal) 
+          (SELECT COUNT(DISTINCT COALESCE(identificador_fiscal_hash, identificador_fiscal)) 
            FROM entidades_documento ed 
            JOIN documentos d3 ON ed.documento_id = d3.id 
            WHERE ed.rol IN ('proveedor', 'emisor') 
-             AND ed.identificador_fiscal NOT IN (${cifPlaceholders}) 
+             AND COALESCE(ed.identificador_fiscal_hash, ed.identificador_fiscal) NOT IN (${cifPlaceholders}) 
              AND (
                  (LOWER(d3.tipo_documento) LIKE '%factura%' AND LOWER(d3.tipo_documento) NOT LIKE '%(sin confirmar)%')
                  OR (LOWER(d3.tipo_documento) LIKE '%abono%' AND LOWER(d3.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -3064,12 +3148,12 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
           COUNT(DISTINCT id) as totalDocs
         FROM DocTypes
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams,
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams,
     ...(hasEmpresaFilter ? [empresaIds] : []),
@@ -3127,7 +3211,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
                 (SELECT COALESCE(MAX(CASE 
                     WHEN ed2.rol IN('emisor', 'proveedor') 
-                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
                     THEN 1 
                     ELSE 0 
                 END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
@@ -3168,7 +3252,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         FROM DocTypes
         GROUP BY quarter
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams
   ]);
@@ -3219,7 +3303,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                         END
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
                         CASE
-                            WHEN (SELECT e2.identificador_fiscal 
+                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
                                   FROM entidades_documento e2 
                                   WHERE e2.documento_id = d.id 
                                     AND e2.rol IN ('emisor', 'proveedor') 
@@ -3262,7 +3346,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         GROUP BY year, quarter
         ORDER BY year DESC, quarter ASC
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : [])
   ]);
 
@@ -3295,7 +3379,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
                 (SELECT COALESCE(MAX(CASE 
                     WHEN ed2.rol IN('emisor', 'proveedor') 
-                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
                     THEN 1 
                     ELSE 0 
                 END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
@@ -3331,7 +3415,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         GROUP BY year
         ORDER BY year ASC
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : [])
   ]);
 
@@ -3378,7 +3462,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
                 (SELECT COALESCE(MAX(CASE 
                     WHEN ed2.rol IN('emisor', 'proveedor') 
-                      AND ed2.identificador_fiscal IN(${cifPlaceholders}) 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
                     THEN 1 
                     ELSE 0 
                 END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
@@ -3418,7 +3502,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         FROM DocTypes
         GROUP BY quarter
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams
   ]);
@@ -3470,7 +3554,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                         END
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
                         CASE
-                            WHEN (SELECT e2.identificador_fiscal 
+                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
                                   FROM entidades_documento e2 
                                   WHERE e2.documento_id = d.id 
                                     AND e2.rol IN ('emisor', 'proveedor') 
@@ -3512,7 +3596,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         GROUP BY year, quarter
         ORDER BY year DESC, quarter ASC
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : [])
   ]);
 
@@ -3556,7 +3640,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                         END
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
                         CASE
-                            WHEN (SELECT e2.identificador_fiscal 
+                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
                                   FROM entidades_documento e2 
                                   WHERE e2.documento_id = d.id 
                                     AND e2.rol IN ('emisor', 'proveedor') 
@@ -3597,7 +3681,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         GROUP BY year
         ORDER BY year ASC
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
+    ...MY_COMPANY_FISCAL_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : [])
   ]);
 
@@ -3620,18 +3704,17 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
   // Let's implement a simpler query here OR update getProvidersWithStats. 
   // Given complexity, let's implement a specific query here that respects the filters.
 
-  const [providerStatsRows] = await db.query<RowDataPacket[]>(`
+  const [providerStatsRows] = await db.query<any[]>(`
         SELECT 
-            e.nombre,
-            e.identificador_fiscal,
+            MAX(e.id) as entidad_id,
             SUM(d.importe_total) as totalSpent,
             COUNT(DISTINCT d.id) as totalDocs,
             MAX(d.fecha_emision) as lastDate
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE e.rol IN ('proveedor', 'emisor')
-          AND e.identificador_fiscal NOT IN (${cifPlaceholders})
-          AND e.nombre NOT IN (${namePlaceholders})
+          AND COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal) NOT IN (${cifPlaceholders})
+          AND COALESCE(e.nombre_hash, e.id) NOT IN (${namePlaceholders})
           AND d.importe_total > 0 -- Solo gastos positivos
           AND (
               (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -3642,54 +3725,67 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
-        GROUP BY e.identificador_fiscal, e.nombre
+        GROUP BY COALESCE(e.identificador_fiscal_hash, e.nombre_hash, e.id)
         ORDER BY totalSpent DESC
         LIMIT 5
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
-    ...MY_COMPANY_NAMES,
+    ...MY_COMPANY_FISCAL_COMBINED,
+    ...MY_COMPANY_NAME_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams
   ]);
 
-  const topProviders = providerStatsRows.map(p => ({
-    name: p.nombre || 'Desconocido',
-    total: Number(p.totalSpent),
-    fiscalId: p.identificador_fiscal
-  }));
+  const topProviderEntityIds = providerStatsRows.map(r => BigInt(r.entidad_id));
+  const topProviderEntities = topProviderEntityIds.length > 0 ? await prisma.entidades_documento.findMany({ where: { id: { in: topProviderEntityIds } } }) : [];
+  const topProviderMap = new Map(topProviderEntities.map(e => [Number(e.id), e]));
 
-  const [clientStatsRows] = await db.query<RowDataPacket[]>(`
+  const topProviders = providerStatsRows.map(p => {
+    const dec = topProviderMap.get(Number(p.entidad_id));
+    return {
+      name: dec?.nombre || 'Desconocido',
+      total: Number(p.totalSpent),
+      fiscalId: dec?.identificador_fiscal || null
+    };
+  });
+
+  const [clientStatsRows] = await db.query<any[]>(`
         SELECT 
-            e.nombre,
-            e.identificador_fiscal,
+            MAX(e.id) as entidad_id,
             SUM(d.importe_total) as totalEarned,
             COUNT(DISTINCT d.id) as totalDocs,
             MAX(d.fecha_emision) as lastDate
         FROM documentos d
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE e.rol IN ('cliente', 'receptor')
-          AND e.identificador_fiscal NOT IN (${cifPlaceholders})
-          AND e.nombre NOT IN (${namePlaceholders})
+          AND COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal) NOT IN (${cifPlaceholders})
+          AND COALESCE(e.nombre_hash, e.id) NOT IN (${namePlaceholders})
           AND d.importe_total > 0
           AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
           AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
-        GROUP BY e.identificador_fiscal, e.nombre
+        GROUP BY COALESCE(e.identificador_fiscal_hash, e.nombre_hash, e.id)
         ORDER BY totalEarned DESC
         LIMIT 5
     `, [
-    ...MY_COMPANY_FISCAL_IDS,
-    ...MY_COMPANY_NAMES,
+    ...MY_COMPANY_FISCAL_COMBINED,
+    ...MY_COMPANY_NAME_COMBINED,
     ...(hasEmpresaFilter ? [empresaIds] : []),
     ...periodQueryParams
   ]);
 
-  const topClients = clientStatsRows.map(p => ({
-    name: p.nombre || 'Desconocido',
-    total: Number(p.totalEarned),
-    fiscalId: p.identificador_fiscal
-  }));
+  const topClientEntityIds = clientStatsRows.map(r => BigInt(r.entidad_id));
+  const topClientEntities = topClientEntityIds.length > 0 ? await prisma.entidades_documento.findMany({ where: { id: { in: topClientEntityIds } } }) : [];
+  const topClientMap = new Map(topClientEntities.map(e => [Number(e.id), e]));
+
+  const topClients = clientStatsRows.map(p => {
+    const dec = topClientMap.get(Number(p.entidad_id));
+    return {
+      name: dec?.nombre || 'Desconocido',
+      total: Number(p.totalEarned),
+      fiscalId: dec?.identificador_fiscal || null
+    };
+  });
 
   const analyticsData = {
     kpis: {
@@ -3782,16 +3878,20 @@ export async function getTrimestresList(
         : [filters.empresa_id];
 
       if (empresaIds.length > 0) {
-        const [empresasInfo] = await conn.query<RowDataPacket[]>(
-          'SELECT cif FROM empresas WHERE id IN (?)',
-          [empresaIds]
-        );
-        MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+        const empresasInfo = await prisma.empresas.findMany({
+          where: { id: { in: empresaIds } },
+          select: { CIF: true }
+        });
+        MY_COMPANY_FISCAL_IDS = empresasInfo.map((e: any) => e.CIF).filter(Boolean) as string[];
       }
     }
 
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
-      ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+    const MY_COMPANY_FISCAL_COMBINED = MY_COMPANY_FISCAL_IDS.length > 0
+      ? [...MY_COMPANY_FISCAL_IDS.map(cif => require('crypto').createHash('sha256').update(cif.toLowerCase().trim()).digest('hex')), ...MY_COMPANY_FISCAL_IDS]
+      : [];
+
+    const cifPlaceholders = MY_COMPANY_FISCAL_COMBINED.length > 0
+      ? MY_COMPANY_FISCAL_COMBINED.map(() => '?').join(',')
       : "'NEVER_MATCH'";
 
     // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) en lugar de importe_sin_impuestos
@@ -3813,7 +3913,7 @@ export async function getTrimestresList(
     SELECT 1 FROM entidades_documento ed 
     WHERE ed.documento_id = d.id 
       AND ed.rol IN ('emisor', 'proveedor') 
-      AND ed.identificador_fiscal IN (${cifPlaceholders})
+      AND COALESCE(ed.identificador_fiscal_hash, ed.identificador_fiscal) IN (${cifPlaceholders})
   ) THEN 1 ELSE 0 END as is_issued
         FROM documentos d
         LEFT JOIN empresas e ON d.id_de_empresa = e.id
@@ -3829,10 +3929,9 @@ AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado =
         GROUP BY d.id
       )
 SELECT
-dt.año_trimestre as año,
+  dt.año_trimestre as año,
   dt.num_trimestre as trimestre,
   dt.id_de_empresa as empresa_id,
-  e.nombre_de_empresa as empresa_nombre,
   COUNT(DISTINCT dt.id) as total_documentos,
 
   -- ✅ TOTALES CON IVA (Abonos restan)
@@ -3932,15 +4031,14 @@ dt.año_trimestre as año,
   MAX(dt.trimestre_cerrado) as cerrado,
   MAX(dt.fecha_cierre_trimestre) as fecha_cierre
       FROM DocTypes dt
-      LEFT JOIN empresas e ON dt.id_de_empresa = e.id
-      GROUP BY dt.año_trimestre, dt.num_trimestre, dt.id_de_empresa, e.nombre_de_empresa
-      ORDER BY dt.año_trimestre DESC, dt.num_trimestre DESC, e.nombre_de_empresa ASC
+      GROUP BY dt.año_trimestre, dt.num_trimestre, dt.id_de_empresa
+      ORDER BY dt.año_trimestre DESC, dt.num_trimestre DESC
   `;
 
     console.log('📝 [getTrimestresList] Query ejecutándose...');
-    console.log('📝 [getTrimestresList] Params:', [...MY_COMPANY_FISCAL_IDS, ...params]);
+    console.log('📝 [getTrimestresList] Params:', [...MY_COMPANY_FISCAL_COMBINED, ...params]);
 
-    const [rows] = await conn.query<RowDataPacket[]>(query, [...MY_COMPANY_FISCAL_IDS, ...params]);
+    const [rows] = await conn.query<RowDataPacket[]>(query, [...MY_COMPANY_FISCAL_COMBINED, ...params]);
 
     console.log('📊 [getTrimestresList] Filas obtenidas:', rows.length);
 
@@ -3948,7 +4046,7 @@ dt.año_trimestre as año,
       console.log('🔍 [getTrimestresList] Primera fila:', {
         año: rows[0].año,
         trimestre: rows[0].trimestre,
-        empresa: rows[0].empresa_nombre,
+        empresa_id: rows[0].empresa_id,
         ingresos_con_iva: rows[0].total_ingresos,
         ingresos_sin_iva: rows[0].total_ingresos_sin_iva,
         gastos_con_iva: rows[0].total_gastos,
@@ -3958,11 +4056,21 @@ dt.año_trimestre as año,
       });
     }
 
+    // ✅ Hidratar nombres de empresa con Prisma (desencripta automáticamente)
+    const uniqueEmpresaIds = [...new Set(rows.map(r => BigInt(r.empresa_id)).filter(Boolean))];
+    const empresasData = uniqueEmpresaIds.length > 0
+      ? await prisma.empresas.findMany({
+          where: { id: { in: uniqueEmpresaIds } },
+          select: { id: true, nombre_de_empresa: true }
+        })
+      : [];
+    const empresaMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || 'Sin empresa']));
+
     let trimestres = rows.map(row => ({
       año: row.año,
       trimestre: row.trimestre,
       empresa_id: row.empresa_id,
-      empresa_nombre: row.empresa_nombre || 'Sin empresa',
+      empresa_nombre: empresaMap.get(row.empresa_id) || 'Sin empresa',
       total_documentos: Number(row.total_documentos),
 
       // ✅ TOTALES CON IVA (principal)
@@ -3985,6 +4093,13 @@ dt.año_trimestre as año,
     if (!filters?.mostrar_vacios) {
       trimestres = trimestres.filter(t => t.total_documentos > 0);
     }
+
+    // ✅ ORDENAR EN MEMORIA: año DESC, trimestre DESC, empresa_nombre ASC (sobre texto ya desencriptado)
+    trimestres.sort((a, b) => {
+      if (a.año !== b.año) return b.año - a.año;
+      if (a.trimestre !== b.trimestre) return b.trimestre - a.trimestre;
+      return a.empresa_nombre.localeCompare(b.empresa_nombre);
+    });
 
     console.log('✅ [getTrimestresList] Trimestres procesados:', trimestres.length);
     console.log('📊 [getTrimestresList] Resumen:');
@@ -4072,20 +4187,7 @@ d.id,
   d.is_new,
   d.trimestre_cerrado,
   d.año_trimestre,
-  d.num_trimestre,
-  e.nombre_de_empresa as empresa_nombre,
-  e.cif as empresa_cif,
-  -- ✅ is_issued: 1=emitida(ingreso), 0=recibida(gasto)
-  (
-    SELECT MAX(CASE
-      WHEN ed2.rol IN ('emisor', 'proveedor')
-        AND ed2.identificador_fiscal = e.cif
-      THEN 1
-      ELSE 0
-    END)
-    FROM entidades_documento ed2
-    WHERE ed2.documento_id = d.id
-  ) as is_issued
+  d.num_trimestre
       FROM documentos d
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE ${whereClause}
@@ -4203,22 +4305,34 @@ d.trimestre_cerrado = 1,
       : [];
 
     if (empresaIdsToQuery.length > 0) {
-      const [empresasInfo] = await conn.query<RowDataPacket[]>(
-        'SELECT cif FROM empresas WHERE id IN (?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+      const [empresasRaw] = await conn.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE id IN (?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
         [empresaIdsToQuery, userId]
       );
-      MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+      const validIds = empresasRaw.map(e => e.id);
+      if (validIds.length > 0) {
+        const empresasInfo = await prisma.empresas.findMany({ where: { id: { in: validIds } }, select: { CIF: true } });
+        MY_COMPANY_FISCAL_IDS = empresasInfo.map((e: any) => e.CIF).filter(Boolean) as string[];
+      }
     } else {
       // Si no hay empresa específica, obtener todas del usuario
-      const [empresasInfo] = await conn.query<RowDataPacket[]>(
-        'SELECT cif FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+      const [empresasRaw] = await conn.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
         [userId]
       );
-      MY_COMPANY_FISCAL_IDS = empresasInfo.map(e => e.cif).filter(Boolean);
+      const validIds = empresasRaw.map(e => e.id);
+      if (validIds.length > 0) {
+        const empresasInfo = await prisma.empresas.findMany({ where: { id: { in: validIds } }, select: { CIF: true } });
+        MY_COMPANY_FISCAL_IDS = empresasInfo.map((e: any) => e.CIF).filter(Boolean) as string[];
+      }
     }
 
-    const cifPlaceholders = MY_COMPANY_FISCAL_IDS.length > 0
-      ? MY_COMPANY_FISCAL_IDS.map(() => '?').join(',')
+    const MY_COMPANY_FISCAL_COMBINED = MY_COMPANY_FISCAL_IDS.length > 0
+      ? [...MY_COMPANY_FISCAL_IDS.map(cif => require('crypto').createHash('sha256').update(cif.toLowerCase().trim()).digest('hex')), ...MY_COMPANY_FISCAL_IDS]
+      : [];
+
+    const cifPlaceholders = MY_COMPANY_FISCAL_COMBINED.length > 0
+      ? MY_COMPANY_FISCAL_COMBINED.map(() => '?').join(',')
       : "'NEVER_MATCH'";
 
     // ✅ CAMBIO CRÍTICO: Usar importe_total (CON IVA) para guardar en tabla trimestres
@@ -4237,7 +4351,7 @@ d.trimestre_cerrado = 1,
   -- ✅ Clasificar si es emitida(1) o recibida(0)
           MAX(CASE 
             WHEN ed.rol IN('emisor', 'proveedor') 
-              AND ed.identificador_fiscal IN(${cifPlaceholders}) 
+              AND COALESCE(ed.identificador_fiscal_hash, ed.identificador_fiscal) IN(${cifPlaceholders}) 
             THEN 1 
             ELSE 0 
           END) as is_issued
@@ -4312,9 +4426,9 @@ dt.año_trimestre as año,
   `;
 
     console.log('📊 [cerrarTrimestre] Query estadísticas:', statsQuery);
-    console.log('📊 [cerrarTrimestre] Params:', [...MY_COMPANY_FISCAL_IDS, ...statsParams]);
+    console.log('📊 [cerrarTrimestre] Params:', [...MY_COMPANY_FISCAL_COMBINED, ...statsParams]);
 
-    const statsRows = await prisma.$queryRawUnsafe<any[]>(statsQuery, ...MY_COMPANY_FISCAL_IDS, ...statsParams);
+    const statsRows = await prisma.$queryRawUnsafe<any[]>(statsQuery, ...MY_COMPANY_FISCAL_COMBINED, ...statsParams);
 
     console.log('📊 [cerrarTrimestre] Filas de estadísticas obtenidas:', statsRows.length);
 
@@ -4876,7 +4990,9 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   // 1b. Entidad duplicada: misma entidad como emisor/proveedor Y receptor/cliente
   const [entidadesDuplicadas] = await db.query<RowDataPacket[]>(`
     SELECT ed.documento_id, d.id_de_empresa,
-           COALESCE(NULLIF(ed.identificador_fiscal,''), ed.nombre) as entidad_key
+           COALESCE(NULLIF(ed.identificador_fiscal_hash,''), NULLIF(ed.nombre_hash,''), 
+                    NULLIF(ed.identificador_fiscal,''), ed.nombre) as entidad_key,
+           MAX(ed.id) as entidad_id_sample
     FROM entidades_documento ed
     JOIN documentos d ON ed.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
@@ -4887,7 +5003,24 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   `, [companyIds]);
 
   for (const doc of entidadesDuplicadas as any[]) {
-    const motivo = `La entidad "${doc.entidad_key}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
+    // ✅ Obtener nombre desencriptado con Prisma
+    let nombreEntidad = doc.entidad_key || 'Desconocida';
+    if (doc.entidad_id_sample) {
+      const [rows] = await db.query<{ id: string }[]>(`
+        SELECT id FROM entidades_documento
+        WHERE id = ?
+        LIMIT 1
+      `, [doc.entidad_id_sample]);
+
+      if (rows.length > 0) {
+        const entidad = await prisma.entidades_documento.findUnique({ where: { id: BigInt(rows[0].id) }, select: { nombre: true, identificador_fiscal: true } });
+        if (entidad) {
+          nombreEntidad = entidad.nombre || entidad.identificador_fiscal || nombreEntidad;
+        }
+      }
+    }
+
+    const motivo = `La entidad "${nombreEntidad}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
     await prisma.health_check_status.createMany({
       data: [{ documento_id: BigInt(doc.documento_id), empresa_id: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, verified: false, check_type: 'ENTIDAD_DUPLICADA', motivo }] as any[],
       skipDuplicates: true
@@ -5013,26 +5146,34 @@ export async function confirmHealthCheckDocument(documentId: number): Promise<vo
 // ==========================================
 
 export async function getClientByFiscalId(fiscalId: string): Promise<DocumentEntity | null> {
-  const [providerRows] = await db.query<EntidadPacket[]>(`
-SELECT *
-  FROM entidades_documento
-        WHERE identificador_fiscal = ? AND(rol = 'cliente' OR rol = 'receptor')
-        LIMIT 1
-  `, [fiscalId]);
+  if (!fiscalId) return null;
+  const hash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
 
-  if (providerRows.length === 0) {
-    return null;
-  }
-  const p = providerRows[0];
+  // Mismo parche pre-migración que para proveedores
+  const [rows] = await db.query<{ id: string }[]>(`
+    SELECT id FROM entidades_documento
+    WHERE (identificador_fiscal_hash = ? OR identificador_fiscal = ?)
+    AND rol IN ('cliente', 'receptor')
+    LIMIT 1
+  `, [hash, fiscalId]);
+
+  if (rows.length === 0) return null;
+
+  const p = await prisma.entidades_documento.findUnique({
+    where: { id: BigInt(rows[0].id) }
+  });
+
+  if (!p) return null;
+
   const provider: DocumentEntity = {
-    id: p.id,
+    id: Number(p.id),
     rol: p.rol,
     nombre: p.nombre,
     direccion: p.direccion,
     identificador_fiscal: p.identificador_fiscal,
     telefono: p.telefono,
     email: p.email,
-    datos_extra: safeJsonParse(p.datos_extra),
+    datos_extra: safeJsonParse(p.datos_extra as string),
     fecha_creacion: p.fecha_creacion
   };
 
@@ -5043,22 +5184,20 @@ export async function getDocumentsByClientName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<Document[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getDocumentsByClientName] Iniciando:', { fiscalId, empresaIds });
 
   let query = `
-        SELECT DISTINCT d.*,
-  e.nombre_de_empresa as empresa_nombre,
-  e.cif as empresa_cif
+        SELECT DISTINCT d.*
         FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        LEFT JOIN empresas e ON d.id_de_empresa = e.id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
     `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
@@ -5083,6 +5222,7 @@ export async function getProductsByClientName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<DocumentLine[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getProductsByClientName] Iniciando:', { fiscalId, empresaIds });
 
   // 🛠️ Subquery para limpiar duplicados del JOIN antes de aplicar Window Functions
@@ -5106,7 +5246,7 @@ export async function getProductsByClientName(
             FROM lineas_documento ld
             JOIN documentos d ON ld.documento_id = d.id
             JOIN entidades_documento ed ON d.id = ed.documento_id
-            WHERE ed.identificador_fiscal = ?
+            WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
     AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
               AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -5117,7 +5257,7 @@ export async function getProductsByClientName(
   )
     `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -5184,6 +5324,7 @@ export async function getAllProductLinesByClientName(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<DocumentLine[]> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   console.log('🔍 [getAllProductLinesByClientName] Iniciando:', { fiscalId, empresaIds });
 
   let baseQuery = `
@@ -5195,7 +5336,7 @@ ld.*,
       FROM lineas_documento ld
       JOIN documentos d ON ld.documento_id = d.id
       JOIN entidades_documento ed ON d.id = ed.documento_id
-      WHERE ed.identificador_fiscal = ?
+      WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
         AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -5206,7 +5347,7 @@ OR
         )
 `;
 
-  const params: any[] = [fiscalId];
+  const params: any[] = [fiscalIdHash, fiscalId];
 
   // ✅ Agregar filtro de empresas si se especifica
   if (empresaIds && empresaIds.length > 0) {
@@ -5249,6 +5390,7 @@ export async function getClientAnalytics(
   fiscalId: string,
   empresaIds?: number[]
 ): Promise<ProviderAnalyticsData | null> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   const provider = await getClientByFiscalId(fiscalId);
   if (!provider) {
     return null;
@@ -5256,7 +5398,7 @@ export async function getClientAnalytics(
 
   // ✅ Construir filtro de empresa
   let whereEmpresa = '';
-  let params: any[] = [fiscalId];
+  let params: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -5277,7 +5419,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
         SELECT DISTINCT d.*
   FROM documentos d
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
           ${whereDocType}
           ${whereEmpresa}
@@ -5292,7 +5434,7 @@ OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '
     FROM lineas_documento ld
     JOIN documentos d ON ld.documento_id = d.id
     JOIN entidades_documento ed ON d.id = ed.documento_id
-    WHERE ed.identificador_fiscal = ?
+    WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
       AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -5302,7 +5444,7 @@ OR
   (ld.descripcion IS NOT NULL AND ld.descripcion != '')
       )
 `;
-  let lineParams: any[] = [fiscalId];
+  let lineParams: any[] = [fiscalIdHash, fiscalId];
 
   if (empresaIds && empresaIds.length > 0) {
     const placeholders = empresaIds.map(() => '?').join(',');
@@ -5400,6 +5542,7 @@ export async function getClientProductHistory(
   searchBy: 'code' | 'description' = 'code',
   descriptionFilter?: string
 ): Promise<{ productInfo: DocumentLine | null, history: DocumentLine[] }> {
+  const fiscalIdHash = require('crypto').createHash('sha256').update(fiscalId.toLowerCase().trim()).digest('hex');
   let query = `
     WITH UniqueHistory AS(
   SELECT 
@@ -5423,7 +5566,7 @@ export async function getClientProductHistory(
         FROM lineas_documento ld
         JOIN documentos d ON ld.documento_id = d.id
         JOIN entidades_documento ed ON d.id = ed.documento_id
-        WHERE ed.identificador_fiscal = ?
+        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
   AND(ed.rol = 'cliente' OR ed.rol = 'receptor')
           AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -5443,7 +5586,7 @@ SELECT * FROM UniqueHistory
     ORDER BY fecha_emision DESC;
 `;
 
-  const queryParams: any[] = [fiscalId];
+  const queryParams: any[] = [fiscalIdHash, fiscalId];
   if (searchBy === 'code') {
     queryParams.push(identifier);
   } else {
@@ -5495,30 +5638,38 @@ export async function getDocsProviderNames(empresaIds?: number[]): Promise<strin
   try {
     const user = await getCurrentUser();
     if (!user) return [];
-    let query = `
-      SELECT DISTINCT e.nombre
-      FROM entidades_documento e
-      JOIN documentos d ON e.documento_id = d.id
-      JOIN empresas emp ON d.id_de_empresa = emp.id
-      WHERE (e.rol = 'proveedor' OR e.rol = 'emisor')
-        AND e.nombre IS NOT NULL AND e.nombre != ''
-        AND (
-          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-          OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        )
-        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-        AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
-        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
-    `;
-    const params: any[] = [user.id];
-    if (empresaIds && empresaIds.length > 0) {
-      query += ` AND d.id_de_empresa IN(${empresaIds.map(() => '?').join(',')})`;
-      params.push(...empresaIds);
-    }
-    query += ` ORDER BY e.nombre ASC`;
-    const [rows] = await (db as any).query(query, params);
-    return (rows as any[]).map((r: any) => r.nombre);
+
+    // ✅ Obtener empresas permitidas para el usuario
+    const allowedCompanies = await getCompanies();
+    const allowedIds = allowedCompanies.map(c => c.id);
+    const targetIds = empresaIds && empresaIds.length > 0
+      ? empresaIds.filter(id => allowedIds.includes(id))
+      : allowedIds;
+
+    if (targetIds.length === 0) return [];
+
+    // ✅ Prisma: desencripta automáticamente. Filtramos docs confirmados en la relación.
+    const entidades = await prisma.entidades_documento.findMany({
+      where: {
+        rol: { in: ['proveedor', 'emisor'] },
+        documentos: {
+          id_de_empresa: { in: targetIds.map(id => BigInt(id)) },
+          tipo_documento: {
+            // Solo facturas/abonos confirmados
+            contains: 'factura'
+          }
+        }
+      },
+      select: { nombre: true }
+    });
+
+    // Filtrado en memoria: excluir nulos/vacíos, dedup, ordenar
+    const unique = Array.from(
+      new Set(entidades.map(e => e.nombre).filter((n): n is string => typeof n === 'string' && n.trim() !== ''))
+    ).sort((a, b) => a.localeCompare(b, 'es'));
+
+    console.log('✅ [getDocsProviderNames] Proveedores únicos (Prisma):', unique.length);
+    return unique;
   } catch (error) {
     console.error('❌ [getDocsProviderNames] Error:', error);
     return [];
@@ -5529,44 +5680,49 @@ export async function getDocsClientNames(empresaIds?: number[]): Promise<string[
   try {
     const user = await getCurrentUser();
     if (!user) return [];
-    let query = `
-      SELECT DISTINCT e.nombre
-      FROM entidades_documento e
-      JOIN documentos d ON e.documento_id = d.id
-      JOIN empresas emp ON d.id_de_empresa = emp.id
-      WHERE (e.rol = 'receptor' OR e.rol = 'cliente')
-        AND e.nombre IS NOT NULL AND e.nombre != ''
-        AND (
-          (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-          OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-          OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-        )
-        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
-        AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
-        AND JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON))
-    `;
-    const params: any[] = [user.id];
-    if (empresaIds && empresaIds.length > 0) {
-      query += ` AND d.id_de_empresa IN(${empresaIds.map(() => '?').join(',')})`;
-      params.push(...empresaIds);
-    }
-    query += ` ORDER BY e.nombre ASC`;
-    const [rows] = await (db as any).query(query, params);
-    return (rows as any[]).map((r: any) => r.nombre);
+
+    // ✅ Obtener empresas permitidas para el usuario
+    const allowedCompanies = await getCompanies();
+    const allowedIds = allowedCompanies.map(c => c.id);
+    const targetIds = empresaIds && empresaIds.length > 0
+      ? empresaIds.filter(id => allowedIds.includes(id))
+      : allowedIds;
+
+    if (targetIds.length === 0) return [];
+
+    // ✅ Prisma: desencripta automáticamente
+    const entidades = await prisma.entidades_documento.findMany({
+      where: {
+        rol: { in: ['receptor', 'cliente'] },
+        documentos: {
+          id_de_empresa: { in: targetIds.map(id => BigInt(id)) }
+        }
+      },
+      select: { nombre: true }
+    });
+
+    // Filtrado en memoria: excluir nulos/vacíos, dedup, ordenar
+    const unique = Array.from(
+      new Set(entidades.map(e => e.nombre).filter((n): n is string => typeof n === 'string' && n.trim() !== ''))
+    ).sort((a, b) => a.localeCompare(b, 'es'));
+
+    console.log('✅ [getDocsClientNames] Clientes únicos (Prisma):', unique.length);
+    return unique;
   } catch (error) {
     console.error('❌ [getDocsClientNames] Error:', error);
     return [];
   }
 }
 
+
+
 export async function getWebhookDocumentPayload(documentId: number): Promise<any> {
   const [docRows] = await db.query<RowDataPacket[]>(
     `SELECT 
       d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.fecha_emision, 
       d.fecha_vencimiento, d.importe_total, d.importe_sin_impuestos, d.moneda, 
-      d.observaciones, d.fecha_creacion, d.id_de_empresa, e.nombre_de_empresa, e.cif as empresa_cif
+      d.observaciones, d.fecha_creacion, d.id_de_empresa
      FROM documentos d
-     LEFT JOIN empresas e ON d.id_de_empresa = e.id
      WHERE d.id = ? LIMIT 1`,
     [documentId]
   );
@@ -5574,11 +5730,39 @@ export async function getWebhookDocumentPayload(documentId: number): Promise<any
   if (docRows.length === 0) return null;
   const doc = docRows[0];
 
-  const [entidades] = await db.query<RowDataPacket[]>(
-    `SELECT rol, nombre, identificador_fiscal, direccion, telefono, email 
-     FROM entidades_documento WHERE documento_id = ? AND rol IN ('emisor', 'cliente')`,
-    [documentId]
-  );
+  // ✅ Hidratar empresa con Prisma (desencripta automáticamente)
+  const empresaRecord = doc.id_de_empresa ? await prisma.empresas.findUnique({
+    where: { id: BigInt(doc.id_de_empresa) },
+    select: { nombre_de_empresa: true, CIF: true }
+  }) : null;
+
+  doc.nombre_de_empresa = empresaRecord?.nombre_de_empresa || null;
+  doc.empresa_cif = empresaRecord?.CIF || null;
+
+  // ✅ Hidratar entidades con Prisma (desencripta automáticamente)
+  const entidadesPrisma = await prisma.entidades_documento.findMany({
+    where: { 
+      documento_id: BigInt(documentId),
+      rol: { in: ['emisor', 'cliente'] }
+    },
+    select: {
+      rol: true,
+      nombre: true,
+      identificador_fiscal: true,
+      direccion: true,
+      telefono: true,
+      email: true
+    }
+  });
+
+  const entidades = entidadesPrisma.map(e => ({
+    rol: e.rol,
+    nombre: e.nombre,
+    identificador_fiscal: e.identificador_fiscal,
+    direccion: e.direccion,
+    telefono: e.telefono,
+    email: e.email
+  }));
 
   const [impuestos] = await db.query<RowDataPacket[]>(
     `SELECT tipo_impuesto, porcentaje, base_imponible, cuota 

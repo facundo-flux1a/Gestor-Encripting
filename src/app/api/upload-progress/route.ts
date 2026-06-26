@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import connection, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
+import { prisma } from '@/lib/prisma';
 
 // ==========================================
 // POST: Recibir callback de n8n / microservicio
@@ -256,10 +257,8 @@ async function dispatchCompletionWebhook(uploadId: string) {
           `SELECT 
              d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,
              d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,
-             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre,
-             e.nombre_de_empresa as empresa_nombre, e.cif as empresa_cif
+             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre, d.id_de_empresa
            FROM ${dbName}.documentos d
-           LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
            WHERE d.id = ? LIMIT 1`,
           [docId]
         );
@@ -283,8 +282,13 @@ async function dispatchCompletionWebhook(uploadId: string) {
 
           if (hasInc) totalIncidencias++;
 
+          const empresaIdDoc = dRows[0].id_de_empresa;
+          const empresaPrisma = empresaIdDoc ? await prisma.empresas.findUnique({ where: { id: Number(empresaIdDoc) }, select: { nombre_de_empresa: true, CIF: true } }) : null;
+
           docsData.push({
             ...dRows[0],
+            empresa_nombre: empresaPrisma?.nombre_de_empresa || '',
+            empresa_cif: empresaPrisma?.CIF || '',
             url_archivo: aRows[0]?.ruta_archivo ?? null,
             tiene_incidencias: hasInc,
             cantidad_incidencias: docIncidenciasCount,
@@ -326,17 +330,15 @@ async function dispatchCompletionWebhook(uploadId: string) {
         `SELECT 
            d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,
            d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,
-           d.trimestre_cerrado, d.año_trimestre, d.num_trimestre,
-           e.nombre_de_empresa as empresa_nombre, e.cif as empresa_cif
+           d.trimestre_cerrado, d.año_trimestre, d.num_trimestre, d.id_de_empresa
          FROM ${dbName}.documentos d
-         LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
          WHERE d.id = ? LIMIT 1`,
         [docId]
       );
-      const [aRows] = await connection.query<RowDataPacket[]>(
-        `SELECT ruta_archivo FROM ${dbName}.archivos_documento WHERE documento_id = ? ORDER BY fecha_subida DESC LIMIT 1`,
-        [docId]
-      );
+      const latestArchivo = await prisma.archivos_documento.findFirst({
+        where: { documento_id: BigInt(docId) },
+        orderBy: { fecha_subida: 'desc' }
+      });
       const [iRows] = await connection.query<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ? AND validado = 0`,
         [docId]
@@ -350,9 +352,14 @@ async function dispatchCompletionWebhook(uploadId: string) {
       const hasIncidents = iRows[0]?.count > 0 || failedHC;
 
       if (dRows.length > 0) {
+        const empresaIdDoc = dRows[0].id_de_empresa;
+        const empresaPrisma = empresaIdDoc ? await prisma.empresas.findUnique({ where: { id: Number(empresaIdDoc) }, select: { nombre_de_empresa: true, CIF: true } }) : null;
+
         const docData = { 
           ...dRows[0], 
-          url_archivo: aRows[0]?.ruta_archivo ?? null,
+          empresa_nombre: empresaPrisma?.nombre_de_empresa || '',
+          empresa_cif: empresaPrisma?.CIF || '',
+          url_archivo: latestArchivo?.ruta_archivo ?? null,
           upload_id_original: uploadId
         };
         

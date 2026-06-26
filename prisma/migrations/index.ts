@@ -6,6 +6,8 @@ import { migrate as migrateempresas } from './empresas'
 import { migrate as migrateentidades_documento } from './entidades_documento'
 import { migrate as migrateinvitaciones_empresa } from './invitaciones_empresa'
 import { migrate as migratearchivos_documento } from './archivos_documento'
+import { migrate as migrateentidades_config } from './entidades_config'
+import { migrate as migrateproductos_config } from './productos_config'
 
 export interface ProgressReport {
   model: string
@@ -42,7 +44,9 @@ export type MigrationReport = {
   empresas: number,
   entidades_documento: number,
   invitaciones_empresa: number,
-  archivos_documento: number
+  archivos_documento: number,
+  entidades_config: number,
+  productos_config: number
 }
 
 /**
@@ -54,6 +58,8 @@ export type MigrationReport = {
  * - entidades_documento
  * - invitaciones_empresa
  * - archivos_documento
+ * - entidades_config
+ * - productos_config
  *
  * @returns a dictionary of the number of processed records per model.
  */
@@ -66,11 +72,15 @@ export async function migrate(
   const processedentidades_documento = await migrateentidades_documento(client, reportProgress)
   const processedinvitaciones_empresa = await migrateinvitaciones_empresa(client, reportProgress)
   const processedarchivos_documento = await migratearchivos_documento(client, reportProgress)
+  const processedentidades_config = await migrateentidades_config(client, reportProgress)
+  const processedproductos_config = await migrateproductos_config(client, reportProgress)
   return {
     usuarios: processedusuarios,
     empresas: processedempresas,
     entidades_documento: processedentidades_documento,
     invitaciones_empresa: processedinvitaciones_empresa,
-    archivos_documento: processedarchivos_documento
+    archivos_documento: processedarchivos_documento,
+    entidades_config: processedentidades_config,
+    productos_config: processedproductos_config
   }
 }

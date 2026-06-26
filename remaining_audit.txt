@@ -1,0 +1,35 @@
+src/app/api/clean-database/route.ts:22:      `SELECT id, email, has_permits FROM ${dbName}.usuarios WHERE id = ?`,
+src/app/api/check-export/route.ts:31:      `SELECT estado, url_archivo, nombre_archivo 
+src/app/api/ai-incidents/route.ts:57:    // Construir query con filtros (sin JOIN a empresas — nombre_de_empresa está encriptado)
+src/app/api/activity/[id]/route.ts:27:      `SELECT a.id, a.upload_id, a.documento_id, a.documento_nombre, a.parent_upload_id
+src/app/api/activity/[id]/route.ts:54:      `SELECT id, documento_id, upload_id, documento_nombre
+src/app/api/docs/playground/proxy/route.ts:215:        query += ` AND d.id IN (SELECT ent.documento_id FROM entidades_documento ent WHERE ent.rol IN ('emisor', 'proveedor') AND (ent.nombre_hash = ? OR ent.identificador_fiscal_hash = ? OR ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?))`; 
+src/app/api/entidades-config/route.ts:17:        SELECT cuenta_compra, cuenta_venta, nombre_referencia 
+src/app/api/entidades-config/route.ts:19:        WHERE empresa_id = ? AND identificador_fiscal = ?
+src/app/api/upload-progress/route.ts:40:        `SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM ${dbName}.actividad WHERE upload_id = ? OR parent_upload_id = ? OR id = ?`,
+src/app/api/upload-progress/route.ts:49:          `SELECT id, retry_count, mensaje, error_detalle, documento_nombre FROM ${dbName}.actividad WHERE documento_nombre = ? AND updated_at > NOW() - INTERVAL 2 HOUR LIMIT 1`,
+src/app/api/upload-progress/route.ts:266:          `SELECT ruta_archivo FROM ${dbName}.archivos_documento WHERE documento_id = ? ORDER BY fecha_subida DESC LIMIT 1`,
+src/app/api/v1/documents/status/[uploadId]/route.ts:44:      `SELECT upload_id, documento_nombre, documento_tipo, status, step, mensaje, created_at as fecha_creacion, updated_at
+src/app/api/companies/[id]/route.ts:122:        'SELECT id FROM empresas WHERE (cif_hash = ? OR CIF = ?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
+src/services/document-service.ts:1615:       SELECT COUNT(DISTINCT COALESCE(identificador_fiscal_hash, nombre_hash, id)) as count
+src/services/document-service.ts:2071:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2157:            WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2247:      WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2330:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2422:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2437:    WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:2581:            SELECT COALESCE(e.nombre_hash, e.nombre) as group_key,
+src/services/document-service.ts:2689:  (SELECT COALESCE(identificador_fiscal_hash, identificador_fiscal) FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
+src/services/document-service.ts:3107:          (SELECT COUNT(DISTINCT identificador_fiscal) 
+src/services/document-service.ts:3301:                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
+src/services/document-service.ts:3552:                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
+src/services/document-service.ts:3638:                            WHEN (SELECT e2.identificador_fiscal 
+src/services/document-service.ts:4304:        'SELECT cif FROM empresas WHERE id IN (?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/services/document-service.ts:4311:        'SELECT cif FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/services/document-service.ts:5169:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:5224:            WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:5314:      WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:5397:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:5412:    WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/document-service.ts:5544:        WHERE (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
+src/services/upload-service.ts:829:      `UPDATE ${dbName}.actividad SET file_path = ?, file_hash = ?, cif = ? WHERE upload_id = ?`,

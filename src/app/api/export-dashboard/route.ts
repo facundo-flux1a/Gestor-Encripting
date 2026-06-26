@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/services/user-service';
 import { createExport } from '@/services/document-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +27,7 @@ export async function POST(request: NextRequest) {
     let query = `
       SELECT 
         d.id,
+        d.id_de_empresa,
         d.tipo_documento,
         d.numero_documento,
         d.fecha_emision,
@@ -35,11 +38,8 @@ export async function POST(request: NextRequest) {
         d.observaciones,
         d.datos_extra,
         d.año_trimestre,
-        d.num_trimestre,
-        e.nombre_de_empresa,
-        e.cif as empresa_cif
+        d.num_trimestre
       FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE LOWER(d.tipo_documento) LIKE '%factura%'
     `;
 
@@ -61,6 +61,22 @@ export async function POST(request: NextRequest) {
 
     console.log('📊 [export-dashboard] Documentos encontrados:', documentos.length);
 
+    // ✅ Hidratar nombres de empresa con Prisma (desencripta automáticamente)
+    const uniqueEmpresaIds = [...new Set(documentos.map((d: any) => BigInt(d.id_de_empresa)).filter(Boolean))];
+    const empresasData = uniqueEmpresaIds.length > 0
+      ? await prisma.empresas.findMany({
+          where: { id: { in: uniqueEmpresaIds } },
+          select: { id: true, nombre_de_empresa: true, CIF: true }
+        })
+      : [];
+    const empresaMap = new Map(empresasData.map(e => [Number(e.id), { nombre: e.nombre_de_empresa || '', cif: e.CIF || '' }]));
+
+    // Enriquecer cada documento con los datos de empresa desencriptados
+    const documentosEnriquecidos = documentos.map((d: any) => ({
+      ...d,
+      nombre_de_empresa: empresaMap.get(d.id_de_empresa)?.nombre || '',
+      empresa_cif: empresaMap.get(d.id_de_empresa)?.cif || ''
+    }));
     // ✅ Crear registro en BD
     const exportResult = await createExport({
       userId: user.id,
@@ -68,7 +84,7 @@ export async function POST(request: NextRequest) {
       añoFiltro: año || null,
       trimestreFiltro: trimestre || null,
       empresasIds: empresaIds || [],
-      documentoIds: documentos.map(d => d.id),
+      documentoIds: documentosEnriquecidos.map((d: any) => d.id),
       filtrosAplicados: { empresaIds, año, trimestre }
     });
 
@@ -84,7 +100,7 @@ export async function POST(request: NextRequest) {
     const totalGastos = analytics?.kpis?.totalGastos || 0;
     const totalIva = analytics?.kpis?.resultadoIva || 0;
     const beneficio = analytics?.kpis?.beneficio || 0;
-    const totalDocs = analytics?.kpis?.totalDocs || documentos.length;
+    const totalDocs = analytics?.kpis?.totalDocs || documentosEnriquecidos.length;
 
     console.log('💰 [export-dashboard] Totales a enviar:', {
       totalIngresos,
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
     });
 
     // ✅ Generar nombre descriptivo del archivo
-    const empresaNombre = documentos.length > 0 ? documentos[0].nombre_de_empresa : 'Sin_Empresa';
+    const empresaNombre = documentosEnriquecidos.length > 0 ? documentosEnriquecidos[0].nombre_de_empresa : 'Sin_Empresa';
     const empresaNombreLimpio = empresaNombre
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
@@ -137,7 +153,7 @@ export async function POST(request: NextRequest) {
         beneficio
       },
       // ✅ Lista completa de documentos
-      documentos: documentos.map(d => ({
+      documentos: documentosEnriquecidos.map((d: any) => ({
         id: d.id,
         tipo: d.tipo_documento,
         numero: d.numero_documento,
@@ -155,7 +171,7 @@ export async function POST(request: NextRequest) {
     };
 
     console.log('🚀 [export-dashboard] Enviando a Microservice:', {
-      documentos: documentos.length,
+      documentos: documentosEnriquecidos.length,
       totalIngresos,
       totalGastos,
       totalIva,

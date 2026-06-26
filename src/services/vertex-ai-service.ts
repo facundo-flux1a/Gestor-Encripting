@@ -2,6 +2,7 @@
 
 import { VertexAI } from '@google-cloud/vertexai';
 import db, { dbName } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from './user-service';
 
 // Tipos
@@ -134,13 +135,11 @@ export async function diagnoseDocument(documentId: number, checkType?: string): 
             [documentId]
         );
 
-        // 1.3 Obtener entidades (emisor y receptor)
-        const [entityRows] = await db.query<any[]>(
-            `SELECT rol, nombre, identificador_fiscal
-             FROM ${dbName}.entidades_documento
-             WHERE documento_id = ?`,
-            [documentId]
-        );
+        // 1.3 Obtener entidades (emisor y receptor) a través de Prisma para descifrar campos sensibles
+        const entityRows = await prisma.entidades_documento.findMany({
+            where: { documento_id: BigInt(documentId) },
+            select: { rol: true, nombre: true, identificador_fiscal: true }
+        });
 
         const emisor = entityRows.find((e: any) => e.rol === 'emisor' || e.rol === 'proveedor');
         const receptor = entityRows.find((e: any) => e.rol === 'receptor' || e.rol === 'cliente');

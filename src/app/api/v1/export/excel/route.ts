@@ -3,6 +3,8 @@ import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import * as XLSX from 'xlsx';
+import { prisma } from '@/lib/prisma';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,19 +143,8 @@ export async function POST(request: NextRequest) {
         d.observaciones,
         d.año_trimestre,
         d.num_trimestre,
-        d.trimestre_cerrado,
-        e.nombre_de_empresa,
-        e.CIF AS empresa_cif,
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            ent.rol, '||',
-            COALESCE(ent.nombre, ''), '||',
-            COALESCE(ent.identificador_fiscal, '')
-          ) SEPARATOR ';;'
-        ) AS entidades_raw
+        d.trimestre_cerrado
       FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
       WHERE d.id_de_empresa = ?
         AND (
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -179,27 +170,7 @@ export async function POST(request: NextRequest) {
       params.push(Number(año));
     }
 
-    // Filtro por proveedor
-    if (proveedor) {
-      query += ` AND d.id IN (
-        SELECT ent2.documento_id FROM entidades_documento ent2
-        WHERE ent2.rol IN ('emisor','proveedor')
-          AND (ent2.nombre LIKE ? OR ent2.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${proveedor}%`;
-      params.push(term, term);
-    }
 
-    // Filtro por cliente
-    if (cliente) {
-      query += ` AND d.id IN (
-        SELECT ent3.documento_id FROM entidades_documento ent3
-        WHERE ent3.rol IN ('receptor','cliente')
-          AND (ent3.nombre LIKE ? OR ent3.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${cliente}%`;
-      params.push(term, term);
-    }
 
     query += ` GROUP BY d.id ORDER BY d.fecha_emision DESC`;
 
@@ -226,30 +197,63 @@ export async function POST(request: NextRequest) {
       ivaByDoc[r.documento_id].push(r);
     });
 
-    // 7. Enriquecer documentos con entidades y determinar is_issued
-    const empresaCif = documentos[0]?.empresa_cif?.trim().toLowerCase() || '';
+    // 7. Cargar entidades de todos los documentos y empresa en paralelo con Prisma
+    const [entidadesPrisma, empresaData] = await Promise.all([
+      prisma.entidades_documento.findMany({
+        where: { documento_id: { in: docIds } },
+        select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }
+      }),
+      prisma.empresas.findUnique({
+        where: { id: empresaId },
+        select: { CIF: true, nombre_de_empresa: true }
+      })
+    ]);
+
+    const empresaCifGlobal = empresaData?.CIF?.trim().toLowerCase() || '';
+    const empresaNombreGlobal = empresaData?.nombre_de_empresa || `Empresa_${empresaId}`;
+
+    const entidadesByDoc: Record<number, Record<string, { nombre: string; cif: string }>> = {};
+    entidadesPrisma.forEach((ent) => {
+      if (!entidadesByDoc[ent.documento_id]) entidadesByDoc[ent.documento_id] = {};
+      if (ent.rol) {
+         entidadesByDoc[ent.documento_id][ent.rol] = {
+           nombre: ent.nombre || '',
+           cif: ent.identificador_fiscal || ''
+         };
+      }
+    });
 
     const enriched = documentos.map((doc: any) => {
-      const entidades: Record<string, { nombre: string; cif: string }> = {};
-      if (doc.entidades_raw) {
-        doc.entidades_raw.split(';;').forEach((e: string) => {
-          const [rol, nombre, cif] = e.split('||');
-          if (rol) entidades[rol] = { nombre: nombre || '', cif: cif || '' };
-        });
-      }
-
+      const entidades = entidadesByDoc[doc.doc_id] || {};
       const emisorCif = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim().toLowerCase();
-      const isIssued = !!(empresaCif && emisorCif && emisorCif === empresaCif);
-
+      const isIssued = !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
       const iva_details = ivaByDoc[doc.doc_id] || [];
 
-      return { ...doc, entidades, isIssued, iva_details };
+      return { ...doc, entidades, isIssued, iva_details, nombre_de_empresa: empresaNombreGlobal };
     });
 
     // 8. Filtrar por tipo si se especifica
-    const filtered = tipo === 'todas'
+    let filtered = tipo === 'todas'
       ? enriched
       : enriched.filter((d: any) => tipo === 'emitidas' ? d.isIssued : !d.isIssued);
+
+    if (proveedor) {
+      const term = proveedor.toLowerCase();
+      filtered = filtered.filter((doc: any) => {
+        const emisor = doc.entidades.emisor || doc.entidades.proveedor;
+        if (!emisor) return false;
+        return (emisor.nombre?.toLowerCase().includes(term) || emisor.cif?.toLowerCase().includes(term));
+      });
+    }
+
+    if (cliente) {
+      const term = cliente.toLowerCase();
+      filtered = filtered.filter((doc: any) => {
+        const receptor = doc.entidades.receptor || doc.entidades.cliente;
+        if (!receptor) return false;
+        return (receptor.nombre?.toLowerCase().includes(term) || receptor.cif?.toLowerCase().includes(term));
+      });
+    }
 
     if (filtered.length === 0) {
       return NextResponse.json(

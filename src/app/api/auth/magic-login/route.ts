@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashField } from '@/lib/encryption';
-import { createSession } from '@/services/auth-service';
+import { createSession, findUserByEmail } from '@/services/auth-service';
 import { acceptInvitation } from '@/services/invitation-service';
 
 export async function GET(req: NextRequest) {
@@ -17,11 +17,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Buscar usuario por hash del email (blind index) porque el email está encriptado en DB
-    const emailHash = hashField(email);
-    const user = await prisma.usuarios.findUnique({
-      where: { email_hash: emailHash }
-    });
+    // Buscar usuario por email (usa hash + fallback plano para migración)
+    const user = await findUserByEmail(email);
 
     if (!user) {
       return NextResponse.redirect(new URL('/auth/login?error=user_not_found', req.url));

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,11 +81,8 @@ export async function GET(request: NextRequest) {
     // 4. Construir query de documentos principal
     let query = `
       SELECT
-        d.*,
-        e.nombre_de_empresa,
-        e.CIF AS empresa_cif
+        d.*
       FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE d.id_de_empresa = ?
     `;
     const params: any[] = [empresaId];
@@ -128,25 +127,7 @@ export async function GET(request: NextRequest) {
       params.push(año);
     }
 
-    if (proveedor) {
-      query += ` AND d.id IN (
-        SELECT ent2.documento_id FROM entidades_documento ent2
-        WHERE ent2.rol IN ('emisor','proveedor')
-          AND (ent2.nombre LIKE ? OR ent2.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${proveedor}%`;
-      params.push(term, term);
-    }
 
-    if (cliente) {
-      query += ` AND d.id IN (
-        SELECT ent3.documento_id FROM entidades_documento ent3
-        WHERE ent3.rol IN ('receptor','cliente')
-          AND (ent3.nombre LIKE ? OR ent3.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${cliente}%`;
-      params.push(term, term);
-    }
 
     query += ` ORDER BY d.fecha_emision DESC`;
 
@@ -158,22 +139,26 @@ export async function GET(request: NextRequest) {
 
     const docIds = documentos.map((d: any) => d.id);
 
-    // 5. Cargar todas las relaciones en paralelo
+    // 5. Cargar relaciones
     const [
-      [entidadesRows],
       [lineasRows],
       [impuestosRows],
-      [archivosRows],
       [incidenciasRows],
       [healthCheckRows]
     ] = await Promise.all([
-      db.query<RowDataPacket[]>(`SELECT * FROM entidades_documento WHERE documento_id IN (?)`, [docIds]),
       db.query<RowDataPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]),
       db.query<RowDataPacket[]>(`SELECT * FROM impuestos_documento WHERE documento_id IN (?)`, [docIds]),
-      db.query<RowDataPacket[]>(`SELECT * FROM archivos_documento WHERE documento_id IN (?)`, [docIds]),
       db.query<RowDataPacket[]>(`SELECT * FROM incidencias_documento WHERE documento_id IN (?)`, [docIds]),
       db.query<RowDataPacket[]>(`SELECT * FROM health_check_status WHERE documento_id IN (?)`, [docIds])
     ]);
+
+    // Prisma fetches encrypted tables natively
+    const [entidadesRows, archivosRows, empresaData] = await Promise.all([
+      prisma.entidades_documento.findMany({ where: { documento_id: { in: docIds } } }),
+      prisma.archivos_documento.findMany({ where: { documento_id: { in: docIds } } }),
+      prisma.empresas.findUnique({ where: { id: empresaId }, select: { CIF: true, nombre_de_empresa: true } })
+    ]);
+    const empresaCifGlobal = empresaData?.CIF?.trim().toLowerCase() || '';
 
     // 6. Agrupar entidades
     const entidadesByDoc: Record<number, Record<string, any>> = {};
@@ -296,9 +281,8 @@ export async function GET(request: NextRequest) {
       const docId = doc.id;
       const entities = entidadesByDoc[docId] || {};
       
-      const empresaCif = doc.empresa_cif?.trim().toLowerCase() || '';
       const emisorCif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().toLowerCase();
-      const isIssued = !!(empresaCif && emisorCif && emisorCif === empresaCif);
+      const isIssued = !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
 
       const docArchivos = archivosByDoc[docId] || [];
       const publicUrl = docArchivos.length > 0 ? docArchivos[0].url_archivo : null;
@@ -337,9 +321,28 @@ export async function GET(request: NextRequest) {
 
     // Filtrar por flujo (emitidas/recibidas) en memoria después de calcular is_issued
     if (tipo !== 'todas') {
-      enriched = enriched.filter((doc) =>
+      enriched = enriched.filter((doc: any) =>
         tipo === 'emitidas' ? doc.is_issued : !doc.is_issued
       );
+    }
+
+    // Filtrar en memoria por proveedor/cliente (partial match support over encrypted data)
+    if (proveedor) {
+      const term = proveedor.toLowerCase();
+      enriched = enriched.filter((doc: any) => {
+        const emisor = doc.entidades.emisor || doc.entidades.proveedor;
+        if (!emisor) return false;
+        return (emisor.nombre?.toLowerCase().includes(term) || emisor.cif?.toLowerCase().includes(term));
+      });
+    }
+
+    if (cliente) {
+      const term = cliente.toLowerCase();
+      enriched = enriched.filter((doc: any) => {
+        const receptor = doc.entidades.receptor || doc.entidades.cliente;
+        if (!receptor) return false;
+        return (receptor.nombre?.toLowerCase().includes(term) || receptor.cif?.toLowerCase().includes(term));
+      });
     }
 
     return NextResponse.json(

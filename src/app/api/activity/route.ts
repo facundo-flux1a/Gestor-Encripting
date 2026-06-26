@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connection, { dbName } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { ActivityService } from '@/services/activity-service';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
   try {
@@ -22,6 +23,28 @@ export async function GET(request: Request) {
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
     const search = searchParams.get('search');
+
+    // Obtener empresas del usuario para descifrarlas con Prisma y poder buscar sobre ellas
+    const [userEmpRows] = await connection.query(`SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`, [session.userId]);
+    const userEmpIds = (userEmpRows as any[]).map(r => Number(r.id));
+    
+    const empresasPrisma = userEmpIds.length > 0 ? await prisma.empresas.findMany({
+       where: { id: { in: userEmpIds } },
+       select: { id: true, nombre_de_empresa: true, CIF: true }
+    }) : [];
+    
+    const empresaMap: Record<number, { nombre: string, cif: string }> = {};
+    empresasPrisma.forEach(e => {
+       empresaMap[Number(e.id)] = { nombre: e.nombre_de_empresa || '', cif: e.CIF || '' };
+    });
+
+    let matchedEmpresaIds: number[] = [];
+    if (search) {
+       const searchLower = search.toLowerCase();
+       matchedEmpresaIds = empresasPrisma
+         .filter(e => (e.nombre_de_empresa?.toLowerCase().includes(searchLower)) || (e.CIF?.toLowerCase().includes(searchLower)))
+         .map(e => Number(e.id));
+    }
 
     // Query con LEFT JOIN - INCLUYE is_new y dashboard-correo
     let query = `
@@ -44,12 +67,8 @@ export async function GET(request: Request) {
         a.completed_at,
         a.is_new,
         a.\`dashboard-correo\`,
-        e.nombre_de_empresa,
-        e.CIF,
         d.tipo_documento,
-        d.numero_documento,
-        (SELECT nombre FROM ${dbName}.entidades_documento WHERE documento_id = d.id AND rol = 'emisor' LIMIT 1) as empresa_emisora,
-        (SELECT nombre FROM ${dbName}.entidades_documento WHERE documento_id = d.id AND rol = 'cliente' LIMIT 1) as cliente
+        d.numero_documento
       FROM ${dbName}.actividad a
       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
       LEFT JOIN ${dbName}.documentos d ON a.documento_id = d.id
@@ -92,15 +111,20 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      query += ` AND (
+      let searchCond = `(
         a.documento_nombre LIKE ? OR
-        e.nombre_de_empresa LIKE ? OR
-        e.CIF LIKE ? OR
         d.tipo_documento LIKE ? OR
-        d.numero_documento LIKE ?
-      )`;
+        d.numero_documento LIKE ?`;
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      const p = [searchParam, searchParam, searchParam];
+      
+      if (matchedEmpresaIds.length > 0) {
+         searchCond += ` OR a.id_de_empresa IN (${matchedEmpresaIds.map(()=>'?').join(',')})`;
+         p.push(...matchedEmpresaIds);
+      }
+      searchCond += `)`;
+      query += ` AND ${searchCond}`;
+      params.push(...p);
     }
 
     query += ` ORDER BY a.created_at DESC LIMIT ? OFFSET ?`;
@@ -152,15 +176,20 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      countQuery += ` AND (
+      let searchCond = `(
         a.documento_nombre LIKE ? OR
-        e.nombre_de_empresa LIKE ? OR
-        e.CIF LIKE ? OR
         d.tipo_documento LIKE ? OR
-        d.numero_documento LIKE ?
-      )`;
+        d.numero_documento LIKE ?`;
       const searchParam = `%${search}%`;
-      countParams.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      const p = [searchParam, searchParam, searchParam];
+      
+      if (matchedEmpresaIds.length > 0) {
+         searchCond += ` OR a.id_de_empresa IN (${matchedEmpresaIds.map(()=>'?').join(',')})`;
+         p.push(...matchedEmpresaIds);
+      }
+      searchCond += `)`;
+      countQuery += ` AND ${searchCond}`;
+      countParams.push(...p);
     }
 
     const [countRows] = await connection.query(countQuery, countParams);
@@ -170,27 +199,41 @@ export async function GET(request: Request) {
     // Se desactiva aquí para evitar reintentos duplicados.
     // Ver: src/components/upload/retry-monitor.tsx
 
-    // 🔥 FORMATEO DINÁMICO: Inyectar mensaje de agotado si retry_count >= 3
+    const docIds = Array.from(new Set((rows as any[]).map(r => r.documento_id).filter(id => id != null)));
+    let entidadesByDoc: Record<number, { emisor?: string, cliente?: string }> = {};
+    if (docIds.length > 0) {
+       const entidades = await prisma.entidades_documento.findMany({
+          where: { documento_id: { in: docIds as number[] }, rol: { in: ['emisor', 'cliente'] } },
+          select: { documento_id: true, rol: true, nombre: true }
+       });
+       entidades.forEach(ent => {
+          if (!entidadesByDoc[Number(ent.documento_id)]) entidadesByDoc[Number(ent.documento_id)] = {};
+          if (ent.rol === 'emisor') entidadesByDoc[Number(ent.documento_id)].emisor = ent.nombre || '';
+          if (ent.rol === 'cliente') entidadesByDoc[Number(ent.documento_id)].cliente = ent.nombre || '';
+       });
+    }
+
     const formattedRows = (rows as any[]).map(a => {
-      if ((a.status?.toLowerCase() === 'fallido' || a.status?.toLowerCase() === 'error') && (a.retry_count || 0) >= 3) {
+      let finalA = {
+        ...a,
+        nombre_de_empresa: empresaMap[a.id_de_empresa]?.nombre || '',
+        CIF: empresaMap[a.id_de_empresa]?.cif || '',
+        empresa_emisora: entidadesByDoc[a.documento_id]?.emisor || null,
+        cliente: entidadesByDoc[a.documento_id]?.cliente || null
+      };
+
+      if ((finalA.status?.toLowerCase() === 'fallido' || finalA.status?.toLowerCase() === 'error') && (finalA.retry_count || 0) >= 3) {
         const disclaimer = '⚠️ (Se agotaron los 3 reintentos automáticos)';
-        const currentDetail = a.error_detalle || 'Error';
-        return {
-          ...a,
-          mensaje: '⚠️ Reintentos automáticos agotados (3/3)',
-          error_detalle: currentDetail.includes(disclaimer) ? currentDetail : `${currentDetail}\n\n${disclaimer}`
-        };
+        const currentDetail = finalA.error_detalle || 'Error';
+        finalA.mensaje = '⚠️ Reintentos automáticos agotados (3/3)';
+        finalA.error_detalle = currentDetail.includes(disclaimer) ? currentDetail : `${currentDetail}\n\n${disclaimer}`;
       }
       
-      // ✅ ÉXITO TRAS REINTENTO: Indicar que se logró tras varios intentos
-      if (a.status?.toLowerCase() === 'completado' && (a.retry_count || 0) > 0) {
-        return {
-          ...a,
-          mensaje: `✅ Completado tras ${(a.retry_count || 0)} reintentos automáticos`
-        };
+      if (finalA.status?.toLowerCase() === 'completado' && (finalA.retry_count || 0) > 0) {
+        finalA.mensaje = `✅ Completado tras ${(finalA.retry_count || 0)} reintentos automáticos`;
       }
 
-      return a;
+      return finalA;
     });
 
     return NextResponse.json({

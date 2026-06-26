@@ -1,6 +1,7 @@
 'use server';
 
 import db from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 import { RowDataPacket } from 'mysql2';
 import { revalidatePath } from 'next/cache';
 import { getDocumentById } from './document-service';
@@ -24,12 +25,17 @@ export async function validateIncidentsAsync(documentId: number) {
         // 2. Obtener la compañía del documento (si existe)
         let companyData = undefined;
         if (document.empresa_id) {
-            const [companies] = await db.query<RowDataPacket[]>(
-                'SELECT id, nombre_de_empresa as name, CIF as cif, nombre_fiscal as nombreFiscal FROM empresas WHERE id = ?',
-                [document.empresa_id]
-            );
-            if (companies.length > 0) {
-                companyData = companies[0] as any;
+            const companyPrisma = await prisma.empresas.findUnique({
+                where: { id: BigInt(document.empresa_id) },
+                select: { id: true, nombre_de_empresa: true, CIF: true, nombre_fiscal: true }
+            });
+            if (companyPrisma) {
+                companyData = {
+                    id: Number(companyPrisma.id),
+                    name: companyPrisma.nombre_de_empresa,
+                    cif: companyPrisma.CIF,
+                    nombreFiscal: companyPrisma.nombre_fiscal
+                };
             }
         }
 

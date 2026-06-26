@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getCurrentUser } from '@/services/user-service';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
     try {
@@ -18,8 +19,8 @@ export async function GET(req: NextRequest) {
         const params: any[] = [empresaId];
 
         if (proveedorCif) {
-            query += ' AND (proveedor_cif = ? OR proveedor_cif IS NULL)';
-            params.push(proveedorCif);
+            query += ' AND (proveedor_cif_hash = SHA2(?, 256) OR proveedor_cif = ? OR proveedor_cif IS NULL)';
+            params.push(proveedorCif, proveedorCif);
         }
 
         const [rows] = await db.query(query, params);
@@ -53,13 +54,13 @@ export async function POST(req: NextRequest) {
                     DELETE FROM productos_config 
                     WHERE id_de_empresa = ? 
                     AND (patron = ? OR patron = ?) 
-                    AND (IFNULL(proveedor_cif, '') = IFNULL(?, ''))
-                `, [empresaId, patron, rawPatron, cif]);
+                    AND (IFNULL(proveedor_cif_hash, '') = IFNULL(SHA2(?, 256), '') OR IFNULL(proveedor_cif, '') = IFNULL(?, ''))
+                `, [empresaId, patron, rawPatron, cif, cif]);
 
                 await db.query(`
-                    INSERT INTO productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)
-                    VALUES (?, ?, ?, ?, 0, NULL)
-                `, [empresaId, cif, patron, cuenta]);
+                    INSERT INTO productos_config (id_de_empresa, proveedor_cif, proveedor_cif_hash, patron, cuenta_contable, is_ai_suggested, justification)
+                    VALUES (?, ?, SHA2(?, 256), ?, ?, 0, NULL)
+                `, [empresaId, cif, cif, patron, cuenta]);
 
                 // 2. Actualizar histórico de líneas con JOIN para asegurar proveedor y empresa
                 // Usamos REGEXP_REPLACE para normalizar en SQL igual que en JS
@@ -69,10 +70,13 @@ export async function POST(req: NextRequest) {
                     JOIN entidades_documento ed ON d.id = ed.documento_id
                     SET ld.cuenta_contable = ?
                     WHERE d.id_de_empresa = ?
-                    AND (IFNULL(ed.identificador_fiscal, '') = IFNULL(?, ''))
+                    AND (
+                        IFNULL(ed.identificador_fiscal_hash, '') = IFNULL(?, '') OR
+                        IFNULL(ed.identificador_fiscal, '') = IFNULL(?, '')
+                    )
                     AND ed.rol IN ('proveedor', 'emisor')
                 `;
-                let updateParams = [cuenta, empresaId, cif];
+                let updateParams = [cuenta, empresaId, cif ? hashField(normalizeEntityName(cif)) : null, cif];
 
                 if (item.code) {
                     updateQuery += ' AND ld.codigo = ?';
@@ -109,8 +113,8 @@ export async function POST(req: NextRequest) {
                     DELETE FROM productos_config 
                     WHERE id_de_empresa = ? 
                     AND (patron = ? OR patron = ?) 
-                    AND (IFNULL(proveedor_cif, '') = IFNULL(?, ''))
-                `, [empresaId, normPatron, item.description, cif]);
+                    AND (IFNULL(proveedor_cif_hash, '') = IFNULL(SHA2(?, 256), '') OR IFNULL(proveedor_cif, '') = IFNULL(?, ''))
+                `, [empresaId, normPatron, item.description, cif, cif]);
 
                 // 2. Resetear líneas
                 let resetQuery = `
@@ -119,10 +123,13 @@ export async function POST(req: NextRequest) {
                     JOIN entidades_documento ed ON d.id = ed.documento_id
                     SET ld.cuenta_contable = NULL
                     WHERE d.id_de_empresa = ?
-                    AND (IFNULL(ed.identificador_fiscal, '') = IFNULL(?, ''))
+                    AND (
+                        IFNULL(ed.identificador_fiscal_hash, '') = IFNULL(?, '') OR
+                        IFNULL(ed.identificador_fiscal, '') = IFNULL(?, '')
+                    )
                     AND ed.rol IN ('proveedor', 'emisor')
                 `;
-                let resetParams = [empresaId, cif];
+                let resetParams = [empresaId, cif ? hashField(normalizeEntityName(cif)) : null, cif];
 
                 if (item.code) {
                     resetQuery += ' AND ld.codigo = ?';

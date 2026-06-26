@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import connection, { dbName } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 import JSZip from 'jszip';
 
 const UploadResponseSchema = z.object({
@@ -362,16 +363,18 @@ export async function uploadDocument(
     console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
 
     console.log(`[${normalizedFileName}] Consultando CIF, Recargo y Nombre para empresaId: ${empresaId}`);
-    const [rows] = await connection.query('SELECT CIF, recargo, nombre_de_empresa FROM empresas WHERE id = ?', [empresaId]);
-    const empresaData = rows as { CIF: string, recargo: number, nombre_de_empresa: string }[];
+    const empresaPrisma = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { CIF: true, recargo: true, nombre_de_empresa: true }
+    });
 
-    if (!empresaData || empresaData.length === 0) {
+    if (!empresaPrisma) {
       throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
     }
 
-    const cif = empresaData[0].CIF;
-    const recargo = !!empresaData[0].recargo; // Convertir a booleano
-    const nombreEmpresa = empresaData[0].nombre_de_empresa;
+    const cif = empresaPrisma.CIF || '';
+    const recargo = !!empresaPrisma.recargo; // Convertir a booleano
+    const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
     console.log(`[${normalizedFileName}] Empresa: ${nombreEmpresa}, CIF: ${cif}, Recargo: ${recargo}`);
 
     let individualFileHashes: { [fileName: string]: string } = {};
@@ -767,16 +770,18 @@ export async function uploadDocumentFromApi(
   try {
     const mainFileHash = await calculateFileHash(fileBuffer);
     
-    const [rows] = await connection.query('SELECT CIF, recargo, nombre_de_empresa FROM empresas WHERE id = ?', [empresaId]);
-    const empresaData = rows as { CIF: string, recargo: number, nombre_de_empresa: string }[];
+    const empresaPrisma = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { CIF: true, recargo: true, nombre_de_empresa: true }
+    });
 
-    if (!empresaData || empresaData.length === 0) {
+    if (!empresaPrisma) {
       throw new Error(`Empresa no encontrada: ${empresaId}`);
     }
 
-    const cif = empresaData[0].CIF;
-    const recargo = !!empresaData[0].recargo;
-    const nombreEmpresa = empresaData[0].nombre_de_empresa;
+    const cif = empresaPrisma.CIF || '';
+    const recargo = !!empresaPrisma.recargo;
+    const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
 
     const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
     if (duplicateRecord) {

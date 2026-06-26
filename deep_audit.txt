@@ -1,0 +1,4 @@
+src/app/api/send-dashboard-email/route.ts:74:    const [exportRows] = await db.query<RowDataPacket[]>(
+src/app/api/send-dashboard-email/route.ts:130:    await db.query(
+src/app/api/companies/[id]/route.ts:121:      const [cifCheck] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/route.ts:138:      const [emailCheck] = await db.query<RowDataPacket[]>(

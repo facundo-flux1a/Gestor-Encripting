@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/services/user-service';
 import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    // Construir query con filtros (usando columnas reales de la tabla)
+    // Construir query con filtros (sin JOIN a empresas — nombre_de_empresa está encriptado)
     let query = `
       SELECT 
         ai.id,
@@ -69,11 +70,9 @@ export async function GET(request: NextRequest) {
         d.tipo_documento,
         d.fecha_emision,
         d.importe_total,
-        d.id_de_empresa,
-        e.nombre_de_empresa as empresa_nombre
+        d.id_de_empresa
       FROM ${dbName}.ai_incidencias_documento ai
       INNER JOIN ${dbName}.documentos d ON ai.documento_id = d.id
-      INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
       WHERE d.id_de_empresa IN (?)
     `;
 
@@ -99,9 +98,21 @@ export async function GET(request: NextRequest) {
 
     const [rows] = await pool.query<RowDataPacket[]>(query, params);
 
+    // ✅ Hidratar nombres de empresa con Prisma (desencripta automáticamente)
+    const uniqueEmpIds = [...new Set(rows.map((r: any) => BigInt(r.id_de_empresa)).filter(Boolean))];
+    const empresasData = uniqueEmpIds.length > 0
+      ? await prisma.empresas.findMany({
+          where: { id: { in: uniqueEmpIds } },
+          select: { id: true, nombre_de_empresa: true }
+        })
+      : [];
+    const empMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || '']));
+
+    const result = rows.map((r: any) => ({ ...r, empresa_nombre: empMap.get(r.id_de_empresa) || '' }));
+
     console.log(`✅ [AI-INCIDENTS] ${rows.length} incidencias encontradas para empresas: ${filteredEmpresaIds.join(', ')}`);
 
-    return NextResponse.json(rows);
+    return NextResponse.json(result);
 
   } catch (error: any) {
     console.error('❌ Error en /api/ai-incidents:', error);

@@ -22,8 +22,10 @@ export async function POST(req: NextRequest) {
           d.numero_documento, 
           d.id_de_empresa, 
           d.tipo_documento,
-          e.identificador_fiscal as proveedor_cif,
-          e.nombre as proveedor_nombre
+          e.identificador_fiscal_hash as proveedor_cif_hash,
+          e.identificador_fiscal as proveedor_cif_raw,
+          e.nombre_hash as proveedor_nombre_hash,
+          e.nombre as proveedor_nombre_raw
        FROM documentos d
        JOIN empresas emp ON d.id_de_empresa = emp.id
        LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
@@ -44,7 +46,9 @@ export async function POST(req: NextRequest) {
       // LÓGICA DIFERENCIADA
       if (tipo.includes('recibida') || tipo.includes('recibido')) {
         // 🔥 FACTURAS RECIBIDAS: Chequear Número + Proveedor
-        const proveedor = (doc.proveedor_cif || doc.proveedor_nombre || 'DESCONOCIDO').trim().toLowerCase();
+        const cif = doc.proveedor_cif_hash || doc.proveedor_cif_raw;
+        const nombre = doc.proveedor_nombre_hash || doc.proveedor_nombre_raw;
+        const proveedor = (cif || nombre || 'DESCONOCIDO').trim().toLowerCase();
         console.log(`🔍 [Check-Dup] DOC #${doc.id} (Recibida) | Num: ${numero} | Prov: ${proveedor}`);
 
         // Si no tenemos proveedor, fallback a lógica estricta (solo número) para evitar falsos negativos groseros,

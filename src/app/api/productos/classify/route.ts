@@ -141,13 +141,13 @@ export async function POST(req: NextRequest) {
                         DELETE FROM productos_config 
                         WHERE id_de_empresa = ? 
                         AND (patron = ? OR patron = ?) 
-                        AND (IFNULL(proveedor_cif, '') = IFNULL(?, ''))
-                    `, [empresaId, rawPatron, patron, cif]);
+                        AND (IFNULL(proveedor_cif_hash, '') = IFNULL(SHA2(?, 256), '') OR IFNULL(proveedor_cif, '') = IFNULL(?, ''))
+                    `, [empresaId, rawPatron, patron, cif, cif]);
 
                     await db.query(`
-                        INSERT INTO productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)
-                        VALUES (?, ?, ?, ?, 1, ?)
-                    `, [empresaId, cif, patron, cls.cuenta_contable, cls.justificacion]);
+                        INSERT INTO productos_config (id_de_empresa, proveedor_cif, proveedor_cif_hash, patron, cuenta_contable, is_ai_suggested, justification)
+                        VALUES (?, ?, SHA2(?, 256), ?, ?, 1, ?)
+                    `, [empresaId, cif, cif, patron, cls.cuenta_contable, cls.justificacion]);
                 }
             }
 

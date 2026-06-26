@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/services/user-service';
 import { createExport } from '@/services/document-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,10 +21,11 @@ export async function POST(request: NextRequest) {
 
     console.log('📤 [export-documents] Iniciando exportación:', { empresaIds, año, trimestre, status, search });
 
-    // ✅ Construir query para obtener documentos
+    // ✅ Query base — solo columnas de la tabla documentos (sin JOINs a tablas encriptadas)
     let query = `
       SELECT 
-        d.id_documento,
+        d.id,
+        d.id_de_empresa,
         d.tipo_documento,
         d.numero_documento,
         d.fecha_emision,
@@ -33,27 +35,13 @@ export async function POST(request: NextRequest) {
         d.importe_sin_impuestos,
         d.moneda,
         d.observaciones,
-        d.proveedor,
-        d.cif,
         d.año_trimestre,
         d.num_trimestre,
         d.trimestre_cerrado,
         d.incidencia,
         d.incidencia_razon,
-        d.datos_extra,
-        e.nombre_de_empresa,
-        e.cif as empresa_cif,
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            ent.rol, ':', 
-            COALESCE(ent.nombre, ''), '|',
-            COALESCE(ent.cif, '')
-          ) SEPARATOR ';'
-        ) as entidades_data
+        d.datos_extra
       FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      LEFT JOIN documento_entidades de ON d.id_documento = de.id_documento
-      LEFT JOIN entidades ent ON de.id_entidad = ent.id_entidad
       WHERE 1=1
         AND (
             (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -62,24 +50,21 @@ export async function POST(request: NextRequest) {
             OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         )
-        AND d.id_documento NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
+        AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     `;
 
     const params: any[] = [];
 
-    // Filtrar por empresa
     if (empresaIds && empresaIds.length > 0) {
       query += ` AND d.id_de_empresa IN (?)`;
       params.push(empresaIds);
     }
 
-    // Filtrar por año y trimestre
     if (año !== null && año !== undefined && trimestre !== null && trimestre !== undefined) {
       query += ` AND d.año_trimestre = ? AND d.num_trimestre = ?`;
       params.push(año, trimestre);
     }
 
-    // Filtrar por status (tab)
     if (status) {
       switch (status) {
         case 'pending':
@@ -91,25 +76,22 @@ export async function POST(request: NextRequest) {
         case 'incidents':
           query += ` AND d.incidencia = 1`;
           break;
-        // 'all' no agrega filtro adicional
       }
     }
 
-    // Filtrar por búsqueda
+    // ⚠️ Búsqueda por texto: no podemos buscar dentro de nombre_de_empresa encriptado via SQL.
+    // Solo buscamos en campos no encriptados de documentos.
     if (search && search.trim() !== '') {
       query += ` AND (
         d.numero_documento LIKE ? OR
         d.tipo_documento LIKE ? OR
-        d.proveedor LIKE ? OR
-        d.cif LIKE ? OR
-        d.observaciones LIKE ? OR
-        e.nombre_de_empresa LIKE ?
+        d.observaciones LIKE ?
       )`;
       const searchTerm = `%${search.trim()}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    query += ` GROUP BY d.id_documento ORDER BY d.fecha_emision DESC`;
+    query += ` ORDER BY d.fecha_emision DESC`;
 
     const [documentos] = await db.query<RowDataPacket[]>(query, params);
 
@@ -122,29 +104,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Obtener detalles de IVA para cada documento
-    const documentoIds = documentos.map(d => d.id_documento);
+    const documentoIds = documentos.map((d: any) => BigInt(d.id));
 
-    let ivaQuery = `
-      SELECT 
-        id_documento,
-        tipo_impuesto,
-        porcentaje,
-        base_imponible,
-        cuota
-      FROM iva_details
-      WHERE id_documento IN (?)
-    `;
+    // ✅ Hidratar nombres de empresa con Prisma (desencripta automáticamente)
+    const uniqueEmpresaIds = [...new Set(documentos.map((d: any) => BigInt(d.id_de_empresa)).filter(Boolean))];
+    const empresasData = uniqueEmpresaIds.length > 0
+      ? await prisma.empresas.findMany({
+          where: { id: { in: uniqueEmpresaIds } },
+          select: { id: true, nombre_de_empresa: true, CIF: true }
+        })
+      : [];
+    const empresaMap = new Map(empresasData.map(e => [Number(e.id), { nombre: e.nombre_de_empresa || '', cif: e.CIF || '' }]));
 
-    const [ivaDetails] = await db.query<RowDataPacket[]>(ivaQuery, [documentoIds]);
+    // ✅ Hidratar entidades (proveedores/clientes) con Prisma (desencripta automáticamente)
+    const entidades = documentoIds.length > 0
+      ? await prisma.entidades_documento.findMany({
+          where: { documento_id: { in: documentoIds } }
+        })
+      : [];
 
-    // Agrupar detalles de IVA por documento
+    // Agrupar entidades por documento_id
+    const entidadesByDoc = new Map<number, typeof entidades>();
+    for (const ent of entidades) {
+      const docId = Number(ent.documento_id);
+      if (!entidadesByDoc.has(docId)) entidadesByDoc.set(docId, []);
+      entidadesByDoc.get(docId)!.push(ent);
+    }
+
+    // ✅ IVA desde impuestos_documento (nombre correcto de la tabla)
+    const [ivaDetails] = documentoIds.length > 0
+      ? await db.query<RowDataPacket[]>(
+          `SELECT documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_impuesto
+           FROM impuestos_documento
+           WHERE documento_id IN (?)`,
+          [documentos.map((d: any) => d.id)]
+        )
+      : [[]];
+
     const ivaByDocument: { [key: number]: any[] } = {};
-    ivaDetails.forEach((iva: any) => {
-      if (!ivaByDocument[iva.id_documento]) {
-        ivaByDocument[iva.id_documento] = [];
-      }
-      ivaByDocument[iva.id_documento].push(iva);
+    (ivaDetails as any[]).forEach((iva: any) => {
+      if (!ivaByDocument[iva.documento_id]) ivaByDocument[iva.documento_id] = [];
+      ivaByDocument[iva.documento_id].push(iva);
     });
 
     // ✅ Calcular totales
@@ -164,46 +164,30 @@ export async function POST(request: NextRequest) {
       const base = parseFloat(doc.importe_sin_impuestos) || 0;
       const iva = total - base;
 
-      // Extract entidades data
-      const entidadesData = doc.entidades_data?.split(';').reduce((acc: any, e: string) => {
-        const [rol, data] = e.split(':');
-        if (data) {
-          const [nombre, cif] = data.split('|');
-          acc[rol] = { nombre, cif: cif || '' };
-        }
-        return acc;
-      }, {}) || {};
+      const docEntidades = entidadesByDoc.get(doc.id) || [];
+      const emisor = docEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
+      const empresaInfo = empresaMap.get(doc.id_de_empresa);
+
+      // Determinar si es emitida (la empresa del sistema es el emisor)
+      const emisorFiscal = emisor?.identificador_fiscal?.trim().toLowerCase();
+      const empresaCif = empresaInfo?.cif?.trim().toLowerCase();
+      const isIssued = !!(emisorFiscal && empresaCif && emisorFiscal === empresaCif);
 
       const tipo = doc.tipo_documento?.toLowerCase() || '';
       const isAbono = tipo.includes('abono') || tipo.includes('crédito') || tipo.includes('credito') || total < 0;
-
-      // Logic identical to SQL:
-      const emisor = entidadesData.emisor || entidadesData.proveedor;
-      const emisorCif = emisor?.cif?.trim().toLowerCase();
-      const empresaCif = doc.empresa_cif?.trim().toLowerCase();
-
-      let isIssued = false;
-      if (emisorCif && empresaCif && emisorCif === empresaCif) {
-        isIssued = true;
-      }
 
       totales.totalBaseImponible += base;
       totales.totalIva += iva;
       totales.totalImporte += total;
 
-      // Clasificar ingresos vs gastos con abonos restando
       if (isIssued) {
         totales.totalIngresos += isAbono ? -Math.abs(total) : total;
       } else {
         totales.totalGastos += isAbono ? -Math.abs(total) : total;
       }
 
-      // Contar incidencias
-      if (doc.incidencia === 1) {
-        totales.totalIncidencias++;
-      }
+      if (doc.incidencia === 1) totales.totalIncidencias++;
 
-      // Contar por tipo de documento
       const tipoDoc = doc.tipo_documento || 'Sin tipo';
       totales.porTipoDocumento[tipoDoc] = (totales.porTipoDocumento[tipoDoc] || 0) + 1;
     });
@@ -215,7 +199,7 @@ export async function POST(request: NextRequest) {
       añoFiltro: año || null,
       trimestreFiltro: trimestre || null,
       empresasIds: empresaIds || [],
-      documentoIds: documentoIds,
+      documentoIds: documentos.map((d: any) => d.id),
       filtrosAplicados: { empresaIds, año, trimestre, status, search }
     });
 
@@ -226,28 +210,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Generar nombre descriptivo del archivo
-    const empresaNombre = documentos[0]?.nombre_de_empresa || 'Documentos';
-    const empresaNombreLimpio = empresaNombre
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .substring(0, 30);
-
+    // ✅ Generar nombre de archivo
+    const primeraEmpresa = empresaMap.get(documentos[0]?.id_de_empresa)?.nombre || 'Documentos';
+    const empresaNombreLimpio = primeraEmpresa.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
     const fechaActual = new Date().toISOString().split('T')[0];
     const statusLabel = status === 'pending' ? 'Pendientes' :
       status === 'incidents' ? 'Incidencias' :
         status === 'confirmed' ? 'Confirmados' : 'Todos';
 
     let nombreArchivo = `Documentos_${statusLabel}_${empresaNombreLimpio}_${fechaActual}`;
-
     if (año && trimestre) {
       nombreArchivo = `Documentos_${statusLabel}_${año}_T${trimestre}_${empresaNombreLimpio}_${fechaActual}`;
     }
-
     nombreArchivo += '.pdf';
 
-    console.log('📄 [export-documents] Nombre del archivo:', nombreArchivo);
-
-    // ✅ Enviar a Microservice
     const microserviceWebhookUrl = 'https://agent.flux1a.com.ar/webhook/19aedb0e-661d-429a-b84b-1db75a18cfae';
 
     const webhookPayload = {
@@ -256,26 +232,16 @@ export async function POST(request: NextRequest) {
       userEmail: user.email,
       tipo: 'documentos',
       nombreArchivo,
-      filtros: {
-        empresaIds,
-        año,
-        trimestre,
-        status,
-        search
-      },
+      filtros: { empresaIds, año, trimestre, status, search },
       resumen: totales,
       documentos: documentos.map((d: any) => {
-        const entidadesData = d.entidades_data?.split(';').reduce((acc: any, e: string) => {
-          const [rol, data] = e.split(':');
-          if (data) {
-            const [nombre, cif] = data.split('|');
-            acc[rol] = { nombre, cif };
-          }
-          return acc;
-        }, {}) || {};
+        const docEntidades = entidadesByDoc.get(d.id) || [];
+        const emisor = docEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
+        const cliente = docEntidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const empresaInfo = empresaMap.get(d.id_de_empresa);
 
         return {
-          id: d.id_documento,
+          id: d.id,
           tipo: d.tipo_documento,
           numero: d.numero_documento,
           fecha_emision: d.fecha_emision,
@@ -285,43 +251,33 @@ export async function POST(request: NextRequest) {
           importe_sin_iva: d.importe_sin_impuestos,
           base_imponible: d.importe_sin_impuestos,
           moneda: d.moneda,
-          proveedor: d.proveedor,
-          cif: d.cif,
           concepto: d.observaciones,
-          empresa: d.nombre_de_empresa,
-          empresa_cif: d.empresa_cif,
+          empresa: empresaInfo?.nombre || '',
+          empresa_cif: empresaInfo?.cif || '',
           trimestre: d.num_trimestre,
           año: d.año_trimestre,
           trimestre_cerrado: d.trimestre_cerrado,
           incidencia: d.incidencia === 1,
           incidencia_razon: d.incidencia_razon,
-          cliente: entidadesData.cliente?.nombre || entidadesData.receptor?.nombre || '',
-          cliente_cif: entidadesData.cliente?.cif || entidadesData.receptor?.cif || '',
-          emisor: entidadesData.emisor?.nombre || '',
-          emisor_cif: entidadesData.emisor?.cif || '',
-          iva_details: ivaByDocument[d.id_documento] || []
+          emisor: emisor?.nombre || '',
+          emisor_cif: emisor?.identificador_fiscal || '',
+          cliente: cliente?.nombre || '',
+          cliente_cif: cliente?.identificador_fiscal || '',
+          iva_details: ivaByDocument[d.id] || []
         };
       }),
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/export-callback`
     };
 
-    console.log('🚀 [export-documents] Enviando a Microservice:', {
-      documentos: documentos.length,
-      totales
-    });
+    console.log('🚀 [export-documents] Enviando a Microservice:', { documentos: documentos.length, totales });
 
-    // Enviar a Microservice (fire and forget)
     fetch(microserviceWebhookUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload)
     }).catch(err => {
       console.error('❌ Error enviando a Microservice:', err);
     });
-
-    console.log('✅ [export-documents] Exportación iniciada con ID:', exportResult.exportId);
 
     return NextResponse.json({
       success: true,

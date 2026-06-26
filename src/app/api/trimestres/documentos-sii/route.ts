@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
 import pool from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,24 +34,8 @@ export async function GET(request: NextRequest) {
         d.importe_total,
         d.importe_sin_impuestos,
         d.moneda,
-        emp.CIF as empresa_cif,
-        emp.nombre_de_empresa as empresa_nombre,
-        
-        -- Emisor
-        ed_emisor.identificador_fiscal as emisor_cif,
-        ed_emisor.nombre as emisor_nombre,
-        
-        -- Cliente/Receptor
-        ed_cliente.identificador_fiscal as cliente_cif,
-        ed_cliente.nombre as cliente_nombre
-        
+        d.id_de_empresa
       FROM documentos d
-      LEFT JOIN empresas emp ON d.id_de_empresa = emp.id
-      LEFT JOIN entidades_documento ed_emisor 
-        ON d.id = ed_emisor.documento_id AND ed_emisor.rol = 'emisor'
-      LEFT JOIN entidades_documento ed_cliente 
-        ON d.id = ed_cliente.documento_id AND ed_cliente.rol = 'cliente'
-      
       WHERE 
         d.año_trimestre = ? 
         AND d.num_trimestre = ?
@@ -78,12 +63,40 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ [API-TRIMESTRES-DOCS-SII] Documentos encontrados:', rows.length);
 
+    const docIds = Array.from(new Set((rows as any[]).map(r => r.id)));
+    const empIds = Array.from(new Set((rows as any[]).map(r => r.id_de_empresa)));
+
+    let empresasMap: Record<number, any> = {};
+    let entidadesByDoc: Record<number, Record<string, any>> = {};
+
+    if (docIds.length > 0) {
+      const [empresasPrisma, entidadesPrisma] = await Promise.all([
+        prisma.empresas.findMany({
+          where: { id: { in: empIds as number[] } },
+          select: { id: true, nombre_de_empresa: true, CIF: true }
+        }),
+        prisma.entidades_documento.findMany({
+          where: { documento_id: { in: docIds as number[] }, rol: { in: ['emisor', 'cliente'] } },
+          select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }
+        })
+      ]);
+
+      empresasPrisma.forEach(e => empresasMap[Number(e.id)] = e);
+      entidadesPrisma.forEach(ent => {
+        if (!entidadesByDoc[Number(ent.documento_id)]) entidadesByDoc[Number(ent.documento_id)] = {};
+        if (ent.rol) entidadesByDoc[Number(ent.documento_id)][ent.rol] = ent;
+      });
+    }
+
     // Formatear documentos para el SII
     const documentosSII = rows.map((doc: any) => {
       const baseImponible = parseFloat(doc.importe_sin_impuestos || 0);
       const total = parseFloat(doc.importe_total || 0);
       const cuotaIVA = total - baseImponible;
       const tipoIVA = baseImponible > 0 ? ((cuotaIVA / baseImponible) * 100).toFixed(2) : '21';
+
+      const empresa = empresasMap[doc.id_de_empresa] || {};
+      const ents = entidadesByDoc[doc.id] || {};
 
       return {
         // Datos originales
@@ -93,8 +106,8 @@ export async function GET(request: NextRequest) {
         tipo_documento: doc.tipo_documento,
         
         // Datos empresa
-        nif_empresa: doc.empresa_cif,
-        nombre_empresa: doc.empresa_nombre,
+        nif_empresa: empresa.CIF || '',
+        nombre_empresa: empresa.nombre_de_empresa || '',
         
         // Datos para SII (formato factura)
         num_factura: doc.numero_documento,
@@ -107,8 +120,8 @@ export async function GET(request: NextRequest) {
         cuota_iva: cuotaIVA.toFixed(2),
         
         // Datos cliente/emisor
-        nif_cliente: doc.cliente_cif || doc.emisor_cif,
-        nombre_cliente: doc.cliente_nombre || doc.emisor_nombre,
+        nif_cliente: ents.cliente?.identificador_fiscal || ents.emisor?.identificador_fiscal || '',
+        nombre_cliente: ents.cliente?.nombre || ents.emisor?.nombre || '',
         pais_cliente: 'ES'
       };
     });

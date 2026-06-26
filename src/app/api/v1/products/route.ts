@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,12 +42,9 @@ export async function GET(request: NextRequest) {
         l.importe_linea,
         d.id as documento_id,
         d.numero_documento,
-        d.fecha_emision,
-        ent.nombre as proveedor_nombre,
-        ent.identificador_fiscal as proveedor_cif
+        d.fecha_emision
       FROM lineas_documento l
       JOIN documentos d ON l.documento_id = d.id
-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id AND ent.rol IN ('emisor', 'proveedor')
       WHERE d.id_de_empresa = ?
     `;
 
@@ -66,16 +65,23 @@ export async function GET(request: NextRequest) {
       params.push(`%${productoParam}%`);
     }
 
-    if (proveedorParam) {
-      query += ` AND (ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?)`;
-      params.push(`%${proveedorParam}%`, `%${proveedorParam}%`);
-    }
+
 
     query += ` ORDER BY d.fecha_emision DESC LIMIT 1000`; // Limit to avoid massive payloads if unchecked
 
     const [rows] = await db.query<RowDataPacket[]>(query, params);
 
-    const formattedData = rows.map((r: any) => ({
+    const docIds = Array.from(new Set(rows.map((r: any) => r.documento_id)));
+    let entidadesByDoc: Record<number, any> = {};
+    if (docIds.length > 0) {
+      const entidadesPrisma = await prisma.entidades_documento.findMany({
+        where: { documento_id: { in: docIds as number[] }, rol: { in: ['emisor', 'proveedor'] } },
+        select: { documento_id: true, nombre: true, identificador_fiscal: true }
+      });
+      entidadesPrisma.forEach(e => entidadesByDoc[Number(e.documento_id)] = e);
+    }
+
+    let formattedData = rows.map((r: any) => ({
       id: r.linea_id,
       producto_servicio: r.producto,
       cantidad: Number(r.cantidad) || 0,
@@ -87,10 +93,17 @@ export async function GET(request: NextRequest) {
         fecha: r.fecha_emision
       },
       proveedor: {
-        nombre: r.proveedor_nombre || 'Desconocido',
-        cif: r.proveedor_cif || ''
+        nombre: entidadesByDoc[r.documento_id]?.nombre || 'Desconocido',
+        cif: entidadesByDoc[r.documento_id]?.identificador_fiscal || ''
       }
     }));
+
+    if (proveedorParam) {
+      const term = proveedorParam.toLowerCase();
+      formattedData = formattedData.filter((item: any) => {
+        return (item.proveedor.nombre?.toLowerCase().includes(term) || item.proveedor.cif?.toLowerCase().includes(term));
+      });
+    }
 
     return NextResponse.json(
       {

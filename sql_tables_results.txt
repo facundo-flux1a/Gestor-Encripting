@@ -1,0 +1,143 @@
+src/components/trimestres/TrimestresTutorial.tsx:196:          // ✅ PASO 1 (índice 1): Selector de empresas
+src/components/trimestres/TrimestresTutorial.tsx:198:            console.log('🏢 PASO 1: Abriendo selector de empresas');
+src/components/trimestres/trimestres-filter-bar.tsx:370:            <MultiSelectFilter title="Empresa" options={empresasOptions} selected={filters.selectedEmpresas}
+src/components/companies-header-selector.tsx:12: * Selector de empresas para headers (estilo popover)
+src/components/companies-header-selector.tsx:13: * SIEMPRE se muestra como botón con popover, sin importar el número de empresas
+src/components/companies-header-selector.tsx:29:        Cargando empresas...
+src/components/companies-header-selector.tsx:37:        No hay empresas
+src/components/companies-header-selector.tsx:53:            ? 'Seleccionar empresas'
+src/components/companies-header-selector.tsx:55:              ? 'Todas las empresas'
+src/components/companies-selector.tsx:1088:          <div className="text-sm text-muted-foreground">No hay empresas</div>
+src/components/companies-selector.tsx:1545:              razon: shouldBlock ? (isInStep2 ? 'Paso 2 activo' : noHayEmpresas ? 'No hay empresas en tutorial' : 'Dialog abierto') : 'Permitir cambio'
+src/components/companies-selector.tsx:1566:                ? 'Seleccionar empresas'
+src/components/companies-selector.tsx:1568:                  ? 'Todas las empresas'
+src/components/layout/main-layout.tsx:332:          {/* 🎯 Selector de empresas CON data-tutorial */}
+src/components/incidents/analyze-documents-card.tsx:34:            console.log('🔍 [AnalyzeDocuments] Analizando empresas:', selectedCompanyIds);
+src/lib/trimestre-utils.ts:90:      JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:169:    prisma.archivos_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+src/services/document-service.ts:170:    prisma.entidades_documento.findMany({ where: { documento_id: { in: bigDocIds } } }),
+src/services/document-service.ts:523:        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
+src/services/document-service.ts:600:        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } }
+src/services/document-service.ts:662:            LEFT JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:906:      await tx.entidades_documento.deleteMany({ where: { documento_id: BigInt(id) } });
+src/services/document-service.ts:1155:          await tx.entidades_documento.update({
+src/services/document-service.ts:1337:      where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: userId } } },
+src/services/document-service.ts:1440:      where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: user.id } } },
+src/services/document-service.ts:1521:      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/services/document-service.ts:1691:      JOIN empresas emp ON d.id_de_empresa = emp.id
+src/services/document-service.ts:1824:      ? empresasArray.join(', ')
+src/services/document-service.ts:1885:      JOIN empresas emp ON d.id_de_empresa = emp.id
+src/services/document-service.ts:2019:      ? empresasArray.join(', ')
+src/services/document-service.ts:2070:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2156:            JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2246:      JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2329:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2421:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2436:    JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:2576:            JOIN empresas e2 ON d.id_de_empresa = e2.id
+src/services/document-service.ts:2586:            JOIN entidades_documento e ON i.documento_id = e.documento_id
+src/services/document-service.ts:2587:            JOIN empresas e2 ON d.id_de_empresa = e2.id
+src/services/document-service.ts:2600:      ? await prisma.entidades_documento.findMany({ where: { id: { in: sampleIds } }, select: { id: true, nombre: true } })
+src/services/document-service.ts:2621:            JOIN empresas e2 ON d.id_de_empresa = e2.id
+src/services/document-service.ts:2689:  (SELECT identificador_fiscal FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
+src/services/document-service.ts:3041:                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued,
+src/services/document-service.ts:3212:                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
+src/services/document-service.ts:3293:                                SELECT 1 FROM entidades_documento e2 
+src/services/document-service.ts:3380:                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
+src/services/document-service.ts:3463:                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
+src/services/document-service.ts:3544:                                SELECT 1 FROM entidades_documento e2 
+src/services/document-service.ts:3630:                                SELECT 1 FROM entidades_documento e2 
+src/services/document-service.ts:3709:        JOIN entidades_documento e ON d.id = e.documento_id
+src/services/document-service.ts:3734:  const topProviderEntities = topProviderEntityIds.length > 0 ? await prisma.entidades_documento.findMany({ where: { id: { in: topProviderEntityIds } } }) : [];
+src/services/document-service.ts:3753:        JOIN entidades_documento e ON d.id = e.documento_id
+src/services/document-service.ts:3773:  const topClientEntities = topClientEntityIds.length > 0 ? await prisma.entidades_documento.findMany({ where: { id: { in: topClientEntityIds } } }) : [];
+src/services/document-service.ts:3877:          'SELECT cif FROM empresas WHERE id IN (?)',
+src/services/document-service.ts:3908:    SELECT 1 FROM entidades_documento ed 
+src/services/document-service.ts:3914:        LEFT JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4187:      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4258:      JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4304:        'SELECT cif FROM empresas WHERE id IN (?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/services/document-service.ts:4311:        'SELECT cif FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/services/document-service.ts:4346:        LEFT JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:4347:        JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4790:      JOIN empresas emp ON d.id_de_empresa = emp.id
+src/services/document-service.ts:4843:      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4862:      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+src/services/document-service.ts:4996:      const entidad = await prisma.entidades_documento.findUnique({ where: { id: BigInt(doc.entidad_id_sample) }, select: { nombre: true, identificador_fiscal: true } });
+src/services/document-service.ts:5168:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:5223:            JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:5313:      JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:5396:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:5411:    JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/document-service.ts:5543:        JOIN entidades_documento ed ON d.id = ed.documento_id
+src/services/invitation-service.ts:141:      await prisma.empresas.update({
+src/services/invitation-service.ts:236:      include: { empresas: { select: { nombre_de_empresa: true } } }
+src/services/ai-service.ts:435:       LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+src/services/api-key-service.ts:63:      `SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
+src/services/api-key-service.ts:118:    // 1. Traer las api_keys del usuario sin JOIN a empresas (evita exponer datos encriptados)
+src/services/vertex-ai-service.ts:113:             LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+src/app/trimestres/page.tsx:1136:                Ir al selector de empresas
+src/app/dashboard/webhooks/actions.ts:24:      `SELECT id FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
+src/app/api/user/selected-companies/route.ts:7:// GET - Obtener IDs de empresas seleccionadas por el usuario
+src/app/api/user/selected-companies/route.ts:26:// POST - Guardar IDs de empresas seleccionadas
+src/app/api/productos-config/route.ts:70:                    JOIN entidades_documento ed ON d.id = ed.documento_id
+src/app/api/productos-config/route.ts:123:                    JOIN entidades_documento ed ON d.id = ed.documento_id
+src/app/api/ai-incidents/route.ts:39:      `SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
+src/app/api/ai-incidents/route.ts:57:    // Construir query con filtros (sin JOIN a empresas — nombre_de_empresa está encriptado)
+src/app/api/ai-incidents/route.ts:113:    console.log(`✅ [AI-INCIDENTS] ${rows.length} incidencias encontradas para empresas: ${filteredEmpresaIds.join(', ')}`);
+src/app/api/ai-incidents/route.ts:158:       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+src/app/api/users/[userId]/role/route.ts:29:            `SELECT config_roles FROM ${dbName}.empresas WHERE id = ?`,
+src/app/api/users/[userId]/role/route.ts:52:            `UPDATE ${dbName}.empresas SET config_roles = JSON_SET(config_roles, ?, ?) WHERE id = ?`,
+src/app/api/activity/delete-all/route.ts:26:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/delete-all/route.ts:48:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/route.ts:28:    const [userEmpRows] = await connection.query(`SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`, [session.userId]);
+src/app/api/activity/route.ts:73:      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/route.ts:139:      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/route.ts:278:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/delete-multiple/route.ts:41:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/delete-multiple/route.ts:63:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/failed-for-retry/route.ts:37:      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/mark-all-read/route.ts:24:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/[id]/route.ts:29:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/[id]/mark-read/route.ts:34:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/[id]/mark-read/route.ts:51:       INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/[id]/mark-read/route.ts:70:         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/[id]/mark-read/route.ts:84:           INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/unread-count/route.ts:27:      INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/mark-multiple-read/route.ts:39:         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/mark-multiple-read/route.ts:57:         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/mark-multiple-read/route.ts:83:         INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/activity/mark-multiple-read/route.ts:97:           INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
+src/app/api/docs/playground/proxy/route.ts:139:        prisma.entidades_documento.findMany({ where: { documento_id: { in: docIds } } }),
+src/app/api/docs/playground/proxy/route.ts:140:        prisma.empresas.findUnique({ where: { id: empresaId }, select: { CIF: true } })
+src/app/api/docs/playground/proxy/route.ts:215:        query += ` AND d.id IN (SELECT ent.documento_id FROM entidades_documento ent WHERE ent.rol IN ('emisor', 'proveedor') AND (ent.nombre_hash = ? OR ent.identificador_fiscal_hash = ? OR ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?))`; 
+src/app/api/entidades-config/route.ts:64:        // 2. Update existing documents snapshot in entidades_documento
+src/app/api/entidades-config/route.ts:70:            UPDATE entidades_documento ed
+src/app/api/upload-progress/route.ts:266:          `SELECT ruta_archivo FROM ${dbName}.archivos_documento WHERE documento_id = ? ORDER BY fecha_subida DESC LIMIT 1`,
+src/app/api/upload-progress/route.ts:286:          const empresaPrisma = empresaIdDoc ? await prisma.empresas.findUnique({ where: { id: Number(empresaIdDoc) }, select: { nombre_de_empresa: true, CIF: true } }) : null;
+src/app/api/upload-progress/route.ts:356:        const empresaPrisma = empresaIdDoc ? await prisma.empresas.findUnique({ where: { id: Number(empresaIdDoc) }, select: { nombre_de_empresa: true, CIF: true } }) : null;
+src/app/api/proveedores/[id]/route.ts:68:    const entitiesToUpdate = await prisma.entidades_documento.findMany({
+src/app/api/proveedores/[id]/route.ts:91:      await prisma.entidades_documento.updateMany({
+src/app/api/proveedores/[id]/route.ts:134:    await prisma.entidades_documento.updateMany({
+src/app/api/v1/documents/route.ts:90:      LEFT JOIN archivos_documento a ON d.id = a.documento_id
+src/app/api/v1/documents/full/route.ts:157:      prisma.entidades_documento.findMany({ where: { documento_id: { in: docIds } } }),
+src/app/api/v1/documents/full/route.ts:158:      prisma.archivos_documento.findMany({ where: { documento_id: { in: docIds } } }),
+src/app/api/v1/documents/full/route.ts:159:      prisma.empresas.findUnique({ where: { id: empresaId }, select: { CIF: true, nombre_de_empresa: true } })
+src/app/api/ai-metrics/route.ts:25:      `SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`,
+src/app/api/documents-confirm/route.ts:47:       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+src/app/api/incidents/count/route.ts:23:      JOIN empresas e ON d.id_de_empresa = e.id
+src/app/api/documents/auto-clean-duplicates/route.ts:27:       JOIN empresas e ON d.id_de_empresa = e.id
+src/app/api/documents/auto-clean-duplicates/route.ts:102:          await db.query('DELETE FROM entidades_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:103:          await db.query('DELETE FROM archivos_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/check-duplicates/route.ts:30:       JOIN empresas emp ON d.id_de_empresa = emp.id
+src/app/api/documents/check-duplicates/route.ts:31:       LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
+src/app/api/companies/[id]/members/[userId]/route.ts:20:            `SELECT id_de_usuario, config_roles FROM ${dbName}.empresas WHERE id = ?`,
+src/app/api/companies/[id]/members/[userId]/route.ts:61:            `UPDATE ${dbName}.empresas SET id_de_usuario = ?, config_roles = JSON_REMOVE(config_roles, ?) WHERE id = ?`,
+src/app/api/companies/[id]/route.ts:37:      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/app/api/companies/[id]/route.ts:106:      'SELECT id FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/app/api/companies/[id]/route.ts:121:        'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
+src/app/api/companies/[id]/route.ts:138:        'SELECT id FROM empresas WHERE (mail_de_carga_hash = ? OR mail_de_carga = ?) AND id != ?',
+src/app/api/companies/[id]/route.ts:180:    const updatedRecord = await prisma.empresas.update({
+src/app/api/companies/[id]/team/route.ts:28:            'SELECT id, id_de_usuario FROM empresas WHERE id = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+src/app/api/analyze-document/route.ts:45:       INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+src/app/incidents/page.tsx:33:            console.log('🔄 [IncidentsPage] Fetching con empresas:', selectedCompanyIds);

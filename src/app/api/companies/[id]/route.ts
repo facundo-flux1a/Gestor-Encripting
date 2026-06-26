@@ -3,7 +3,10 @@ import { deleteCompany } from '@/services/document-service';
 import { getCurrentUser } from '@/services/user-service';
 import { validateCompanyDocuments } from '@/services/incidents-service';
 import db from '@/lib/db';
+import type { RowDataPacket } from 'mysql2';
+import { hashField } from '@/lib/encryption';
 export const dynamic = 'force-dynamic';
+
 
 // GET - Contar documentos de una empresa
 export async function GET(
@@ -114,9 +117,10 @@ export async function PATCH(
 
     // Verificar si el CIF ya existe en otra empresa (solo si viene en el body)
     if ('cif' in body && body.cif !== null && body.cif !== undefined && body.cif.trim()) {
+      const cifHash = hashField(body.cif.trim());
       const [cifCheck] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
-        [body.cif.trim(), user.id, empresaId]
+        'SELECT id FROM empresas WHERE (cif_hash = ? OR CIF = ?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
+        [cifHash, body.cif.trim(), user.id, empresaId]
       );
 
       if (cifCheck.length > 0) {
@@ -129,9 +133,11 @@ export async function PATCH(
 
     // Verificar email único (solo si viene en el body)
     if ('mailDeCarga' in body && body.mailDeCarga !== null && body.mailDeCarga !== undefined && body.mailDeCarga.trim()) {
+      const mailHash = hashField(body.mailDeCarga.trim());
+      // ✅ Comparar contra hash (post-migración) con fallback a texto plano (pre-migración)
       const [emailCheck] = await db.query<RowDataPacket[]>(
-        'SELECT id FROM empresas WHERE mail_de_carga = ? AND id != ?',
-        [body.mailDeCarga.trim(), empresaId]
+        'SELECT id FROM empresas WHERE (mail_de_carga_hash = ? OR mail_de_carga = ?) AND id != ?',
+        [mailHash, body.mailDeCarga.trim(), empresaId]
       );
 
       if (emailCheck.length > 0) {
@@ -148,7 +154,12 @@ export async function PATCH(
     if ('name' in body) updateData.nombre_de_empresa = body.name.trim();
     if ('nombreFiscal' in body) updateData.nombre_fiscal = body.nombreFiscal?.trim() || null;
     if ('cif' in body) updateData.CIF = body.cif?.trim() || null;
-    if ('mailDeCarga' in body) updateData.mail_de_carga = body.mailDeCarga?.trim() || null;
+    if ('mailDeCarga' in body) {
+      const mailVal = body.mailDeCarga?.trim() || null;
+      updateData.mail_de_carga = mailVal;
+      // ✅ Recalcular hash para mantener el blind index sincronizado
+      updateData.mail_de_carga_hash = mailVal ? hashField(mailVal) : null;
+    }
     if ('recargo' in body) {
       const rawRecargo = body.recargo;
       updateData.recargo = (rawRecargo === true || rawRecargo === 1 || rawRecargo === 'true');

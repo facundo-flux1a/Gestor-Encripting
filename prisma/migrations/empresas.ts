@@ -41,6 +41,7 @@ async function migrateRecord(client: PrismaClient, cursor: Cursor | undefined) {
         id: true,
         nombre_de_empresa: true,
         nombre_fiscal: true,
+        CIF: true,
         mail_de_carga: true
       }
     })
@@ -54,6 +55,7 @@ async function migrateRecord(client: PrismaClient, cursor: Cursor | undefined) {
       data: {
         nombre_de_empresa: record.nombre_de_empresa,
         nombre_fiscal: record.nombre_fiscal,
+        CIF: record.CIF,
         mail_de_carga: record.mail_de_carga
       }
     })
@@ -71,6 +73,10 @@ async function migrateRecord(client: PrismaClient, cursor: Cursor | undefined) {
  *       "strictDecryption": false
  *     },
  *     "nombre_fiscal": {
+ *       "encrypt": true,
+ *       "strictDecryption": false
+ *     },
+ *     "CIF": {
  *       "encrypt": true,
  *       "strictDecryption": false
  *     },

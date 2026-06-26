@@ -1,0 +1,238 @@
+src/lib/trimestre-utils.ts:104:    const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/lib/trimestre-utils.ts:163:    const [rows] = await db.query<RowDataPacket[]>(query, [documentoId]);
+src/services/document-service.ts:676:    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+src/services/document-service.ts:1520:    const [companyCheck] = await db.query<RowDataPacket[]>(
+src/services/document-service.ts:1531:    const [docCount] = await db.query<RowDataPacket[]>(
+src/services/document-service.ts:1592:    const [docRows] = await db.query<RowDataPacket[]>(
+src/services/document-service.ts:1614:  const [providerRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:1625:  const [providerRows] = await db.query<{ id: string }[]>(`
+src/services/document-service.ts:1673:  const [providerRows] = await db.query<any[]>(`
+src/services/document-service.ts:1704:  const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
+src/services/document-service.ts:1867:  const [providerRows] = await db.query<any[]>(`
+src/services/document-service.ts:1898:  const [productRows] = docIds.length > 0 ? await db.query<any[]>(`
+src/services/document-service.ts:2050:  const [lineaRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:2091:  const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+src/services/document-service.ts:2207:  const [lineaRows] = await db.query<any[]>(baseQuery, params);
+src/services/document-service.ts:2271:  const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
+src/services/document-service.ts:2352:  const [lineaRows] = await db.query<any[]>(query, queryParams);
+src/services/document-service.ts:2418:  const [docs] = await db.query<DocumentPacket[]>(`
+src/services/document-service.ts:2455:  const [lineRows] = await db.query<LineaPacket[]>(lineQuery, lineParams);
+src/services/document-service.ts:2465:  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN(?)`, [docIds]) : [[]];
+src/services/document-service.ts:2570:    const [summary] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:2580:    const [byProviderRaw] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:2610:    const [byType] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:2680:    const [docsWithDetails] = await connection.query<RowDataPacket[]>(`
+src/services/document-service.ts:2701:        const [existing] = await connection.query<RowDataPacket[]>(
+src/services/document-service.ts:2744:          const [existing] = await connection.query<RowDataPacket[]>(
+src/services/document-service.ts:2776:          const [existing] = await connection.query<RowDataPacket[]>(
+src/services/document-service.ts:2804:          const [existing] = await connection.query<RowDataPacket[]>(
+src/services/document-service.ts:2902:  const [allDocIds] = await db.query<RowDataPacket[]>(query, params);
+src/services/document-service.ts:2970:    const [yearRow] = await db.query<RowDataPacket[]>(
+src/services/document-service.ts:2996:  const [kpiRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3195:  const [quarterlyRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3276:  const [multiYearRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3363:  const [yearlyRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3427:  const [distributionRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3445:  const [ivaRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3526:  const [multiYearIvaRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3612:  const [ivaYearlyRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:3702:  const [providerStatsRows] = await db.query<any[]>(`
+src/services/document-service.ts:3746:  const [clientStatsRows] = await db.query<any[]>(`
+src/services/document-service.ts:4195:    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+src/services/document-service.ts:4525:    const [rows] = await db.query<RowDataPacket[]>(query, [documentId]);
+src/services/document-service.ts:4661:    const [docs] = await db.query<RowDataPacket[]>(query, params);
+src/services/document-service.ts:4816:    const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/services/document-service.ts:4840:    const [closedCheck] = await connection.query<RowDataPacket[]>(`
+src/services/document-service.ts:4859:    const [docsToWebhook] = await connection.query<RowDataPacket[]>(`
+src/services/document-service.ts:4943:  const [rows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:4956:  const [fechaAnomalas] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:4978:  const [entidadesDuplicadas] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:5011:  const [docRows] = await db.query<DocumentPacket[]>(`
+src/services/document-service.ts:5041:        const [existingSuggestions] = await db.query<any[]>(
+src/services/document-service.ts:5066:    const [suggestionRows] = await db.query<any[]>(
+src/services/document-service.ts:5071:    const [statusRows] = await db.query<any[]>(
+src/services/document-service.ts:5090:  const [logicRows] = await db.query<RowDataPacket[]>(`
+src/services/document-service.ts:5189:  const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+src/services/document-service.ts:5274:  const [lineaRows] = await db.query<any[]>(baseQuery, params);
+src/services/document-service.ts:5338:  const [lineaRows] = await db.query<LineaPacket[]>(baseQuery, params);
+src/services/document-service.ts:5393:  const [docs] = await db.query<DocumentPacket[]>(`
+src/services/document-service.ts:5430:  const [lineRows] = await db.query<LineaPacket[]>(lineQuery, lineParams);
+src/services/document-service.ts:5440:  const [lines] = docIds.length > 0 ? await db.query<LineaPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN(?)`, [docIds]) : [[]];
+src/services/document-service.ts:5572:  const [lineaRows] = await db.query<any[]>(query, queryParams);
+src/services/document-service.ts:5695:  const [docRows] = await db.query<RowDataPacket[]>(
+src/services/document-service.ts:5742:  const [impuestos] = await db.query<RowDataPacket[]>(
+src/services/webhook-service.ts:35:      const [rows] = await connection.query<RowDataPacket[]>(
+src/services/webhook-service.ts:148:    await connection.query(
+src/services/webhook-service.ts:168:    const [rows] = await connection.query<RowDataPacket[]>(
+src/services/webhook-service.ts:233:  const [rows] = await connection.query<RowDataPacket[]>(
+src/services/webhook-service.ts:248:  const [result] = await connection.query<OkPacket>(
+src/services/webhook-service.ts:285:  await connection.query<OkPacket>(
+src/services/webhook-service.ts:292:  await connection.query<OkPacket>(
+src/services/webhook-service.ts:300:  const [whRows] = await connection.query<RowDataPacket[]>(
+src/services/webhook-service.ts:306:  const [rows] = await connection.query<RowDataPacket[]>(
+src/services/incidents-service.ts:43:        const [incidents] = await db.query<RowDataPacket[]>(
+src/services/incidents-service.ts:124:                await db.query(
+src/services/incidents-service.ts:161:            const [docs] = await db.query<RowDataPacket[]>(
+src/services/incidents-service.ts:186:        await db.query(
+src/services/tax-validation-service.ts:10:        const [rows] = await db.query<RowDataPacket[]>(
+src/services/tax-validation-service.ts:42:        const [result] = await db.query<OkPacket>(
+src/services/tax-validation-service.ts:62:        await db.query('UPDATE validacion_impuestos SET vigente = ? WHERE id = ?', [vigente, id]);
+src/services/tax-validation-service.ts:77:        await db.query('DELETE FROM validacion_impuestos WHERE id = ?', [id]);
+src/services/suggestion-service.ts:55:        await db.query(
+src/services/upload-service.ts:63:    const [rows] = await connection.query(
+src/services/upload-service.ts:191:    await connection.query(
+src/services/upload-service.ts:226:    await connection.query(
+src/services/upload-service.ts:239:    const [childRows] = await connection.query(
+src/services/upload-service.ts:247:      await connection.query(
+src/services/upload-service.ts:537:      await connection.query(
+src/services/upload-service.ts:828:    await connection.query(
+src/services/ai-service.ts:156:    const [rows] = await db.query<any[]>(
+src/services/ai-service.ts:212:      await db.query(
+src/services/ai-service.ts:228:      await db.query(
+src/services/ai-service.ts:432:    const [rows] = await db.query<any[]>(
+src/services/ai-service.ts:572:    const [logResult] = await db.query<any>(
+src/services/api-key-service.ts:62:    const [empresaRows] = await db.query<RowDataPacket[]>(
+src/services/api-key-service.ts:85:    const [result] = await db.query<OkPacket>(
+src/services/api-key-service.ts:119:    const [rows] = await db.query<RowDataPacket[]>(
+src/services/api-key-service.ts:168:    const [result] = await db.query<OkPacket>(
+src/services/api-key-service.ts:195:    const [rows] = await db.query<RowDataPacket[]>(
+src/services/api-key-service.ts:208:    db.query(`UPDATE api_keys SET ultimo_uso = NOW() WHERE id = ?`, [key_id])
+src/services/vertex-ai-service.ts:109:        const [rows] = await db.query<any[]>(
+src/services/vertex-ai-service.ts:122:        const [taxRows] = await db.query<any[]>(
+src/services/vertex-ai-service.ts:130:        const [lineRows] = await db.query<any[]>(
+src/services/vertex-ai-service.ts:390:        await db.query(
+src/services/vertex-ai-service.ts:408:            await db.query(
+src/services/vertex-ai-service.ts:429:        const [rows] = await db.query<any[]>(
+src/services/vertex-ai-service.ts:445:        await db.query(`UPDATE ${dbName}.ai_suggestions SET include_in_context = ? WHERE id = ?`, [include, id]);
+src/services/vertex-ai-service.ts:458:        await db.query(`DELETE FROM ${dbName}.ai_suggestions WHERE id = ?`, [id]);
+src/services/vertex-ai-service.ts:478:        await db.query(`DELETE FROM ${dbName}.ai_suggestions WHERE documento_id = ?`, [docId]);
+src/app/settings/page.tsx:37:    const [rows] = await db.query<RowDataPacket[]>(
+src/app/dashboard/webhooks/actions.ts:23:    const [empRows] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-proveedores/route.ts:16:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial/route.ts:18:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/preferences/route.ts:23:    const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/user/preferences/route.ts:91:    const [result] = await db.query<ResultSetHeader>(
+src/app/api/user/tutorial-documentos/route.ts:15:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-health-check/route.ts:13:        const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-actividad/route.ts:15:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-trimestres/route.ts:15:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-incidencias/route.ts:16:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/user/tutorial-individual/route.ts:16:    const [dbUser] = await db.query<RowDataPacket[]>(
+src/app/api/clean-database/route.ts:21:    const [rows] = await connection.query<RowDataPacket[]>(
+src/app/api/check-export/route.ts:30:    const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/trimestres/disponibles/route.ts:33:    const [existentes] = await db.query<RowDataPacket[]>(
+src/app/api/productos-config/route.ts:22:            query += ' AND (proveedor_cif = ? OR proveedor_cif IS NULL)';
+src/app/api/productos-config/route.ts:26:        const [rows] = await db.query(query, params);
+src/app/api/productos-config/route.ts:53:                await db.query(`
+src/app/api/productos-config/route.ts:60:                await db.query(`
+src/app/api/productos-config/route.ts:100:                await db.query(updateQuery, updateParams);
+src/app/api/productos-config/route.ts:112:                await db.query(`
+src/app/api/productos-config/route.ts:152:                await db.query(resetQuery, resetParams);
+src/app/api/ai-incidents/route.ts:57:    // Construir query con filtros (sin JOIN a empresas — nombre_de_empresa está encriptado)
+src/app/api/productos/classify/route.ts:140:                    await db.query(`
+src/app/api/productos/classify/route.ts:147:                    await db.query(`
+src/app/api/users/[userId]/role/route.ts:28:        const [companyRows] = await db.query<RowDataPacket[]>(
+src/app/api/users/[userId]/role/route.ts:51:        await db.query(
+src/app/api/users/[userId]/role/route.ts:57:        // await db.query('UPDATE usuarios SET organization_rol = ? WHERE id = ?', [rol, userId]);
+src/app/api/activity/route.ts:28:    const [userEmpRows] = await connection.query(`SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`, [session.userId]);
+src/app/api/activity/route.ts:133:    const [rows] = await connection.query(query, params);
+src/app/api/activity/route.ts:195:    const [countRows] = await connection.query(countQuery, countParams);
+src/app/api/activity/route.ts:275:    const [checkRows] = await connection.query(
+src/app/api/activity/route.ts:287:    await connection.query(
+src/app/api/activity/failed-for-retry/route.ts:28:    const [rows] = await connection.query(
+src/app/api/activity/mark-all-read/route.ts:22:    const [result] = await connection.query(
+src/app/api/activity/[id]/mark-read/route.ts:31:    const [activities] = await connection.query(
+src/app/api/activity/[id]/mark-read/route.ts:49:    const [result] = await connection.query(
+src/app/api/activity/[id]/mark-read/route.ts:67:      const [unreadSiblings] = await connection.query(
+src/app/api/activity/[id]/mark-read/route.ts:82:        const [parentResult] = await connection.query(
+src/app/api/activity/[id]/retry/route.ts:71:    const [rows] = await connection.query<RowDataPacket[]>(
+src/app/api/activity/[id]/retry/route.ts:97:    await connection.query(`UPDATE ${dbName}.actividad SET retry_count = 3 WHERE id = ?`, [parseInt(id)]);
+src/app/api/activity/unread-count/route.ts:41:    const [rows] = await connection.query(query, params);
+src/app/api/activity/mark-multiple-read/route.ts:36:            const [activities] = await connection.query(
+src/app/api/activity/mark-multiple-read/route.ts:55:            const [result] = await connection.query(
+src/app/api/activity/mark-multiple-read/route.ts:80:            const [unreadSiblings] = await connection.query(
+src/app/api/activity/mark-multiple-read/route.ts:95:                const [parentResult] = await connection.query(
+src/app/api/docs/playground/proxy/route.ts:23:  const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/docs/playground/proxy/route.ts:127:      const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/docs/playground/proxy/route.ts:134:        db.query<RowDataPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]),
+src/app/api/docs/playground/proxy/route.ts:135:        db.query<RowDataPacket[]>(`SELECT * FROM impuestos_documento WHERE documento_id IN (?)`, [docIds]),
+src/app/api/docs/playground/proxy/route.ts:215:        query += ` AND d.id IN (SELECT ent.documento_id FROM entidades_documento ent WHERE ent.rol IN ('emisor', 'proveedor') AND (ent.nombre_hash = ? OR ent.identificador_fiscal_hash = ? OR ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?))`; 
+src/app/api/docs/playground/proxy/route.ts:220:      const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/docs/playground/proxy/route.ts:291:      const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/entidades-config/route.ts:15:        const [rows] = await connection.query(
+src/app/api/entidades-config/route.ts:51:        await connection.query(
+src/app/api/entidades-config/route.ts:68:        await connection.query(
+src/app/api/send-dashboard-email/route.ts:74:    const [exportRows] = await db.query<RowDataPacket[]>(
+src/app/api/send-dashboard-email/route.ts:130:    await db.query(
+src/app/api/upload-progress/route.ts:39:      let [actRows] = await connection.query(
+src/app/api/upload-progress/route.ts:48:        [actRows] = await connection.query(
+src/app/api/upload-progress/route.ts:73:      await connection.query(
+src/app/api/upload-progress/route.ts:99:    await connection.query(
+src/app/api/upload-progress/route.ts:142:    await connection.query(
+src/app/api/upload-progress/route.ts:161:    const [children] = await connection.query(
+src/app/api/upload-progress/route.ts:193:    await connection.query(
+src/app/api/upload-progress/route.ts:212:    const [actRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:229:    const [childRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:235:    const [existingLogs] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:256:        const [dRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:265:        const [aRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:269:        const [iRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:273:        const [hcRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:317:        const [recheck] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:329:      const [dRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:342:      const [iRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:346:      const [hcRows] = await connection.query<RowDataPacket[]>(
+src/app/api/upload-progress/route.ts:391:    const [rows] = await connection.query(
+src/app/api/upload-progress/route.ts:417:      const [childRows] = await connection.query(
+src/app/api/upload-progress/route.ts:430:        const [incidentRows] = await connection.query(
+src/app/api/export-documents/route.ts:96:    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/export-documents/route.ts:136:      ? await db.query<RowDataPacket[]>(
+src/app/api/v1/products/route.ts:72:    const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/v1/quarters/route.ts:105:    const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/v1/incidents/route.ts:50:    const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/incidents/route.ts:173:    const [incRows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/incidents/route.ts:196:    await db.query<OkPacket>(
+src/app/api/v1/incidents/route.ts:215:      const [remainingIncRows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/incidents/route.ts:234:        const [docRows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/documents/route.ts:120:    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/v1/documents/route.ts:129:    const [ivaRows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/documents/route.ts:142:    const [lineasRows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/documents/status/[uploadId]/route.ts:43:    const [rows] = await db.query<RowDataPacket[]>(
+src/app/api/v1/documents/full/route.ts:134:    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/v1/documents/full/route.ts:149:      db.query<RowDataPacket[]>(`SELECT * FROM lineas_documento WHERE documento_id IN (?)`, [docIds]),
+src/app/api/v1/documents/full/route.ts:150:      db.query<RowDataPacket[]>(`SELECT * FROM impuestos_documento WHERE documento_id IN (?)`, [docIds]),
+src/app/api/v1/documents/full/route.ts:151:      db.query<RowDataPacket[]>(`SELECT * FROM incidencias_documento WHERE documento_id IN (?)`, [docIds]),
+src/app/api/v1/documents/full/route.ts:152:      db.query<RowDataPacket[]>(`SELECT * FROM health_check_status WHERE documento_id IN (?)`, [docIds])
+src/app/api/v1/export/excel/route.ts:177:    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/v1/export/excel/route.ts:188:    const [ivaRows] = await db.query<RowDataPacket[]>(
+src/app/api/export-dashboard/route.ts:60:    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/auth/reset-password/route.ts:48:    const [rows] = await db.query<ResetToken[]>(
+src/app/api/auth/reset-password/route.ts:93:    const [userRows] = await db.query<User[]>(
+src/app/api/auth/reset-password/route.ts:135:    const [updateResult] = await db.query<ResultSetHeader>(
+src/app/api/auth/reset-password/route.ts:154:    await db.query<ResultSetHeader>(
+src/app/api/auth/forgot-password/route.ts:43:        await db.query<ResultSetHeader>(
+src/app/api/auth/validate-reset-token/route.ts:30:    const [rows] = await db.query<ResetToken[]>(
+src/app/api/documents-confirm/route.ts:44:    const [checkRows] = await connection.query(
+src/app/api/documents-confirm/route.ts:90:    await connection.query(
+src/app/api/incidents/count/route.ts:38:        const [rows] = await db.query<RowDataPacket[]>(query, params);
+src/app/api/documents/auto-clean-duplicates/route.ts:19:    const [docs] = await db.query<RowDataPacket[]>(
+src/app/api/documents/auto-clean-duplicates/route.ts:101:          await db.query('DELETE FROM impuestos_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:102:          await db.query('DELETE FROM entidades_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:103:          await db.query('DELETE FROM archivos_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:104:          await db.query('DELETE FROM incidencias_documento WHERE documento_id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:105:          await db.query('DELETE FROM documentos WHERE id = ?', [doc.id]);
+src/app/api/documents/auto-clean-duplicates/route.ts:121:    const [cleanResult] = await db.query<ResultSetHeader>(
+src/app/api/documents/[id]/move/route.ts:36:    const [docCheck] = await db.query<any[]>(
+src/app/api/documents/check-duplicates/route.ts:19:    const [docs] = await db.query<RowDataPacket[]>(
+src/app/api/documents/check-duplicates/route.ts:89:    await db.query(
+src/app/api/documents/check-duplicates/route.ts:102:        const [existing] = await db.query<RowDataPacket[]>(
+src/app/api/documents/check-duplicates/route.ts:109:          await db.query(
+src/app/api/suggestions/route.ts:18:        const [result] = await db.query(
+src/app/api/companies/[id]/members/[userId]/route.ts:19:        const [companyRows] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/members/[userId]/route.ts:60:        await db.query(
+src/app/api/companies/[id]/route.ts:36:    const [empresaCheck] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/route.ts:47:    const [countResult] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/route.ts:105:    const [empresaCheck] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/route.ts:120:      const [cifCheck] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/route.ts:137:      const [emailCheck] = await db.query<RowDataPacket[]>(
+src/app/api/companies/[id]/team/route.ts:27:        const [empresaCheck] = await db.query<RowDataPacket[]>(

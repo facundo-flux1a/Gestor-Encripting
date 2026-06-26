@@ -1,0 +1,915 @@
+[
+  {
+    "file": "src/app/api/activity/failed-for-retry/route.ts",
+    "line": 28,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "    }\n\n    const [rows] = await connection.query(\n      `select \n        a.id,\n        a.documento_nombre,\n        a.retry_count,\n        a.upload_id,\n        a.status,\n        a.updated_at\n      from ${dbname}.actividad a\n      inner join ${dbname}.empresas e on a.id_de_empresa = e.id\n      where a.status in ('fallido', 'error', 'failed')\n        and (a.retry_count is null or a.retry_count < 3)\n        and a.step != 'verificación de duplicados'\n        and a.mensaje not like '%duplicado%'\n        and a.updated_at > now() - interval 30 minute\n        and a.updated_at < now() - interval 15 second\n        and json_contains(e.id_de_usuario, cast(? as json))\n      order by a.updated_at desc\n      limit 10`,\n      [session.userid]\n    ) as any;\n\n    console.log(`🛡️ [api-failedforretry] encontradas ${rows.length} actividades fallidas para usuario ${session.userid}`);\n\n    return nextresponse.json({\n      activities: rows.map((r: any) => ({\n        id: r.id,\n        documento_nombre: r.documento_nombre,\n        retry_count: r.retry_count || 0,\n        upload_id: r.upload_id,"
+  },
+  {
+    "file": "src/app/api/activity/route.ts",
+    "line": 28,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "\r\n    // obtener empresas del usuario para descifrarlas con prisma y poder buscar sobre ellas\r\n    const [useremprows] = await connection.query(`select id from ${dbname}.empresas where json_contains(id_de_usuario, cast(? as json))`, [session.userid]);\r\n    const userempids = (useremprows as any[]).map(r => number(r.id));\r\n    \r\n    const empresasprisma = userempids.length > 0 ? await prisma.empresas.findmany({\r\n       where: { id: { in: userempids } },\r\n       select: { id: true, nombre_de_empresa: true, cif: true }\r\n    }) : [];\r\n    \r\n    const empresamap: record<number, { nombre: string, cif: string }> = {};\r\n    empresasprisma.foreach(e => {\r\n       empresamap[number(e.id)] = { nombre: e.nombre_de_empresa || '', cif: e.cif || '' };\r\n    });\r\n\r\n    let matchedempresaids: number[] = [];\r\n    if (search) {\r\n       const searchlower = search.tolowercase();\r\n       matchedempresaids = empresasprisma\r\n         .filter(e => (e.nombre_de_empresa?.tolowercase().includes(searchlower)) || (e.cif?.tolowercase().includes(searchlower)))\r\n         .map(e => number(e.id));\r\n    }\r\n\r\n    // query con left join - incluye is_new y dashboard-correo\r\n    let query = `\r\n      select \r\n        a.id,\r\n        a.upload_id,\r\n        a.parent_upload_id,\r\n        a.id_de_empresa,\r\n        a.documento_id,\r\n        a.documento_nombre,\r"
+  },
+  {
+    "file": "src/app/api/activity/route.ts",
+    "line": 195,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "    }\r\n\r\n    const [countrows] = await connection.query(countquery, countparams);\r\n    const total = (countrows as any[])[0].total;\r\n\r\n    // 🔥 proactive rescue: ahora gestionado por <retrymonitor /> en el frontend.\r\n    // se desactiva aquí para evitar reintentos duplicados.\r\n    // ver: src/components/upload/retry-monitor.tsx\r\n\r\n    const docids = array.from(new set((rows as any[]).map(r => r.documento_id).filter(id => id != null)));\r\n    let entidadesbydoc: record<number, { emisor?: string, cliente?: string }> = {};\r\n    if (docids.length > 0) {\r\n       const entidades = await prisma.entidades_documento.findmany({\r\n          where: { documento_id: { in: docids as number[] }, rol: { in: ['emisor', 'cliente'] } },\r\n          select: { documento_id: true, rol: true, nombre: true }\r\n       });\r\n       entidades.foreach(ent => {\r\n          if (!entidadesbydoc[number(ent.documento_id)]) entidadesbydoc[number(ent.documento_id)] = {};\r\n          if (ent.rol === 'emisor') entidadesbydoc[number(ent.documento_id)].emisor = ent.nombre || '';\r\n          if (ent.rol === 'cliente') entidadesbydoc[number(ent.documento_id)].cliente = ent.nombre || '';\r\n       });\r\n    }\r\n\r\n    const formattedrows = (rows as any[]).map(a => {\r\n      let finala = {\r\n        ...a,\r\n        nombre_de_empresa: empresamap[a.id_de_empresa]?.nombre || '',\r\n        cif: empresamap[a.id_de_empresa]?.cif || '',\r\n        empresa_emisora: entidadesbydoc[a.documento_id]?.emisor || null,\r\n        cliente: entidadesbydoc[a.documento_id]?.cliente || null\r\n      };\r\n\r"
+  },
+  {
+    "file": "src/app/api/auth/forgot-password/route.ts",
+    "line": 43,
+    "fields": [
+      "nombre",
+      "email"
+    ],
+    "snippet": "        const expiresatmysql = expirationdate.toisostring().slice(0, 19).replace('t', ' ');\n\n        await db.query<resultsetheader>(\n            `insert into password_reset_tokens (user_id, token, email, expires_at, used)\n       values (?, ?, ?, ?, 0)`,\n            [number(userid), token, email, expiresatmysql]\n        );\n\n        // 3. enviar mail de éxito\n        const { success, error: emailerror } = await sendemail({\n            to: email,\n            subject: 'restablecer contraseña',\n            html: getresettemplate(user.nombre, email, reseturl),\n        });\n\n        if (!success) {\n            return nextresponse.json({ error: 'error al enviar el correo. verificá la configuración smtp.' }, { status: 500 });\n        }\n\n        return nextresponse.json({ success: true, message: 'instrucciones enviadas con éxito' });\n\n    } catch (error) {\n        console.error('❌ [forgot-password] error:', error);\n        return nextresponse.json({ error: 'error interno del servidor' }, { status: 500 });\n    }\n}\n\nfunction getresettemplate(nombre: string, email: string, reseturl: string) {\n    return `<!doctype html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"utf-8\">"
+  },
+  {
+    "file": "src/app/api/auth/reset-password/route.ts",
+    "line": 48,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // buscar y validar token\n    const [rows] = await db.query<resettoken[]>(\n      `select \n        id, \n        user_id, \n        token, \n        email, \n        expires_at, \n        used \n      from ${dbname}.password_reset_tokens \n      where token = ?`,\n      [token]\n    );\n\n    if (rows.length === 0) {\n      console.log('❌ [reset-password] token no existe');\n      return nextresponse.json(\n        { success: false, message: 'token inválido o expirado' },\n        { status: 404 }\n      );\n    }\n\n    const resettoken = rows[0];\n\n    // verificar si ya fue usado\n    if (resettoken.used === 1) {\n      console.log('❌ [reset-password] token ya usado');\n      return nextresponse.json(\n        { success: false, message: 'este token ya fue utilizado' },\n        { status: 400 }\n      );"
+  },
+  {
+    "file": "src/app/api/auth/reset-password/route.ts",
+    "line": 135,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // actualizar contraseña del usuario\n    const [updateresult] = await db.query<resultsetheader>(\n      `update ${dbname}.usuarios \n       set password = ?, \n           fecha_actualizacion = current_timestamp \n       where id = ?`,\n      [hashedpassword, resettoken.user_id]\n    );\n\n    if (updateresult.affectedrows === 0) {\n      console.log('❌ [reset-password] error al actualizar');\n      return nextresponse.json(\n        { success: false, message: 'error al actualizar la contraseña' },\n        { status: 500 }\n      );\n    }\n\n    console.log('✅ [reset-password] contraseña actualizada, marcando token como usado...');\n\n    // marcar token como usado\n    await db.query<resultsetheader>(\n      `update ${dbname}.password_reset_tokens \n       set used = 1 \n       where id = ?`,\n      [resettoken.id]\n    );\n\n    console.log('🎉 [reset-password] proceso completado exitosamente para:', resettoken.email);\n\n    return nextresponse.json({\n      success: true,"
+  },
+  {
+    "file": "src/app/api/auth/reset-password/route.ts",
+    "line": 154,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // marcar token como usado\n    await db.query<resultsetheader>(\n      `update ${dbname}.password_reset_tokens \n       set used = 1 \n       where id = ?`,\n      [resettoken.id]\n    );\n\n    console.log('🎉 [reset-password] proceso completado exitosamente para:', resettoken.email);\n\n    return nextresponse.json({\n      success: true,\n      message: 'contraseña actualizada exitosamente'\n    });\n\n  } catch (error) {\n    console.error('❌ [reset-password] error:', error);\n    return nextresponse.json(\n      { success: false, message: 'error al actualizar la contraseña' },\n      { status: 500 }\n    );\n  }\n}"
+  },
+  {
+    "file": "src/app/api/auth/validate-reset-token/route.ts",
+    "line": 30,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // buscar token en db\n    const [rows] = await db.query<resettoken[]>(\n      `select \n        id, \n        user_id, \n        token, \n        email, \n        expires_at, \n        used \n      from ${dbname}.password_reset_tokens \n      where token = ?`,\n      [token]\n    );\n\n    console.log('📊 [validate-token] resultado query:', rows.length > 0 ? 'token encontrado' : 'token no encontrado');\n\n    if (rows.length === 0) {\n      console.log('❌ [validate-token] token no existe en db');\n      return nextresponse.json(\n        { valid: false, message: 'token inválido o expirado' },\n        { status: 404 }\n      );\n    }\n\n    const resettoken = rows[0];\n\n    // verificar si ya fue usado\n    if (resettoken.used === 1) {\n      console.log('❌ [validate-token] token ya fue usado');\n      return nextresponse.json(\n        { valid: false, message: 'este token ya fue utilizado' },"
+  },
+  {
+    "file": "src/app/api/check-export/route.ts",
+    "line": 30,
+    "fields": [
+      "nombre",
+      "nombre_archivo"
+    ],
+    "snippet": "\n    // consultar estado del export\n    const [rows] = await db.query<rowdatapacket[]>(\n      `select estado, url_archivo, nombre_archivo \n       from exports \n       where id = ? and json_contains(id_de_usuario, cast(? as json))`,\n      [exportid, user.id]\n    );\n\n    if (rows.length === 0) {\n      console.log('❌ [check-export] export no encontrado:', exportid);\n      return nextresponse.json(\n        { error: 'export no encontrado' },\n        { status: 404 }\n      );\n    }\n\n    const exportdata = rows[0];\n    \n    console.log('📊 [check-export] estado:', {\n      exportid,\n      estado: exportdata.estado,\n      url: exportdata.url_archivo ? 'presente' : 'null',\n      nombre: exportdata.nombre_archivo\n    });\n\n    // ✅ importante: retornar con el campo \"status\" (no \"estado\")\n    const response = {\n      status: exportdata.estado,           // ← backend devuelve \"status\"\n      urlarchivo: exportdata.url_archivo,\n      nombrearchivo: exportdata.nombre_archivo\n    };"
+  },
+  {
+    "file": "src/app/api/clean-database/route.ts",
+    "line": 21,
+    "fields": [
+      "email"
+    ],
+    "snippet": "    const useremail = session.email;\r\n\r\n    const [rows] = await connection.query<rowdatapacket[]>(\r\n      `select id, email, has_permits from ${dbname}.usuarios where id = ?`,\r\n      [userid]\r\n    );\r\n\r\n    if (rows.length === 0) {\r\n      console.warn(`[clean db] ❌ usuario ${userid} no encontrado en la bd`);\r\n      return nextresponse.json(\r\n        { error: 'usuario no encontrado' },\r\n        { status: 404 }\r\n      );\r\n    }\r\n\r\n    const user = rows[0];\r\n\r\n    if (user.id !== 5 || !user.has_permits) {\r\n      console.warn(\r\n        `[clean db] ❌ usuario ${userid} (${useremail}) intentó limpiar la bd sin permisos\\n` +\r\n        `   - id del usuario: ${user.id} (requiere: 5)\\n` +\r\n        `   - has_permits: ${user.has_permits} (requiere: 1)`\r\n      );\r\n      return nextresponse.json(\r\n        { error: 'no tienes permisos para realizar esta acción' },\r\n        { status: 403 }\r\n      );\r\n    }\r\n\r\n    console.log(`[clean db] ✅ usuario ${userid} (${useremail}) ejecutando limpieza de bd...`);\r\n\r\n    const clean_database_webhook_url = process.env.clean_database_webhook_url || 'https://agent.flux1a.com.ar/webhook/b6eec5d7-5509-4c65-85b9-80ff5d183817';\r"
+  },
+  {
+    "file": "src/app/api/companies/[id]/route.ts",
+    "line": 105,
+    "fields": [
+      "email",
+      "cif"
+    ],
+    "snippet": "\r\n    // verificar que la empresa pertenece al usuario\r\n    const [empresacheck] = await db.query<rowdatapacket[]>(\r\n      'select id from empresas where id = ? and json_contains(id_de_usuario, cast(? as json))',\r\n      [empresaid, user.id]\r\n    );\r\n\r\n    if (empresacheck.length === 0) {\r\n      console.error('❌ [api-update-company] empresa no encontrada o sin permisos');\r\n      return nextresponse.json(\r\n        { error: 'empresa no encontrada' },\r\n        { status: 404 }\r\n      );\r\n    }\r\n\r\n    // verificar si el cif ya existe en otra empresa (solo si viene en el body)\r\n    if ('cif' in body && body.cif !== null && body.cif !== undefined && body.cif.trim()) {\r\n      const cifhash = hashfield(body.cif.trim());\r\n      const [cifcheck] = await db.query<rowdatapacket[]>(\r\n        'select id from empresas where (cif_hash = ? or cif = ?) and json_contains(id_de_usuario, cast(? as json)) and id != ?',\r\n        [cifhash, body.cif.trim(), user.id, empresaid]\r\n      );\r\n\r\n      if (cifcheck.length > 0) {\r\n        return nextresponse.json(\r\n          { error: 'ya existe una empresa con ese cif' },\r\n          { status: 409 }\r\n        );\r\n      }\r\n    }\r\n\r\n    // verificar email único (solo si viene en el body)\r"
+  },
+  {
+    "file": "src/app/api/companies/[id]/route.ts",
+    "line": 121,
+    "fields": [
+      "email",
+      "cif",
+      "mail_de_carga"
+    ],
+    "snippet": "    if ('cif' in body && body.cif !== null && body.cif !== undefined && body.cif.trim()) {\r\n      const cifhash = hashfield(body.cif.trim());\r\n      const [cifcheck] = await db.query<rowdatapacket[]>(\r\n        'select id from empresas where (cif_hash = ? or cif = ?) and json_contains(id_de_usuario, cast(? as json)) and id != ?',\r\n        [cifhash, body.cif.trim(), user.id, empresaid]\r\n      );\r\n\r\n      if (cifcheck.length > 0) {\r\n        return nextresponse.json(\r\n          { error: 'ya existe una empresa con ese cif' },\r\n          { status: 409 }\r\n        );\r\n      }\r\n    }\r\n\r\n    // verificar email único (solo si viene en el body)\r\n    if ('maildecarga' in body && body.maildecarga !== null && body.maildecarga !== undefined && body.maildecarga.trim()) {\r\n      const mailhash = hashfield(body.maildecarga.trim());\r\n      // ✅ comparar contra hash (post-migración) con fallback a texto plano (pre-migración)\r\n      const [emailcheck] = await db.query<rowdatapacket[]>(\r\n        'select id from empresas where (mail_de_carga_hash = ? or mail_de_carga = ?) and id != ?',\r\n        [mailhash, body.maildecarga.trim(), empresaid]\r\n      );\r\n\r\n      if (emailcheck.length > 0) {\r\n        return nextresponse.json(\r\n          { error: 'ya existe una empresa con ese mail de carga' },\r\n          { status: 409 }\r\n        );\r\n      }\r\n    }\r\n\r"
+  },
+  {
+    "file": "src/app/api/companies/[id]/route.ts",
+    "line": 138,
+    "fields": [
+      "nombre",
+      "email",
+      "nombre_de_empresa",
+      "nombre_fiscal",
+      "cif",
+      "mail_de_carga"
+    ],
+    "snippet": "      const mailhash = hashfield(body.maildecarga.trim());\r\n      // ✅ comparar contra hash (post-migración) con fallback a texto plano (pre-migración)\r\n      const [emailcheck] = await db.query<rowdatapacket[]>(\r\n        'select id from empresas where (mail_de_carga_hash = ? or mail_de_carga = ?) and id != ?',\r\n        [mailhash, body.maildecarga.trim(), empresaid]\r\n      );\r\n\r\n      if (emailcheck.length > 0) {\r\n        return nextresponse.json(\r\n          { error: 'ya existe una empresa con ese mail de carga' },\r\n          { status: 409 }\r\n        );\r\n      }\r\n    }\r\n\r\n    // ✅ construcción dinámica: solo actualiza campos presentes en el body\r\n    const updatedata: any = {};\r\n\r\n    if ('name' in body) updatedata.nombre_de_empresa = body.name.trim();\r\n    if ('nombrefiscal' in body) updatedata.nombre_fiscal = body.nombrefiscal?.trim() || null;\r\n    if ('cif' in body) updatedata.cif = body.cif?.trim() || null;\r\n    if ('maildecarga' in body) {\r\n      const mailval = body.maildecarga?.trim() || null;\r\n      updatedata.mail_de_carga = mailval;\r\n      // ✅ recalcular hash para mantener el blind index sincronizado\r\n      updatedata.mail_de_carga_hash = mailval ? hashfield(mailval) : null;\r\n    }\r\n    if ('recargo' in body) {\r\n      const rawrecargo = body.recargo;\r\n      updatedata.recargo = (rawrecargo === true || rawrecargo === 1 || rawrecargo === 'true');\r\n      console.log(`🔌 [api-update] recargo parsing: raw=${rawrecargo} (${typeof rawrecargo}) -> db=${updatedata.recargo}`);\r\n    }\r"
+  },
+  {
+    "file": "src/app/api/docs/playground/proxy/route.ts",
+    "line": 127,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "      query += ` order by d.fecha_emision desc`;\n\n      const [documentos] = await db.query<rowdatapacket[]>(query, params);\n      if (documentos.length === 0) {\n        finalresponse = nextresponse.json({ total: 0, data: [] });\n      } else {\n\n      const docids = documentos.map((d: any) => d.id);\n      const [[lineasrows], [impuestosrows]] = await promise.all([\n        db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n        db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      ]);\n\n      const [entidadesrows, empresadata] = await promise.all([\n        prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n        prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true } })\n      ]);\n      const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n      const entbydoc: record<number, record<string, any>> = {};\n      entidadesrows.foreach((r: any) => {\n        if (!entbydoc[r.documento_id]) entbydoc[r.documento_id] = {};\n        entbydoc[r.documento_id][r.rol] = r;\n      });\n      const linbydoc: record<number, any[]> = {};\n      lineasrows.foreach((r: any) => { if (!linbydoc[r.documento_id]) linbydoc[r.documento_id] = []; linbydoc[r.documento_id].push(r); });\n      const impbydoc: record<number, any[]> = {};\n      impuestosrows.foreach((r: any) => { if (!impbydoc[r.documento_id]) impbydoc[r.documento_id] = []; impbydoc[r.documento_id].push(r); });\n\n      let enriched = documentos.map((doc: any) => {\n        const entities = entbydoc[doc.id] || {};\n        const emisorcif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().tolowercase();"
+  },
+  {
+    "file": "src/app/api/docs/playground/proxy/route.ts",
+    "line": 134,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "      const docids = documentos.map((d: any) => d.id);\n      const [[lineasrows], [impuestosrows]] = await promise.all([\n        db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n        db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      ]);\n\n      const [entidadesrows, empresadata] = await promise.all([\n        prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n        prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true } })\n      ]);\n      const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n      const entbydoc: record<number, record<string, any>> = {};\n      entidadesrows.foreach((r: any) => {\n        if (!entbydoc[r.documento_id]) entbydoc[r.documento_id] = {};\n        entbydoc[r.documento_id][r.rol] = r;\n      });\n      const linbydoc: record<number, any[]> = {};\n      lineasrows.foreach((r: any) => { if (!linbydoc[r.documento_id]) linbydoc[r.documento_id] = []; linbydoc[r.documento_id].push(r); });\n      const impbydoc: record<number, any[]> = {};\n      impuestosrows.foreach((r: any) => { if (!impbydoc[r.documento_id]) impbydoc[r.documento_id] = []; impbydoc[r.documento_id].push(r); });\n\n      let enriched = documentos.map((doc: any) => {\n        const entities = entbydoc[doc.id] || {};\n        const emisorcif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().tolowercase();\n        return {\n          id: doc.id,\n          tipo_documento: doc.tipo_documento,\n          numero_documento: doc.numero_documento,\n          fecha_emision: doc.fecha_emision,\n          importe_total: number(doc.importe_total) || 0,\n          importe_sin_impuestos: number(doc.importe_sin_impuestos) || 0,"
+  },
+  {
+    "file": "src/app/api/docs/playground/proxy/route.ts",
+    "line": 135,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "      const [[lineasrows], [impuestosrows]] = await promise.all([\n        db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n        db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      ]);\n\n      const [entidadesrows, empresadata] = await promise.all([\n        prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n        prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true } })\n      ]);\n      const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n      const entbydoc: record<number, record<string, any>> = {};\n      entidadesrows.foreach((r: any) => {\n        if (!entbydoc[r.documento_id]) entbydoc[r.documento_id] = {};\n        entbydoc[r.documento_id][r.rol] = r;\n      });\n      const linbydoc: record<number, any[]> = {};\n      lineasrows.foreach((r: any) => { if (!linbydoc[r.documento_id]) linbydoc[r.documento_id] = []; linbydoc[r.documento_id].push(r); });\n      const impbydoc: record<number, any[]> = {};\n      impuestosrows.foreach((r: any) => { if (!impbydoc[r.documento_id]) impbydoc[r.documento_id] = []; impbydoc[r.documento_id].push(r); });\n\n      let enriched = documentos.map((doc: any) => {\n        const entities = entbydoc[doc.id] || {};\n        const emisorcif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().tolowercase();\n        return {\n          id: doc.id,\n          tipo_documento: doc.tipo_documento,\n          numero_documento: doc.numero_documento,\n          fecha_emision: doc.fecha_emision,\n          importe_total: number(doc.importe_total) || 0,\n          importe_sin_impuestos: number(doc.importe_sin_impuestos) || 0,\n          moneda: doc.moneda,"
+  },
+  {
+    "file": "src/app/api/docs/playground/proxy/route.ts",
+    "line": 220,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "      query += ` order by d.fecha_emision desc limit 1000`;\n\n      const [rows] = await db.query<rowdatapacket[]>(query, params);\n      \n      const docids = array.from(new set(rows.map((r: any) => r.documento_id)));\n      let entidadesbydoc: record<number, any> = {};\n      if (docids.length > 0) {\n        const entidadesprisma = await prisma.entidades_documento.findmany({\n          where: { documento_id: { in: docids as number[] }, rol: { in: ['emisor', 'proveedor'] } },\n          select: { documento_id: true, nombre: true, identificador_fiscal: true }\n        });\n        entidadesprisma.foreach(e => entidadesbydoc[number(e.documento_id)] = e);\n      }\n\n      finalresponse = nextresponse.json({\n        total_resultados: rows.length,\n        data: rows.map((r: any) => ({\n          id: r.linea_id,\n          producto_servicio: r.producto,\n          cantidad: number(r.cantidad) || 0,\n          precio_unitario: number(r.precio_unitario) || 0,\n          importe_total: number(r.importe_linea) || 0,\n          documento_origen: { id: r.documento_id, numero: r.numero_documento, fecha: r.fecha_emision },\n          proveedor: { \n            nombre: entidadesbydoc[r.documento_id]?.nombre || 'desconocido', \n            cif: entidadesbydoc[r.documento_id]?.identificador_fiscal || '' \n          },\n        }))\n      });\n    }\n\n    // ── get /analytics ─────────────────────────────────────────────────────"
+  },
+  {
+    "file": "src/app/api/docs/playground/proxy/route.ts",
+    "line": 291,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "      else if (estado === 'validadas') estadofilter = 'and i.validado = 1';\n\n      const [rows] = await db.query<rowdatapacket[]>(\n        `select i.id as incidencia_id, i.documento_id, i.descripcion as descripcion_incidencia,\n                i.validado, i.validado_por, i.fecha_validacion, i.observaciones_validacion,\n                d.tipo_documento, d.numero_documento, d.fecha_emision, d.importe_total, d.moneda,\n                hcs.verified as verificado_matematicamente, hcs.motivo as razon_descuadre\n         from incidencias_documento i\n         join documentos d on i.documento_id = d.id\n         left join health_check_status hcs on hcs.documento_id = d.id\n         where d.id_de_empresa = ? ${estadofilter}\n         order by i.validado asc, d.fecha_emision desc`,\n        [empresaid]\n      );\n      \n      const docids = array.from(new set(rows.map((r: any) => r.documento_id)));\n      let entidadesbydoc: record<number, string> = {};\n      if (docids.length > 0) {\n        const entidadesprisma = await prisma.entidades_documento.findmany({\n          where: { documento_id: { in: docids as number[] }, rol: { in: ['emisor', 'proveedor'] } },\n          select: { documento_id: true, nombre: true }\n        });\n        entidadesprisma.foreach(e => entidadesbydoc[number(e.documento_id)] = e.nombre || '');\n      }\n\n      finalresponse = nextresponse.json({\n        total: rows.length,\n        filtros: { estado },\n        data: rows.map((r: any) => ({\n          incidencia_id: r.incidencia_id,\n          documento_id: r.documento_id,\n          estado: r.validado === 1 ? 'validada' : 'pendiente',"
+  },
+  {
+    "file": "src/app/api/documents/check-duplicates/route.ts",
+    "line": 19,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "    // obtener todos los documentos de la empresa con información del proveedor\n    // solo traemos info de proveedor si es una factura recibida o similar, pero por simplicidad traemos de todos\n    const [docs] = await db.query<rowdatapacket[]>(\n      `select \n          d.id, \n          d.numero_documento, \n          d.id_de_empresa, \n          d.tipo_documento,\n          e.identificador_fiscal_hash as proveedor_cif_hash,\n          e.identificador_fiscal as proveedor_cif_raw,\n          e.nombre_hash as proveedor_nombre_hash,\n          e.nombre as proveedor_nombre_raw\n       from documentos d\n       join empresas emp on d.id_de_empresa = emp.id\n       left join entidades_documento e on (d.id = e.documento_id and e.rol in ('proveedor', 'emisor'))\n       where json_contains(emp.id_de_usuario, cast(? as json)) ${empresaid ? 'and d.id_de_empresa = ?' : ''}\n       and d.numero_documento is not null \n       and d.numero_documento != ''`,\n      empresaid ? [session.userid, empresaid] : [session.userid]\n    );\n\n    // detectar duplicados (agrupar según lógica de negocio)\n    const gruposduplicados = new map<string, { numero: string, empresa_id: number, ids: number[] }>();\n\n    docs.foreach(doc => {\n      const numero = doc.numero_documento.trim().tolowercase();\n      const tipo = (doc.tipo_documento || '').tolowercase();\n      let key = '';\n\n      // lógica diferenciada\n      if (tipo.includes('recibida') || tipo.includes('recibido')) {\n        // 🔥 facturas recibidas: chequear número + proveedor"
+  },
+  {
+    "file": "src/app/api/entidades-config/route.ts",
+    "line": 15,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "        }\n\n        const [rows] = await connection.query(\n            `\n        select cuenta_compra, cuenta_venta, nombre_referencia \n        from entidades_config \n        where empresa_id = ? and identificador_fiscal = ?\n        limit 1\n      `,\n            [empresaid, identificadorfiscal]\n        ) as any[];\n\n        if (rows.length > 0) {\n            return nextresponse.json({ config: rows[0] });\n        } else {\n            return nextresponse.json({ config: null });\n        }\n    } catch (error) {\n        console.error('❌ error en get /api/entidades-config:', error);\n        return nextresponse.json({ error: 'error del servidor' }, { status: 500 });\n    }\n}\n\nexport async function post(request: request) {\n    try {\n        const body = await request.json();\n        const { empresaid, identificadorfiscal, nombrereferencia, cuentacompra, cuentaventa } = body;\n\n        if (!empresaid || !identificadorfiscal) {\n            console.warn('❌ [api-entidades-config] error: faltan parámetros:', { empresaid, identificadorfiscal });\n            return nextresponse.json({ error: 'faltan parámetros obligatorios' }, { status: 400 });\n        }"
+  },
+  {
+    "file": "src/app/api/entidades-config/route.ts",
+    "line": 51,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n        // 1. insert or update (upsert) in entidades_config\n        await connection.query(\n            `\n        insert into entidades_config (\n          empresa_id, identificador_fiscal, nombre_referencia, cuenta_compra, cuenta_venta\n        ) values (?, ?, ?, ?, ?)\n        on duplicate key update \n          nombre_referencia = values(nombre_referencia),\n          cuenta_compra = values(cuenta_compra),\n          cuenta_venta = coalesce(values(cuenta_venta), cuenta_venta)\n      `,\n            [empresaid, identificadorfiscal, nombrereferencia || null, cuentacompra || null, cuentaventa || null]\n        );\n\n        // 2. update existing documents snapshot in entidades_documento\n        // we only update documents belonging to the specific company being edited\n        // ✅ dual where: hash (post-migración) con fallback a texto plano (pre-migración)\n        const fiscalhash = hashfield(identificadorfiscal);\n        await connection.query(\n            `\n            update entidades_documento ed\n            inner join documentos d on ed.documento_id = d.id\n            set ed.cuenta_contable = ?\n            where d.id_de_empresa = ? \n            and (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n            and (ed.rol = 'proveedor' or ed.rol = 'emisor')\n            `,\n            [cuentacompra || null, empresaid, fiscalhash, identificadorfiscal]\n        );\n\n        return nextresponse.json({ success: true, updateddocuments: true });"
+  },
+  {
+    "file": "src/app/api/entidades-config/route.ts",
+    "line": 68,
+    "fields": [
+      "identificador_fiscal"
+    ],
+    "snippet": "        // ✅ dual where: hash (post-migración) con fallback a texto plano (pre-migración)\n        const fiscalhash = hashfield(identificadorfiscal);\n        await connection.query(\n            `\n            update entidades_documento ed\n            inner join documentos d on ed.documento_id = d.id\n            set ed.cuenta_contable = ?\n            where d.id_de_empresa = ? \n            and (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n            and (ed.rol = 'proveedor' or ed.rol = 'emisor')\n            `,\n            [cuentacompra || null, empresaid, fiscalhash, identificadorfiscal]\n        );\n\n        return nextresponse.json({ success: true, updateddocuments: true });\n    } catch (error) {\n        console.error('❌ error en post /api/entidades-config:', error);\n        return nextresponse.json({ error: 'error agregando/actualizando config' }, { status: 500 });\n    }\n}\n"
+  },
+  {
+    "file": "src/app/api/export-dashboard/route.ts",
+    "line": 60,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "    query += ` order by d.fecha_emision desc`;\n\n    const [documentos] = await db.query<rowdatapacket[]>(query, params);\n\n    console.log('📊 [export-dashboard] documentos encontrados:', documentos.length);\n\n    // ✅ hidratar nombres de empresa con prisma (desencripta automáticamente)\n    const uniqueempresaids = [...new set(documentos.map((d: any) => bigint(d.id_de_empresa)).filter(boolean))];\n    const empresasdata = uniqueempresaids.length > 0\n      ? await prisma.empresas.findmany({\n          where: { id: { in: uniqueempresaids } },\n          select: { id: true, nombre_de_empresa: true, cif: true }\n        })\n      : [];\n    const empresamap = new map(empresasdata.map(e => [number(e.id), { nombre: e.nombre_de_empresa || '', cif: e.cif || '' }]));\n\n    // enriquecer cada documento con los datos de empresa desencriptados\n    const documentosenriquecidos = documentos.map((d: any) => ({\n      ...d,\n      nombre_de_empresa: empresamap.get(d.id_de_empresa)?.nombre || '',\n      empresa_cif: empresamap.get(d.id_de_empresa)?.cif || ''\n    }));\n    // ✅ crear registro en bd\n    const exportresult = await createexport({\n      userid: user.id,\n      tipoexport: 'dashboard',\n      añofiltro: año || null,\n      trimestrefiltro: trimestre || null,\n      empresasids: empresaids || [],\n      documentoids: documentosenriquecidos.map((d: any) => d.id),\n      filtrosaplicados: { empresaids, año, trimestre }\n    });"
+  },
+  {
+    "file": "src/app/api/export-documents/route.ts",
+    "line": 96,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "    query += ` order by d.fecha_emision desc`;\n\n    const [documentos] = await db.query<rowdatapacket[]>(query, params);\n\n    console.log('📊 [export-documents] documentos encontrados:', documentos.length);\n\n    if (documentos.length === 0) {\n      return nextresponse.json(\n        { error: 'no se encontraron documentos para exportar' },\n        { status: 400 }\n      );\n    }\n\n    const documentoids = documentos.map((d: any) => bigint(d.id));\n\n    // ✅ hidratar nombres de empresa con prisma (desencripta automáticamente)\n    const uniqueempresaids = [...new set(documentos.map((d: any) => bigint(d.id_de_empresa)).filter(boolean))];\n    const empresasdata = uniqueempresaids.length > 0\n      ? await prisma.empresas.findmany({\n          where: { id: { in: uniqueempresaids } },\n          select: { id: true, nombre_de_empresa: true, cif: true }\n        })\n      : [];\n    const empresamap = new map(empresasdata.map(e => [number(e.id), { nombre: e.nombre_de_empresa || '', cif: e.cif || '' }]));\n\n    // ✅ hidratar entidades (proveedores/clientes) con prisma (desencripta automáticamente)\n    const entidades = documentoids.length > 0\n      ? await prisma.entidades_documento.findmany({\n          where: { documento_id: { in: documentoids } }\n        })\n      : [];\n"
+  },
+  {
+    "file": "src/app/api/export-documents/route.ts",
+    "line": 136,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "    // ✅ iva desde impuestos_documento (nombre correcto de la tabla)\n    const [ivadetails] = documentoids.length > 0\n      ? await db.query<rowdatapacket[]>(\n          `select documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_impuesto\n           from impuestos_documento\n           where documento_id in (?)`,\n          [documentos.map((d: any) => d.id)]\n        )\n      : [[]];\n\n    const ivabydocument: { [key: number]: any[] } = {};\n    (ivadetails as any[]).foreach((iva: any) => {\n      if (!ivabydocument[iva.documento_id]) ivabydocument[iva.documento_id] = [];\n      ivabydocument[iva.documento_id].push(iva);\n    });\n\n    // ✅ calcular totales\n    const totales = {\n      totaldocumentos: documentos.length,\n      totalbaseimponible: 0,\n      totaliva: 0,\n      totalimporte: 0,\n      totalingresos: 0,\n      totalgastos: 0,\n      totalincidencias: 0,\n      portipodocumento: {} as { [key: string]: number }\n    };\n\n    documentos.foreach((doc: any) => {\n      const total = parsefloat(doc.importe_total) || 0;\n      const base = parsefloat(doc.importe_sin_impuestos) || 0;\n      const iva = total - base;"
+  },
+  {
+    "file": "src/app/api/productos/classify/route.ts",
+    "line": 140,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "\n                    // limpiar previa (por patrón exacto o normalizado) para evitar duplicados\n                    await db.query(`\n                        delete from productos_config \n                        where id_de_empresa = ? \n                        and (patron = ? or patron = ?) \n                        and (ifnull(proveedor_cif, '') = ifnull(?, ''))\n                    `, [empresaid, rawpatron, patron, cif]);\n\n                    await db.query(`\n                        insert into productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)\n                        values (?, ?, ?, ?, 1, ?)\n                    `, [empresaid, cif, patron, cls.cuenta_contable, cls.justificacion]);\n                }\n            }\n\n            return nextresponse.json({\n                ...parsed,\n                usage: classificationresult.tokens,\n                provider: 'openai'\n            });\n\n        } catch (openaierror: any) {\n            console.error('❌ error fatal en clasificación openai:', openaierror);\n            throw openaierror;\n        }\n    } catch (error: any) {\n        console.error('❌ error en /api/productos/classify:', error);\n        return nextresponse.json({ error: error.message }, { status: 500 });\n    }\n}\n"
+  },
+  {
+    "file": "src/app/api/productos/classify/route.ts",
+    "line": 147,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "                    `, [empresaid, rawpatron, patron, cif]);\n\n                    await db.query(`\n                        insert into productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)\n                        values (?, ?, ?, ?, 1, ?)\n                    `, [empresaid, cif, patron, cls.cuenta_contable, cls.justificacion]);\n                }\n            }\n\n            return nextresponse.json({\n                ...parsed,\n                usage: classificationresult.tokens,\n                provider: 'openai'\n            });\n\n        } catch (openaierror: any) {\n            console.error('❌ error fatal en clasificación openai:', openaierror);\n            throw openaierror;\n        }\n    } catch (error: any) {\n        console.error('❌ error en /api/productos/classify:', error);\n        return nextresponse.json({ error: error.message }, { status: 500 });\n    }\n}\n"
+  },
+  {
+    "file": "src/app/api/productos-config/route.ts",
+    "line": 26,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "        }\n\n        const [rows] = await db.query(query, params);\n        return nextresponse.json(rows);\n    } catch (error: any) {\n        return nextresponse.json({ error: error.message }, { status: 500 });\n    }\n}\n\nexport async function post(req: nextrequest) {\n    try {\n        const user = await getcurrentuser();\n        if (!user) return nextresponse.json({ error: 'no autorizado' }, { status: 401 });\n\n        const { action, empresaid, items } = await req.json();\n\n        if (!empresaid || !items || !array.isarray(items)) {\n            return nextresponse.json({ error: 'datos incompletos' }, { status: 400 });\n        }\n\n        if (action === 'save_rules') {\n            for (const item of items) {\n                const normpatron = item.normalizeddescription || item.description;\n                const rawpatron = item.description;\n                const patron = normpatron;\n                const cuenta = item.cuenta_contable;\n                const cif = item.proveedor_cif || null;\n\n                // 1. guardar regla (limpiamos por normalizado y por original para evitar duplicados de versiones antiguas)\n                await db.query(`\n                    delete from productos_config \n                    where id_de_empresa = ? "
+  },
+  {
+    "file": "src/app/api/productos-config/route.ts",
+    "line": 53,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n                // 1. guardar regla (limpiamos por normalizado y por original para evitar duplicados de versiones antiguas)\n                await db.query(`\n                    delete from productos_config \n                    where id_de_empresa = ? \n                    and (patron = ? or patron = ?) \n                    and (ifnull(proveedor_cif, '') = ifnull(?, ''))\n                `, [empresaid, patron, rawpatron, cif]);\n\n                await db.query(`\n                    insert into productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)\n                    values (?, ?, ?, ?, 0, null)\n                `, [empresaid, cif, patron, cuenta]);\n\n                // 2. actualizar histórico de líneas con join para asegurar proveedor y empresa\n                // usamos regexp_replace para normalizar en sql igual que en js\n                let updatequery = `\n                    update lineas_documento ld\n                    join documentos d on ld.documento_id = d.id\n                    join entidades_documento ed on d.id = ed.documento_id\n                    set ld.cuenta_contable = ?\n                    where d.id_de_empresa = ?\n                    and (\n                        ifnull(ed.identificador_fiscal_hash, '') = ifnull(?, '') or\n                        ifnull(ed.identificador_fiscal, '') = ifnull(?, '')\n                    )\n                    and ed.rol in ('proveedor', 'emisor')\n                `;\n                let updateparams = [cuenta, empresaid, cif ? hashfield(normalizeentityname(cif)) : null, cif];\n\n                if (item.code) {\n                    updatequery += ' and ld.codigo = ?';"
+  },
+  {
+    "file": "src/app/api/productos-config/route.ts",
+    "line": 60,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "                `, [empresaid, patron, rawpatron, cif]);\n\n                await db.query(`\n                    insert into productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)\n                    values (?, ?, ?, ?, 0, null)\n                `, [empresaid, cif, patron, cuenta]);\n\n                // 2. actualizar histórico de líneas con join para asegurar proveedor y empresa\n                // usamos regexp_replace para normalizar en sql igual que en js\n                let updatequery = `\n                    update lineas_documento ld\n                    join documentos d on ld.documento_id = d.id\n                    join entidades_documento ed on d.id = ed.documento_id\n                    set ld.cuenta_contable = ?\n                    where d.id_de_empresa = ?\n                    and (\n                        ifnull(ed.identificador_fiscal_hash, '') = ifnull(?, '') or\n                        ifnull(ed.identificador_fiscal, '') = ifnull(?, '')\n                    )\n                    and ed.rol in ('proveedor', 'emisor')\n                `;\n                let updateparams = [cuenta, empresaid, cif ? hashfield(normalizeentityname(cif)) : null, cif];\n\n                if (item.code) {\n                    updatequery += ' and ld.codigo = ?';\n                    updateparams.push(item.code);\n                } else {\n                    // si no hay código, comparamos normalizando en vuelo\n                    updatequery += `\n                        and upper(trim(\n                            regexp_replace(\n                                regexp_replace("
+  },
+  {
+    "file": "src/app/api/productos-config/route.ts",
+    "line": 100,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "                }\n\n                await db.query(updatequery, updateparams);\n            }\n            return nextresponse.json({ success: true, message: 'reglas y líneas actualizadas' });\n        }\n\n        if (action === 'clear_accounts') {\n            for (const item of items) {\n                const normpatron = item.normalizeddescription || item.description;\n                const patron = normpatron;\n                const cif = item.proveedor_cif || null;\n\n                // 1. eliminar regla (intentamos por normalizado y por original para ser exhaustivos)\n                await db.query(`\n                    delete from productos_config \n                    where id_de_empresa = ? \n                    and (patron = ? or patron = ?) \n                    and (ifnull(proveedor_cif, '') = ifnull(?, ''))\n                `, [empresaid, normpatron, item.description, cif]);\n\n                // 2. resetear líneas\n                let resetquery = `\n                    update lineas_documento ld\n                    join documentos d on ld.documento_id = d.id\n                    join entidades_documento ed on d.id = ed.documento_id\n                    set ld.cuenta_contable = null\n                    where d.id_de_empresa = ?\n                    and (\n                        ifnull(ed.identificador_fiscal_hash, '') = ifnull(?, '') or\n                        ifnull(ed.identificador_fiscal, '') = ifnull(?, '')\n                    )"
+  },
+  {
+    "file": "src/app/api/productos-config/route.ts",
+    "line": 112,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n                // 1. eliminar regla (intentamos por normalizado y por original para ser exhaustivos)\n                await db.query(`\n                    delete from productos_config \n                    where id_de_empresa = ? \n                    and (patron = ? or patron = ?) \n                    and (ifnull(proveedor_cif, '') = ifnull(?, ''))\n                `, [empresaid, normpatron, item.description, cif]);\n\n                // 2. resetear líneas\n                let resetquery = `\n                    update lineas_documento ld\n                    join documentos d on ld.documento_id = d.id\n                    join entidades_documento ed on d.id = ed.documento_id\n                    set ld.cuenta_contable = null\n                    where d.id_de_empresa = ?\n                    and (\n                        ifnull(ed.identificador_fiscal_hash, '') = ifnull(?, '') or\n                        ifnull(ed.identificador_fiscal, '') = ifnull(?, '')\n                    )\n                    and ed.rol in ('proveedor', 'emisor')\n                `;\n                let resetparams = [empresaid, cif ? hashfield(normalizeentityname(cif)) : null, cif];\n\n                if (item.code) {\n                    resetquery += ' and ld.codigo = ?';\n                    resetparams.push(item.code);\n                } else {\n                    resetquery += `\n                        and upper(trim(\n                            regexp_replace(\n                                regexp_replace("
+  },
+  {
+    "file": "src/app/api/send-dashboard-email/route.ts",
+    "line": 74,
+    "fields": [
+      "nombre",
+      "email"
+    ],
+    "snippet": "\n    // 2. obtener la url del pdf generado\n    const [exportrows] = await db.query<rowdatapacket[]>(\n      'select url from exportes where id = ?',\n      [exportresult.exportid]\n    );\n\n    const pdfurl = exportrows[0]?.url || '';\n\n    // 3. preparar datos para el webhook de microservice\n    const webhookpayload = {\n      // información del destinatario\n      emailto,\n\n      // información de la empresa\n      empresaid: empresa.id,\n      empresanombre: empresa.nombre,\n      empresacuit: empresa.cuit || '',\n\n      // url del pdf generado\n      pdfurl,\n      exportid: exportresult.exportid,\n\n      // estadísticas del dashboard\n      stats: {\n        totalcuentas: stats?.totalcuentas || 0,\n        totaldocumentos: stats?.totaldocumentos || 0,\n        documentospendientes: stats?.documentospendientes || 0,\n        proximosvencimientos: stats?.proximosvencimientos || 0,\n      },\n\n      // metadata"
+  },
+  {
+    "file": "src/app/api/send-dashboard-email/route.ts",
+    "line": 130,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // 5. actualizar el registro de exportación con info del email\n    await db.query(\n      `update exportes \n       set metadata = json_set(\n         coalesce(metadata, '{}'),\n         '$.emailenviado', true,\n         '$.emaildestinatario', ?,\n         '$.emailfechaenvio', ?\n       )\n       where id = ?`,\n      [emailto, new date().toisostring(), exportresult.exportid]\n    );\n\n    return nextresponse.json({\n      success: true,\n      message: 'dashboard enviado por email correctamente',\n      exportid: exportresult.exportid,\n      pdfurl,\n      emailto,\n      microserviceresponse: microserviceresult,\n    });\n\n  } catch (error) {\n    console.error('error en send-dashboard-email:', error);\n    return nextresponse.json(\n      {\n        error: 'error al enviar el dashboard por email',\n        details: error instanceof error ? error.message : 'error desconocido',\n      },\n      { status: 500 }\n    );"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 39,
+    "fields": [
+      "nombre",
+      "email"
+    ],
+    "snippet": "\n      // 1. obtener actividad\n      let [actrows] = await connection.query(\n        `select id, retry_count, mensaje, error_detalle, documento_nombre from ${dbname}.actividad where upload_id = ? or parent_upload_id = ? or id = ?`,\n        [effectiveuploadid, effectiveuploadid, body.activityid || -1]\n      ) as any;\n\n      // fallback por nombre si no hay id (para emails o reintentos con ids nuevos)\n      if (actrows.length === 0 && (body.filename || body.documento_nombre)) {\n        const fname = body.filename || body.documento_nombre;\n        console.log(`🔍 [post-progress] fallback: buscando por nombre \"${fname}\"`);\n        [actrows] = await connection.query(\n          `select id, retry_count, mensaje, error_detalle, documento_nombre from ${dbname}.actividad where documento_nombre = ? and updated_at > now() - interval 2 hour limit 1`,\n          [fname]\n        ) as any;\n      }\n\n      const activity = actrows[0];\n      const currentretries = activity?.retry_count || 0;\n      const filename = activity?.documento_nombre || 'archivo';\n\n      // 2. determinar el mensaje final\n      let finalmensaje = message || 'error al procesar';\n      let finaldetalle = activity?.error_detalle || step || 'error desconocido';\n\n      if (currentretries >= 3) {\n        finalmensaje = '⚠️ reintentos automáticos agotados (3/3). intenta nuevamente de forma manual.';\n        if (!finaldetalle.includes('agotaron')) {\n          finaldetalle = `${finaldetalle}\\n\\n⚠️ (se agotaron los 3 reintentos automáticos)`;\n        }\n      }\n"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 48,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "        const fname = body.filename || body.documento_nombre;\n        console.log(`🔍 [post-progress] fallback: buscando por nombre \"${fname}\"`);\n        [actrows] = await connection.query(\n          `select id, retry_count, mensaje, error_detalle, documento_nombre from ${dbname}.actividad where documento_nombre = ? and updated_at > now() - interval 2 hour limit 1`,\n          [fname]\n        ) as any;\n      }\n\n      const activity = actrows[0];\n      const currentretries = activity?.retry_count || 0;\n      const filename = activity?.documento_nombre || 'archivo';\n\n      // 2. determinar el mensaje final\n      let finalmensaje = message || 'error al procesar';\n      let finaldetalle = activity?.error_detalle || step || 'error desconocido';\n\n      if (currentretries >= 3) {\n        finalmensaje = '⚠️ reintentos automáticos agotados (3/3). intenta nuevamente de forma manual.';\n        if (!finaldetalle.includes('agotaron')) {\n          finaldetalle = `${finaldetalle}\\n\\n⚠️ (se agotaron los 3 reintentos automáticos)`;\n        }\n      }\n\n      // 3. actualizar el registro (usando el id real para asegurar el match)\n      const filterfield = activity?.id ? 'id = ?' : 'upload_id = ?';\n      const filtervalue = activity?.id || effectiveuploadid;\n\n      await connection.query(\n        `update ${dbname}.actividad \n         set status = 'fallido', step = ?, progress = 0, mensaje = ?, error_detalle = ?, updated_at = now()\n         where ${filterfield}`,\n        [step || 'error', finalmensaje, finaldetalle, filtervalue]"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 256,
+    "fields": [
+      "ruta_archivo"
+    ],
+    "snippet": "\n      for (const docid of docids) {\n        const [drows] = await connection.query<rowdatapacket[]>(\n          `select \n             d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,\n             d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,\n             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre, d.id_de_empresa\n           from ${dbname}.documentos d\n           where d.id = ? limit 1`,\n          [docid]\n        );\n        const [arows] = await connection.query<rowdatapacket[]>(\n          `select ruta_archivo from ${dbname}.archivos_documento where documento_id = ? order by fecha_subida desc limit 1`,\n          [docid]\n        );\n        const [irows] = await connection.query<rowdatapacket[]>(\n          `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ? and validado = 0`,\n          [docid]\n        );\n        const [hcrows] = await connection.query<rowdatapacket[]>(\n          `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n          [docid]\n        );\n\n        if (drows.length > 0) {\n          const docincidenciascount = irows[0]?.count || 0;\n          const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n          const hasinc = docincidenciascount > 0 || failedhc;\n\n          if (hasinc) totalincidencias++;\n\n          const empresaiddoc = drows[0].id_de_empresa;"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 265,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "ruta_archivo"
+    ],
+    "snippet": "          [docid]\n        );\n        const [arows] = await connection.query<rowdatapacket[]>(\n          `select ruta_archivo from ${dbname}.archivos_documento where documento_id = ? order by fecha_subida desc limit 1`,\n          [docid]\n        );\n        const [irows] = await connection.query<rowdatapacket[]>(\n          `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ? and validado = 0`,\n          [docid]\n        );\n        const [hcrows] = await connection.query<rowdatapacket[]>(\n          `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n          [docid]\n        );\n\n        if (drows.length > 0) {\n          const docincidenciascount = irows[0]?.count || 0;\n          const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n          const hasinc = docincidenciascount > 0 || failedhc;\n\n          if (hasinc) totalincidencias++;\n\n          const empresaiddoc = drows[0].id_de_empresa;\n          const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n          docsdata.push({\n            ...drows[0],\n            empresa_nombre: empresaprisma?.nombre_de_empresa || '',\n            empresa_cif: empresaprisma?.cif || '',\n            url_archivo: arows[0]?.ruta_archivo ?? null,\n            tiene_incidencias: hasinc,\n            cantidad_incidencias: docincidenciascount,"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 269,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "ruta_archivo"
+    ],
+    "snippet": "          [docid]\n        );\n        const [irows] = await connection.query<rowdatapacket[]>(\n          `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ? and validado = 0`,\n          [docid]\n        );\n        const [hcrows] = await connection.query<rowdatapacket[]>(\n          `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n          [docid]\n        );\n\n        if (drows.length > 0) {\n          const docincidenciascount = irows[0]?.count || 0;\n          const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n          const hasinc = docincidenciascount > 0 || failedhc;\n\n          if (hasinc) totalincidencias++;\n\n          const empresaiddoc = drows[0].id_de_empresa;\n          const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n          docsdata.push({\n            ...drows[0],\n            empresa_nombre: empresaprisma?.nombre_de_empresa || '',\n            empresa_cif: empresaprisma?.cif || '',\n            url_archivo: arows[0]?.ruta_archivo ?? null,\n            tiene_incidencias: hasinc,\n            cantidad_incidencias: docincidenciascount,\n            upload_id_original: uploadid\n          });\n        }\n      }"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 273,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "ruta_archivo"
+    ],
+    "snippet": "          [docid]\n        );\n        const [hcrows] = await connection.query<rowdatapacket[]>(\n          `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n          [docid]\n        );\n\n        if (drows.length > 0) {\n          const docincidenciascount = irows[0]?.count || 0;\n          const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n          const hasinc = docincidenciascount > 0 || failedhc;\n\n          if (hasinc) totalincidencias++;\n\n          const empresaiddoc = drows[0].id_de_empresa;\n          const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n          docsdata.push({\n            ...drows[0],\n            empresa_nombre: empresaprisma?.nombre_de_empresa || '',\n            empresa_cif: empresaprisma?.cif || '',\n            url_archivo: arows[0]?.ruta_archivo ?? null,\n            tiene_incidencias: hasinc,\n            cantidad_incidencias: docincidenciascount,\n            upload_id_original: uploadid\n          });\n        }\n      }\n\n      // el webhook individual que queremos disparar si no está agrupado\n      // sería \"documento.listo_para_erp\" si todo bien, o \"requiere_atencion\". \n      // dado que el lote puede tener mezcla, dejaremos \"documento.procesado\" como evento singular base (aunque idealmente el usuario agrupará)."
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 329,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "      }\n\n      const [drows] = await connection.query<rowdatapacket[]>(\n        `select \n           d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,\n           d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,\n           d.trimestre_cerrado, d.año_trimestre, d.num_trimestre, d.id_de_empresa\n         from ${dbname}.documentos d\n         where d.id = ? limit 1`,\n        [docid]\n      );\n      const latestarchivo = await prisma.archivos_documento.findfirst({\n        where: { documento_id: bigint(docid) },\n        orderby: { fecha_subida: 'desc' }\n      });\n      const [irows] = await connection.query<rowdatapacket[]>(\n        `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ? and validado = 0`,\n        [docid]\n      );\n      const [hcrows] = await connection.query<rowdatapacket[]>(\n        `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n        [docid]\n      );\n\n      const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n      const hasincidents = irows[0]?.count > 0 || failedhc;\n\n      if (drows.length > 0) {\n        const empresaiddoc = drows[0].id_de_empresa;\n        const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n        const docdata = { "
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 342,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "ruta_archivo"
+    ],
+    "snippet": "        orderby: { fecha_subida: 'desc' }\n      });\n      const [irows] = await connection.query<rowdatapacket[]>(\n        `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ? and validado = 0`,\n        [docid]\n      );\n      const [hcrows] = await connection.query<rowdatapacket[]>(\n        `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n        [docid]\n      );\n\n      const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n      const hasincidents = irows[0]?.count > 0 || failedhc;\n\n      if (drows.length > 0) {\n        const empresaiddoc = drows[0].id_de_empresa;\n        const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n        const docdata = { \n          ...drows[0], \n          empresa_nombre: empresaprisma?.nombre_de_empresa || '',\n          empresa_cif: empresaprisma?.cif || '',\n          url_archivo: latestarchivo?.ruta_archivo ?? null,\n          upload_id_original: uploadid\n        };\n        \n        console.log(`🔔 [webhook-dispatch] disparando webhook para doc ${docid} (incidencias: ${hasincidents})`);\n        if (hasincidents) {\n          await firebatchwebhook(empresaid, 'documento.requiere_atencion', 'documento.lote_requiere_atencion', [docdata]);\n        } else {\n          await firebatchwebhook(empresaid, 'documento.listo_para_erp', 'documento.lote_procesado', [docdata]);\n        }"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 346,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "ruta_archivo"
+    ],
+    "snippet": "        [docid]\n      );\n      const [hcrows] = await connection.query<rowdatapacket[]>(\n        `select verified from ${dbname}.health_check_status where documento_id = ? limit 1`,\n        [docid]\n      );\n\n      const failedhc = hcrows.length > 0 && hcrows[0].verified === 0;\n      const hasincidents = irows[0]?.count > 0 || failedhc;\n\n      if (drows.length > 0) {\n        const empresaiddoc = drows[0].id_de_empresa;\n        const empresaprisma = empresaiddoc ? await prisma.empresas.findunique({ where: { id: number(empresaiddoc) }, select: { nombre_de_empresa: true, cif: true } }) : null;\n\n        const docdata = { \n          ...drows[0], \n          empresa_nombre: empresaprisma?.nombre_de_empresa || '',\n          empresa_cif: empresaprisma?.cif || '',\n          url_archivo: latestarchivo?.ruta_archivo ?? null,\n          upload_id_original: uploadid\n        };\n        \n        console.log(`🔔 [webhook-dispatch] disparando webhook para doc ${docid} (incidencias: ${hasincidents})`);\n        if (hasincidents) {\n          await firebatchwebhook(empresaid, 'documento.requiere_atencion', 'documento.lote_requiere_atencion', [docdata]);\n        } else {\n          await firebatchwebhook(empresaid, 'documento.listo_para_erp', 'documento.lote_procesado', [docdata]);\n        }\n      }\n    }\n  } catch (error) {\n    console.error('❌ [webhook-dispatch] error en dispatchcompletionwebhook:', error);"
+  },
+  {
+    "file": "src/app/api/upload-progress/route.ts",
+    "line": 430,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "    if (mainrecord.status === 'completado') {\n      if (mainrecord.documento_id && children.length === 0) {\n        const [incidentrows] = await connection.query(\n          `select count(*) as count from ${dbname}.incidencias_documento where documento_id = ?`,\n          [mainrecord.documento_id]\n        ) as any;\n        hasincidents = incidentrows[0]?.count > 0;\n      }\n      \n      // disparamos el webhook usando la misma función central en background\n      after(async () => {\n        await dispatchcompletionwebhook(uploadid);\n      });\n    }\n\n    const response = {\n      id: mainrecord.id,\n      status: mainrecord.status,\n      step: mainrecord.step,\n      progress: mainrecord.progress,\n      message: mainrecord.mensaje,\n      retrycount: mainrecord.retry_count || 0,\n      timestamp: date.now(),\n      iscompressed: children.length > 0,\n      hasincidents,\n      children: children.map((child: any) => ({\n        id: child.id,\n        uploadid: child.upload_id,\n        filename: child.documento_nombre,\n        status: child.status,\n        step: child.step,\n        progress: child.progress,"
+  },
+  {
+    "file": "src/app/api/v1/documents/full/route.ts",
+    "line": 134,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "    query += ` order by d.fecha_emision desc`;\n\n    const [documentos] = await db.query<rowdatapacket[]>(query, params);\n\n    if (documentos.length === 0) {\n      return nextresponse.json({ total: 0, data: [] }, { status: 200 });\n    }\n\n    const docids = documentos.map((d: any) => d.id);\n\n    // 5. cargar relaciones\n    const [\n      [lineasrows],\n      [impuestosrows],\n      [incidenciasrows],\n      [healthcheckrows]\n    ] = await promise.all([\n      db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from incidencias_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from health_check_status where documento_id in (?)`, [docids])\n    ]);\n\n    // prisma fetches encrypted tables natively\n    const [entidadesrows, archivosrows, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.archivos_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true, nombre_de_empresa: true } })\n    ]);\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n    // 6. agrupar entidades"
+  },
+  {
+    "file": "src/app/api/v1/documents/full/route.ts",
+    "line": 149,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "nombre_de_empresa",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "      [healthcheckrows]\n    ] = await promise.all([\n      db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from incidencias_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from health_check_status where documento_id in (?)`, [docids])\n    ]);\n\n    // prisma fetches encrypted tables natively\n    const [entidadesrows, archivosrows, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.archivos_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true, nombre_de_empresa: true } })\n    ]);\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n    // 6. agrupar entidades\n    const entidadesbydoc: record<number, record<string, any>> = {};\n    entidadesrows.foreach((r: any) => {\n      if (!entidadesbydoc[r.documento_id]) {\n        entidadesbydoc[r.documento_id] = {};\n      }\n      entidadesbydoc[r.documento_id][r.rol] = {\n        id: r.id,\n        nombre: r.nombre,\n        identificador_fiscal: r.identificador_fiscal,\n        direccion: r.direccion,\n        telefono: r.telefono,\n        email: r.email,\n        cuenta_contable: r.cuenta_contable,\n        datos_extra: r.datos_extra,\n        fecha_creacion: r.fecha_creacion"
+  },
+  {
+    "file": "src/app/api/v1/documents/full/route.ts",
+    "line": 150,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "nombre_de_empresa",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "    ] = await promise.all([\n      db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from incidencias_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from health_check_status where documento_id in (?)`, [docids])\n    ]);\n\n    // prisma fetches encrypted tables natively\n    const [entidadesrows, archivosrows, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.archivos_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true, nombre_de_empresa: true } })\n    ]);\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n    // 6. agrupar entidades\n    const entidadesbydoc: record<number, record<string, any>> = {};\n    entidadesrows.foreach((r: any) => {\n      if (!entidadesbydoc[r.documento_id]) {\n        entidadesbydoc[r.documento_id] = {};\n      }\n      entidadesbydoc[r.documento_id][r.rol] = {\n        id: r.id,\n        nombre: r.nombre,\n        identificador_fiscal: r.identificador_fiscal,\n        direccion: r.direccion,\n        telefono: r.telefono,\n        email: r.email,\n        cuenta_contable: r.cuenta_contable,\n        datos_extra: r.datos_extra,\n        fecha_creacion: r.fecha_creacion\n      };"
+  },
+  {
+    "file": "src/app/api/v1/documents/full/route.ts",
+    "line": 151,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "nombre_de_empresa",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "      db.query<rowdatapacket[]>(`select * from lineas_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from incidencias_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from health_check_status where documento_id in (?)`, [docids])\n    ]);\n\n    // prisma fetches encrypted tables natively\n    const [entidadesrows, archivosrows, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.archivos_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true, nombre_de_empresa: true } })\n    ]);\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n    // 6. agrupar entidades\n    const entidadesbydoc: record<number, record<string, any>> = {};\n    entidadesrows.foreach((r: any) => {\n      if (!entidadesbydoc[r.documento_id]) {\n        entidadesbydoc[r.documento_id] = {};\n      }\n      entidadesbydoc[r.documento_id][r.rol] = {\n        id: r.id,\n        nombre: r.nombre,\n        identificador_fiscal: r.identificador_fiscal,\n        direccion: r.direccion,\n        telefono: r.telefono,\n        email: r.email,\n        cuenta_contable: r.cuenta_contable,\n        datos_extra: r.datos_extra,\n        fecha_creacion: r.fecha_creacion\n      };\n    });"
+  },
+  {
+    "file": "src/app/api/v1/documents/full/route.ts",
+    "line": 152,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "nombre_de_empresa",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "      db.query<rowdatapacket[]>(`select * from impuestos_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from incidencias_documento where documento_id in (?)`, [docids]),\n      db.query<rowdatapacket[]>(`select * from health_check_status where documento_id in (?)`, [docids])\n    ]);\n\n    // prisma fetches encrypted tables natively\n    const [entidadesrows, archivosrows, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.archivos_documento.findmany({ where: { documento_id: { in: docids } } }),\n      prisma.empresas.findunique({ where: { id: empresaid }, select: { cif: true, nombre_de_empresa: true } })\n    ]);\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n\n    // 6. agrupar entidades\n    const entidadesbydoc: record<number, record<string, any>> = {};\n    entidadesrows.foreach((r: any) => {\n      if (!entidadesbydoc[r.documento_id]) {\n        entidadesbydoc[r.documento_id] = {};\n      }\n      entidadesbydoc[r.documento_id][r.rol] = {\n        id: r.id,\n        nombre: r.nombre,\n        identificador_fiscal: r.identificador_fiscal,\n        direccion: r.direccion,\n        telefono: r.telefono,\n        email: r.email,\n        cuenta_contable: r.cuenta_contable,\n        datos_extra: r.datos_extra,\n        fecha_creacion: r.fecha_creacion\n      };\n    });\n"
+  },
+  {
+    "file": "src/app/api/v1/documents/route.ts",
+    "line": 140,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n    // 6. cargar líneas de todos los documentos en una sola query\n    const [lineasrows] = await db.query<rowdatapacket[]>(\n      `select documento_id, descripcion, cantidad, precio_unitario, importe_linea\n       from lineas_documento where documento_id in (?)`,\n      [docids]\n    );\n\n    const lineasbydoc: record<number, any[]> = {};\n    lineasrows.foreach((r: any) => {\n      if (!lineasbydoc[r.documento_id]) lineasbydoc[r.documento_id] = [];\n      lineasbydoc[r.documento_id].push({\n        descripcion: r.descripcion,\n        cantidad: number(r.cantidad) || 0,\n        precio_unitario: number(r.precio_unitario) || 0,\n        importe_total: number(r.importe_linea) || 0,\n      });\n    });\n\n    // 6.5 cargar entidades usando prisma para garantizar desencriptación\n    const entidadesprisma = await prisma.entidades_documento.findmany({\n      where: { documento_id: { in: docids } },\n      select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }\n    });\n\n    const entidadesbydoc: record<number, record<string, { nombre: string; cif: string }>> = {};\n    entidadesprisma.foreach((ent) => {\n      if (!entidadesbydoc[ent.documento_id]) entidadesbydoc[ent.documento_id] = {};\n      if (ent.rol) {\n         entidadesbydoc[ent.documento_id][ent.rol] = {\n           nombre: ent.nombre || '',\n           cif: ent.identificador_fiscal || ''"
+  },
+  {
+    "file": "src/app/api/v1/documents/status/[uploadId]/route.ts",
+    "line": 43,
+    "fields": [
+      "nombre",
+      "nombre_archivo"
+    ],
+    "snippet": "\n    // consultar el estado en la tabla de actividad\n    const [rows] = await db.query<rowdatapacket[]>(\n      `select upload_id, documento_nombre, documento_tipo, status, step, mensaje, created_at as fecha_creacion, updated_at\n       from actividad \n       where upload_id = ? and id_de_empresa = ?`,\n      [uploadid, empresaid]\n    );\n\n    if (rows.length === 0) {\n      return nextresponse.json(\n        { error: 'no se encontró ningún proceso con el id proporcionado o no pertenece a su empresa.' },\n        { status: 404 }\n      );\n    }\n\n    const actividad = rows[0];\n\n    // verificar si el documento ya está en la tabla `documentos` usando el upload_id si lo guardamos (en este caso el microservicio lo vincula luego).\n    // para simplificar, devolvemos el estado reportado en `actividad`.\n\n    return nextresponse.json(\n      {\n        upload_id: actividad.upload_id,\n        nombre_archivo: actividad.documento_nombre,\n        estado: actividad.status,\n        paso_actual: actividad.step,\n        mensaje: actividad.mensaje,\n        fecha_inicio: actividad.fecha_creacion,\n        ultima_actualizacion: actividad.updated_at\n      },\n      { status: 200 }"
+  },
+  {
+    "file": "src/app/api/v1/export/excel/route.ts",
+    "line": 177,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "    query += ` group by d.id order by d.fecha_emision desc`;\n\n    const [documentos] = await db.query<rowdatapacket[]>(query, params);\n\n    if (documentos.length === 0) {\n      return nextresponse.json(\n        { error: 'no se encontraron documentos con los filtros indicados.' },\n        { status: 404 }\n      );\n    }\n\n    // 6. cargar impuestos de todos los documentos en una sola query\n    const docids = documentos.map((d: any) => d.doc_id);\n    const [ivarows] = await db.query<rowdatapacket[]>(\n      `select documento_id, tipo_impuesto, porcentaje, base_imponible, cuota\n       from impuestos_documento where documento_id in (?)`,\n      [docids]\n    );\n\n    const ivabydoc: record<number, any[]> = {};\n    ivarows.foreach((r: any) => {\n      if (!ivabydoc[r.documento_id]) ivabydoc[r.documento_id] = [];\n      ivabydoc[r.documento_id].push(r);\n    });\n\n    // 7. cargar entidades de todos los documentos y empresa en paralelo con prisma\n    const [entidadesprisma, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({\n        where: { documento_id: { in: docids } },\n        select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }\n      }),\n      prisma.empresas.findunique({"
+  },
+  {
+    "file": "src/app/api/v1/export/excel/route.ts",
+    "line": 188,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "    // 6. cargar impuestos de todos los documentos en una sola query\n    const docids = documentos.map((d: any) => d.doc_id);\n    const [ivarows] = await db.query<rowdatapacket[]>(\n      `select documento_id, tipo_impuesto, porcentaje, base_imponible, cuota\n       from impuestos_documento where documento_id in (?)`,\n      [docids]\n    );\n\n    const ivabydoc: record<number, any[]> = {};\n    ivarows.foreach((r: any) => {\n      if (!ivabydoc[r.documento_id]) ivabydoc[r.documento_id] = [];\n      ivabydoc[r.documento_id].push(r);\n    });\n\n    // 7. cargar entidades de todos los documentos y empresa en paralelo con prisma\n    const [entidadesprisma, empresadata] = await promise.all([\n      prisma.entidades_documento.findmany({\n        where: { documento_id: { in: docids } },\n        select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }\n      }),\n      prisma.empresas.findunique({\n        where: { id: empresaid },\n        select: { cif: true, nombre_de_empresa: true }\n      })\n    ]);\n\n    const empresacifglobal = empresadata?.cif?.trim().tolowercase() || '';\n    const empresanombreglobal = empresadata?.nombre_de_empresa || `empresa_${empresaid}`;\n\n    const entidadesbydoc: record<number, record<string, { nombre: string; cif: string }>> = {};\n    entidadesprisma.foreach((ent) => {\n      if (!entidadesbydoc[ent.documento_id]) entidadesbydoc[ent.documento_id] = {};"
+  },
+  {
+    "file": "src/app/api/v1/products/route.ts",
+    "line": 72,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "    query += ` order by d.fecha_emision desc limit 1000`; // limit to avoid massive payloads if unchecked\n\n    const [rows] = await db.query<rowdatapacket[]>(query, params);\n\n    const docids = array.from(new set(rows.map((r: any) => r.documento_id)));\n    let entidadesbydoc: record<number, any> = {};\n    if (docids.length > 0) {\n      const entidadesprisma = await prisma.entidades_documento.findmany({\n        where: { documento_id: { in: docids as number[] }, rol: { in: ['emisor', 'proveedor'] } },\n        select: { documento_id: true, nombre: true, identificador_fiscal: true }\n      });\n      entidadesprisma.foreach(e => entidadesbydoc[number(e.documento_id)] = e);\n    }\n\n    let formatteddata = rows.map((r: any) => ({\n      id: r.linea_id,\n      producto_servicio: r.producto,\n      cantidad: number(r.cantidad) || 0,\n      precio_unitario: number(r.precio_unitario) || 0,\n      importe_total: number(r.importe_linea) || 0,\n      documento_origen: {\n        id: r.documento_id,\n        numero: r.numero_documento,\n        fecha: r.fecha_emision\n      },\n      proveedor: {\n        nombre: entidadesbydoc[r.documento_id]?.nombre || 'desconocido',\n        cif: entidadesbydoc[r.documento_id]?.identificador_fiscal || ''\n      }\n    }));\n\n    if (proveedorparam) {"
+  },
+  {
+    "file": "src/services/api-key-service.ts",
+    "line": 62,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa"
+    ],
+    "snippet": "\n    // 1. verificar que el usuario pertenece a la empresa\n    const [empresarows] = await db.query<rowdatapacket[]>(\n      `select id from empresas where id = ? and json_contains(id_de_usuario, cast(? as json))`,\n      [empresa_id, usuario_id]\n    );\n\n    if (empresarows.length === 0) {\n      return { success: false, error: 'no tienes acceso a esta empresa.' };\n    }\n\n    // 2. generar token: \"muvail_\" + 43 chars url-safe base64\n    const randompart = crypto.randombytes(32).tostring('base64url');\n    const rawkey = `muvail_${randompart}`;\n    const keyhash = hashkey(rawkey);\n    const keyprefix = rawkey.slice(0, 14); // \"muvail_ab3xkm9\"\n\n    // 3. obtener nombre de empresa para la respuesta (prisma desencripta automáticamente)\n    const empresarecord = await prisma.empresas.findunique({\n      where: { id: bigint(empresa_id) },\n      select: { nombre_de_empresa: true }\n    });\n    const empresa_nombre = empresarecord?.nombre_de_empresa || 'empresa';\n\n    // 4. insertar en bd\n    const [result] = await db.query<okpacket>(\n      `insert into api_keys (nombre, key_hash, key_prefix, empresa_id, usuario_id, activa)\n       values (?, ?, ?, ?, ?, 1)`,\n      [nombre, keyhash, keyprefix, empresa_id, usuario_id]\n    );\n\n    const newkeyid = result.insertid;"
+  },
+  {
+    "file": "src/services/api-key-service.ts",
+    "line": 85,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "\n    // 4. insertar en bd\n    const [result] = await db.query<okpacket>(\n      `insert into api_keys (nombre, key_hash, key_prefix, empresa_id, usuario_id, activa)\n       values (?, ?, ?, ?, ?, 1)`,\n      [nombre, keyhash, keyprefix, empresa_id, usuario_id]\n    );\n\n    const newkeyid = result.insertid;\n\n    const key: apikey = {\n      id: newkeyid,\n      nombre,\n      key_prefix: keyprefix,\n      empresa_id,\n      empresa_nombre,\n      usuario_id,\n      activa: true,\n      ultimo_uso: null,\n      fecha_creacion: new date().toisostring()\n    };\n\n    return { success: true, raw_key: rawkey, key };\n  } catch (error) {\n    console.error('❌ [api-key-service] generateapikey error:', error);\n    return { success: false, error: 'error al generar la clave api.' };\n  }\n}\n\n// ─────────────────────────────────────────────────────────────────────────────\n// listar claves del usuario\n// ─────────────────────────────────────────────────────────────────────────────"
+  },
+  {
+    "file": "src/services/api-key-service.ts",
+    "line": 119,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa"
+    ],
+    "snippet": "  try {\n    // 1. traer las api_keys del usuario sin join a empresas (evita exponer datos encriptados)\n    const [rows] = await db.query<rowdatapacket[]>(\n      `select\n         ak.id,\n         ak.nombre,\n         ak.key_prefix,\n         ak.empresa_id,\n         ak.usuario_id,\n         ak.activa,\n         ak.ultimo_uso,\n         ak.fecha_creacion\n       from api_keys ak\n       where ak.usuario_id = ? and ak.activa = 1\n       order by ak.fecha_creacion desc`,\n      [usuario_id]\n    );\n\n    if (rows.length === 0) return [];\n\n    // 2. hidratar nombres de empresa con prisma (desencripta automáticamente)\n    const empresaids = [...new set(rows.map(r => bigint(r.empresa_id)))];\n    const empresas = await prisma.empresas.findmany({\n      where: { id: { in: empresaids } },\n      select: { id: true, nombre_de_empresa: true }\n    });\n    const empresamap = new map(empresas.map(e => [number(e.id), e.nombre_de_empresa || 'empresa']));\n\n    return rows.map(r => ({\n      id: r.id,\n      nombre: r.nombre,\n      key_prefix: r.key_prefix,"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 676,
+    "fields": [
+      "email"
+    ],
+    "snippet": "    console.log('📝 [getincidents] params:', params);\n\n    const [documentrows] = await db.query<documentpacket[]>(query, params);\n\n    console.log('📊 [getincidents] incidencias encontradas:', documentrows.length);\n\n    return mapdocumentpacketstodocuments(documentrows);\n  } catch (error) {\n    console.error(\"❌ [getincidents] error:\", error);\n    return [];\n  }\n}\n\nexport async function updatedocument(id: number, data: documentupdatepayload, useridentifier: string = 'sistema'): promise<{ success: boolean }> {\n  if (useridentifier === 'sistema') {\n    const sessionuser = await getcurrentuser();\n    if (sessionuser?.email) useridentifier = sessionuser.email;\n  }\n\n  try {\n    console.log('═══════════════════════════════════════════════════════════');\n    console.log('🚀 [updatedocument] inicio - id:', id);\n    console.log('═══════════════════════════════════════════════════════════');\n\n    let camposreales: string[] = [];\n    let empresaid: number = 0;\n\n    await prisma.$transaction(async (tx) => {\n      console.log('✅ [updatedocument] transacción iniciada via prisma');\n\n      let oldsnapshot = null;\n      try {"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1592,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "  // 🔔 webhooks trigger: incidencia resuelta manualmente desde el dashboard\n  try {\n    const [docrows] = await db.query<rowdatapacket[]>(\n      `select id_de_empresa, file_hash, tipo_documento, numero_documento, importe_total from documentos where id = ? limit 1`,\n      [documentid]\n    );\n    if (docrows.length > 0) {\n      const empresaid = docrows[0].id_de_empresa;\n      await firewebhook(empresaid, 'incidencia.resuelta_manualmente', {\n        documento_id: documentid,\n        validado_por: 'dashboard',\n        quedan_incidencias_pendientes: false\n      });\n      // al validar todas desde el dashboard siempre quedará limpio → listo para erp\n      await firewebhook(empresaid, 'documento.listo_para_erp', docrows[0]);\n    }\n  } catch (wherr) {\n    console.error('❌ [validatedocumentincidents] error disparando webhook:', wherr);\n  }\n\n  return { success: true };\n}\n\nexport async function getuniqueproviderscount(): promise<number> {\n  const [providerrows] = await db.query<rowdatapacket[]>(`\n       select count(distinct coalesce(identificador_fiscal_hash, nombre_hash, id)) as count\n       from entidades_documento\n       where (rol = 'proveedor' or rol = 'emisor')\n  `);\n\n  return providerrows[0].count || 0;\n}"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1614,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "\nexport async function getuniqueproviderscount(): promise<number> {\n  const [providerrows] = await db.query<rowdatapacket[]>(`\n       select count(distinct coalesce(identificador_fiscal_hash, nombre_hash, id)) as count\n       from entidades_documento\n       where (rol = 'proveedor' or rol = 'emisor')\n  `);\n\n  return providerrows[0].count || 0;\n}\n\nexport async function getuniqueproviders(): promise<documententity[]> {\n  // 1. obtener los ids de los proveedores únicos agrupando por hash\n  const [providerrows] = await db.query<{ id: string }[]>(`\n    select max(id) as id\n    from entidades_documento\n    where (rol = 'proveedor' or rol = 'emisor')\n    group by coalesce(identificador_fiscal_hash, nombre_hash, id)\n  `);\n\n  if (providerrows.length === 0) return [];\n\n  const ids = providerrows.map(p => bigint(p.id));\n\n  // 2. usar prisma para traer los datos y desencriptarlos automáticamente\n  const providers = await prisma.entidades_documento.findmany({\n    where: { id: { in: ids } }\n  });\n\n  // 3. ordenar en memoria (ya que prisma no puede ordenar campos encriptados nativamente en sql)\n  providers.sort((a, b) => (a.nombre || '').localecompare(b.nombre || '', 'es', { sensitivity: 'base' }));\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1625,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "export async function getuniqueproviders(): promise<documententity[]> {\n  // 1. obtener los ids de los proveedores únicos agrupando por hash\n  const [providerrows] = await db.query<{ id: string }[]>(`\n    select max(id) as id\n    from entidades_documento\n    where (rol = 'proveedor' or rol = 'emisor')\n    group by coalesce(identificador_fiscal_hash, nombre_hash, id)\n  `);\n\n  if (providerrows.length === 0) return [];\n\n  const ids = providerrows.map(p => bigint(p.id));\n\n  // 2. usar prisma para traer los datos y desencriptarlos automáticamente\n  const providers = await prisma.entidades_documento.findmany({\n    where: { id: { in: ids } }\n  });\n\n  // 3. ordenar en memoria (ya que prisma no puede ordenar campos encriptados nativamente en sql)\n  providers.sort((a, b) => (a.nombre || '').localecompare(b.nombre || '', 'es', { sensitivity: 'base' }));\n\n  return providers.map(p => ({\n    id: number(p.id),\n    rol: p.rol,\n    nombre: p.nombre,\n    direccion: p.direccion,\n    identificador_fiscal: p.identificador_fiscal,\n    telefono: p.telefono,\n    email: p.email,\n    datos_extra: p.datos_extra,\n    fecha_creacion: p.fecha_creacion?.toisostring()\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1673,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "    and d.id not in (select documento_id from health_check_status where verified = 0)`;\n\n  const [providerrows] = await db.query<any[]>(`\n      select\n        e.id as entidad_id,\n        e.nombre,\n        e.rol,\n        e.identificador_fiscal,\n        e.identificador_fiscal_hash,\n        e.nombre_hash,\n        e.direccion,\n        e.telefono,\n        e.email,\n        e.datos_extra,\n        e.fecha_creacion,\n        d.id_de_empresa,\n        d.id as documento_id,\n        d.importe_total\n      from entidades_documento e\n      join documentos d on e.documento_id = d.id\n      join empresas emp on d.id_de_empresa = emp.id\n      -- ✅ entidades_config join removido: se hace en js post-prisma usando fiscal desencriptado\n      where e.rol in ('proveedor', 'emisor')\n        and d.id_de_empresa in (${placeholders})\n        and not (\n            (e.identificador_fiscal_hash = emp.cif_hash and e.identificador_fiscal_hash is not null and e.identificador_fiscal_hash != '') or\n            (e.identificador_fiscal = emp.cif and e.identificador_fiscal is not null and e.identificador_fiscal != '')\n        )\n        ${wheredoctype}\n  `, companyids);\n\n  const docids = [...new set(providerrows.map(r => r.documento_id))];"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1704,
+    "fields": [
+      "nombre",
+      "telefono",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "  const docids = [...new set(providerrows.map(r => r.documento_id))];\n\n  const [productrows] = docids.length > 0 ? await db.query<any[]>(`\n      select distinct\n        documento_id,\n        codigo,\n        descripcion\n      from lineas_documento\n      where documento_id in(${docids.map(() => '?').join(',')})\n        and (\n          (codigo is not null and codigo != '')\n          or\n          (descripcion is not null and descripcion != '')\n        )\n  `, docids) : [[]];\n\n  const productsbydoc = new map<number, set<string>>();\n  productrows.foreach(p => {\n    if (!productsbydoc.has(p.documento_id)) {\n      productsbydoc.set(p.documento_id, new set());\n    }\n    const key = (p.codigo && p.codigo !== '') ? p.codigo : normalizeproductdescription(p.descripcion || '');\n    if (key) productsbydoc.get(p.documento_id)!.add(key);\n  });\n\n  const providermap = new map<string, {\n    entidad_id: number;\n    rol: string;\n    nombre: string;\n    direccion: string | null;\n    identificador_fiscal: string;\n    telefono: string | null;"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1867,
+    "fields": [
+      "nombre",
+      "email",
+      "telefono",
+      "cif",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "    and d.id not in (select documento_id from health_check_status where verified = 0)`;\n\n  const [providerrows] = await db.query<any[]>(`\n      select\n        e.id as entidad_id,\n        e.nombre,\n        e.rol,\n        e.identificador_fiscal,\n        e.identificador_fiscal_hash,\n        e.nombre_hash,\n        e.direccion,\n        e.telefono,\n        e.email,\n        e.datos_extra,\n        e.fecha_creacion,\n        d.id_de_empresa,\n        d.id as documento_id,\n        d.importe_total\n      from entidades_documento e\n      join documentos d on e.documento_id = d.id\n      join empresas emp on d.id_de_empresa = emp.id\n      -- ✅ entidades_config join removido: se hace en js post-prisma usando fiscal desencriptado\n      where e.rol in ('cliente', 'receptor')\n        and d.id_de_empresa in (${placeholders})\n        and not (\n            (e.identificador_fiscal_hash = emp.cif_hash and e.identificador_fiscal_hash is not null and e.identificador_fiscal_hash != '') or\n            (e.identificador_fiscal = emp.cif and e.identificador_fiscal is not null and e.identificador_fiscal != '')\n        )\n        ${wheredoctype}\n  `, companyids);\n\n  const docids = [...new set(providerrows.map(r => r.documento_id))];"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 1898,
+    "fields": [
+      "nombre",
+      "telefono",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "  const docids = [...new set(providerrows.map(r => r.documento_id))];\n\n  const [productrows] = docids.length > 0 ? await db.query<any[]>(`\n      select distinct\n        documento_id,\n        codigo,\n        descripcion\n      from lineas_documento\n      where documento_id in(${docids.map(() => '?').join(',')})\n        and (\n          (codigo is not null and codigo != '')\n          or\n          (descripcion is not null and descripcion != '')\n        )\n  `, docids) : [[]];\n\n  const productsbydoc = new map<number, set<string>>();\n  productrows.foreach(p => {\n    if (!productsbydoc.has(p.documento_id)) {\n      productsbydoc.set(p.documento_id, new set());\n    }\n    const key = (p.codigo && p.codigo !== '') ? p.codigo : normalizeproductdescription(p.descripcion || '');\n    if (key) productsbydoc.get(p.documento_id)!.add(key);\n  });\n\n  const providermap = new map<string, {\n    entidad_id: number;\n    rol: string;\n    nombre: string;\n    direccion: string | null;\n    identificador_fiscal: string;\n    telefono: string | null;"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2050,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\nexport async function getallproducts(): promise<number> {\n  const [linearows] = await db.query<rowdatapacket[]>(`\n        select count(distinct codigo) as count\n        from lineas_documento\n        where codigo is not null and codigo != ''\n  `);\n\n  return linearows[0].count || 0;\n}\n\n// get by fiscal id, as name can be repeated or contain special chars\nexport async function getdocumentsbyprovidername(\n  fiscalid: string,\n  empresaids?: number[]\n): promise<document[]> {\n  const fiscalidhash = require('crypto').createhash('sha256').update(fiscalid.tolowercase().trim()).digest('hex');\n  console.log('🔍 [getdocumentsbyprovidername] iniciando:', { fiscalid, empresaids });\n\n  let query = `\n        select distinct d.*\n        from documentos d\n        join entidades_documento ed on d.id = ed.documento_id\n        where (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n  and(ed.rol = 'proveedor' or ed.rol = 'emisor')\n          and d.id not in(select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\n    `;\n\n  const params: any[] = [fiscalidhash, fiscalid];\n\n  // ✅ agregar filtro de empresas si se especifica"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2091,
+    "fields": [
+      "nombre",
+      "telefono",
+      "direccion",
+      "identificador_fiscal"
+    ],
+    "snippet": "  console.log('📝 [getdocumentsbyprovidername] params:', params);\n\n  const [documentrows] = await db.query<documentpacket[]>(query, params);\n\n  console.log('📊 [getdocumentsbyprovidername] documentos encontrados:', documentrows.length);\n\n  return mapdocumentpacketstodocuments(documentrows);\n}\n\nexport async function getproviderbyfiscalid(fiscalid: string): promise<documententity | null> {\n  if (!fiscalid) return null;\n  const hash = require('crypto').createhash('sha256').update(fiscalid.tolowercase().trim()).digest('hex');\n\n  const p = await prisma.entidades_documento.findfirst({\n    where: {\n      or: [\n        { identificador_fiscal_hash: hash },\n        { identificador_fiscal: fiscalid }\n      ],\n      rol: { in: ['proveedor', 'emisor'] }\n    }\n  });\n\n  if (!p) return null;\n\n  const provider: documententity = {\n    id: number(p.id),\n    rol: p.rol,\n    nombre: p.nombre,\n    direccion: p.direccion,\n    identificador_fiscal: p.identificador_fiscal,\n    telefono: p.telefono,"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2418,
+    "fields": [
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ cambio crítico: usar distinct para evitar duplicados\n  const [docs] = await db.query<documentpacket[]>(`\n        select distinct d.*\n  from documentos d\n        join entidades_documento ed on d.id = ed.documento_id\n        where (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n  and(ed.rol = 'proveedor' or ed.rol = 'emisor')\n          ${wheredoctype}\n          ${whereempresa}\n`, params);\n\n  console.log(`📊[getprovideranalytics] documentos encontrados para ${fiscalid}: `, docs.length);\n  console.log(`🏢[getprovideranalytics] empresas filtradas: `, empresaids);\n\n  // ✅ fix: aplicar el mismo filtro de empresaids a la query de líneas\n  let linequery = `\n    select ld.importe_linea\n    from lineas_documento ld\n    join documentos d on ld.documento_id = d.id\n    join entidades_documento ed on d.id = ed.documento_id\n    where (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n  and(ed.rol = 'proveedor' or ed.rol = 'emisor')\n      and d.id not in(select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\nand(\n  (ld.codigo is not null and ld.codigo != '')\nor\n  (ld.descripcion is not null and ld.descripcion != '')\n      )\n`;\n  let lineparams: any[] = [fiscalidhash, fiscalid];"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2570,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "    const params: any[] = [user.id, empresaids];\n\n    const [summary] = await db.query<rowdatapacket[]>(`\nselect\nsum(case when i.validado = 0 then 1 else 0 end) as totalopen,\n  sum(case when i.validado = 1 then 1 else 0 end) as totalvalidated\n            from incidencias_documento i\n            join documentos d on i.documento_id = d.id\n            join empresas e2 on d.id_de_empresa = e2.id\n            where 1 = 1 ${wheredoctype} ${whereempresa}\n`, params);\n\n    const [byproviderraw] = await db.query<rowdatapacket[]>(`\n            select coalesce(e.nombre_hash, e.nombre) as group_key,\n                   max(e.id) as entidad_id_sample,\n                   count(i.id) as count\n            from incidencias_documento i\n            join documentos d on i.documento_id = d.id\n            join entidades_documento e on i.documento_id = e.documento_id\n            join empresas e2 on d.id_de_empresa = e2.id\n            where i.validado = 0\nand(e.rol = 'proveedor' or e.rol = 'emisor')\n              ${wheredoctype}\n              ${whereempresa}\n            group by group_key\n            order by count desc\n            limit 5\n  `, params);\n\n    // ✅ hidratar nombres desencriptados vía prisma\n    const sampleids = byproviderraw.map(r => bigint(r.entidad_id_sample)).filter(boolean);\n    const hydrated = sampleids.length > 0"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2580,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "`, params);\n\n    const [byproviderraw] = await db.query<rowdatapacket[]>(`\n            select coalesce(e.nombre_hash, e.nombre) as group_key,\n                   max(e.id) as entidad_id_sample,\n                   count(i.id) as count\n            from incidencias_documento i\n            join documentos d on i.documento_id = d.id\n            join entidades_documento e on i.documento_id = e.documento_id\n            join empresas e2 on d.id_de_empresa = e2.id\n            where i.validado = 0\nand(e.rol = 'proveedor' or e.rol = 'emisor')\n              ${wheredoctype}\n              ${whereempresa}\n            group by group_key\n            order by count desc\n            limit 5\n  `, params);\n\n    // ✅ hidratar nombres desencriptados vía prisma\n    const sampleids = byproviderraw.map(r => bigint(r.entidad_id_sample)).filter(boolean);\n    const hydrated = sampleids.length > 0\n      ? await prisma.entidades_documento.findmany({ where: { id: { in: sampleids } }, select: { id: true, nombre: true } })\n      : [];\n    const hydratedmap = new map(hydrated.map(e => [number(e.id), e.nombre]));\n\n    const byprovider = byproviderraw.map(r => ({\n      name: hydratedmap.get(number(r.entidad_id_sample)) || r.group_key || 'desconocido',\n      count: r.count\n    }));\n\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2680,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n    // ⬅️ cambio: ahora también obtenemos id_de_empresa\n    const [docswithdetails] = await connection.query<rowdatapacket[]>(`\nselect\nd.id,\n  d.id_de_empresa,\n  d.numero_documento,\n  d.tipo_documento,\n  d.fecha_emision,\n  d.importe_total,\n  d.importe_sin_impuestos,\n  (select coalesce(identificador_fiscal_hash, identificador_fiscal) from entidades_documento where documento_id = d.id and(rol = 'proveedor' or rol = 'emisor') limit 1) as provider_cif,\n    (select count(*) from lineas_documento where documento_id = d.id) as line_count,\n      (select sum(importe_linea) from lineas_documento where documento_id = d.id) as sum_line_items,\n        (select sum(cuota) from impuestos_documento where documento_id = d.id) as sum_cuota_iva\n            from documentos d\n            where d.id in(?)\n        `, [docids]);\n\n    // check for incomplete documents\n    for (const doc of docswithdetails) {\n      if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {\n        const description = `datos incompletos o faltantes en el documento.`;\n        const [existing] = await connection.query<rowdatapacket[]>(\n          'select id from incidencias_documento where documento_id = ? and descripcion like ?',\n          [doc.id, 'datos incompletos%']\n        );\n        if (existing.length === 0) {\n          await prisma.incidencias_documento.create({\n            data: { documento_id: bigint(doc.id), id_de_empresa: doc.id_de_empresa ? bigint(doc.id_de_empresa) : null, descripcion: description } as any\n          });\n          newincidentsfound++;"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2701,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "      if (!doc.numero_documento || doc.line_count === 0 || doc.importe_total == 0) {\n        const description = `datos incompletos o faltantes en el documento.`;\n        const [existing] = await connection.query<rowdatapacket[]>(\n          'select id from incidencias_documento where documento_id = ? and descripcion like ?',\n          [doc.id, 'datos incompletos%']\n        );\n        if (existing.length === 0) {\n          await prisma.incidencias_documento.create({\n            data: { documento_id: bigint(doc.id), id_de_empresa: doc.id_de_empresa ? bigint(doc.id_de_empresa) : null, descripcion: description } as any\n          });\n          newincidentsfound++;\n          firewebhook(doc.id_de_empresa, 'documento.requiere_atencion', {\n            id: doc.id,\n            tipo_documento: doc.tipo_documento,\n            numero_documento: doc.numero_documento,\n            importe_total: doc.importe_total,\n            fecha_emision: doc.fecha_emision,\n            motivo_incidencia: description\n          }).catch(console.error);\n        }\n      }\n    }\n    const validdocsforanalysis = docswithdetails.filter(d => d.numero_documento && d.provider_cif && d.importe_total);\n\n    // ✅ cambio crítico: incluir empresa en la clave de duplicados\n    // check for duplicates (solo dentro de cada empresa)\n    const docmap = new map<string, array<any>>();\n    for (const doc of validdocsforanalysis) {\n      // ✅ antes: const key = `${ doc.provider_cif }| ${ doc.numero_documento }| ${ doc.importe_total } `;\n      // ✅ ahora: incluir empresa en la clave\n      const key = `${doc.id_de_empresa}| ${doc.provider_cif}| ${doc.numero_documento}| ${doc.importe_total} `;\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2902,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "nombre_fiscal",
+      "cif"
+    ],
+    "snippet": "  console.log('🔍 [rundocumentanalysis] params:', params);\n\n  const [alldocids] = await db.query<rowdatapacket[]>(query, params);\n  const docids = alldocids.map(row => row.id);\n\n  console.log(`📊[rundocumentanalysis] analizando ${docids.length} documentos`);\n\n  return analyzedocuments(docids);\n}\n\nexport async function runsingledocumentanalysis(documentid: number): promise<incidentanalysisresult> {\n  return analyzedocuments([documentid]);\n}\nexport async function getdashboardanalytics(\n  empresaids?: number[],\n  año?: number,\n  trimestre?: number\n): promise<dashboardanalytics> {\n  console.log('🔥 [getdashboardanalytics] parámetros recibidos:', { empresaids, año, trimestre });\n\n  let my_company_fiscal_ids: string[] = [];\n  let my_company_names: string[] = [];\n\n  if (empresaids && empresaids.length > 0) {\n    const empresasinfo = await prisma.empresas.findmany({\n      where: { id: { in: empresaids } },\n      select: { cif: true, nombre_de_empresa: true, nombre_fiscal: true }\n    });\n    my_company_fiscal_ids = empresasinfo.map(e => e.cif).filter(boolean) as string[];\n    my_company_names = empresasinfo.flatmap(e => [e.nombre_de_empresa, e.nombre_fiscal]).filter(boolean) as string[];\n  }\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 2970,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "\n  if (año === undefined) {\n    const [yearrow] = await db.query<rowdatapacket[]>(\n      `select max(year(fecha_emision)) as maxyear from documentos ${hasempresafilter ? 'where id_de_empresa in (?)' : ''\n      }`,\n      hasempresafilter ? [empresaids] : []\n    );\n    yeartouse = yearrow[0]?.maxyear || new date().getfullyear();\n    console.log('📅 [getdashboardanalytics] auto-detected year:', yeartouse);\n  }\n\n  const my_company_fiscal_combined = my_company_fiscal_ids.length > 0\n    ? [...my_company_fiscal_ids.map(cif => require('crypto').createhash('sha256').update(cif.tolowercase().trim()).digest('hex')), ...my_company_fiscal_ids]\n    : [];\n\n  const cifplaceholders = my_company_fiscal_combined.length > 0\n    ? my_company_fiscal_combined.map(() => '?').join(',')\n    : \"'never_match'\";\n\n  const my_company_name_combined = my_company_names.length > 0\n    ? [...my_company_name_hashes, ...my_company_names]\n    : [];\n\n  const nameplaceholders = my_company_name_combined.length > 0\n    ? my_company_name_combined.map(() => '?').join(',')\n    : \"'never_match'\";\n\n  // ✅ cambio crítico: usar importe_total (con iva) en lugar de importe_sin_impuestos\n  const [kpirows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3195,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ quarterly summary con importe_total (con iva)\n  const [quarterlyrows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                -- ✅ clasificación robusta (igual a trimestres)\n                (select coalesce(max(case \n                    when ed2.rol in('emisor', 'proveedor') \n                      and coalesce(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) in(${cifplaceholders}) \n                    then 1 \n                    else 0 \n                end), 0) from entidades_documento ed2 where ed2.documento_id = d.id) as is_issued\n            from documentos d\n            where 1=1\n              and (\n                  (lower(d.tipo_documento) like '%factura%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%abono%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%nota%crédito%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%nota%credito%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n              )\n              and d.id not in (select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\n              ${hasempresafilter ? 'and d.id_de_empresa in (?)' : ''}\n              ${whereperiodfilter}"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3276,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ multi-year quarterly (desglose por año y trimestre)\n  const [multiyearrows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                case\n                    when lower(d.tipo_documento) regexp 'emitid[oa]' then 1\n                    when lower(d.tipo_documento) regexp 'recibid[oa]' then 0\n                    when lower(d.tipo_documento) like '%albar%' then\n                        case\n                            when exists (\n                                select 1 from entidades_documento e2 \n                                where e2.documento_id = d.id \n                                  and e2.rol in ('cliente', 'receptor')\n                            ) then 1\n                            else 0\n                        end\n                    when lower(d.tipo_documento) like '%abono%' then\n                        case\n                            when (select coalesce(e2.identificador_fiscal_hash, e2.identificador_fiscal) \n                                  from entidades_documento e2 \n                                  where e2.documento_id = d.id \n                                    and e2.rol in ('emisor', 'proveedor') \n                                  limit 1) in (${cifplaceholders})"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3363,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ yearly summary (resumen anual)\n  const [yearlyrows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                -- ✅ clasificación robusta (igual a trimestres)\n                (select coalesce(max(case \n                    when ed2.rol in('emisor', 'proveedor') \n                      and coalesce(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) in(${cifplaceholders}) \n                    then 1 \n                    else 0 \n                end), 0) from entidades_documento ed2 where ed2.documento_id = d.id) as is_issued\n            from documentos d\n            where 1=1\n              and (\n                  (lower(d.tipo_documento) like '%factura%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%abono%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%albar%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n              )\n              and d.id not in (select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\n              ${hasempresafilter ? 'and d.id_de_empresa in (?)' : ''}\n              -- no year filter for yearly summary strictly, unless we wanted to filter by range, but usually we want all years\n        )"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3445,
+    "fields": [
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "  ]);\n\n  const [ivarows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                i.cuota as iva_cuota,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                -- ✅ clasificación robusta (igual a trimestres)\n                (select coalesce(max(case \n                    when ed2.rol in('emisor', 'proveedor') \n                      and coalesce(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) in(${cifplaceholders}) \n                    then 1 \n                    else 0 \n                end), 0) from entidades_documento ed2 where ed2.documento_id = d.id) as is_issued\n            from documentos d\n            join impuestos_documento i on d.id = i.documento_id\n            where i.tipo_impuesto not like '%retencion%'\n              and (\n                  (lower(d.tipo_documento) like '%factura%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%abono%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n                  or (lower(d.tipo_documento) like '%albar%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n              )\n              and d.id not in (select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\n            ${hasempresafilter ? 'and d.id_de_empresa in (?)' : ''}"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3526,
+    "fields": [
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ multi-year iva (desglose por año y trimestre)\n  const [multiyearivarows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                i.cuota as iva_cuota,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                case\n                    when lower(d.tipo_documento) regexp 'emitid[oa]' then 1\n                    when lower(d.tipo_documento) regexp 'recibid[oa]' then 0\n                    when lower(d.tipo_documento) like '%albar%' then\n                        case\n                            when exists (\n                                select 1 from entidades_documento e2 \n                                where e2.documento_id = d.id \n                                  and e2.rol in ('cliente', 'receptor')\n                            ) then 1\n                            else 0\n                        end\n                    when lower(d.tipo_documento) like '%abono%' then\n                        case\n                            when (select coalesce(e2.identificador_fiscal_hash, e2.identificador_fiscal) \n                                  from entidades_documento e2 \n                                  where e2.documento_id = d.id \n                                    and e2.rol in ('emisor', 'proveedor') "
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3612,
+    "fields": [
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ yearly iva summary\n  const [ivayearlyrows] = await db.query<rowdatapacket[]>(`\n        with doctypes as (\n            select \n                d.id,\n                d.fecha_emision,\n                d.importe_total,\n                i.cuota as iva_cuota,\n                case \n                    when lower(d.tipo_documento) like '%abono%' or d.importe_total < 0 \n                    then 1 \n                    else 0 \n                end as es_abono,\n                case\n                    when lower(d.tipo_documento) regexp 'emitid[oa]' then 1\n                    when lower(d.tipo_documento) regexp 'recibid[oa]' then 0\n                    when lower(d.tipo_documento) like '%albar%' then\n                        case\n                            when exists (\n                                select 1 from entidades_documento e2 \n                                where e2.documento_id = d.id \n                                  and e2.rol in ('cliente', 'receptor')\n                            ) then 1\n                            else 0\n                        end\n                    when lower(d.tipo_documento) like '%abono%' then\n                        case\n                            when (select coalesce(e2.identificador_fiscal_hash, e2.identificador_fiscal) \n                                  from entidades_documento e2 \n                                  where e2.documento_id = d.id \n                                    and e2.rol in ('emisor', 'proveedor') "
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3702,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "  // given complexity, let's implement a specific query here that respects the filters.\n\n  const [providerstatsrows] = await db.query<any[]>(`\n        select \n            max(e.id) as entidad_id,\n            sum(d.importe_total) as totalspent,\n            count(distinct d.id) as totaldocs,\n            max(d.fecha_emision) as lastdate\n        from documentos d\n        join entidades_documento e on d.id = e.documento_id\n        where e.rol in ('proveedor', 'emisor')\n          and coalesce(e.identificador_fiscal_hash, e.identificador_fiscal) not in (${cifplaceholders})\n          and coalesce(e.nombre_hash, e.id) not in (${nameplaceholders})\n          and d.importe_total > 0 -- solo gastos positivos\n          and (\n              (lower(d.tipo_documento) like '%factura%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n              or (lower(d.tipo_documento) like '%abono%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n              or (lower(d.tipo_documento) like '%albar%' and lower(d.tipo_documento) not like '%(sin confirmar)%')\n          )\n          and d.id not in (select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\n          ${hasempresafilter ? 'and d.id_de_empresa in (?)' : ''}\n          ${whereperiodfilter}\n        group by coalesce(e.identificador_fiscal_hash, e.nombre_hash, e.id)\n        order by totalspent desc\n        limit 5\n    `, [\n    ...my_company_fiscal_combined,\n    ...my_company_name_combined,\n    ...(hasempresafilter ? [empresaids] : []),\n    ...periodqueryparams\n  ]);"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 3746,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "  });\n\n  const [clientstatsrows] = await db.query<any[]>(`\n        select \n            max(e.id) as entidad_id,\n            sum(d.importe_total) as totalearned,\n            count(distinct d.id) as totaldocs,\n            max(d.fecha_emision) as lastdate\n        from documentos d\n        join entidades_documento e on d.id = e.documento_id\n        where e.rol in ('cliente', 'receptor')\n          and coalesce(e.identificador_fiscal_hash, e.identificador_fiscal) not in (${cifplaceholders})\n          and coalesce(e.nombre_hash, e.id) not in (${nameplaceholders})\n          and d.importe_total > 0\n          and d.id not in (select documento_id from incidencias_documento where validado = 0)\n          and d.id not in (select documento_id from health_check_status where verified = 0)\n          ${hasempresafilter ? 'and d.id_de_empresa in (?)' : ''}\n          ${whereperiodfilter}\n        group by coalesce(e.identificador_fiscal_hash, e.nombre_hash, e.id)\n        order by totalearned desc\n        limit 5\n    `, [\n    ...my_company_fiscal_combined,\n    ...my_company_name_combined,\n    ...(hasempresafilter ? [empresaids] : []),\n    ...periodqueryparams\n  ]);\n\n  const topcliententityids = clientstatsrows.map(r => bigint(r.entidad_id));\n  const topcliententities = topcliententityids.length > 0 ? await prisma.entidades_documento.findmany({ where: { id: { in: topcliententityids } } }) : [];\n  const topclientmap = new map(topcliententities.map(e => [number(e.id), e]));\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 4848,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // ✅ bloqueo de trimestre cerrado\n    const [closedcheck] = await connection.query<rowdatapacket[]>(`\n      select d.id, d.num_trimestre, d.año_trimestre \n      from documentos d\n      left join empresas e on d.id_de_empresa = e.id\n      where d.id in (?) \n        and d.trimestre_cerrado = 1\n        and (json_contains(e.id_de_usuario, cast(? as json)) or d.id_de_empresa is null)\n    `, [ids, userid]);\n\n    if (closedcheck.length > 0) {\n      const firstlocked = closedcheck[0];\n      console.warn(`⚠️ [deletedocuments] bloqueo masivo: ${closedcheck.length} documentos en trimestres cerrados.`);\n      return {\n        success: false,\n        error: `no se pueden eliminar los documentos seleccionados porque ${closedcheck.length} de ellos pertenecen a trimestres cerrados (ej: ${firstlocked.año_trimestre}q${firstlocked.num_trimestre}).`\n      };\n    }\n\n    // fetch docs data for webhooks before deleting\n    const [docstowebhook] = await connection.query<rowdatapacket[]>(`\n      select d.id as documento_id, d.numero_documento, d.id_de_empresa \n      from documentos d\n      left join empresas e on d.id_de_empresa = e.id\n      where d.id in (?) \n        and (json_contains(e.id_de_usuario, cast(? as json)) or d.id_de_empresa is null)\n    `, [ids, userid]);\n\n    // obtener información del usuario para auditoría\n    const useremail = (await getcurrentuser())?.email || 'desconocido';\n"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 4867,
+    "fields": [
+      "email"
+    ],
+    "snippet": "\n    // fetch docs data for webhooks before deleting\n    const [docstowebhook] = await connection.query<rowdatapacket[]>(`\n      select d.id as documento_id, d.numero_documento, d.id_de_empresa \n      from documentos d\n      left join empresas e on d.id_de_empresa = e.id\n      where d.id in (?) \n        and (json_contains(e.id_de_usuario, cast(? as json)) or d.id_de_empresa is null)\n    `, [ids, userid]);\n\n    // obtener información del usuario para auditoría\n    const useremail = (await getcurrentuser())?.email || 'desconocido';\n\n    // capturar snapshots e insertar auditoría\n    for (const doc of docstowebhook) {\n      let snapshot = null;\n      try {\n        snapshot = await getsnapshotbeforeupdate(doc.documento_id, db);\n      } catch (e) {\n        console.warn(`⚠️ [deletedocuments] falló captura de snapshot previo a eliminar doc ${doc.documento_id}:`, e);\n      }\n\n      await prisma.documentos_auditoria.create({\n        data: {\n          documento_id: bigint(doc.documento_id),\n          id_de_empresa: doc.id_de_empresa ? bigint(doc.id_de_empresa) : bigint(0),\n          accion: 'delete',\n          usuario: useremail,\n          detalle: json.stringify({ previo: snapshot }),\n          fecha_accion: new date()\n        }\n      });"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 4964,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // 1a. fecha anómala: year(fecha_emision) != año_trimestre, o año < 2020\n  const [fechaanomalas] = await db.query<rowdatapacket[]>(`\n    select d.id, d.id_de_empresa, d.año_trimestre, date_format(d.fecha_emision, '%d/%m/%y') as fecha_fmt\n    from documentos d\n    where d.id_de_empresa in (?)\n      and d.fecha_emision is not null\n      and (\n        year(d.fecha_emision) != d.año_trimestre\n        or year(d.fecha_emision) < 2020\n      )\n      and d.id not in (select documento_id from ${dbname}.health_check_status where verified = 0)\n  `, [companyids]);\n\n  for (const doc of fechaanomalas as any[]) {\n    const motivo = `fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). posible error de ocr.`;\n    await prisma.health_check_status.createmany({\n      data: [{ documento_id: bigint(doc.id), empresa_id: doc.id_de_empresa ? bigint(doc.id_de_empresa) : null, verified: false, check_type: 'fecha_anomala', motivo }] as any[],\n      skipduplicates: true\n    });\n    console.log(`📅 [healthcheck] fecha anómala registrada para doc #${doc.id}`);\n  }\n\n  // 1b. entidad duplicada: misma entidad como emisor/proveedor y receptor/cliente\n  const [entidadesduplicadas] = await db.query<rowdatapacket[]>(`\n    select ed.documento_id, d.id_de_empresa,\n           coalesce(nullif(ed.identificador_fiscal_hash,''), nullif(ed.nombre_hash,''), \n                    nullif(ed.identificador_fiscal,''), ed.nombre) as entidad_key,\n           max(ed.id) as entidad_id_sample\n    from entidades_documento ed\n    join documentos d on ed.documento_id = d.id\n    where d.id_de_empresa in (?)"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 4986,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // 1b. entidad duplicada: misma entidad como emisor/proveedor y receptor/cliente\n  const [entidadesduplicadas] = await db.query<rowdatapacket[]>(`\n    select ed.documento_id, d.id_de_empresa,\n           coalesce(nullif(ed.identificador_fiscal_hash,''), nullif(ed.nombre_hash,''), \n                    nullif(ed.identificador_fiscal,''), ed.nombre) as entidad_key,\n           max(ed.id) as entidad_id_sample\n    from entidades_documento ed\n    join documentos d on ed.documento_id = d.id\n    where d.id_de_empresa in (?)\n      and ed.documento_id not in (select documento_id from ${dbname}.health_check_status where verified = 0)\n    group by ed.documento_id, entidad_key\n    having sum(ed.rol in ('emisor','proveedor')) > 0\n       and sum(ed.rol in ('receptor','cliente')) > 0\n  `, [companyids]);\n\n  for (const doc of entidadesduplicadas as any[]) {\n    // ✅ obtener nombre desencriptado con prisma\n    let nombreentidad = doc.entidad_key || 'desconocida';\n    if (doc.entidad_id_sample) {\n      const entidad = await prisma.entidades_documento.findunique({ where: { id: bigint(doc.entidad_id_sample) }, select: { nombre: true, identificador_fiscal: true } });\n      if (entidad) {\n        nombreentidad = entidad.nombre || entidad.identificador_fiscal || nombreentidad;\n      }\n    }\n\n    const motivo = `la entidad \"${nombreentidad}\" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;\n    await prisma.health_check_status.createmany({\n      data: [{ documento_id: bigint(doc.documento_id), empresa_id: doc.id_de_empresa ? bigint(doc.id_de_empresa) : null, verified: false, check_type: 'entidad_duplicada', motivo }] as any[],\n      skipduplicates: true\n    });\n    console.log(`🔁 [healthcheck] entidad duplicada registrada para doc #${doc.documento_id}`);"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 5401,
+    "fields": [
+      "identificador_fiscal"
+    ],
+    "snippet": "\n  // ✅ cambio crítico: usar distinct para evitar duplicados\n  const [docs] = await db.query<documentpacket[]>(`\n        select distinct d.*\n  from documentos d\n        join entidades_documento ed on d.id = ed.documento_id\n        where (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n  and(ed.rol = 'cliente' or ed.rol = 'receptor')\n          ${wheredoctype}\n          ${whereempresa}\n`, params);\n\n  console.log(`📊[getclientanalytics] documentos encontrados para ${fiscalid}: `, docs.length);\n  console.log(`🏢[getclientanalytics] empresas filtradas: `, empresaids);\n\n  // ✅ fix: aplicar el mismo filtro de empresaids a la query de líneas\n  let linequery = `\n    select ld.importe_linea\n    from lineas_documento ld\n    join documentos d on ld.documento_id = d.id\n    join entidades_documento ed on d.id = ed.documento_id\n    where (ed.identificador_fiscal_hash = ? or ed.identificador_fiscal = ?)\n  and(ed.rol = 'cliente' or ed.rol = 'receptor')\n      and d.id not in(select documento_id from incidencias_documento where validado = 0)\n    and d.id not in (select documento_id from health_check_status where verified = 0)\nand(\n  (ld.codigo is not null and ld.codigo != '')\nor\n  (ld.descripcion is not null and ld.descripcion != '')\n      )\n`;\n  let lineparams: any[] = [fiscalidhash, fiscalid];"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 5703,
+    "fields": [
+      "nombre",
+      "nombre_de_empresa",
+      "cif"
+    ],
+    "snippet": "\nexport async function getwebhookdocumentpayload(documentid: number): promise<any> {\n  const [docrows] = await db.query<rowdatapacket[]>(\n    `select \n      d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.fecha_emision, \n      d.fecha_vencimiento, d.importe_total, d.importe_sin_impuestos, d.moneda, \n      d.observaciones, d.fecha_creacion, d.id_de_empresa\n     from documentos d\n     where d.id = ? limit 1`,\n    [documentid]\n  );\n\n  if (docrows.length === 0) return null;\n  const doc = docrows[0];\n\n  // ✅ hidratar empresa con prisma (desencripta automáticamente)\n  const empresarecord = doc.id_de_empresa ? await prisma.empresas.findunique({\n    where: { id: bigint(doc.id_de_empresa) },\n    select: { nombre_de_empresa: true, cif: true }\n  }) : null;\n\n  doc.nombre_de_empresa = empresarecord?.nombre_de_empresa || null;\n  doc.empresa_cif = empresarecord?.cif || null;\n\n  // ✅ hidratar entidades con prisma (desencripta automáticamente)\n  const entidadesprisma = await prisma.entidades_documento.findmany({\n    where: { \n      documento_id: bigint(documentid),\n      rol: { in: ['emisor', 'cliente'] }\n    },\n    select: {\n      rol: true,"
+  },
+  {
+    "file": "src/services/document-service.ts",
+    "line": 5750,
+    "fields": [
+      "nombre",
+      "identificador_fiscal"
+    ],
+    "snippet": "  }));\n\n  const [impuestos] = await db.query<rowdatapacket[]>(\n    `select tipo_impuesto, porcentaje, base_imponible, cuota \n     from impuestos_documento where documento_id = ?`,\n    [documentid]\n  );\n\n  return {\n    ...doc,\n    entidades,\n    iva_details: impuestos\n  };\n}\n\nexport async function getsnapshotbeforeupdate(id: number, tx: any = prisma): promise<any> {\n  const doc = await tx.documentos.findunique({\n    where: { id: bigint(id) },\n    select: {\n      numero_documento: true,\n      tipo_documento: true,\n      importe_total: true,\n      importe_sin_impuestos: true,\n      fecha_emision: true,\n      fecha_vencimiento: true,\n      moneda: true,\n      observaciones: true,\n      entidades_documento: {\n        select: {\n          rol: true,\n          nombre: true,\n          identificador_fiscal: true,"
+  },
+  {
+    "file": "src/services/incidents-service.ts",
+    "line": 161,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "        try {\n            console.log(`🏢 [incidents] validación por cambio en empresa #${companyid}`);\n            const [docs] = await db.query<rowdatapacket[]>(\n                `select distinct d.id \n                 from documentos d\n                 join incidencias_documento i on d.id = i.documento_id\n                 where d.id_de_empresa = ? and i.validado = 0`,\n                [companyid]\n            );\n\n            console.log(`🏢 [incidents] encontrados ${docs.length} documentos con incidencias para revalidar.`);\n\n            for (const doc of docs) {\n                await validateincidentsasync(doc.id);\n            }\n        } catch (err) {\n            console.error('❌ [incidents] error revalidando empresa:', err);\n        }\n    })();\n}\n\n/**\n * validates a single specific incident by id.\n */\nexport async function validatesingleincident(incidentid: number, userid: number | string = 'system') {\n    console.log(`🕵️ [incidents] validando incidencia individual #${incidentid}`);\n    try {\n        await db.query(\n            `update incidencias_documento \n             set validado = 1, \n                 validado_por = ?, \n                 fecha_validacion = now(),"
+  },
+  {
+    "file": "src/services/upload-service.ts",
+    "line": 63,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "async function checkduplicate(filehash: string, empresaid: string): promise<any> {\r\n  try {\r\n    const [rows] = await connection.query(\r\n      `select file_hash, numero_documento as file_name, fecha_creacion as uploaded_at \r\n       from documentos \r\n       where file_hash = ? and id_de_empresa = ?\r\n       order by fecha_creacion desc\r\n       limit 1`,\r\n      [filehash, empresaid]\r\n    );\r\n\r\n    const results = rows as any[];\r\n    return results.length > 0 ? results[0] : null;\r\n  } catch (error) {\r\n    console.error('error al verificar duplicados:', error);\r\n    return null;\r\n  }\r\n}\r\n\r\n/**\r\n * descomprime un zip y calcula el hash sha-256 de cada archivo individual\r\n * 🔥 normaliza los nombres de archivo (quita espacios)\r\n */\r\nasync function extractandhashzipfiles(filebuffer: arraybuffer): promise<{ [filename: string]: string }> {\r\n  const zip = new jszip();\r\n  const zipcontent = await zip.loadasync(buffer.from(filebuffer));\r\n  const filehashes: { [filename: string]: string } = {};\r\n\r\n  for (const [originalfilename, zipentry] of object.entries(zipcontent.files)) {\r\n    if (!zipentry.dir) {\r\n      // 🔥 normalizar nombre (quitar espacios)\r\n      const normalizedfilename = normalizefilename(originalfilename);\r"
+  },
+  {
+    "file": "src/services/upload-service.ts",
+    "line": 191,
+    "fields": [
+      "nombre"
+    ],
+    "snippet": "): promise<void> {\r\n  try {\r\n    await connection.query(\r\n      `insert into ${dbname}.actividad \r\n        (upload_id, parent_upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)\r\n       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,\r\n      [\r\n        uploadid,\r\n        parentuploadid || null,\r\n        empresaid,\r\n        filename,\r\n        filetype,\r\n        'iniciando',\r\n        'iniciando el flujo',\r\n        0,\r\n        'archivo recibido, preparando para procesamiento'\r\n      ]\r\n    );\r\n    console.log(`[${filename}] ✅ registro de actividad creado (uploadid: ${uploadid}${parentuploadid ? `, parent: ${parentuploadid}` : ''})`);\r\n  } catch (error) {\r\n    console.error(`[${filename}] ❌ error al crear registro de actividad:`, error);\r\n  }\r\n}\r\n\r\n/**\r\n * 🔥 marca el upload como fallido en la bd con mensaje genérico\r\n */\r\nasync function markuploadasfailed(\r\n  uploadid: string,\r\n  errormessage: string,\r\n  errornode?: string\r\n): promise<void> {\r"
+  },
+  {
+    "file": "src/services/upload-service.ts",
+    "line": 537,
+    "fields": [
+      "nombre",
+      "cif"
+    ],
+    "snippet": "    // 🆕 guardar file_path, file_hash y cif para que el sistema de reintentos pueda reconstruir el payload\r\n    try {\r\n      await connection.query(\r\n        `update ${dbname}.actividad \r\n         set file_path = ?, file_hash = ?, cif = ?\r\n         where upload_id = ?`,\r\n        [filepath, mainfilehash, cif || null, uploadid]\r\n      );\r\n      console.log(`[${normalizedfilename}] ✅ datos de reintento guardados (file_path, file_hash, cif)`);\r\n    } catch (updateerr) {\r\n      console.warn(`[${normalizedfilename}] ⚠️ no se pudieron guardar datos de reintento:`, updateerr);\r\n    }\r\n\r\n    // 🔥 preparar payload para microservice (con nombre normalizado)\r\n    const webhookpayload: any = {\r\n      text: filepath,\r\n      empresaid: empresaid,\r\n      cif: cif,\r\n      nombreempresa: nombreempresa, // ✅ nuevo campo: nombre de empresa\r\n      recargo: recargo, // ✅ nuevo campo: recargo de equivalencia\r\n      filehash: mainfilehash,\r\n      uploadid: uploadid,\r\n      filename: normalizedfilename, // 🔥 nombre normalizado\r\n      originalfilename: originalfilename, // conservamos el original por si acaso\r\n      filesize: filesize,\r\n      publicurl: publicurl,\r\n      iscompressedfile: iscompressedfile,\r\n      mimetype: filemimetype,\r\n      normalizedfiletype: normalizedfiletype,\r\n      fileextension: fileextension,\r\n      fechasubida: now.toisostring(),\r\n    };\r"
+  },
+  {
+    "file": "src/services/upload-service.ts",
+    "line": 828,
+    "fields": [
+      "nombre",
+      "cif"
+    ],
+    "snippet": "    const publicurl = `${minio_endpoint.replace(/\\/$/, '')}/${minio_bucket_name}/${filepath}`;\r\n    \r\n    await connection.query(\r\n      `update ${dbname}.actividad set file_path = ?, file_hash = ?, cif = ? where upload_id = ?`,\r\n      [filepath, mainfilehash, cif || null, uploadid]\r\n    );\r\n\r\n    const webhookpayload: any = {\r\n      text: filepath,\r\n      empresaid: empresaid,\r\n      cif: cif,\r\n      nombreempresa: nombreempresa,\r\n      recargo: recargo,\r\n      filehash: mainfilehash,\r\n      uploadid: uploadid,\r\n      filename: normalizedfilename,\r\n      originalfilename: normalizedfilename,\r\n      filesize: filesize,\r\n      publicurl: publicurl,\r\n      iscompressedfile: false,\r\n      mimetype: filemimetype,\r\n      normalizedfiletype: normalizedfiletype,\r\n      fileextension: fileextension,\r\n      fechasubida: now.toisostring(),\r\n    };\r\n\r\n    console.log(`📡 [uploadapi] llamando webhook para ${normalizedfilename}...`);\r\n    \r\n    // lo lanzamos sin esperar respuesta asíncronamente\r\n    fetch(microservice_webhook_url, {\r\n      method: 'post',\r\n      headers: { 'content-type': 'application/json' },\r"
+  },
+  {
+    "file": "src/services/vertex-ai-service.ts",
+    "line": 109,
+    "fields": [
+      "cif"
+    ],
+    "snippet": "\n        // 1. obtener datos del documento con la suma de sus impuestos\n        const [rows] = await db.query<any[]>(\n            `select d.*, e.recargo as empresa_recargo,\n                coalesce((select sum(cuota) from ${dbname}.impuestos_documento where documento_id = d.id), 0) as total_impuestos\n             from ${dbname}.documentos d\n             left join ${dbname}.empresas e on d.id_de_empresa = e.id\n             where d.id = ? `,\n            [documentid]\n        );\n\n        if (rows.length === 0) return { success: false, incidents: [], error: 'documento no encontrado' };\n        const doc = rows[0];\n\n        // 1.1 obtener desglose de impuestos\n        const [taxrows] = await db.query<any[]>(\n            `select tipo_impuesto, porcentaje, base_imponible, cuota \n             from ${dbname}.impuestos_documento \n             where documento_id = ?`,\n            [documentid]\n        );\n\n        // 1.2 obtener líneas del documento\n        const [linerows] = await db.query<any[]>(\n            `select descripcion, cantidad, precio_unitario, importe_linea, descuento_porcentaje\n             from ${dbname}.lineas_documento\n             where documento_id = ?\n             order by id`,\n            [documentid]\n        );\n\n        // 1.3 obtener entidades (emisor y receptor) a través de prisma para descifrar campos sensibles"
+  },
+  {
+    "file": "src/services/vertex-ai-service.ts",
+    "line": 122,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n        // 1.1 obtener desglose de impuestos\n        const [taxrows] = await db.query<any[]>(\n            `select tipo_impuesto, porcentaje, base_imponible, cuota \n             from ${dbname}.impuestos_documento \n             where documento_id = ?`,\n            [documentid]\n        );\n\n        // 1.2 obtener líneas del documento\n        const [linerows] = await db.query<any[]>(\n            `select descripcion, cantidad, precio_unitario, importe_linea, descuento_porcentaje\n             from ${dbname}.lineas_documento\n             where documento_id = ?\n             order by id`,\n            [documentid]\n        );\n\n        // 1.3 obtener entidades (emisor y receptor) a través de prisma para descifrar campos sensibles\n        const entityrows = await prisma.entidades_documento.findmany({\n            where: { documento_id: bigint(documentid) },\n            select: { rol: true, nombre: true, identificador_fiscal: true }\n        });\n\n        const emisor = entityrows.find((e: any) => e.rol === 'emisor' || e.rol === 'proveedor');\n        const receptor = entityrows.find((e: any) => e.rol === 'receptor' || e.rol === 'cliente');\n        const tienerecargo = boolean(doc.empresa_recargo);\n\n        // convertir strings de mysql a números reales para evitar nan\n        const base = number(doc.importe_sin_impuestos || 0);\n        const total = number(doc.importe_total || 0);\n        const impuestos = number(doc.total_impuestos || 0);"
+  },
+  {
+    "file": "src/services/vertex-ai-service.ts",
+    "line": 130,
+    "fields": [
+      "nombre",
+      "cif",
+      "identificador_fiscal"
+    ],
+    "snippet": "\n        // 1.2 obtener líneas del documento\n        const [linerows] = await db.query<any[]>(\n            `select descripcion, cantidad, precio_unitario, importe_linea, descuento_porcentaje\n             from ${dbname}.lineas_documento\n             where documento_id = ?\n             order by id`,\n            [documentid]\n        );\n\n        // 1.3 obtener entidades (emisor y receptor) a través de prisma para descifrar campos sensibles\n        const entityrows = await prisma.entidades_documento.findmany({\n            where: { documento_id: bigint(documentid) },\n            select: { rol: true, nombre: true, identificador_fiscal: true }\n        });\n\n        const emisor = entityrows.find((e: any) => e.rol === 'emisor' || e.rol === 'proveedor');\n        const receptor = entityrows.find((e: any) => e.rol === 'receptor' || e.rol === 'cliente');\n        const tienerecargo = boolean(doc.empresa_recargo);\n\n        // convertir strings de mysql a números reales para evitar nan\n        const base = number(doc.importe_sin_impuestos || 0);\n        const total = number(doc.importe_total || 0);\n        const impuestos = number(doc.total_impuestos || 0);\n        const diferencia = math.abs(total - (base + impuestos));\n\n        // 2. configurar vertex ai\n        const projectid = process.env.vertex_ai_project_id;\n        const location = process.env.vertex_ai_location || 'us-central1';\n        const modelname = process.env.vertex_ai_model || 'gemini-1.5-flash';\n\n        let credentials;"
+  }
+]

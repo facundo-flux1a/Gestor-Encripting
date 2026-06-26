@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,21 +84,8 @@ export async function GET(request: NextRequest) {
         d.observaciones,
         d.año_trimestre,
         d.num_trimestre,
-        d.trimestre_cerrado,
-        e.nombre_de_empresa,
-        e.CIF AS empresa_cif,
-        MAX(a.ruta_archivo) AS ruta_archivo,
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            ent.rol, '||',
-            COALESCE(ent.nombre, ''), '||',
-            COALESCE(ent.identificador_fiscal, '')
-          ) SEPARATOR ';;'
-        ) AS entidades_raw
+        d.trimestre_cerrado
       FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
-      LEFT JOIN archivos_documento a ON d.id = a.documento_id
       WHERE d.id_de_empresa = ?
         AND (
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -122,25 +111,7 @@ export async function GET(request: NextRequest) {
       params.push(Number(año));
     }
 
-    if (proveedor) {
-      query += ` AND d.id IN (
-        SELECT ent2.documento_id FROM entidades_documento ent2
-        WHERE ent2.rol IN ('emisor','proveedor')
-          AND (ent2.nombre LIKE ? OR ent2.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${proveedor}%`;
-      params.push(term, term);
-    }
 
-    if (cliente) {
-      query += ` AND d.id IN (
-        SELECT ent3.documento_id FROM entidades_documento ent3
-        WHERE ent3.rol IN ('receptor','cliente')
-          AND (ent3.nombre LIKE ? OR ent3.identificador_fiscal LIKE ?)
-      )`;
-      const term = `%${cliente}%`;
-      params.push(term, term);
-    }
 
     query += ` GROUP BY d.id ORDER BY d.fecha_emision DESC`;
 
@@ -183,26 +154,57 @@ export async function GET(request: NextRequest) {
       });
     });
 
+    // 6.5 Cargar entidades usando Prisma para garantizar desencriptación
+    const entidadesPrisma = await prisma.entidades_documento.findMany({
+      where: { documento_id: { in: docIds } },
+      select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }
+    });
+
+    const entidadesByDoc: Record<number, Record<string, { nombre: string; cif: string }>> = {};
+    entidadesPrisma.forEach((ent) => {
+      if (!entidadesByDoc[ent.documento_id]) entidadesByDoc[ent.documento_id] = {};
+      if (ent.rol) {
+         entidadesByDoc[ent.documento_id][ent.rol] = {
+           nombre: ent.nombre || '',
+           cif: ent.identificador_fiscal || ''
+         };
+      }
+    });
+
+    // 6.6 Cargar archivos usando Prisma para garantizar desencriptación
+    const archivosPrisma = await prisma.archivos_documento.findMany({
+      where: { documento_id: { in: docIds } },
+      select: { documento_id: true, ruta_archivo: true }
+    });
+
+    const archivoByDoc: Record<number, string> = {};
+    archivosPrisma.forEach((archivo) => {
+      if (archivo.ruta_archivo) {
+         archivoByDoc[Number(archivo.documento_id)] = archivo.ruta_archivo;
+      }
+    });
+
+    // 6.7 Cargar empresa para saber si es emitida
+    const empresa = await prisma.empresas.findUnique({
+      where: { id: empresaId },
+      select: { CIF: true }
+    });
+    const empresaCif = empresa?.CIF?.trim().toLowerCase() || '';
+
     // 7. Enriquecer documentos
-    const empresaCif = documentos[0]?.empresa_cif?.trim().toLowerCase() || '';
     const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
     const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
 
     let enriched = documentos.map((doc: any) => {
-      const entidades: Record<string, { nombre: string; cif: string }> = {};
-      if (doc.entidades_raw) {
-        doc.entidades_raw.split(';;').forEach((e: string) => {
-          const [rol, nombre, cif] = e.split('||');
-          if (rol) entidades[rol] = { nombre: nombre || '', cif: cif || '' };
-        });
-      }
+      const entidades = entidadesByDoc[doc.doc_id] || {};
 
       const emisorCif = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim().toLowerCase();
       const isIssued = !!(empresaCif && emisorCif && emisorCif === empresaCif);
 
       let publicUrl = null;
-      if (doc.ruta_archivo) {
-        publicUrl = `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${doc.ruta_archivo}`;
+      const docRutaArchivo = archivoByDoc[doc.doc_id];
+      if (docRutaArchivo) {
+        publicUrl = `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${docRutaArchivo}`;
       }
 
       return {
@@ -227,9 +229,28 @@ export async function GET(request: NextRequest) {
 
     // 8. Filtrar por tipo si se especifica
     if (tipo !== 'todas') {
-      enriched = enriched.filter((doc) =>
+      enriched = enriched.filter((doc: any) =>
         tipo === 'emitidas' ? doc.is_issued : !doc.is_issued
       );
+    }
+
+    // 9. Filtrar en memoria por proveedor/cliente (partial match support over encrypted data)
+    if (proveedor) {
+      const term = proveedor.toLowerCase();
+      enriched = enriched.filter((doc: any) => {
+        const emisor = doc.entidades.emisor || doc.entidades.proveedor;
+        if (!emisor) return false;
+        return (emisor.nombre?.toLowerCase().includes(term) || emisor.cif?.toLowerCase().includes(term));
+      });
+    }
+
+    if (cliente) {
+      const term = cliente.toLowerCase();
+      enriched = enriched.filter((doc: any) => {
+        const receptor = doc.entidades.receptor || doc.entidades.cliente;
+        if (!receptor) return false;
+        return (receptor.nombre?.toLowerCase().includes(term) || receptor.cif?.toLowerCase().includes(term));
+      });
     }
 
     return NextResponse.json(

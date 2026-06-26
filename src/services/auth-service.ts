@@ -54,7 +54,7 @@ const SESSION_COOKIE_NAME = 'session';
  * 2. Si no encuentra, cae en fallback a texto plano → funciona antes de migrar.
  *    Además, aprovecha para rellenar el email_hash del usuario (migración lazy).
  */
-async function findUserByEmail(email: string) {
+export async function findUserByEmail(email: string) {
   const emailHash = hashField(email);
 
   // Intento 1: Blind Index (post-migración)
@@ -64,17 +64,24 @@ async function findUserByEmail(email: string) {
   if (userByHash) return userByHash;
 
   // Intento 2: Texto plano (pre-migración, fallback legacy)
-  const [rows] = await db.query<RowDataPacket[]>('SELECT * FROM usuarios WHERE email = ?', [email.trim()]);
-  if (rows[0]) {
+  // Buscamos usuarios sin hash y filtramos en memoria, usando Prisma para aprovechar desencriptación si aplica
+  const legacyUsers = await prisma.usuarios.findMany({
+    where: { email_hash: null }
+  });
+  const matchedUser = legacyUsers.find(u => u.email === email.trim());
+
+  if (matchedUser) {
     // Backfill lazy: rellenar email_hash para este usuario
     try {
       await prisma.usuarios.update({
-        where: { id: BigInt(rows[0].id) },
+        where: { id: matchedUser.id },
         data: { email_hash: emailHash }
       });
     } catch (_) { /* Ignorar error de backfill */ }
+    return matchedUser;
   }
-  return rows[0] || null;
+
+  return null;
 }
 
 export async function encrypt(payload: any) {

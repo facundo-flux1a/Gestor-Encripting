@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getInvitationByToken } from '@/services/invitation-service';
 import { prisma } from '@/lib/prisma';
 import { hashField } from '@/lib/encryption';
+import { findUserByEmail } from '@/services/auth-service';
 
 export async function GET(req: NextRequest) {
     try {
@@ -24,12 +25,8 @@ export async function GET(req: NextRequest) {
             select: { nombre_de_empresa: true }
         });
 
-        // Verificar si el usuario ya existe (buscar por email_hash, el email está encriptado)
-        const emailHash = hashField(invitation.email);
-        const existingUser = await prisma.usuarios.findUnique({
-            where: { email_hash: emailHash },
-            select: { id: true }
-        });
+        // Verificar si el usuario ya existe (buscar por email, usa fallback)
+        const existingUser = await findUserByEmail(invitation.email);
 
         return NextResponse.json({
             email: invitation.email,

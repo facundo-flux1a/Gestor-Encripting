@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import connection from '@/lib/db';
+import { hashField } from '@/lib/encryption';
 
 export async function GET(request: Request) {
     try {
@@ -15,10 +16,10 @@ export async function GET(request: Request) {
             `
         SELECT cuenta_compra, cuenta_venta, nombre_referencia 
         FROM entidades_config 
-        WHERE empresa_id = ? AND identificador_fiscal = ?
+        WHERE empresa_id = ? AND (identificador_fiscal_hash = SHA2(?, 256) OR identificador_fiscal = ?)
         LIMIT 1
       `,
-            [empresaId, identificadorFiscal]
+            [empresaId, identificadorFiscal, identificadorFiscal]
         ) as any[];
 
         if (rows.length > 0) {
@@ -50,28 +51,30 @@ export async function POST(request: Request) {
         await connection.query(
             `
         INSERT INTO entidades_config (
-          empresa_id, identificador_fiscal, nombre_referencia, cuenta_compra, cuenta_venta
-        ) VALUES (?, ?, ?, ?, ?)
+          empresa_id, identificador_fiscal, identificador_fiscal_hash, nombre_referencia, cuenta_compra, cuenta_venta
+        ) VALUES (?, ?, SHA2(?, 256), ?, ?, ?)
         ON DUPLICATE KEY UPDATE 
           nombre_referencia = VALUES(nombre_referencia),
           cuenta_compra = VALUES(cuenta_compra),
           cuenta_venta = COALESCE(VALUES(cuenta_venta), cuenta_venta)
       `,
-            [empresaId, identificadorFiscal, nombreReferencia || null, cuentaCompra || null, cuentaVenta || null]
+            [empresaId, identificadorFiscal, identificadorFiscal, nombreReferencia || null, cuentaCompra || null, cuentaVenta || null]
         );
 
         // 2. Update existing documents snapshot in entidades_documento
         // We only update documents belonging to the specific company being edited
+        // ✅ Dual WHERE: hash (post-migración) con fallback a texto plano (pre-migración)
+        const fiscalHash = hashField(identificadorFiscal);
         await connection.query(
             `
             UPDATE entidades_documento ed
             INNER JOIN documentos d ON ed.documento_id = d.id
             SET ed.cuenta_contable = ?
             WHERE d.id_de_empresa = ? 
-            AND ed.identificador_fiscal = ? 
+            AND (ed.identificador_fiscal_hash = ? OR ed.identificador_fiscal = ?)
             AND (ed.rol = 'proveedor' OR ed.rol = 'emisor')
             `,
-            [cuentaCompra || null, empresaId, identificadorFiscal]
+            [cuentaCompra || null, empresaId, fiscalHash, identificadorFiscal]
         );
 
         return NextResponse.json({ success: true, updatedDocuments: true });

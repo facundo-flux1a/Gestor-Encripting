@@ -46,3 +46,16 @@ export function decrypt(encryptedText: string): string {
 export function hashField(value: string): string {
   return crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex');
 }
+
+/**
+ * Normaliza nombres para garantizar que el hash de búsqueda sea determinista y constante.
+ * Útil para campos como nombre_de_empresa o nombre de entidades.
+ */
+export function normalizeEntityName(name: string): string {
+  if (!name) return '';
+  return name
+    .normalize("NFD") 
+    .replace(/[\u0300-\u036f]/g, "") 
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ""); 
+}

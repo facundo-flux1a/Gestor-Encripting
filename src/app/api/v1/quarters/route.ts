@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -79,11 +81,8 @@ export async function GET(request: NextRequest) {
         t.iva_repercutido,
         t.iva_soportado,
         t.fecha_creacion,
-        t.fecha_actualizacion,
-        e.nombre_de_empresa AS empresa,
-        e.CIF AS empresa_cif
+        t.fecha_actualizacion
       FROM trimestres t
-      LEFT JOIN empresas e ON t.id_de_empresa = e.id
       WHERE t.id_de_empresa = ?
     `;
     const params: any[] = [empresaId];
@@ -134,9 +133,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // ✅ Hidratar nombre de empresa con Prisma (desencripta automáticamente)
+    const empresaData = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresaId) },
+      select: { nombre_de_empresa: true, CIF: true }
+    });
+
     return NextResponse.json({
-      empresa: rows[0].empresa,
-      empresa_cif: rows[0].empresa_cif,
+      empresa: empresaData?.nombre_de_empresa || '',
+      empresa_cif: empresaData?.CIF || '',
       empresa_id: empresaId,
       trimestres,
     });

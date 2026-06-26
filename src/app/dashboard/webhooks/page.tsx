@@ -2,8 +2,7 @@ import React from 'react';
 import { getCurrentUser } from '@/services/user-service';
 import { redirect } from 'next/navigation';
 import { getWebhooks } from '@/services/webhook-service';
-import db from '@/lib/db';
-import type { RowDataPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 import WebhooksClient from './webhooks-client';
 
 export const dynamic = 'force-dynamic';
@@ -14,10 +13,16 @@ export default async function WebhooksPage() {
     redirect('/auth/login');
   }
 
-  const [empRows] = await db.query<RowDataPacket[]>(
-    `SELECT id, nombre_de_empresa FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY id ASC`,
-    [user.id]
-  );
+  const empRowsPrisma = await prisma.empresas.findMany({
+    where: { id_de_usuario: { array_contains: user.id } },
+    select: { id: true, nombre_de_empresa: true },
+    orderBy: { id: 'asc' }
+  });
+
+  const empRows = empRowsPrisma.map(e => ({
+    id: Number(e.id),
+    nombre_de_empresa: e.nombre_de_empresa || ''
+  }));
 
   if (empRows.length === 0) {
     return <div className="p-8">No tienes empresas asociadas.</div>;

@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS
@@ -72,12 +74,12 @@ export async function generateApiKey(params: {
     const keyHash = hashKey(rawKey);
     const keyPrefix = rawKey.slice(0, 14); // "muvail_Ab3xKm9"
 
-    // 3. Obtener nombre de empresa para la respuesta
-    const [empRows] = await db.query<RowDataPacket[]>(
-      `SELECT nombre_de_empresa FROM empresas WHERE id = ?`,
-      [empresa_id]
-    );
-    const empresa_nombre = empRows[0]?.nombre_de_empresa || 'Empresa';
+    // 3. Obtener nombre de empresa para la respuesta (Prisma desencripta automáticamente)
+    const empresaRecord = await prisma.empresas.findUnique({
+      where: { id: BigInt(empresa_id) },
+      select: { nombre_de_empresa: true }
+    });
+    const empresa_nombre = empresaRecord?.nombre_de_empresa || 'Empresa';
 
     // 4. Insertar en BD
     const [result] = await db.query<OkPacket>(
@@ -113,30 +115,39 @@ export async function generateApiKey(params: {
 
 export async function listApiKeys(usuario_id: number): Promise<ApiKey[]> {
   try {
+    // 1. Traer las api_keys del usuario sin JOIN a empresas (evita exponer datos encriptados)
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT
          ak.id,
          ak.nombre,
          ak.key_prefix,
          ak.empresa_id,
-         e.nombre_de_empresa AS empresa_nombre,
          ak.usuario_id,
          ak.activa,
          ak.ultimo_uso,
          ak.fecha_creacion
        FROM api_keys ak
-       INNER JOIN empresas e ON ak.empresa_id = e.id
        WHERE ak.usuario_id = ? AND ak.activa = 1
        ORDER BY ak.fecha_creacion DESC`,
       [usuario_id]
     );
+
+    if (rows.length === 0) return [];
+
+    // 2. Hidratar nombres de empresa con Prisma (desencripta automáticamente)
+    const empresaIds = [...new Set(rows.map(r => BigInt(r.empresa_id)))];
+    const empresas = await prisma.empresas.findMany({
+      where: { id: { in: empresaIds } },
+      select: { id: true, nombre_de_empresa: true }
+    });
+    const empresaMap = new Map(empresas.map(e => [Number(e.id), e.nombre_de_empresa || 'Empresa']));
 
     return rows.map(r => ({
       id: r.id,
       nombre: r.nombre,
       key_prefix: r.key_prefix,
       empresa_id: r.empresa_id,
-      empresa_nombre: r.empresa_nombre,
+      empresa_nombre: empresaMap.get(r.empresa_id) || 'Empresa',
       usuario_id: r.usuario_id,
       activa: !!r.activa,
       ultimo_uso: r.ultimo_uso,

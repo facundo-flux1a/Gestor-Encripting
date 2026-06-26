@@ -4,6 +4,7 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { sendEmail } from '@/services/email-service';
 import { prisma } from '@/lib/prisma';
 import { hashField } from '@/lib/encryption';
+import { findUserByEmail } from '@/services/auth-service';
 
 export async function POST(request: NextRequest) {
     try {
@@ -13,12 +14,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
         }
 
-        // 1. Buscar usuario por hash del email (blind index) porque el email está encriptado en DB
-        const emailHash = hashField(email);
-        const user = await prisma.usuarios.findUnique({
-            where: { email_hash: emailHash },
-            select: { id: true, nombre: true, email: true }
-        });
+        // 1. Buscar usuario por email (usa hash + fallback plano para migración)
+        const user = await findUserByEmail(email);
 
         if (!user) {
             // Caso: Usuario no existe (Aviso de seguridad)

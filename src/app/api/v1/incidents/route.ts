@@ -3,6 +3,7 @@ import { validateApiKey } from '@/services/api-key-service';
 import { fireWebhook } from '@/services/webhook-service';
 import db from '@/lib/db';
 import type { RowDataPacket, OkPacket } from 'mysql2';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,13 +62,6 @@ export async function GET(request: NextRequest) {
          d.importe_total,
          d.importe_sin_impuestos,
          d.moneda,
-         -- Datos del emisor / proveedor para que el ERP pueda identificar la factura
-         (SELECT nombre FROM entidades_documento
-          WHERE documento_id = d.id AND rol IN ('emisor', 'proveedor')
-          ORDER BY id LIMIT 1)       AS entidad_nombre,
-         (SELECT identificador_fiscal FROM entidades_documento
-          WHERE documento_id = d.id AND rol IN ('emisor', 'proveedor')
-          ORDER BY id LIMIT 1)       AS entidad_cif,
          -- Estado del health check matemático del documento
          hcs.verified                AS verificado_matematicamente,
          hcs.motivo                  AS razon_descuadre
@@ -80,6 +74,20 @@ export async function GET(request: NextRequest) {
        ORDER BY i.validado ASC, d.fecha_emision DESC`,
       params
     );
+
+    const docIds = Array.from(new Set(rows.map((r: any) => r.documento_id)));
+    let entidadesByDoc: Record<number, any> = {};
+    if (docIds.length > 0) {
+      const entidadesPrisma = await prisma.entidades_documento.findMany({
+        where: { documento_id: { in: docIds as number[] }, rol: { in: ['emisor', 'proveedor'] } },
+        select: { documento_id: true, nombre: true, identificador_fiscal: true }
+      });
+      entidadesPrisma.forEach(e => {
+        if (!entidadesByDoc[Number(e.documento_id)]) {
+           entidadesByDoc[Number(e.documento_id)] = e;
+        }
+      });
+    }
 
     return NextResponse.json(
       {
@@ -103,8 +111,8 @@ export async function GET(request: NextRequest) {
             importe_total: Number(r.importe_total) || 0,
             importe_sin_impuestos: Number(r.importe_sin_impuestos) || 0,
             moneda: r.moneda || 'EUR',
-            entidad_nombre: r.entidad_nombre || null,
-            entidad_cif: r.entidad_cif || null,
+            entidad_nombre: entidadesByDoc[r.documento_id]?.nombre || null,
+            entidad_cif: entidadesByDoc[r.documento_id]?.identificador_fiscal || null,
             verificado_matematicamente: !!r.verificado_matematicamente,
             razon_descuadre: r.razon_descuadre || null,
           },
