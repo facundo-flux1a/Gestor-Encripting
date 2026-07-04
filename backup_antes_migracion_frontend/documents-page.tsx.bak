@@ -182,9 +182,8 @@ function DocumentsPageContent() {
       const totalRecargo = ingresos.recargos.total + gastos.recargos.total;
       const totalGeneral = ingresos.totalReal.total + gastos.totalReal.total;
 
-      // Adjustment for theoretical total: Base + IvaTeo + Recargos - Retenciones - Descuentos
-      const totalDescuentos = ingresos.descuentos.total + gastos.descuentos.total;
-      const totalTeorico = totalBase + totalIva + totalRecargo - (ingresos.retenciones.total + gastos.retenciones.total) - totalDescuentos;
+      // Adjustment for theoretical total: Base + IvaTeo + Recargos - Retenciones
+      const totalTeorico = totalBase + totalIva + totalRecargo - (ingresos.retenciones.total + gastos.retenciones.total);
 
       return {
         base: Number(totalBase.toFixed(2)),

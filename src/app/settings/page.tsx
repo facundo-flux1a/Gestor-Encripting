@@ -19,6 +19,7 @@ import { Company, Invitation } from "@/lib/types";
 import { getInvitationsByEmpresa } from "@/services/invitation-service";
 import { TutorialReplaySection } from "@/components/settings/TutorialReplaySection";
 import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
+import { TwoFactorSettingsSection } from "@/components/settings/TwoFactorSettingsSection";
 
 
 async function handleLogout() {
@@ -82,6 +83,10 @@ export default async function SettingsPage() {
                         initialName={user.nombre}
                         initialEmail={user.email}
                     />
+
+                    {/* Autenticación en Dos Pasos */}
+                    <TwoFactorSettingsSection />
+
 
                     {/* Configuración de Alertas */}
                     <Card>

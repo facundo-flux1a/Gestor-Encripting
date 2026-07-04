@@ -239,45 +239,67 @@ export function GroupedDocumentsView({
   };
 
   const documentsByType = useMemo(() => {
-    const MAX_FOLDERS = 5;
-    const INDEFINIDO = 'Indefinido';
+    const DEFAULT_CATEGORIES = [
+      'Fiscal y Contable',
+      'Legal y Societario',
+      'Laboral y RR.HH.',
+      'Bancos y Financiación',
+      'Clientes',
+      'Proveedores',
+      'Administración Pública',
+      'Interno / Operaciones'
+    ];
 
-    // ✅ Obtener tipos únicos de los documentos
-    const documentedTypes = new Set<string>();
-    documents.forEach(doc => {
-      if (doc.tipo_documento && doc.tipo_documento !== INDEFINIDO) {
-        documentedTypes.add(doc.tipo_documento);
-      }
-    });
-
-    // ✅ Priorizar customTypes + los más frecuentes
-    const typeCounts = new Map<string, number>();
-    documents.forEach(doc => {
-      if (doc.tipo_documento && doc.tipo_documento !== INDEFINIDO) {
-        typeCounts.set(doc.tipo_documento, (typeCounts.get(doc.tipo_documento) || 0) + 1);
-      }
-    });
-
-    // Ordenar por: 1) custom types primero, 2) cantidad de docs
-    const sortedTypes = Array.from(documentedTypes).sort((a, b) => {
-      const aIsCustom = customTypes.includes(a);
-      const bIsCustom = customTypes.includes(b);
-      if (aIsCustom && !bIsCustom) return -1;
-      if (!aIsCustom && bIsCustom) return 1;
-      return (typeCounts.get(b) || 0) - (typeCounts.get(a) || 0);
-    });
-
-    // ✅ Tomar solo los primeros MAX_FOLDERS
-    const allowedTypes = new Set(sortedTypes.slice(0, MAX_FOLDERS));
+    // ✅ Combinar categorías predeterminadas + tipos personalizados
+    const allowedTypes = new Set([...DEFAULT_CATEGORIES, ...customTypes]);
 
     // ✅ Agrupar documentos
     const grouped = new Map<string, Document[]>();
     allowedTypes.forEach(t => grouped.set(t, []));
-    grouped.set(INDEFINIDO, []);
     grouped.set(UNCLASSIFIED, []);
 
     documents.forEach(doc => {
       let tipo = doc.tipo_documento || 'Sin categoría';
+
+      // 1. Intentar extraer de datos_extra si viene de la IA
+      if (doc.datos_extra) {
+        try {
+          const parsed = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra;
+          if (parsed && (parsed.CATEGORIA_RAIZ || parsed.CATEGORIA)) {
+             const categoryFromAI = parsed.CATEGORIA_RAIZ || parsed.CATEGORIA;
+             const matchedDefault = DEFAULT_CATEGORIES.find(c => c.toLowerCase() === categoryFromAI.toLowerCase());
+             if (matchedDefault) {
+                tipo = matchedDefault;
+             }
+          }
+        } catch (e) {
+          // Ignorar errores de parseo
+        }
+      }
+
+      // 2. Si todavía no es un DEFAULT_CATEGORY, intentar normalizar el tipo actual (case-insensitive)
+      if (!DEFAULT_CATEGORIES.includes(tipo)) {
+         const matchedType = DEFAULT_CATEGORIES.find(c => c.toLowerCase() === tipo.toLowerCase());
+         if (matchedType) {
+            tipo = matchedType;
+         }
+      }
+
+      // 3. Fallback buscando dentro del string de tipo_documento
+      if (!DEFAULT_CATEGORIES.includes(tipo)) {
+         const matchedType = DEFAULT_CATEGORIES.find(c => tipo.toLowerCase().includes(c.toLowerCase()));
+         if (matchedType) {
+            tipo = matchedType;
+         }
+      }
+
+      // 4. Fallback buscando en observaciones (ej: "Categoría: INTERNO / OPERACIONES")
+      if (!DEFAULT_CATEGORIES.includes(tipo) && doc.observaciones) {
+         const matchedObs = DEFAULT_CATEGORIES.find(c => doc.observaciones?.toLowerCase().includes(c.toLowerCase()));
+         if (matchedObs) {
+            tipo = matchedObs;
+         }
+      }
 
       // 🔄 LOGIC: Reclassify Albaranes
       const isAlbaran = tipo.toLowerCase().includes('albarán') || tipo.toLowerCase().includes('albaran');
@@ -286,23 +308,28 @@ export function GroupedDocumentsView({
         tipo = hasCliente ? 'Factura Emitida' : 'Factura Recibida';
       }
 
-      // ✅ Si el tipo está permitido, asignarlo, sino va a Indefinido
+      // ✅ Si el tipo está permitido, asignarlo, sino va TODO a No Clasificado (carpeta gris)
       if (allowedTypes.has(tipo)) {
         grouped.get(tipo)!.push(doc);
-      } else if (!tipo || tipo === 'Sin categoría') {
-        grouped.get(UNCLASSIFIED)!.push(doc);
       } else {
-        grouped.get(INDEFINIDO)!.push(doc);
+        grouped.get(UNCLASSIFIED)!.push(doc);
       }
     });
 
     return Array.from(grouped.entries())
-      .filter(([t, d]) => d.length > 0)
+      .filter(([t, d]) => DEFAULT_CATEGORIES.includes(t) || t === UNCLASSIFIED || d.length > 0) // Mantener predeterminadas y "No clasificado" aunque estén vacías
       .sort((a, b) => {
-        if (a[0] === INDEFINIDO) return 1;
-        if (b[0] === INDEFINIDO) return -1;
         if (a[0] === UNCLASSIFIED) return 1;
         if (b[0] === UNCLASSIFIED) return -1;
+
+        // Ordenar las predeterminadas en su orden original
+        const idxA = DEFAULT_CATEGORIES.indexOf(a[0]);
+        const idxB = DEFAULT_CATEGORIES.indexOf(b[0]);
+        
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+
         return a[0].localeCompare(b[0]);
       });
   }, [documents, customTypes]);

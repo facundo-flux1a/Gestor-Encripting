@@ -113,9 +113,17 @@ export function DocumentPreviewDialog({
     return null;
   }
 
-  // Add timestamp to prevent caching
   const fixedUrl = fixMinioUrl(documentUrl);
-  const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fixedUrl)}&embedded=true&t=${Date.now()}`;
+
+  // --- Detect file type by extension ---
+  const ext = fixedUrl.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+  const isImage   = ['jpg','jpeg','png','gif','webp','svg','bmp','avif'].includes(ext);
+  const isPdf     = ext === 'pdf';
+  const isOffice  = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods'].includes(ext);
+
+  // Viewer URLs
+  const googleDocsViewerUrl  = `https://docs.google.com/gview?url=${encodeURIComponent(fixedUrl)}&embedded=true&t=${Date.now()}`;
+  const officeViewerUrl      = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fixedUrl)}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -150,7 +158,7 @@ export function DocumentPreviewDialog({
         {/* 📱 IFRAME CONTAINER - CRECE PARA LLENAR ESPACIO */}
         <div className="flex-1 overflow-hidden min-h-0 w-full relative bg-muted/10">
 
-          {isLoading && (
+          {isLoading && !isImage && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10 backdrop-blur-sm">
               <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
               <p className="text-sm text-muted-foreground font-medium">
@@ -160,25 +168,57 @@ export function DocumentPreviewDialog({
             </div>
           )}
 
-          <iframe
-            key={key} // Force re-render on key change
-            src={googleDocsViewerUrl}
-            className="w-full h-full border-0"
-            aria-label={`Preview of ${documentName}`}
-            title={`Preview of ${documentName}`}
-            onLoad={handleIframeLoad}
-          >
-            {/* 📱 FALLBACK RESPONSIVE CUANDO IFRAME NO CARGA (Legacy fallback) */}
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground bg-muted/50 rounded-md p-3 sm:p-4">
-              <p className="font-semibold text-sm sm:text-base">La previsualización no está disponible.</p>
-              <p className="text-xs sm:text-sm mt-2 mb-4">
-                Tu navegador no puede mostrar este PDF aquí.
+          {/* 🖼️ IMAGEN NATIVA */}
+          {isImage && (
+            <div className="w-full h-full flex items-center justify-center overflow-auto p-4 bg-muted/20">
+              <img
+                src={fixedUrl}
+                alt={documentName}
+                className="max-w-full max-h-full object-contain rounded shadow"
+                onLoad={() => setIsLoading(false)}
+                onError={() => setIsLoading(false)}
+              />
+            </div>
+          )}
+
+          {/* 📄 PDF — Google Docs Viewer */}
+          {isPdf && (
+            <iframe
+              key={key}
+              src={googleDocsViewerUrl}
+              className="w-full h-full border-0"
+              aria-label={`Preview of ${documentName}`}
+              title={`Preview of ${documentName}`}
+              onLoad={handleIframeLoad}
+            />
+          )}
+
+          {/* 📊 Office — Microsoft Online Viewer */}
+          {isOffice && (
+            <iframe
+              key={key}
+              src={officeViewerUrl}
+              className="w-full h-full border-0"
+              aria-label={`Preview of ${documentName}`}
+              title={`Preview of ${documentName}`}
+              onLoad={handleIframeLoad}
+            />
+          )}
+
+          {/* ❓ Formato no soportado */}
+          {!isImage && !isPdf && !isOffice && (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-6 gap-4">
+              <div className="text-5xl">📎</div>
+              <p className="font-semibold text-sm sm:text-base">Vista previa no disponible para este formato</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                El archivo <span className="font-mono bg-muted px-1 rounded">.{ext || '?'}</span> no puede mostrarse en el navegador.
               </p>
-              <Button onClick={handleManualReload} variant="outline" size="sm" className="gap-2">
-                <RotateCw className="h-4 w-4" /> Recargar
+              <Button onClick={handleDownload} variant="outline" size="sm" className="gap-2 mt-2">
+                <Download className="h-4 w-4" /> Descargar archivo
               </Button>
             </div>
-          </iframe>
+          )}
+
         </div>
 
         {/* 📱 FOOTER FIJO CON BOTONES RESPONSIVE */}

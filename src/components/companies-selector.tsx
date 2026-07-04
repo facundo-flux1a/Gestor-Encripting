@@ -686,6 +686,7 @@ export function CompaniesSelector() {
           title: "Éxito",
           description: "Empresa creada correctamente",
         });
+        window.location.reload();
       } else {
         const error = await response.json();
         toast({
@@ -843,6 +844,7 @@ export function CompaniesSelector() {
       setEditingCompany(null);
       setOriginalCompany(null);
       setIsEditDialogOpen(false);
+      window.location.reload();
     } catch (error) {
       toast({
         title: 'Error',

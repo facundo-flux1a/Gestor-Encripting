@@ -6,7 +6,6 @@ export interface FinancialSummary {
     totalReal: Record<number | string, number>;
     baseReal: Record<number | string, number>;
     ivaReal: Record<number | string, number>;
-    descuentos: Record<number | string, number>;
     retenciones: Record<number | string, number>;
     recargos: Record<number | string, number>;
     otrosCargos: Record<string, Record<number | string, number>>;
@@ -36,7 +35,6 @@ const createEmptySummary = (): FinancialSummary => {
         totalReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         baseReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         ivaReal: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
-        descuentos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         otrosCargos: {},
@@ -107,43 +105,38 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // 4. Totales Reales (BD)
         const valReal = Math.abs(docTotalVal);
         const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0));
-        const docDescuentoGlobal = Math.abs(Number((doc as any).descuento_global || 0));
         // Si no hay iva explícito, aproximamos por diferencia (se ajustará al final sumando impuestos)
         let ivaRealVal = Math.abs(Number(doc.iva || (doc as any).total_iva || 0));
         const recargoCab = Math.abs(Number((doc as any).recargo_cuota || (doc as any).recargo || 0));
         const retencionCab = Math.abs(Number((doc as any).retencion_cuota || (doc as any).retencion || 0));
 
         // Si el IVA viene de cabecera, podría incluir el recargo. Lo restamos para empezar con IVA puro.
-        if (ivaRealVal > 0 && recargoCab > 0 && Math.abs(ivaRealVal - (valReal - baseRealVal + docDescuentoGlobal)) < 0.01) {
+        if (ivaRealVal > 0 && recargoCab > 0 && Math.abs(ivaRealVal - (valReal - baseRealVal)) < 0.01) {
             ivaRealVal = Math.max(0, ivaRealVal - recargoCab + retencionCab);
         }
 
         // Si sigue siendo 0, usamos la diferencia total-base como fallback inicial (menos otros impuestos conocidos)
         if (ivaRealVal === 0) {
-            ivaRealVal = Math.max(0, valReal - baseRealVal + docDescuentoGlobal - recargoCab + retencionCab);
+            ivaRealVal = Math.max(0, valReal - baseRealVal - recargoCab + retencionCab);
         }
 
         if (hasValidQ) {
             target.totalReal[q!] += valReal * absSign;
             target.baseReal[q!] += baseRealVal * absSign;
             target.ivaReal[q!] += ivaRealVal * absSign;
-            target.descuentos[q!] += docDescuentoGlobal * absSign;
 
             totalNeto.totalReal[q!] += valReal * netoSign;
             totalNeto.baseReal[q!] += baseRealVal * netoSign;
             totalNeto.ivaReal[q!] += ivaRealVal * netoSign;
-            totalNeto.descuentos[q!] += docDescuentoGlobal * netoSign;
         }
 
         target.totalReal.total += valReal * absSign;
         target.baseReal.total += baseRealVal * absSign;
         target.ivaReal.total += ivaRealVal * absSign;
-        target.descuentos.total += docDescuentoGlobal * absSign;
 
         totalNeto.totalReal.total += valReal * netoSign;
         totalNeto.baseReal.total += baseRealVal * netoSign;
         totalNeto.ivaReal.total += ivaRealVal * netoSign;
-        totalNeto.descuentos.total += docDescuentoGlobal * netoSign;
 
         // 5. Procesar Impuestos
         const ivaDetails = doc.iva_details || [];
@@ -237,7 +230,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
             });
         } else {
             // ✅ MEJORA: Deducir el porcentaje si no hay desgloses (Evitar asumir 21% siempre)
-            const diff = valReal - baseRealVal + docDescuentoGlobal;
+            const diff = valReal - baseRealVal;
             let deducedRate = 21; // Default fallback
 
             if (baseRealVal > 0) {
@@ -271,7 +264,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // pero la cabecera + impuestos cuadra con el total real, entonces la diferencia es Base 0%.
         const headerBaseVal = Math.abs(Number((doc as any).importe_sin_impuestos || doc.base_imponible || 0));
         const baseGap = headerBaseVal - docBaseSum;
-        const theoreticalTotalWithHeader = headerBaseVal + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
+        const theoreticalTotalWithHeader = headerBaseVal + docIvaSum + docRecSum - docRetSum;
 
         if (Math.abs(baseGap) > 0.01 && Math.abs(valReal - theoreticalTotalWithHeader) < 0.02) {
             // Es Base 0% omitida en los desgloses
@@ -288,7 +281,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         }
 
         // Auditoría de Total del Documento
-        const docTheoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
+        const docTheoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum;
         if (hasValidQ && Math.abs(valReal - docTheoreticalTotal) > 0.01 && ivaDetails.length > 0) {
             const docId = doc.numero_documento || `ID:${doc.id_documento}`;
             target.mismatchDocs.total[q!].push(`${docId} (BD:${valReal.toFixed(2)}€ vs Calc:${docTheoreticalTotal.toFixed(2)}€)`);
@@ -297,7 +290,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // ✅ AJUSTE FINAL DE IVA REAL: 
         // Si usamos el fallback (total-base), debemos restar Recargos y Retenciones encontrados
         // para que 'ivaReal' sea solo IVA puro.
-        const ivaFallback = valReal - baseRealVal + docDescuentoGlobal;
+        const ivaFallback = valReal - baseRealVal;
         if (Math.abs(ivaRealVal - ivaFallback) < 0.01) {
             const trueIvaReal = Math.max(0, ivaRealVal - docRecSum + docRetSum);
             const diff = trueIvaReal - ivaRealVal;

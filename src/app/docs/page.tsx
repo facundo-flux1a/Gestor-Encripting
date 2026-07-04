@@ -8,7 +8,7 @@ import { ApiKeyPanel } from '@/components/docs/api-key-panel';
 import {
   BookOpen, Key, Database, FileJson, Download,
   ShieldAlert, BarChart3, TriangleAlert, AlertTriangle,
-  Calendar,
+  Calendar, FileImage,
 } from 'lucide-react';
 
 // ------------- Param definitions per endpoint -------------
@@ -73,6 +73,13 @@ const documentsFullParams: ParamDef[] = [
     description: 'Por defecto solo se exportan documentos confirmados. Activa para incluir borradores.',
     type: 'boolean',
     defaultValue: 'false',
+  },
+  {
+    key: 'include_thumbnail_url',
+    label: 'Incluir URLs de miniatura',
+    description: 'Por defecto (true) se inyecta un enlace dinámico a la vista previa JPEG del documento. Desactívalo (false) para omitir este campo.',
+    type: 'boolean',
+    defaultValue: 'true',
   },
 ];
 
@@ -220,6 +227,17 @@ const incidentsPostParams: ParamDef[] = [
   },
 ];
 
+const thumbnailParams: ParamDef[] = [
+  {
+    key: 'id',
+    label: 'Documento ID',
+    description: 'Selecciona uno de tus últimos 100 documentos para generar su vista previa.',
+    type: 'async-enum',
+    asyncOptionsUrl: '/api/docs/filters/documentos',
+    asyncOptionsKey: 'documentos',
+  },
+];
+
 // ------------- Mock responses -------------
 
 const incidentPostMock = {
@@ -308,7 +326,7 @@ export default function DocsPage() {
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.1 Consulta Avanzada de Documentos <code className="text-base font-mono text-indigo-400">/full</code></h3>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              El endpoint central de extracción. Devuelve el árbol completo de cada documento procesado: metadata del encabezado, datos de la entidad emisora y receptora, líneas de detalle de producto o servicio, el array de impuestos desagregado (IVA, Recargo de Equivalencia, IRPF), las rutas de archivos adjuntos y un indicador del estado de salud matemática del documento. Es el equivalente a un <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">JOIN</code> masivo de todas las tablas relacionadas con la factura.
+              El endpoint central de extracción. Devuelve el árbol completo de cada documento procesado: metadata del encabezado, datos de la entidad emisora y receptora, líneas de detalle de producto o servicio, el array de impuestos desagregado (IVA, Recargo de Equivalencia, IRPF), un indicador del estado de salud matemática del documento, y ahora también incluye automáticamente <strong>la URL a la previsualización (miniatura JPEG) del PDF</strong> renderizada por nuestro motor interno Ghostscript. Es el equivalente a un <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">JOIN</code> masivo de todas las tablas relacionadas con la factura.
             </p>
             <InteractiveEndpoint
               method="GET"
@@ -424,6 +442,26 @@ export default function DocsPage() {
               selectedKeyId={selectedKeyId}
               isMockOnly
               mockResponse={incidentPostMock}
+            />
+          </div>
+
+          {/* 2.7 Thumbnail */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FileImage className="h-5 w-5 text-fuchsia-500" />
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.7 Previsualización de PDF (Thumbnail)</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              Genera al instante una vista previa en formato JPEG (calidad 85%) de la primera página del documento PDF. El sistema renderiza el documento internamente usando Ghostscript de forma nativa y cachea el resultado en MinIO. Este endpoint es súper liviano e ideal para mostrar miniaturas en galerías dentro de tu ERP sin tener que descargar los PDFs originales.
+              <br /><span className="inline-block mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">⚠️ Límite del Playground: máx. 5 peticiones por minuto para no afectar al servidor compartido.</span>
+            </p>
+            <InteractiveEndpoint
+              method="GET"
+              path="/api/v1/documents/[id]/thumbnail"
+              description="Seleccioná un documento de la lista. Al ejecutar, verás la miniatura renderizada directamente debajo."
+              params={thumbnailParams}
+              apiKey={apiKey}
+              selectedKeyId={selectedKeyId}
             />
           </div>
 

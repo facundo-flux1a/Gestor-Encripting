@@ -3,9 +3,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+export interface DuplicateGroup {
+  numero: string;
+  ids: number[];
+  docs?: { id: number; tipo: string; seccion?: string; empresa_nombre?: string }[];
+}
+
 export function useDuplicateDetection(empresaId?: number) {
   const router = useRouter();
   const [duplicates, setDuplicates] = useState<Set<number>>(new Set());
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [isChecking, setIsChecking] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -31,19 +38,22 @@ export function useDuplicateDetection(empresaId?: number) {
       // Extraer y guardar los IDs de documentos duplicados
       if (result.duplicates && Array.isArray(result.duplicates)) {
         const duplicateIds = new Set<number>();
+        const groups: DuplicateGroup[] = [];
         
         result.duplicates.forEach((dup: any) => {
-          // Cada grupo de duplicados tiene un array de IDs
           if (dup.ids && Array.isArray(dup.ids)) {
             dup.ids.forEach((id: number) => duplicateIds.add(id));
+            groups.push({ numero: dup.numero || 'Sin número', ids: dup.ids, docs: dup.docs || [] });
           }
         });
         
         setDuplicates(duplicateIds);
+        setDuplicateGroups(groups);
         console.log('📊 [useDuplicateDetection] IDs duplicados encontrados:', Array.from(duplicateIds));
         console.log('🔢 [useDuplicateDetection] Total de documentos con duplicados:', duplicateIds.size);
       } else {
         setDuplicates(new Set());
+        setDuplicateGroups([]);
         console.log('✨ [useDuplicateDetection] No se encontraron duplicados');
       }
       
@@ -51,18 +61,19 @@ export function useDuplicateDetection(empresaId?: number) {
     } catch (error) {
       console.error('❌ [useDuplicateDetection] Error:', error);
       setDuplicates(new Set());
+      setDuplicateGroups([]);
       return null;
     } finally {
       setIsChecking(false);
     }
   }, [empresaId]);
 
-  // Polling automático cada 3 segundos
+  // Polling automático cada 30 segundos
   useEffect(() => {
     // Verificar inmediatamente al montar
     checkDuplicates();
     
-    // Configurar polling cada 3 segundos
+    // Configurar polling cada 30 segundos
     intervalRef.current = setInterval(() => {
       checkDuplicates();
     }, 30000);
@@ -78,6 +89,7 @@ export function useDuplicateDetection(empresaId?: number) {
   return { 
     checkDuplicates, 
     duplicates,
+    duplicateGroups,
     isChecking 
   };
 }

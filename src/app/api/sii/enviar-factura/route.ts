@@ -96,6 +96,29 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ [API-ENVIAR-FACTURA] Respuesta del SII:', JSON.stringify(resultado, null, 2));
 
+    try {
+      const { logAuditAction } = await import('@/services/audit-service');
+      const { getCurrentUser } = await import('@/services/user-service');
+      const user = await getCurrentUser();
+      
+      await logAuditAction({
+        documentoId: facturaRaw.id ? Number(facturaRaw.id) : undefined,
+        empresaId: facturaRaw.empresaId ? Number(facturaRaw.empresaId) : undefined,
+        accion: 'ENVIO_SII',
+        usuarioEmail: user?.email || 'API/Desconocido',
+        userId: user?.id,
+        detalle: { 
+          nifEmisor: factura.nifEmisor,
+          numeroFactura: factura.numeroFactura,
+          estadoSII: resultado.estado,
+          exito: resultado.success,
+          csv: resultado.csv
+        }
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría ENVIO_SII:', auditErr);
+    }
+
     // Formatear respuesta
     return NextResponse.json({
       success: resultado.success,

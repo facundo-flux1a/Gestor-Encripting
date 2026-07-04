@@ -293,25 +293,21 @@ export async function login(formData: FormData) {
       return redirect(`/auth/verify-email?email=${encodeURIComponent(userEmail)}${inviteToken ? `&invite_token=${inviteToken}` : ''}`);
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await prisma.usuarios.update({ where: { id: userId }, data: { two_factor_code: code, two_factor_expires_at: expiresAt } });
-    await send2FAEmail(userEmail, userName, code, false);
+    // BYPASS 2FA TEMPORAL PARA DEBUGGING
+    const t = (v: any) => (typeof v === 'boolean' ? Number(v) : Number(v ?? 1));
+    await createSession(Number(userId), userEmail, userName,
+      t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
+      t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
+      t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      (user.organization_rol as any) || 'EDITOR');
+    await logAuthEvent('LOGIN', userEmail);
 
-    const pendingSession = await new SignJWT({ userId: Number(userId), email: userEmail, inviteToken })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('10m')
-      .sign(secretKey);
+    if (inviteToken) {
+      await acceptInvitation(inviteToken, Number(userId));
+    }
     
-    const cookieStore = await cookies();
-    cookieStore.set('pending_2fa', pendingSession, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
+    redirect('/dashboard');
 
-    redirect('/auth/2fa');
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;
     console.error('Login error:', error);

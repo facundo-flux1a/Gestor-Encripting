@@ -184,6 +184,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null);
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
   const [incidentCount, setIncidentCount] = React.useState(0);
+  const [healthCheckCount, setHealthCheckCount] = React.useState(0);
 
   // ✅ Usar el contexto de compañías
   const { selectedCompanyIds } = useCompanyContext();
@@ -276,18 +277,38 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
   }, [selectedCompanyIds, preferences]);
 
+  // Fetch de Health Check count
+  const fetchHealthCheckCount = React.useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedCompanyIds.length > 0) {
+        params.append('empresaId', selectedCompanyIds.join(','));
+      }
+      const res = await fetch(`/api/health-check/count?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHealthCheckCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching health check count:', err);
+    }
+  }, [selectedCompanyIds]);
+
   React.useEffect(() => {
     fetchUnreadCount();
     fetchIncidentCount();
+    fetchHealthCheckCount();
     const interval = setInterval(() => {
       fetchUnreadCount();
       fetchIncidentCount();
+      fetchHealthCheckCount();
     }, 30000);
 
     const handleGlobalUpdate = () => {
       console.log('🔄 [MainLayout] Refetching counters due to global event');
       fetchUnreadCount();
       fetchIncidentCount();
+      fetchHealthCheckCount();
     };
 
     window.addEventListener('documentUploaded', handleGlobalUpdate);
@@ -296,7 +317,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       clearInterval(interval);
       window.removeEventListener('documentUploaded', handleGlobalUpdate);
     };
-  }, [fetchUnreadCount, fetchIncidentCount]);
+  }, [fetchUnreadCount, fetchIncidentCount, fetchHealthCheckCount]);
 
   React.useEffect(() => {
     if (pathname !== '/dashboard/actividad') {
@@ -373,6 +394,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                       <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
                         <AlertCircle className="w-3 h-3" />
                         {incidentCount}
+                      </span>
+                    )}
+
+                    {/* Badge de Health Check - SOLO EN SALUD DOCUMENTAL */}
+                    {item.href === '/dashboard/health-check' && healthCheckCount > 0 && (
+                      <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 border border-emerald-500/30 group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
+                        <ShieldCheck className="w-3 h-3" />
+                        {healthCheckCount}
                       </span>
                     )}
                   </Link>

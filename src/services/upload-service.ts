@@ -681,6 +681,26 @@ export async function uploadDocument(
 
     console.log(`✅ [${normalizedFileName}] PROCESO COMPLETADO EXITOSAMENTE`);
 
+    try {
+      const { logAuditAction } = await import('./audit-service');
+      const { getCurrentUser } = await import('./user-service');
+      const user = await getCurrentUser();
+      
+      await logAuditAction({
+        empresaId: parseInt(empresaId, 10),
+        accion: 'SUBIDA',
+        usuarioEmail: user?.email || 'API/Desconocido',
+        userId: user?.id,
+        detalle: { 
+          fileName: normalizedFileName, 
+          fileHash: mainFileHash,
+          uploadId: uploadId 
+        }
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría SUBIDA:', auditErr);
+    }
+
     return {
       success: true,
       isDuplicate: false,
@@ -716,7 +736,9 @@ export async function uploadDocument(
 export async function uploadDocumentFromApi(
   fileUrl: string,
   empresaId: string,
-  uploadId: string
+  uploadId: string,
+  apiKeyName?: string,
+  apiUsuarioId?: number
 ): Promise<void> {
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
@@ -862,6 +884,26 @@ export async function uploadDocumentFromApi(
     }).catch(err => {
       console.error(`❌ [UploadAPI] Fetch error a webhook:`, err.message);
     });
+
+    try {
+      const { logAuditAction } = await import('./audit-service');
+      const { getCurrentUser } = await import('./user-service');
+      const user = await getCurrentUser();
+      
+      await logAuditAction({
+        empresaId: parseInt(empresaId, 10),
+        accion: 'SUBIDA',
+        usuarioEmail: apiKeyName ? `[API] ${apiKeyName}` : (user?.email || 'API/Desconocido'),
+        userId: apiUsuarioId || user?.id,
+        detalle: { 
+          fileName: normalizedFileName, 
+          fileHash: mainFileHash,
+          uploadId: uploadId 
+        }
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría SUBIDA en API:', auditErr);
+    }
 
   } catch (error: any) {
     console.error(`❌ [UploadAPI] Error general:`, error.message);

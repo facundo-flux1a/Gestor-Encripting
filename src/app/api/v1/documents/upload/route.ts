@@ -61,7 +61,13 @@ export async function POST(request: NextRequest) {
     const uploadId = `api_${crypto.randomBytes(6).toString('hex')}`;
 
     // Lanzar procesamiento en segundo plano sin bloquear la respuesta
-    uploadDocumentFromApi(fileUrl, empresaId.toString(), uploadId).catch(err => {
+    uploadDocumentFromApi(
+      fileUrl, 
+      empresaId.toString(), 
+      uploadId, 
+      authResult.nombre, 
+      authResult.usuario_id
+    ).catch(err => {
       console.error(`❌ [UploadAPI Route] Error fatal no capturado:`, err);
     });
 

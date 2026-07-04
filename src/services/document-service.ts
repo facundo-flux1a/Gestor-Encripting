@@ -1576,8 +1576,10 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
   });
 
   // ✅ Marcar documento como confirmado (is_new = 0)
-  const doc = await prisma.documentos.findUnique({ where: { id: BigInt(documentId) }, select: { tipo_documento: true } });
+  const doc = await prisma.documentos.findUnique({ where: { id: BigInt(documentId) }, select: { tipo_documento: true, is_new: true, id_de_empresa: true } });
   if (doc) {
+    const wasNew = doc.is_new === 1;
+
     await prisma.documentos.update({
       where: { id: BigInt(documentId) },
       data: {
@@ -1585,6 +1587,37 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
         tipo_documento: doc.tipo_documento?.replace('(SIN CONFIRMAR)', '').trim() || ''
       }
     });
+
+    try {
+      const { getCurrentUser } = await import('./user-service');
+      const user = await getCurrentUser();
+      if (user) {
+        const { logAuditAction } = await import('./audit-service');
+        
+        // Log "VALIDACION_MANUAL" (ya sea de estado sin confirmar o de incidencias)
+        await logAuditAction({
+          documentoId: documentId,
+          empresaId: doc.id_de_empresa ? Number(doc.id_de_empresa) : null,
+          accion: 'VALIDACION_MANUAL',
+          usuarioEmail: user.email,
+          userId: user.id,
+          detalle: { source: 'dashboard_bulk_validate' }
+        });
+
+        // Si era nuevo, registrar "VISTO_POR_PRIMERA_VEZ" también, porque se confirmó sin abrir
+        if (wasNew) {
+          await logAuditAction({
+            documentoId: documentId,
+            empresaId: doc.id_de_empresa ? Number(doc.id_de_empresa) : null,
+            accion: 'VISTO_POR_PRIMERA_VEZ',
+            usuarioEmail: user.email,
+            userId: user.id
+          });
+        }
+      }
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría en validateDocumentIncidents:', auditErr);
+    }
   }
 
   // 🔔 WEBHOOKS TRIGGER: Incidencia resuelta manualmente desde el dashboard
@@ -4508,6 +4541,23 @@ cerrado = 1,
     console.log('───────────────────────────────────────────────────────────');
     console.log('🎉 [cerrarTrimestre] TRANSACCIÓN COMPLETADA EXITOSAMENTE');
     console.log('═══════════════════════════════════════════════════════════');
+
+    try {
+      const { logAuditAction } = await import('./audit-service');
+      const { getCurrentUser } = await import('./user-service');
+      const user = await getCurrentUser();
+      if (user) {
+        await logAuditAction({
+          empresaId: payload.empresa_id,
+          accion: 'CIERRE_TRIMESTRE',
+          usuarioEmail: user.email,
+          userId: user.id,
+          detalle: { año: payload.año, trimestre: payload.trimestre, statsRows: statsRows.length },
+        });
+      }
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría CIERRE_TRIMESTRE:', auditErr);
+    }
 
     return { affected: affectedCount || 1 }; // legacy: return { affected: ids.length };
   } catch (error) {

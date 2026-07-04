@@ -144,6 +144,24 @@ export async function PUT(
 
     console.log(`✅ ${wasMerge ? 'MERGE' : 'Cambio de CIF'} completado: ${entityIds.length} registros actualizados`);
 
+    try {
+      const { logAuditAction } = await import('@/services/audit-service');
+      await logAuditAction({
+        accion: 'EDICION_ENTIDAD',
+        usuarioEmail: user.email,
+        userId: user.id,
+        detalle: { 
+          entidadOriginal: currentFiscalId,
+          entidadNueva: identificador_fiscal,
+          nombre,
+          fueMerge: wasMerge,
+          afectados: entityIds.length 
+        }
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría EDICION_ENTIDAD:', auditErr);
+    }
+
     return NextResponse.json({
       success: true,
       merged: wasMerge,

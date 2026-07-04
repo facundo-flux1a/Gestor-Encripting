@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -70,7 +70,13 @@ export function UploadDialog({
     e.stopPropagation();
   };
 
-  const processDroppedFiles = (droppedFiles: File[]) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+
     const acceptedTypes = [
       'application/pdf',
       'application/msword',
@@ -109,66 +115,6 @@ export function UploadDialog({
       });
     }
   };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    processDroppedFiles(Array.from(e.dataTransfer.files));
-  };
-
-  // Fullscreen drag and drop listeners
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let dragCounter = 0;
-
-    const handleWindowDragEnter = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragCounter++;
-      if (e.dataTransfer?.types.includes('Files')) {
-        setIsDragging(true);
-      }
-    };
-
-    const handleWindowDragLeave = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragCounter--;
-      if (dragCounter === 0) {
-        setIsDragging(false);
-      }
-    };
-
-    const handleWindowDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const handleWindowDrop = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      dragCounter = 0;
-      
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        processDroppedFiles(Array.from(e.dataTransfer.files));
-      }
-    };
-
-    window.addEventListener('dragenter', handleWindowDragEnter);
-    window.addEventListener('dragleave', handleWindowDragLeave);
-    window.addEventListener('dragover', handleWindowDragOver);
-    window.addEventListener('drop', handleWindowDrop);
-
-    return () => {
-      window.removeEventListener('dragenter', handleWindowDragEnter);
-      window.removeEventListener('dragleave', handleWindowDragLeave);
-      window.removeEventListener('dragover', handleWindowDragOver);
-      window.removeEventListener('drop', handleWindowDrop);
-    };
-  }, [isOpen]);
 
   const handleUpload = () => {
     if (!selectedCompanyId || files.length === 0) {
@@ -298,26 +244,12 @@ export function UploadDialog({
   const hasOversizedFiles = files.some(file => file.size > MAX_FILE_SIZE);
 
   return (
-    <>
-      {/* Overlay de arrastre a pantalla completa */}
-      {isDragging && isOpen && (
-        <div className="fixed inset-0 z-[100] bg-violet-500/10 backdrop-blur-sm border-4 border-dashed border-violet-500 flex items-center justify-center pointer-events-none transition-all duration-200">
-          <div className="bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-2xl p-10 flex flex-col items-center transform scale-105 transition-transform duration-200">
-            <div className="bg-violet-100 dark:bg-violet-900/50 p-6 rounded-full mb-6">
-              <Upload className="w-16 h-16 text-violet-600 dark:text-violet-400 animate-bounce" />
-            </div>
-            <p className="text-3xl font-bold text-violet-700 dark:text-violet-400 mb-2">Suelta tus archivos aquí</p>
-            <p className="text-gray-500 dark:text-gray-400">PDF, ZIP o imágenes (máx 10MB)</p>
-          </div>
-        </div>
-      )}
-
-      <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open && !isUploading) {
-          handleClose();
-        }
-      }}>
-        <DialogContent data-tutorial="upload-modal" className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open && !isUploading) {
+        handleClose();
+      }
+    }}>
+      <DialogContent data-tutorial="upload-modal" className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="px-3 sm:px-6 py-3 sm:py-6">
           <DialogTitle className="text-base sm:text-lg">
             Subir Nuevos Documentos
@@ -466,7 +398,7 @@ export function UploadDialog({
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={isUploading || hasOversizedFiles}
+              disabled={!selectedCompanyId || files.length === 0 || isUploading || hasOversizedFiles}
               className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
             >
               {isUploading ? 'Subiendo...' : `Subir ${files.length} archivo(s)`}
@@ -475,6 +407,5 @@ export function UploadDialog({
         </div>
       </DialogContent>
     </Dialog>
-    </>
   );
 }

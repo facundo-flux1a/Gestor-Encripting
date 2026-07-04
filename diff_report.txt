@@ -1,0 +1,1237 @@
+==== src/app/api/activity/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/activity/route.ts	2026-06-15 18:41:45.157675543 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/activity/route.ts	2026-06-18 12:24:26.472395949 -0300
+@@ -2,6 +2,7 @@
+ import connection, { dbName } from '@/lib/db';
+ import { getSession } from '@/services/auth-service';
+ import { ActivityService } from '@/services/activity-service';
+ 
+ export async function GET(request: Request) {
+   try {
+@@ -23,6 +24,28 @@
+     const dateTo = searchParams.get('dateTo');
+     const search = searchParams.get('search');
+ 
++    // Obtener empresas del usuario para descifrarlas con Prisma y poder buscar sobre ellas
++    const [userEmpRows] = await connection.query(`SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`, [session.userId]);
++    const userEmpIds = (userEmpRows as any[]).map(r => Number(r.id));
++    
++       where: { id: { in: userEmpIds } },
++       select: { id: true, nombre_de_empresa: true, CIF: true }
++    }) : [];
++    
++    const empresaMap: Record<number, { nombre: string, cif: string }> = {};
++    empresasPrisma.forEach(e => {
++       empresaMap[Number(e.id)] = { nombre: e.nombre_de_empresa || '', cif: e.CIF || '' };
++    });
++
++    let matchedEmpresaIds: number[] = [];
++    if (search) {
++       const searchLower = search.toLowerCase();
++       matchedEmpresaIds = empresasPrisma
+...
+==== src/app/api/ai-incidents/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/ai-incidents/route.ts	2026-06-15 18:41:45.157675543 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/ai-incidents/route.ts	2026-06-18 14:16:18.704610356 -0300
+@@ -2,6 +2,7 @@
+ import { getCurrentUser } from '@/services/user-service';
+ import pool, { dbName } from '@/lib/db';
+ import { RowDataPacket } from 'mysql2';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -53,7 +54,7 @@
+       return NextResponse.json([]);
+     }
+ 
+-    // Construir query con filtros (usando columnas reales de la tabla)
++    // Construir query con filtros (sin JOIN a empresas — nombre_de_empresa está encriptado)
+     let query = `
+       SELECT 
+         ai.id,
+@@ -69,11 +70,9 @@
+         d.tipo_documento,
+         d.fecha_emision,
+         d.importe_total,
+-        d.id_de_empresa,
+-        e.nombre_de_empresa as empresa_nombre
++        d.id_de_empresa
+       FROM ${dbName}.ai_incidencias_documento ai
+       INNER JOIN ${dbName}.documentos d ON ai.documento_id = d.id
+-      INNER JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+       WHERE d.id_de_empresa IN (?)
+     `;
+...
+==== src/app/api/auth/forgot-password/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/auth/forgot-password/route.ts	2026-06-15 18:41:45.158653361 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/auth/forgot-password/route.ts	2026-06-18 16:18:33.706128414 -0300
+@@ -2,6 +2,9 @@
+ import db from '@/lib/db';
+ import { RowDataPacket, ResultSetHeader } from 'mysql2';
+ import { sendEmail } from '@/services/email-service';
++import { hashField } from '@/lib/encryption';
++import { findUserByEmail } from '@/services/auth-service';
+ 
+ export async function POST(request: NextRequest) {
+     try {
+@@ -11,13 +14,10 @@
+             return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
+         }
+ 
+-        // 1. Buscar usuario
+-            'SELECT id, nombre, email FROM usuarios WHERE email = ?',
+-            [email]
+-        );
++        // 1. Buscar usuario por email (usa hash + fallback plano para migración)
++        const user = await findUserByEmail(email);
+ 
+-        if (users.length === 0) {
++        if (!user) {
+             // Caso: Usuario no existe (Aviso de seguridad)
+             const { success, error: emailError } = await sendEmail({
+                 to: email,
+@@ -32,7 +32,8 @@
+             return NextResponse.json({ success: true, message: 'Si el correo existe, recibirás instrucciones.' });
+         }
+...
+==== src/app/api/auth/invitation-details/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/auth/invitation-details/route.ts	2026-06-15 18:41:45.158653361 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/auth/invitation-details/route.ts	2026-06-18 16:19:15.667812939 -0300
+@@ -1,7 +1,8 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { getInvitationByToken } from '@/services/invitation-service';
++import { hashField } from '@/lib/encryption';
++import { findUserByEmail } from '@/services/auth-service';
+ 
+ export async function GET(req: NextRequest) {
+     try {
+@@ -18,23 +19,20 @@
+             return NextResponse.json({ error: 'Invitación no encontrada o expirada' }, { status: 404 });
+         }
+ 
+-        // Obtener nombre de la empresa para mostrar en el UI de registro
+-            'SELECT nombre_de_empresa FROM empresas WHERE id = ?',
+-            [invitation.empresa_id]
+-        );
+-
+-        // Verificar si el usuario ya existe
+-            'SELECT id FROM usuarios WHERE email = ?',
+-            [invitation.email]
+-        );
++        // Obtener nombre de la empresa usando Prisma (descifra nombre_de_empresa automáticamente)
++            where: { id: BigInt(invitation.empresa_id) },
++            select: { nombre_de_empresa: true }
++        });
++
++        // Verificar si el usuario ya existe (buscar por email, usa fallback)
++        const existingUser = await findUserByEmail(invitation.email);
+...
+==== src/app/api/auth/magic-login/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/auth/magic-login/route.ts	2026-06-18 10:35:53.996038634 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/auth/magic-login/route.ts	2026-06-18 16:19:05.018892240 -0300
+@@ -1,9 +1,8 @@
+ import { NextRequest, NextResponse } from 'next/server';
+-import { createSession } from '@/services/auth-service';
++import { hashField } from '@/lib/encryption';
++import { createSession, findUserByEmail } from '@/services/auth-service';
+ import { acceptInvitation } from '@/services/invitation-service';
+-import { SignJWT } from 'jose';
+ 
+ export async function GET(req: NextRequest) {
+   const searchParams = req.nextUrl.searchParams;
+@@ -18,27 +17,27 @@
+   }
+ 
+   try {
+-    if (rows.length === 0) {
++    // Buscar usuario por email (usa hash + fallback plano para migración)
++    const user = await findUserByEmail(email);
++
++    if (!user) {
+       return NextResponse.redirect(new URL('/auth/login?error=user_not_found', req.url));
+     }
+-    
+-    const user = rows[0];
+ 
+     // Verificar código y expiración
+     if (user.two_factor_code !== code) {
+       return NextResponse.redirect(new URL('/auth/login?error=magic_link_invalid_code', req.url));
+     }
+...
+==== src/app/api/companies/[id]/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/companies/[id]/route.ts	2026-06-22 10:15:17.274925699 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/companies/[id]/route.ts	2026-06-23 13:35:41.704043306 -0300
+@@ -1,12 +1,13 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { deleteCompany } from '@/services/document-service';
+ import { getCurrentUser } from '@/services/user-service';
+ import { validateCompanyDocuments } from '@/services/incidents-service';
+-
++import { hashField } from '@/lib/encryption';
+ export const dynamic = 'force-dynamic';
+ 
++
+ // GET - Contar documentos de una empresa
+ export async function GET(
+   request: NextRequest,
+@@ -116,9 +117,10 @@
+ 
+     // Verificar si el CIF ya existe en otra empresa (solo si viene en el body)
+     if ('cif' in body && body.cif !== null && body.cif !== undefined && body.cif.trim()) {
++      const cifHash = hashField(body.cif.trim());
+       const [cifCheck] = await db.query<RowDataPacket[]>(
+-        'SELECT id FROM empresas WHERE CIF = ? AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
+-        [body.cif.trim(), user.id, empresaId]
++        'SELECT id FROM empresas WHERE (cif_hash = ? OR CIF = ?) AND JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND id != ?',
++        [cifHash, body.cif.trim(), user.id, empresaId]
+       );
+ 
+       if (cifCheck.length > 0) {
+@@ -131,9 +133,11 @@
+ 
+...
+==== src/app/api/companies/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/companies/route.ts	2026-06-22 10:14:59.192994970 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/companies/route.ts	2026-06-10 19:02:41.934509252 -0300
+@@ -1,8 +1,6 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { createCompany } from '@/services/document-service';
+ import { getCurrentUser } from '@/services/user-service';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -11,7 +9,6 @@
+   try {
+     console.log('🏢 [API-COMPANIES] Iniciando GET...');
+ 
+-    // Verificar usuario
+     const user = await getCurrentUser();
+     console.log('👤 [API-COMPANIES] Usuario actual:', user?.id, user?.email);
+ 
+@@ -20,28 +17,41 @@
+       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+     }
+ 
+-    // ✅ QUERY DIRECTA: Asegurar que traiga TODOS los campos incluido mail_de_carga
+-      `SELECT 
+-        id,
+-        nombre_de_empresa as name,
+-        nombre_fiscal as nombre_fiscal,
+-        CIF as cif,
+-        mail_de_carga,
+-        recargo
+-      FROM empresas 
+...
+==== src/app/api/docs/playground/proxy/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/docs/playground/proxy/route.ts	2026-06-22 16:39:06.495976978 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/docs/playground/proxy/route.ts	2026-06-22 18:45:42.966686529 -0300
+@@ -13,7 +13,8 @@
+ import type { RowDataPacket } from 'mysql2';
+ import { getDashboardAnalytics, getHealthCheckAnalytics } from '@/services/document-service';
+ import { checkRateLimit } from '@/lib/rate-limit';
+-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -94,12 +95,10 @@
+       const incluirIncidencias = queryParams.incluir_incidencias === 'true';
+       const incluirSinVerificar = queryParams.incluir_sin_verificar === 'true';
+       const incluirSinConfirmar = queryParams.incluir_sin_confirmar === 'true';
+-      const includeThumbnail = queryParams.include_thumbnail_url !== 'false';
+ 
+       let query = `
+-        SELECT d.*, e.nombre_de_empresa, e.CIF AS empresa_cif
++        SELECT d.*
+         FROM documentos d
+-        LEFT JOIN empresas e ON d.id_de_empresa = e.id
+         WHERE d.id_de_empresa = ?
+       `;
+       const params: any[] = [empresaId];
+@@ -122,14 +121,7 @@
+       }
+       if (trimestre) { query += ` AND d.num_trimestre = ?`; params.push(trimestre); }
+       if (año) { query += ` AND d.año_trimestre = ?`; params.push(año); }
+-      if (proveedor) {
+...
+==== src/app/api/documents/bulk-update-field/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/documents/bulk-update-field/route.ts	2026-06-15 18:41:45.160581180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/documents/bulk-update-field/route.ts	2026-06-11 04:14:31.923656770 -0300
+@@ -20,7 +20,7 @@
+         console.log(`📦 [BulkUpdate] Updating ${ids.length} documents: ${fieldName} = ${value}`);
+ 
+         const results = await Promise.all(
+-            ids.map(id => updateDocumentField(id, fieldName, value).catch(err => ({ success: false, error: err.message })))
++            ids.map(id => updateDocumentField(id, fieldName, value, user.email).catch(err => ({ success: false, error: err.message })))
+         );
+ 
+         const failures = results.filter(r => !r.success);
+...
+==== src/app/api/documents/check-duplicates/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/documents/check-duplicates/route.ts	2026-06-24 11:32:39.214514935 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/documents/check-duplicates/route.ts	2026-06-22 18:43:23.122521574 -0300
+@@ -22,11 +22,10 @@
+           d.numero_documento, 
+           d.id_de_empresa, 
+           d.tipo_documento,
+-          (SELECT COUNT(*) FROM health_check_status h WHERE h.documento_id = d.id AND h.verified = 0) as has_health_error,
+-          e.identificador_fiscal as proveedor_cif,
+-          e.nombre as proveedor_nombre,
+-          (SELECT COUNT(*) FROM incidencias_documento i WHERE i.documento_id = d.id AND i.validado = 0) as has_incidencias,
+-          emp.nombre_de_empresa
++          e.identificador_fiscal_hash as proveedor_cif_hash,
++          e.identificador_fiscal as proveedor_cif_raw,
++          e.nombre_hash as proveedor_nombre_hash,
++          e.nombre as proveedor_nombre_raw
+        FROM documentos d
+        JOIN empresas emp ON d.id_de_empresa = emp.id
+        LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
+@@ -37,7 +36,7 @@
+     );
+ 
+     // Detectar duplicados (agrupar según lógica de negocio)
+-    const gruposDuplicados = new Map<string, { numero: string, empresa_id: number, ids: number[], docs: { id: number, tipo: string, seccion: string, empresa_nombre: string }[] }>();
++    const gruposDuplicados = new Map<string, { numero: string, empresa_id: number, ids: number[] }>();
+ 
+     docs.forEach(doc => {
+       const numero = doc.numero_documento.trim().toLowerCase();
+@@ -47,7 +46,9 @@
+       // LÓGICA DIFERENCIADA
+       if (tipo.includes('recibida') || tipo.includes('recibido')) {
+...
+==== src/app/api/documents/[id]/field/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/documents/[id]/field/route.ts	2026-06-15 18:41:45.160391569 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/documents/[id]/field/route.ts	2026-06-11 04:14:18.526705383 -0300
+@@ -35,7 +35,7 @@
+ 
+     console.log('📝 [API-UPDATE-FIELD] Actualizando:', { documentId, fieldName, value });
+ 
+-    const result = await updateDocumentField(documentId, fieldName, value);
++    const result = await updateDocumentField(documentId, fieldName, value, user.email);
+ 
+     if (!result.success) {
+       return NextResponse.json({ error: 'Error al actualizar campo' }, { status: 400 });
+...
+==== src/app/api/documents/[id]/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/documents/[id]/route.ts	2026-06-15 18:41:45.160391569 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/documents/[id]/route.ts	2026-06-11 04:14:09.083739249 -0300
+@@ -64,7 +64,7 @@
+       }, { status: 400 });
+     }
+ 
+-    const result = await updateDocument(documentId, validation.data);
++    const result = await updateDocument(documentId, validation.data, user.email);
+     
+     if (!result.success) {
+       return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
+...
+==== src/app/api/entidades-config/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/entidades-config/route.ts	2026-06-15 18:41:45.160581180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/entidades-config/route.ts	2026-06-26 15:35:29.785727396 -0300
+@@ -1,5 +1,6 @@
+ import { NextResponse } from 'next/server';
+ import connection from '@/lib/db';
++import { hashField } from '@/lib/encryption';
+ 
+ export async function GET(request: Request) {
+     try {
+@@ -15,10 +16,10 @@
+             `
+         SELECT cuenta_compra, cuenta_venta, nombre_referencia 
+         FROM entidades_config 
+-        WHERE empresa_id = ? AND identificador_fiscal = ?
++        WHERE empresa_id = ? AND (identificador_fiscal_hash = SHA2(?, 256) OR identificador_fiscal = ?)
+         LIMIT 1
+       `,
+-            [empresaId, identificadorFiscal]
++            [empresaId, identificadorFiscal, identificadorFiscal]
+         ) as any[];
+ 
+         if (rows.length > 0) {
+@@ -50,28 +51,30 @@
+         await connection.query(
+             `
+         INSERT INTO entidades_config (
+-          empresa_id, identificador_fiscal, nombre_referencia, cuenta_compra, cuenta_venta
+-        ) VALUES (?, ?, ?, ?, ?)
++          empresa_id, identificador_fiscal, identificador_fiscal_hash, nombre_referencia, cuenta_compra, cuenta_venta
++        ) VALUES (?, ?, SHA2(?, 256), ?, ?, ?)
+...
+==== src/app/api/export-dashboard/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/export-dashboard/route.ts	2026-06-15 18:41:45.160581180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/export-dashboard/route.ts	2026-06-18 14:14:57.486952685 -0300
+@@ -3,6 +3,8 @@
+ import { createExport } from '@/services/document-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
++
+ 
+ export async function POST(request: NextRequest) {
+   try {
+@@ -25,6 +27,7 @@
+     let query = `
+       SELECT 
+         d.id,
++        d.id_de_empresa,
+         d.tipo_documento,
+         d.numero_documento,
+         d.fecha_emision,
+@@ -35,11 +38,8 @@
+         d.observaciones,
+         d.datos_extra,
+         d.año_trimestre,
+-        d.num_trimestre,
+-        e.nombre_de_empresa,
+-        e.cif as empresa_cif
++        d.num_trimestre
+       FROM documentos d
+-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+       WHERE LOWER(d.tipo_documento) LIKE '%factura%'
+     `;
+...
+==== src/app/api/export-documents/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/export-documents/route.ts	2026-06-15 18:41:45.160581180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/export-documents/route.ts	2026-06-18 14:17:30.387310095 -0300
+@@ -3,6 +3,7 @@
+ import { createExport } from '@/services/document-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
+ 
+ export async function POST(request: NextRequest) {
+   try {
+@@ -20,10 +21,11 @@
+ 
+     console.log('📤 [export-documents] Iniciando exportación:', { empresaIds, año, trimestre, status, search });
+ 
+-    // ✅ Construir query para obtener documentos
++    // ✅ Query base — solo columnas de la tabla documentos (sin JOINs a tablas encriptadas)
+     let query = `
+       SELECT 
+-        d.id_documento,
++        d.id,
++        d.id_de_empresa,
+         d.tipo_documento,
+         d.numero_documento,
+         d.fecha_emision,
+@@ -33,27 +35,13 @@
+         d.importe_sin_impuestos,
+         d.moneda,
+         d.observaciones,
+-        d.proveedor,
+-        d.cif,
+         d.año_trimestre,
+...
+==== src/app/api/productos/classify/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/productos/classify/route.ts	2026-06-15 18:41:45.162522367 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/productos/classify/route.ts	2026-06-24 14:30:37.005965930 -0300
+@@ -141,13 +141,13 @@
+                         DELETE FROM productos_config 
+                         WHERE id_de_empresa = ? 
+                         AND (patron = ? OR patron = ?) 
+-                        AND (IFNULL(proveedor_cif, '') = IFNULL(?, ''))
+-                    `, [empresaId, rawPatron, patron, cif]);
++                        AND (IFNULL(proveedor_cif_hash, '') = IFNULL(SHA2(?, 256), '') OR IFNULL(proveedor_cif, '') = IFNULL(?, ''))
++                    `, [empresaId, rawPatron, patron, cif, cif]);
+ 
+                     await db.query(`
+-                        INSERT INTO productos_config (id_de_empresa, proveedor_cif, patron, cuenta_contable, is_ai_suggested, justification)
+-                        VALUES (?, ?, ?, ?, 1, ?)
+-                    `, [empresaId, cif, patron, cls.cuenta_contable, cls.justificacion]);
++                        INSERT INTO productos_config (id_de_empresa, proveedor_cif, proveedor_cif_hash, patron, cuenta_contable, is_ai_suggested, justification)
++                        VALUES (?, ?, SHA2(?, 256), ?, ?, 1, ?)
++                    `, [empresaId, cif, cif, patron, cls.cuenta_contable, cls.justificacion]);
+                 }
+             }
+ 
+...
+==== src/app/api/productos-config/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/productos-config/route.ts	2026-06-15 18:41:45.162006157 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/productos-config/route.ts	2026-06-24 14:30:05.549297516 -0300
+@@ -2,6 +2,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import db from '@/lib/db';
+ import { getCurrentUser } from '@/services/user-service';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export async function GET(req: NextRequest) {
+     try {
+@@ -18,8 +19,8 @@
+         const params: any[] = [empresaId];
+ 
+         if (proveedorCif) {
+-            query += ' AND (proveedor_cif = ? OR proveedor_cif IS NULL)';
+-            params.push(proveedorCif);
++            query += ' AND (proveedor_cif_hash = SHA2(?, 256) OR proveedor_cif = ? OR proveedor_cif IS NULL)';
++            params.push(proveedorCif, proveedorCif);
+         }
+ 
+         const [rows] = await db.query(query, params);
+@@ -53,13 +54,13 @@
+                     DELETE FROM productos_config 
+                     WHERE id_de_empresa = ? 
+                     AND (patron = ? OR patron = ?) 
+-                    AND (IFNULL(proveedor_cif, '') = IFNULL(?, ''))
+-                `, [empresaId, patron, rawPatron, cif]);
++                    AND (IFNULL(proveedor_cif_hash, '') = IFNULL(SHA2(?, 256), '') OR IFNULL(proveedor_cif, '') = IFNULL(?, ''))
++                `, [empresaId, patron, rawPatron, cif, cif]);
+ 
+...
+==== src/app/api/proveedores/[id]/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/proveedores/[id]/route.ts	2026-06-15 18:41:45.162663297 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/proveedores/[id]/route.ts	2026-06-10 18:19:24.640686513 -0300
+@@ -1,7 +1,6 @@
+ import { NextResponse } from 'next/server';
+ import { getCurrentUser } from '@/services/user-service';
+ 
+ export async function PUT(
+   request: Request,
+@@ -28,37 +27,36 @@
+ 
+     // ✅ Normalizar email vacío
+     if (!email || email.trim() === '') {
+-      // Si está vacío, obtener el email actual de la BD para no cambiarlo
+-        `SELECT email 
+-         FROM entidades_documento 
+-         WHERE identificador_fiscal = ? 
+-           AND rol IN ('proveedor', 'emisor', 'cliente', 'receptor') 
+-         LIMIT 1`,
+-        [currentFiscalId]
+-      );
+-      
+-      email = currentProvider[0]?.email || null;
++      // Si está vacío, buscar el email actual via Prisma para que venga desencriptado
++        where: {
++          identificador_fiscal: currentFiscalId,
++          rol: { in: ['proveedor', 'emisor', 'cliente', 'receptor'] }
++        },
++        select: { email: true }
++      });
++      email = currentProvider?.email || null;
+...
+==== src/app/api/send-dashboard-email/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/send-dashboard-email/route.ts	2026-06-15 18:41:45.162663297 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/send-dashboard-email/route.ts	2026-06-10 18:22:06.376288349 -0300
+@@ -3,6 +3,7 @@
+ import { createExport } from '@/services/document-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
+ 
+ const MICROSERVICE_WEBHOOK_URL = 'https://agent.flux1a.com.ar/webhook/6d62acdb-a2d3-4e2d-a4f7-41a49be815d4';
+ 
+@@ -37,20 +38,24 @@
+       );
+     }
+ 
+-    // Obtener datos completos de la empresa
+-      'SELECT * FROM empresas WHERE id = ?',
+-      [empresaId]
+-    );
++    // Obtener datos completos de la empresa (Prisma descifra nombre_de_empresa automáticamente)
++      where: { id: BigInt(empresaId) },
++      select: { id: true, nombre_de_empresa: true, CIF: true }
++    });
+ 
+-    if (empresaRows.length === 0) {
++    if (!empresaRow) {
+       return NextResponse.json(
+         { error: 'Empresa no encontrada' },
+         { status: 404 }
+       );
+     }
+ 
+...
+==== src/app/api/trimestres/documentos-sii/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/trimestres/documentos-sii/route.ts	2026-06-15 18:41:45.163333216 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/trimestres/documentos-sii/route.ts	2026-06-18 12:25:19.209098130 -0300
+@@ -1,6 +1,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { getSession } from '@/services/auth-service';
+ import pool from '@/lib/db';
+ 
+ export async function GET(request: NextRequest) {
+   try {
+@@ -33,24 +34,8 @@
+         d.importe_total,
+         d.importe_sin_impuestos,
+         d.moneda,
+-        emp.CIF as empresa_cif,
+-        emp.nombre_de_empresa as empresa_nombre,
+-        
+-        -- Emisor
+-        ed_emisor.identificador_fiscal as emisor_cif,
+-        ed_emisor.nombre as emisor_nombre,
+-        
+-        -- Cliente/Receptor
+-        ed_cliente.identificador_fiscal as cliente_cif,
+-        ed_cliente.nombre as cliente_nombre
+-        
++        d.id_de_empresa
+       FROM documentos d
+-      LEFT JOIN empresas emp ON d.id_de_empresa = emp.id
+-      LEFT JOIN entidades_documento ed_emisor 
+-        ON d.id = ed_emisor.documento_id AND ed_emisor.rol = 'emisor'
+-      LEFT JOIN entidades_documento ed_cliente 
+...
+==== src/app/api/upload-progress/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/upload-progress/route.ts	2026-06-15 18:41:45.163581180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/upload-progress/route.ts	2026-06-22 18:39:00.083145551 -0300
+@@ -3,6 +3,7 @@
+ import connection, { dbName } from '@/lib/db';
+ import { RowDataPacket } from 'mysql2';
+ import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
+ 
+ // ==========================================
+ // POST: Recibir callback de n8n / microservicio
+@@ -256,10 +257,8 @@
+           `SELECT 
+              d.id, d.file_hash, d.tipo_documento, d.numero_documento, d.importe_total,
+              d.fecha_emision, d.fecha_vencimiento, d.importe_sin_impuestos, d.moneda,
+-             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre,
+-             e.nombre_de_empresa as empresa_nombre, e.cif as empresa_cif
++             d.trimestre_cerrado, d.año_trimestre, d.num_trimestre, d.id_de_empresa
+            FROM ${dbName}.documentos d
+-           LEFT JOIN ${dbName}.empresas e ON d.id_de_empresa = e.id
+            WHERE d.id = ? LIMIT 1`,
+           [docId]
+         );
+@@ -283,11 +282,17 @@
+ 
+           if (hasInc) totalIncidencias++;
+ 
++          const empresaIdDoc = dRows[0].id_de_empresa;
++
+           docsData.push({
+             ...dRows[0],
++            empresa_nombre: empresaPrisma?.nombre_de_empresa || '',
+...
+==== src/app/api/v1/documents/full/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/documents/full/route.ts	2026-06-22 13:35:00.977042234 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/documents/full/route.ts	2026-06-22 18:45:01.880930252 -0300
+@@ -2,6 +2,8 @@
+ import { validateApiKey } from '@/services/api-key-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -79,11 +81,8 @@
+     // 4. Construir query de documentos principal
+     let query = `
+       SELECT
+-        d.*,
+-        e.nombre_de_empresa,
+-        e.CIF AS empresa_cif
++        d.*
+       FROM documentos d
+-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+       WHERE d.id_de_empresa = ?
+     `;
+     const params: any[] = [empresaId];
+@@ -128,25 +127,7 @@
+       params.push(año);
+     }
+ 
+-    if (proveedor) {
+-      query += ` AND d.id IN (
+-        SELECT ent2.documento_id FROM entidades_documento ent2
+...
+==== src/app/api/v1/documents/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/documents/route.ts	2026-06-22 13:34:58.965053510 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/documents/route.ts	2026-06-23 13:35:40.489047101 -0300
+@@ -2,6 +2,8 @@
+ import { validateApiKey } from '@/services/api-key-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -82,21 +84,8 @@
+         d.observaciones,
+         d.año_trimestre,
+         d.num_trimestre,
+-        d.trimestre_cerrado,
+-        e.nombre_de_empresa,
+-        e.CIF AS empresa_cif,
+-        MAX(a.ruta_archivo) AS ruta_archivo,
+-        GROUP_CONCAT(
+-          DISTINCT CONCAT(
+-            ent.rol, '||',
+-            COALESCE(ent.nombre, ''), '||',
+-            COALESCE(ent.identificador_fiscal, '')
+-          ) SEPARATOR ';;'
+-        ) AS entidades_raw
++        d.trimestre_cerrado
+       FROM documentos d
+-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
+-      LEFT JOIN archivos_documento a ON d.id = a.documento_id
+...
+==== src/app/api/v1/export/excel/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/export/excel/route.ts	2026-06-15 18:41:45.165866753 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/export/excel/route.ts	2026-06-23 13:28:09.837187314 -0300
+@@ -3,6 +3,8 @@
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
+ import * as XLSX from 'xlsx';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -141,19 +143,8 @@
+         d.observaciones,
+         d.año_trimestre,
+         d.num_trimestre,
+-        d.trimestre_cerrado,
+-        e.nombre_de_empresa,
+-        e.CIF AS empresa_cif,
+-        GROUP_CONCAT(
+-          DISTINCT CONCAT(
+-            ent.rol, '||',
+-            COALESCE(ent.nombre, ''), '||',
+-            COALESCE(ent.identificador_fiscal, '')
+-          ) SEPARATOR ';;'
+-        ) AS entidades_raw
++        d.trimestre_cerrado
+       FROM documentos d
+-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
+-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id
+       WHERE d.id_de_empresa = ?
+         AND (
+...
+==== src/app/api/v1/incidents/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/incidents/route.ts	2026-06-15 18:41:45.165866753 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/incidents/route.ts	2026-06-18 12:22:40.328079917 -0300
+@@ -3,6 +3,7 @@
+ import { fireWebhook } from '@/services/webhook-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket, OkPacket } from 'mysql2';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -61,13 +62,6 @@
+          d.importe_total,
+          d.importe_sin_impuestos,
+          d.moneda,
+-         -- Datos del emisor / proveedor para que el ERP pueda identificar la factura
+-         (SELECT nombre FROM entidades_documento
+-          WHERE documento_id = d.id AND rol IN ('emisor', 'proveedor')
+-          ORDER BY id LIMIT 1)       AS entidad_nombre,
+-         (SELECT identificador_fiscal FROM entidades_documento
+-          WHERE documento_id = d.id AND rol IN ('emisor', 'proveedor')
+-          ORDER BY id LIMIT 1)       AS entidad_cif,
+          -- Estado del health check matemático del documento
+          hcs.verified                AS verificado_matematicamente,
+          hcs.motivo                  AS razon_descuadre
+@@ -81,6 +75,20 @@
+       params
+     );
+ 
++    const docIds = Array.from(new Set(rows.map((r: any) => r.documento_id)));
++    let entidadesByDoc: Record<number, any> = {};
++    if (docIds.length > 0) {
+...
+==== src/app/api/v1/products/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/products/route.ts	2026-06-15 18:41:45.165866753 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/products/route.ts	2026-06-22 18:46:04.064561837 -0300
+@@ -2,6 +2,8 @@
+ import { validateApiKey } from '@/services/api-key-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
++import { hashField, normalizeEntityName } from '@/lib/encryption';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -40,12 +42,9 @@
+         l.importe_linea,
+         d.id as documento_id,
+         d.numero_documento,
+-        d.fecha_emision,
+-        ent.nombre as proveedor_nombre,
+-        ent.identificador_fiscal as proveedor_cif
++        d.fecha_emision
+       FROM lineas_documento l
+       JOIN documentos d ON l.documento_id = d.id
+-      LEFT JOIN entidades_documento ent ON d.id = ent.documento_id AND ent.rol IN ('emisor', 'proveedor')
+       WHERE d.id_de_empresa = ?
+     `;
+ 
+@@ -66,16 +65,23 @@
+       params.push(`%${productoParam}%`);
+     }
+ 
+-    if (proveedorParam) {
+-      query += ` AND (ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?)`;
+...
+==== src/app/api/v1/quarters/route.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/api/v1/quarters/route.ts	2026-06-15 18:41:45.165866753 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/api/v1/quarters/route.ts	2026-06-18 14:16:38.369527821 -0300
+@@ -2,6 +2,8 @@
+ import { validateApiKey } from '@/services/api-key-service';
+ import db from '@/lib/db';
+ import type { RowDataPacket } from 'mysql2';
++
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -79,11 +81,8 @@
+         t.iva_repercutido,
+         t.iva_soportado,
+         t.fecha_creacion,
+-        t.fecha_actualizacion,
+-        e.nombre_de_empresa AS empresa,
+-        e.CIF AS empresa_cif
++        t.fecha_actualizacion
+       FROM trimestres t
+-      LEFT JOIN empresas e ON t.id_de_empresa = e.id
+       WHERE t.id_de_empresa = ?
+     `;
+     const params: any[] = [empresaId];
+@@ -134,9 +133,15 @@
+       };
+     });
+ 
++    // ✅ Hidratar nombre de empresa con Prisma (desencripta automáticamente)
++      where: { id: BigInt(empresaId) },
++      select: { nombre_de_empresa: true, CIF: true }
+...
+==== src/app/dashboard/webhooks/page.tsx ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/dashboard/webhooks/page.tsx	2026-06-15 18:41:45.167231271 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/dashboard/webhooks/page.tsx	2026-06-22 18:39:21.738008515 -0300
+@@ -2,8 +2,7 @@
+ import { getCurrentUser } from '@/services/user-service';
+ import { redirect } from 'next/navigation';
+ import { getWebhooks } from '@/services/webhook-service';
+ import WebhooksClient from './webhooks-client';
+ 
+ export const dynamic = 'force-dynamic';
+@@ -14,10 +13,16 @@
+     redirect('/auth/login');
+   }
+ 
+-    `SELECT id, nombre_de_empresa FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) ORDER BY id ASC`,
+-    [user.id]
+-  );
++    where: { id_de_usuario: { array_contains: user.id } },
++    select: { id: true, nombre_de_empresa: true },
++    orderBy: { id: 'asc' }
++  });
++
++  const empRows = empRowsPrisma.map(e => ({
++    id: Number(e.id),
++    nombre_de_empresa: e.nombre_de_empresa || ''
++  }));
+ 
+   if (empRows.length === 0) {
+     return <div className="p-8">No tienes empresas asociadas.</div>;
+...
+==== src/app/settings/page.tsx ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/app/settings/page.tsx	2026-06-24 12:02:02.327562706 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/app/settings/page.tsx	2026-06-30 05:46:17.029539422 -0300
+@@ -21,6 +21,7 @@
+ import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
+ import { TwoFactorSettingsSection } from "@/components/settings/TwoFactorSettingsSection";
+ 
++
+ async function handleLogout() {
+     'use server';
+     await logout();
+@@ -83,6 +84,10 @@
+                         initialEmail={user.email}
+                     />
+ 
++                    {/* Autenticación en Dos Pasos */}
++                    <TwoFactorSettingsSection />
++
++
+                     {/* Configuración de Alertas */}
+                     <Card>
+                         <CardHeader>
+@@ -108,9 +113,6 @@
+ 
+                     {/* Seguridad / Password */}
+                     <PasswordEditDialog isGoogleAccount={isGoogleAccount} />
+-                    
+-                    {/* Autenticación en Dos Pasos */}
+-                    <TwoFactorSettingsSection />
+ 
+                     {/* Integración API */}
+...
+==== src/components/dashboard/grouped-documents-view.tsx ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/components/dashboard/grouped-documents-view.tsx	2026-06-16 14:32:03.060028180 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/components/dashboard/grouped-documents-view.tsx	2026-05-25 10:31:26.572281369 -0300
+@@ -239,68 +239,46 @@
+   };
+ 
+   const documentsByType = useMemo(() => {
+-    const DEFAULT_CATEGORIES = [
+-      'Fiscal y Contable',
+-      'Legal y Societario',
+-      'Laboral y RR.HH.',
+-      'Bancos y Financiación',
+-      'Clientes',
+-      'Proveedores',
+-      'Administración Pública',
+-      'Interno / Operaciones'
+-    ];
++    const MAX_FOLDERS = 5;
++    const INDEFINIDO = 'Indefinido';
+ 
+-    // ✅ Combinar categorías predeterminadas + tipos personalizados
+-    const allowedTypes = new Set([...DEFAULT_CATEGORIES, ...customTypes]);
++    // ✅ Obtener tipos únicos de los documentos
++    const documentedTypes = new Set<string>();
++    documents.forEach(doc => {
++      if (doc.tipo_documento && doc.tipo_documento !== INDEFINIDO) {
++        documentedTypes.add(doc.tipo_documento);
++      }
++    });
++
++    // ✅ Priorizar customTypes + los más frecuentes
+...
+==== src/hooks/use-duplicate-detection.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/hooks/use-duplicate-detection.ts	2026-06-24 11:32:47.757498910 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/hooks/use-duplicate-detection.ts	2026-06-30 05:47:16.984563243 -0300
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import { useState, useCallback, useEffect, useRef } from 'react';
++import { useRouter } from 'next/navigation';
+ 
+ export interface DuplicateGroup {
+   numero: string;
+@@ -9,6 +10,7 @@
+ }
+ 
+ export function useDuplicateDetection(empresaId?: number) {
++  const router = useRouter();
+   const [duplicates, setDuplicates] = useState<Set<number>>(new Set());
+   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+   const [isChecking, setIsChecking] = useState(false);
+@@ -33,6 +35,7 @@
+       
+       console.log('✅ [useDuplicateDetection] Resultado:', result);
+       
++      // Extraer y guardar los IDs de documentos duplicados
+       if (result.duplicates && Array.isArray(result.duplicates)) {
+         const duplicateIds = new Set<number>();
+         const groups: DuplicateGroup[] = [];
+@@ -67,12 +70,15 @@
+ 
+   // Polling automático cada 30 segundos
+   useEffect(() => {
+...
+==== src/lib/encryption.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/lib/encryption.ts	2026-06-15 18:41:45.182711872 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/lib/encryption.ts	2026-06-17 18:06:17.096515975 -0300
+@@ -37,4 +37,25 @@
+   decrypted += decipher.final('utf8');
+   
+   return decrypted;
++}
++
++/**
++ * Calcula el Blind Index SHA-256 para búsquedas seguras en campos encriptados.
++ * Siempre normaliza a minúsculas antes de hashear.
++ */
++export function hashField(value: string): string {
++  return crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex');
++}
++
++/**
++ * Normaliza nombres para garantizar que el hash de búsqueda sea determinista y constante.
++ * Útil para campos como nombre_de_empresa o nombre de entidades.
++ */
++export function normalizeEntityName(name: string): string {
++  if (!name) return '';
++  return name
++    .normalize("NFD") 
++    .replace(/[\u0300-\u036f]/g, "") 
++    .toLowerCase()
++    .replace(/[^a-z0-9]/g, ""); 
+ }
+\ No hay ningún carácter de nueva línea al final del archivo
+...
+==== src/services/api-key-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/api-key-service.ts	2026-06-15 18:41:45.183949010 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/api-key-service.ts	2026-06-18 14:13:46.178255402 -0300
+@@ -1,6 +1,8 @@
+ import crypto from 'crypto';
+ import db from '@/lib/db';
+ import type { RowDataPacket, OkPacket } from 'mysql2';
++
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // TIPOS
+@@ -72,12 +74,12 @@
+     const keyHash = hashKey(rawKey);
+     const keyPrefix = rawKey.slice(0, 14); // "muvail_Ab3xKm9"
+ 
+-    // 3. Obtener nombre de empresa para la respuesta
+-      `SELECT nombre_de_empresa FROM empresas WHERE id = ?`,
+-      [empresa_id]
+-    );
+-    const empresa_nombre = empRows[0]?.nombre_de_empresa || 'Empresa';
++    // 3. Obtener nombre de empresa para la respuesta (Prisma desencripta automáticamente)
++      where: { id: BigInt(empresa_id) },
++      select: { nombre_de_empresa: true }
++    });
++    const empresa_nombre = empresaRecord?.nombre_de_empresa || 'Empresa';
+ 
+     // 4. Insertar en BD
+     const [result] = await db.query<OkPacket>(
+@@ -113,30 +115,39 @@
+ 
+ export async function listApiKeys(usuario_id: number): Promise<ApiKey[]> {
+...
+==== src/services/auth-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/auth-service.ts	2026-06-30 12:49:09.669587273 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/auth-service.ts	2026-06-23 10:06:06.460529412 -0300
+@@ -4,8 +4,7 @@
+ import { SignJWT, jwtVerify } from 'jose';
+ import { z } from 'zod';
+ import bcrypt from 'bcryptjs';
+-import { get2FAConfig } from './user-service';
+ import type { RowDataPacket, OkPacket } from 'mysql2';
+ import type { User, SessionPayload } from '@/lib/types';
+ import { redirect } from 'next/navigation';
+@@ -13,11 +12,78 @@
+ import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
+ import { acceptInvitation } from './invitation-service';
+ import { sendEmail } from './email-service';
++import { hashField } from '@/lib/encryption';
++import { headers } from 'next/headers';
++
++/**
++ * Helper para registrar eventos de sesión en eventos_sistema (VeriFactu / Orden HAC/1177/2024)
++ * No lanza excepciones: un fallo de log nunca debe bloquear el flujo de autenticación.
++ */
++async function logAuthEvent(tipo: 'LOGIN' | 'LOGOUT', userEmail: string) {
++  try {
++    const h = await headers();
++    const ip = h.get('x-forwarded-for') || h.get('x-real-ip') || 'unknown';
++    const agent = h.get('user-agent') || 'unknown';
++      data: {
++        usuario: userEmail,
++        tipo_evento: tipo,
++        metadata: JSON.stringify({ ip, agent }),
+...
+==== src/services/document-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/document-service.ts	2026-06-15 18:41:45.184581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/document-service.ts	2026-06-26 16:39:48.540987801 -0300
+@@ -1,2721 +1,2716 @@
+-'use server';
+-
+-import type { Document, IvaDetail, DocumentUpdatePayload, DocumentEntity, DocumentLine, DocumentFile, ProviderWithStats, Incident, Company, CreateDocumentPayload, DashboardAnalytics } from '@/lib/types';
+-import type { ProviderAnalyticsData } from '@/components/dashboard/provider-analytics';
+-import type { IncidentsAnalyticsData } from '@/components/incidents/incidents-analytics';
+-import type { IncidentAnalysisResult } from '@/lib/types';
+-import { redirect } from 'next/navigation';
+-import { getCurrentUser } from './user-service';
+-import { revalidatePath } from 'next/cache';
+-import { normalizeProductDescription } from "@/lib/utils";
+-
+-import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
+-import { validateIncidentsAsync } from './incidents-service';
+-import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
+-
+-
+-
+-function calcularTrimestre(fecha: Date): number {
+-  const mes = fecha.getMonth() + 1; // 0-11 -> 1-12
+-
+-  if (mes >= 1 && mes <= 3) return 1;
+-  if (mes >= 4 && mes <= 6) return 2;
+-  if (mes >= 7 && mes <= 9) return 3;
+-  return 4;
+-}
+-
+-function isDateInCurrentQuarter(date: Date): boolean {
+...
+==== src/services/incidents-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/incidents-service.ts	2026-06-15 18:41:45.184581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/incidents-service.ts	2026-06-18 12:50:57.122841829 -0300
+@@ -1,6 +1,7 @@
+ 'use server';
+ 
+ import db from '@/lib/db';
+ import { RowDataPacket } from 'mysql2';
+ import { revalidatePath } from 'next/cache';
+ import { getDocumentById } from './document-service';
+@@ -24,12 +25,17 @@
+         // 2. Obtener la compañía del documento (si existe)
+         let companyData = undefined;
+         if (document.empresa_id) {
+-                'SELECT id, nombre_de_empresa as name, CIF as cif, nombre_fiscal as nombreFiscal FROM empresas WHERE id = ?',
+-                [document.empresa_id]
+-            );
+-            if (companies.length > 0) {
+-                companyData = companies[0] as any;
++                where: { id: BigInt(document.empresa_id) },
++                select: { id: true, nombre_de_empresa: true, CIF: true, nombre_fiscal: true }
++            });
++            if (companyPrisma) {
++                companyData = {
++                    id: Number(companyPrisma.id),
++                    name: companyPrisma.nombre_de_empresa,
++                    cif: companyPrisma.CIF,
++                    nombreFiscal: companyPrisma.nombre_fiscal
++                };
+             }
+         }
+...
+==== src/services/invitation-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/invitation-service.ts	2026-06-15 18:41:45.184581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/invitation-service.ts	2026-06-09 16:38:59.674199701 -0300
+@@ -1,7 +1,6 @@
+ import { sendEmail } from './email-service';
+ import crypto from 'crypto';
+ 
+ export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string) {
+   try {
+@@ -9,13 +8,26 @@
+     const fechaExpiracion = new Date();
+     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
+ 
+-    const empresaNombre = emp[0]?.nombre || 'la empresa';
++      where: { id: BigInt(empresaId) },
++      select: { nombre_de_empresa: true }
++    });
++    const empresaNombre = emp?.nombre_de_empresa || 'la empresa';
+ 
+-      'INSERT INTO invitaciones_empresa (empresa_id, email, rol, token, fecha_expiracion, metadata, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+-      [empresaId, email, rol, token, fechaExpiracion.toISOString().slice(0, 19).replace('T', ' '), JSON.stringify({ senderName, empresaNombre }), 'PENDING']
+-    );
++    const emailHash = crypto.createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
++
++      data: {
++        empresa_id: BigInt(empresaId),
++        email,
++        email_hash: emailHash,
++        rol: rol as any,
++        token,
++        fecha_expiracion: fechaExpiracion,
+...
+==== src/services/upload-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/upload-service.ts	2026-06-15 18:41:45.186581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/upload-service.ts	2026-06-18 12:50:29.250927753 -0300
+@@ -4,6 +4,7 @@
+ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+ import crypto from 'crypto';
+ import connection, { dbName } from '@/lib/db';
+ import JSZip from 'jszip';
+ 
+ const UploadResponseSchema = z.object({
+@@ -362,16 +363,18 @@
+     console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
+ 
+     console.log(`[${normalizedFileName}] Consultando CIF, Recargo y Nombre para empresaId: ${empresaId}`);
+-    const [rows] = await connection.query('SELECT CIF, recargo, nombre_de_empresa FROM empresas WHERE id = ?', [empresaId]);
+-    const empresaData = rows as { CIF: string, recargo: number, nombre_de_empresa: string }[];
++      where: { id: BigInt(empresaId) },
++      select: { CIF: true, recargo: true, nombre_de_empresa: true }
++    });
+ 
+-    if (!empresaData || empresaData.length === 0) {
++    if (!empresaPrisma) {
+       throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
+     }
+ 
+-    const cif = empresaData[0].CIF;
+-    const recargo = !!empresaData[0].recargo; // Convertir a booleano
+-    const nombreEmpresa = empresaData[0].nombre_de_empresa;
++    const cif = empresaPrisma.CIF || '';
++    const recargo = !!empresaPrisma.recargo; // Convertir a booleano
++    const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
+...
+==== src/services/user-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/user-service.ts	2026-06-24 11:59:59.156781582 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/user-service.ts	2026-06-30 05:43:48.212359459 -0300
+@@ -1,11 +1,11 @@
+ 'use server';
+ 
+ import type { User } from '@/lib/types';
+ import { getSession, createSession } from './auth-service';
+ import { GOOGLE_PASSWORD_MARKER } from '@/lib/constants';
+ import bcrypt from 'bcryptjs';
++import crypto from 'crypto';
+ 
+ /**
+  * Retrieves the full user object for the currently authenticated user.
+@@ -22,17 +22,17 @@
+   // Esto es un fallback por si la sesión se creó antes de agregar el campo
+   if (session.tutorial === undefined) {
+     console.log('⚠️ [getCurrentUser] Tutorial no está en sesión, consultando BD');
+-      'SELECT id, nombre, email, tutorial FROM usuarios WHERE id = ?',
+-      [session.userId]
+-    );
++      where: { id: BigInt(session.userId) },
++      select: { id: true, nombre: true, email: true, tutorial: true }
++    });
+ 
+-    if (rows.length > 0) {
++    if (user) {
+       return {
+-        id: rows[0].id,
+-        nombre: rows[0].nombre,
+-        email: rows[0].email,
+...
+==== src/services/vertex-ai-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/vertex-ai-service.ts	2026-06-15 18:41:45.186581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/vertex-ai-service.ts	2026-06-18 12:44:51.739208897 -0300
+@@ -2,6 +2,7 @@
+ 
+ import { VertexAI } from '@google-cloud/vertexai';
+ import db, { dbName } from '@/lib/db';
+ import { getCurrentUser } from './user-service';
+ 
+ // Tipos
+@@ -134,13 +135,11 @@
+             [documentId]
+         );
+ 
+-        // 1.3 Obtener entidades (emisor y receptor)
+-            `SELECT rol, nombre, identificador_fiscal
+-             FROM ${dbName}.entidades_documento
+-             WHERE documento_id = ?`,
+-            [documentId]
+-        );
++        // 1.3 Obtener entidades (emisor y receptor) a través de Prisma para descifrar campos sensibles
++            where: { documento_id: BigInt(documentId) },
++            select: { rol: true, nombre: true, identificador_fiscal: true }
++        });
+ 
+         const emisor = entityRows.find((e: any) => e.rol === 'emisor' || e.rol === 'proveedor');
+         const receptor = entityRows.find((e: any) => e.rol === 'receptor' || e.rol === 'cliente');
+...
+==== src/services/webhook-service.ts ====
+--- /home/flux1a/Escritorio/gestor15-6/FluxDocsERPProd/src/services/webhook-service.ts	2026-06-15 18:41:45.186581177 -0300
++++ /home/flux1a/Escritorio/Gestor/FluxDocsERPProd/src/services/webhook-service.ts	2026-06-30 05:46:00.593528431 -0300
+@@ -131,10 +131,24 @@
+   }
+ 
+   try {
++    let originalId = data?.upload_id_original;
++    if (!originalId && data?.lote && Array.isArray(data.lote) && data.lote.length > 0) {
++      originalId = data.lote[0]?.upload_id_original;
++    }
++
++    const redactedPayload = {
++      evento,
++      data: {
++        upload_id_original: originalId
++      },
++      _redacted_for_privacy: true
++    };
++    const redactedPayloadString = JSON.stringify(redactedPayload);
++
+     await connection.query(
+       `INSERT INTO ${dbName}.webhook_logs (webhook_id, evento, payload, http_status, response_body)
+        VALUES (?, ?, ?, ?, ?)`,
+-      [wh.id, evento, payloadString, httpStatus, responseBody]
++      [wh.id, evento, redactedPayloadString, httpStatus, responseBody]
+     );
+   } catch (dbLogErr) {
+     console.error('[Webhooks] Error guardando log en BD:', dbLogErr);
+...

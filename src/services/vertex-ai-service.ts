@@ -355,6 +355,23 @@ ${taxRows.length > 0
                 await saveSuggestionsToDb(documentId, doc.id_de_empresa, incidents, nextAnalysisNro, contextBlock);
             }
 
+            try {
+                const { logAuditAction } = await import('./audit-service');
+                const { getCurrentUser } = await import('./user-service');
+                const user = await getCurrentUser();
+                
+                await logAuditAction({
+                    documentoId: documentId,
+                    empresaId: doc.id_de_empresa ? Number(doc.id_de_empresa) : undefined,
+                    accion: 'EVALUACION_IA',
+                    usuarioEmail: user?.email || 'Sistema',
+                    userId: user?.id,
+                    detalle: { incidentsFound: incidents.length, checkType }
+                });
+            } catch (auditErr) {
+                console.warn('⚠️ Error registrando auditoría EVALUACION_IA:', auditErr);
+            }
+
             return {
                 success: true,
                 incidents: incidents,

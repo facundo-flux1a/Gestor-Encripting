@@ -37,6 +37,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useRouter } from 'next/navigation';
 import { confirmDocument } from '@/services/document-client-service';
 import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
@@ -968,7 +975,8 @@ export function DocumentsTable({
 
   const { selectedCompanyIds } = useCompanyContext();
 
-  const { checkDuplicates, duplicates } = useDuplicateDetection();
+  const { checkDuplicates, duplicates, duplicateGroups } = useDuplicateDetection();
+  const [isDuplicateDetailsOpen, setIsDuplicateDetailsOpen] = useState(false);
 
   console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));
 
@@ -1343,10 +1351,13 @@ export function DocumentsTable({
               {documents.length} documento(s)
             </span>
             {duplicates.size > 0 && (
-              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <button 
+                onClick={() => setIsDuplicateDetailsOpen(true)}
+                className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 hover:bg-amber-100 dark:hover:bg-amber-900/30 px-2 py-1 rounded-md transition-colors cursor-pointer"
+              >
                 <span className="inline-block w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
                 {duplicates.size} duplicado(s)
-              </span>
+              </button>
             )}
           </div>
 
@@ -1678,6 +1689,68 @@ export function DocumentsTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 🆕 MODAL DE DETALLES DE DUPLICADOS */}
+      <Dialog open={isDuplicateDetailsOpen} onOpenChange={setIsDuplicateDetailsOpen}>
+        <DialogContent className="max-w-xl transition-all duration-300">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 bg-amber-500 rounded-full animate-pulse"></span>
+              Detalle de Documentos Duplicados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+            {duplicateGroups && duplicateGroups.length > 0 ? (
+              duplicateGroups.map((group, idx) => (
+                <div key={idx} className="bg-muted/30 p-3 rounded-lg border border-border">
+                  <div className="font-semibold text-sm mb-2 text-foreground">
+                    Factura N°: <span className="font-mono text-amber-600 dark:text-amber-400">{group.numero}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {(group.docs && group.docs.length > 0 ? group.docs : group.ids.map(id => ({ id, tipo: 'Desconocido', seccion: 'Desconocido' }))).map(doc => (
+                      <div key={doc.id} className="flex items-center gap-3">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="h-7 text-xs shrink-0"
+                          onClick={() => {
+                            setIsDuplicateDetailsOpen(false);
+                            router.push(`/documento/${doc.id}`);
+                          }}
+                        >
+                          Ir a doc #{doc.id}
+                        </Button>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                          <span className="text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-0.5 sm:py-1 rounded-md capitalize border border-border">
+                            {doc.tipo.toLowerCase().replace(' (sin confirmar)', '')}
+                          </span>
+                          {doc.empresa_nombre && (
+                            <span className="text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 sm:py-1 rounded-md border border-blue-200 dark:border-blue-800 truncate max-w-[150px]" title={doc.empresa_nombre}>
+                              🏢 {doc.empresa_nombre}
+                            </span>
+                          )}
+                          {doc.seccion && (
+                            <span className="text-[10px] sm:text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 sm:py-1 rounded-md border border-amber-200 dark:border-amber-800">
+                              📍 En: {doc.seccion}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No hay información detallada de grupos.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDuplicateDetailsOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }

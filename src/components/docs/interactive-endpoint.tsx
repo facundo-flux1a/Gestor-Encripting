@@ -91,6 +91,7 @@ export function InteractiveEndpoint({
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
   const [responseStatus, setResponseStatus] = useState<number | null>(null);
+  const [responseImageUrl, setResponseImageUrl] = useState<string | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{ limit: number; remaining: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [showResponse, setShowResponse] = useState(false);
@@ -103,24 +104,50 @@ export function InteractiveEndpoint({
   }, [paramStates]);
 
   const builtUrl = useMemo(() => {
-    const base = path;
-    if (method === 'GET' && activeParams.length > 0) {
-      const qs = activeParams.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&');
+    let base = path;
+    const queryParams: typeof activeParams = [];
+
+    for (const p of activeParams) {
+      const token = `[${p.key}]`;
+      if (base.includes(token)) {
+        const match = p.value.match(/^(\d+)/);
+        const interpolatedValue = match ? match[1] : p.value;
+        base = base.replace(token, encodeURIComponent(interpolatedValue));
+      } else {
+        queryParams.push(p);
+      }
+    }
+
+    if (method === 'GET' && queryParams.length > 0) {
+      const qs = queryParams.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&');
       return `${base}?${qs}`;
     }
     return base;
   }, [method, path, activeParams]);
 
   const curlCommand = useMemo(() => {
-    const baseUrl = `https://gestor.muvail.com${path}`;
+    let baseUrl = `https://gestor.muvail.com${path}`;
+    const queryParams: typeof activeParams = [];
+
+    for (const p of activeParams) {
+      const token = `[${p.key}]`;
+      if (baseUrl.includes(token)) {
+        const match = p.value.match(/^(\d+)/);
+        const interpolatedValue = match ? match[1] : p.value;
+        baseUrl = baseUrl.replace(token, encodeURIComponent(interpolatedValue));
+      } else {
+        queryParams.push(p);
+      }
+    }
+
     // If using proxy mode (selectedKeyId), show a redacted placeholder — the key is never in the browser
     const key = selectedKeyId ? '<CLAVE_GESTIONADA_POR_EL_SERVIDOR>' : (apiKey || 'TU_API_KEY_AQUI');
 
     if (method === 'GET') {
-      const qs = activeParams.map(p => `--data-urlencode "${p.key}=${p.value}"`).join(' \\\n     ');
+      const qs = queryParams.map(p => `--data-urlencode "${p.key}=${p.value}"`).join(' \\\n     ');
       return `curl -G "${baseUrl}" \\\n     -H "X-Api-Key: ${key}"${qs ? ' \\\n     ' + qs : ''}`;
     } else {
-      const body = Object.fromEntries(activeParams.map(p => [p.key, p.value]));
+      const body = Object.fromEntries(queryParams.map(p => [p.key, p.value]));
       return `curl -X POST "${baseUrl}" \\\n     -H "X-Api-Key: ${key}" \\\n     -H "Content-Type: application/json" \\\n     -d '${JSON.stringify(body, null, 2)}'`;
     }
   }, [method, path, activeParams, apiKey, selectedKeyId]);
@@ -176,6 +203,7 @@ export function InteractiveEndpoint({
     setIsLoading(true);
     setShowResponse(false);
     setResponse(null);
+    setResponseImageUrl(null);
     setResponseStatus(null);
 
     try {
@@ -205,12 +233,26 @@ export function InteractiveEndpoint({
         const res = await fetch('/api/docs/playground/proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyId: selectedKeyId, path, queryParams }),
+          body: JSON.stringify({ keyId: selectedKeyId, path: builtUrl, queryParams }),
         });
         setResponseStatus(res.status);
         handleRateLimitHeaders(res);
-        const text = await res.text();
-        try { setResponse(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResponse(text); }
+
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.startsWith('image/')) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          setResponseImageUrl(url);
+          setResponse(JSON.stringify({
+            status: 'success',
+            type: contentType,
+            size: `${(blob.size / 1024).toFixed(2)} KB`,
+            mensaje: 'Imagen recibida y renderizada correctamente.'
+          }, null, 2));
+        } else {
+          const text = await res.text();
+          try { setResponse(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResponse(text); }
+        }
         setShowResponse(true);
         setIsLoading(false);
         return;
@@ -243,11 +285,24 @@ export function InteractiveEndpoint({
         setDownloadedFile(true);
         setTimeout(() => setDownloadedFile(false), 3000);
       } else {
-        const text = await res.text();
-        try {
-          setResponse(JSON.stringify(JSON.parse(text), null, 2));
-        } catch {
-          setResponse(text);
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.startsWith('image/')) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          setResponseImageUrl(url);
+          setResponse(JSON.stringify({
+             status: 'success',
+             type: contentType,
+             size: `${(blob.size / 1024).toFixed(2)} KB`,
+             mensaje: 'Imagen recibida y renderizada correctamente en la interfaz.'
+          }, null, 2));
+        } else {
+          const text = await res.text();
+          try {
+            setResponse(JSON.stringify(JSON.parse(text), null, 2));
+          } catch {
+            setResponse(text);
+          }
         }
       }
     } catch (err: any) {
@@ -300,7 +355,7 @@ export function InteractiveEndpoint({
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Parámetros</h4>
             <div className="grid gap-2">
               {params.map(param => {
-                const state = paramStates[param.key];
+                const state = paramStates[param.key] || { enabled: false, value: '' };
                 return (
                   <div
                     key={param.key}
@@ -513,6 +568,16 @@ export function InteractiveEndpoint({
                 <pre className="font-mono text-xs text-slate-300 whitespace-pre-wrap">{response}</pre>
               </div>
             </div>
+
+            {responseImageUrl && (
+              <div className="mt-4 p-4 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-900/50 flex justify-center">
+                <img 
+                  src={responseImageUrl} 
+                  alt="Thumbnail" 
+                  className="max-w-full max-h-[500px] object-contain rounded shadow-sm border border-slate-200 dark:border-slate-700" 
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

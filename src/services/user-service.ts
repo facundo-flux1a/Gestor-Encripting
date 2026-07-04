@@ -77,6 +77,24 @@ export async function getUsersByIds(ids: number[], companyId?: number): Promise<
   }));
 }
 
+export async function getUserConfigRaw(userId: number | bigint): Promise<any> {
+  const userRow = await prisma.usuarios.findUnique({
+    where: { id: BigInt(userId) },
+    select: { config_otros_tipos: true }
+  });
+
+  if (userRow?.config_otros_tipos) {
+    try {
+      return typeof userRow.config_otros_tipos === 'string'
+        ? JSON.parse(userRow.config_otros_tipos)
+        : userRow.config_otros_tipos;
+    } catch (e) {
+      console.error('Error parsing config_otros_tipos:', e);
+    }
+  }
+  return {};
+}
+
 /**
  * Obtiene la configuración de tipos para la sección "Otros"
  */
@@ -84,24 +102,8 @@ export async function getUserConfigOtros(): Promise<string[] | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const userRow = await prisma.usuarios.findUnique({
-    where: { id: BigInt(user.id) },
-    select: { config_otros_tipos: true }
-  });
-
-  if (userRow?.config_otros_tipos) {
-    try {
-      const config = typeof userRow.config_otros_tipos === 'string'
-        ? JSON.parse(userRow.config_otros_tipos)
-        : userRow.config_otros_tipos as any;
-      return config.tipos || null;
-    } catch (e) {
-      console.error('Error parsing config_otros_tipos:', e);
-      return null;
-    }
-  }
-
-  return null;
+  const config = await getUserConfigRaw(user.id);
+  return config.tipos || null;
 }
 
 /**
@@ -112,13 +114,45 @@ export async function updateUserConfigOtros(tipos: string[]): Promise<boolean> {
   if (!user) return false;
 
   try {
+    const currentConfig = await getUserConfigRaw(user.id);
+    const newConfig = { ...currentConfig, tipos };
+
     await prisma.usuarios.update({
       where: { id: BigInt(user.id) },
-      data: { config_otros_tipos: { tipos } as any }
+      data: { config_otros_tipos: newConfig as any }
     });
     return true;
   } catch (e) {
     console.error('Error updating config_otros_tipos:', e);
+    return false;
+  }
+}
+
+export interface TwoFactorConfig {
+  enabled: boolean;
+  durationHours: number;
+}
+
+export async function get2FAConfig(userId: number): Promise<TwoFactorConfig> {
+  const config = await getUserConfigRaw(userId);
+  return {
+    enabled: config.twoFactor?.enabled ?? true,
+    durationHours: config.twoFactor?.durationHours ?? 24
+  };
+}
+
+export async function update2FAConfig(userId: number, config2FA: TwoFactorConfig): Promise<boolean> {
+  try {
+    const currentConfig = await getUserConfigRaw(userId);
+    const newConfig = { ...currentConfig, twoFactor: config2FA };
+    
+    await prisma.usuarios.update({
+      where: { id: BigInt(userId) },
+      data: { config_otros_tipos: newConfig as any }
+    });
+    return true;
+  } catch (e) {
+    console.error('Error updating 2FA config:', e);
     return false;
   }
 }

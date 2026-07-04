@@ -684,8 +684,7 @@ function TrimestresPageContent() {
     // ✅ VALORES REALES (Extraídos literalmente del documento por el engine)
     const totalBaseReal = summary.baseReal?.total || totalBaseTeorica;
     const totalIVAReal = summary.ivaReal?.total || totalIvaTeorico;
-    const totalDescuento = summary.descuentos?.total || 0;
-    const totalDocumentoReal = summary.totalReal?.total || (totalBaseTeorica + totalIvaTeorico + totalRecargo - totalRetencion - totalDescuento);
+    const totalDocumentoReal = summary.totalReal?.total || (totalBaseTeorica + totalIvaTeorico + totalRecargo - totalRetencion);
 
     return {
       bases: {

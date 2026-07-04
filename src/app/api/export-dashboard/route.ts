@@ -191,6 +191,24 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ [export-dashboard] Exportación iniciada con ID:', exportResult.exportId);
 
+    try {
+      const { logAuditAction } = await import('@/services/audit-service');
+      await logAuditAction({
+        empresaId: empresaIds && empresaIds.length > 0 ? Number(empresaIds[0]) : undefined,
+        accion: 'EXPORTACION_DATOS',
+        usuarioEmail: user.email,
+        userId: user.id,
+        detalle: { 
+          tipo: 'dashboard', 
+          año, 
+          trimestre, 
+          exportId: exportResult.exportId 
+        }
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría EXPORTACION_DATOS:', auditErr);
+    }
+
     return NextResponse.json({
       success: true,
       exportId: exportResult.exportId,
