@@ -1,0 +1,24 @@
+{
+  "text": "archivos/02_lote_200_facturas_2026_07_08_14_08_20.zip",
+  "empresaId": "113",
+  "cif": "12344555",
+  "nombreEmpresa": "test",
+  "recargo": false,
+  "fileHash": "7ad2959f65395db45dd1071c71fc25b20b79c4a1e799db24752e5ed8720499c1",
+  "uploadId": "upload_1783519699631_pr8xpv2z5",
+  "fileName": "02_lote_200_facturas.zip",
+  "originalFileName": "02_lote_200_facturas.zip",
+  "fileSize": 160891,
+  "publicUrl": "https://minio.allbase.com.ar/gestor-documental/archivos/02_lote_200_facturas_2026_07_08_14_08_20.zip",
+  "isCompressedFile": true,
+  "mimeType": "application/zip",
+  "normalizedFileType": "zip",
+  "fileExtension": "zip",
+  "fechaSubida": "2026-07-08T14:08:20.307Z",
+  "individualFileHashes": {
+    "02_lote_200_facturas.pdf": "42b33430316fbdc8106ceda019f76520e3bb9a32862162897662cb7074b90510"
+  },
+  "individualUploadIds": {
+    "02_lote_200_facturas.pdf": "upload_1783519699631_pr8xpv2z5_file_abf87b83"
+  }
+}

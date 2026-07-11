@@ -334,9 +334,36 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                   const isLastFailure = (normalizedStatus === 'fallido' || normalizedStatus === 'failed' || normalizedStatus === 'error') && (data.retryCount ?? 0) >= 3;
                   const isPermanentFail = normalizedStatus === 'permanent-fail';
                   
+                  // 🔥 SMART TIMEOUT: Si lleva más de 3 minutos (180s) procesando, delegar al Sidebar
+                  const isLongRunning = (Date.now() - upload.timestamp) > 180000;
+                  const shouldDelegateToSidebar = isLongRunning && !isFinished;
+
+                  if (shouldDelegateToSidebar && current.connectionStatus === 'polling') {
+                    console.log('⏳ [Manager] Upload tardando mucho, delegando a Sidebar:', upload.uploadId);
+                    
+                    // Actualizar mensaje para avisar al usuario
+                    current.progressData = {
+                      ...current.progressData,
+                      message: 'El lote es grande y continuará en segundo plano. Progreso visible en la sección "Subidas en proceso" del menú lateral.'
+                    };
+                    current.connectionStatus = 'completed'; // Detener polling en este card
+
+                    const interval = pollIntervalsRef.current.get(upload.uploadId);
+                    if (interval) {
+                      clearInterval(interval);
+                      pollIntervalsRef.current.delete(upload.uploadId);
+                    }
+
+                    // Auto-cerrar en 8s para que el usuario alcance a leer
+                    if (!autoCloseTimersRef.current.has(upload.uploadId)) {
+                      const timer = setTimeout(() => {
+                        removeUpload(upload.uploadId);
+                      }, 8000);
+                      autoCloseTimersRef.current.set(upload.uploadId, timer);
+                    }
+                  }
+                  
                   // Auto-cerrar si: completado, es el último fallo de los 3 reintentos, o es un fallo permanente.
-                  // También cerramos si es un fallo intermedio para que el RetryMonitor tome el control con su propia notificación si se desea,
-                  // pero el usuario pidió expresamente que el modal de upload se cierre al fallar.
                   const shouldAutoClose = normalizedStatus === 'completado' || 
                                        normalizedStatus === 'completed' || 
                                        normalizedStatus === 'fallido' || 

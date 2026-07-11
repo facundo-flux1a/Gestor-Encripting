@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import connection, { dbName } from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import JSZip from 'jszip';
+import { ingestionQueue, IngestionJobData } from '@/lib/queue';
 
 const UploadResponseSchema = z.object({
   success: z.boolean(),
@@ -545,17 +546,18 @@ export async function uploadDocument(
       console.warn(`[${normalizedFileName}] ⚠️ No se pudieron guardar datos de reintento:`, updateErr);
     }
 
-    // 🔥 PREPARAR PAYLOAD PARA MICROSERVICE (con nombre normalizado)
-    const webhookPayload: any = {
+    // 🔥 PREPARAR JOB DATA PARA BULLMQ (con nombre normalizado)
+    const jobData: IngestionJobData = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
-      nombreEmpresa: nombreEmpresa, // ✅ NUEVO CAMPO: Nombre de empresa
-      recargo: recargo, // ✅ NUEVO CAMPO: Recargo de equivalencia
+      nombreEmpresa: nombreEmpresa, 
+      recargo: recargo,
       fileHash: mainFileHash,
       uploadId: uploadId,
-      fileName: normalizedFileName, // 🔥 Nombre normalizado
-      originalFileName: originalFileName, // Conservamos el original por si acaso
+      parentUploadId: uploadId,
+      fileName: normalizedFileName, 
+      originalFileName: originalFileName,
       fileSize: fileSize,
       publicUrl: publicUrl,
       isCompressedFile: isCompressedFile,
@@ -563,123 +565,33 @@ export async function uploadDocument(
       normalizedFileType: normalizedFileType,
       fileExtension: fileExtension,
       fechaSubida: now.toISOString(),
+      origen: 'dashboard'
     };
 
     if ((normalizedFileType === 'zip' || normalizedFileType === 'rar') && Object.keys(individualFileHashes).length > 0) {
-      webhookPayload.individualFileHashes = individualFileHashes;
-      webhookPayload.individualUploadIds = individualUploadIds;
+      jobData.individualFileHashes = individualFileHashes;
+      jobData.individualUploadIds = individualUploadIds;
       console.log(`[${normalizedFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales`);
     }
 
-    // 🔥 LLAMAR A MICROSERVICE CON TIMEOUT DE 90 SEGUNDOS
-    console.log(`[${normalizedFileName}] 📡 Llamando a Microservice webhook...`);
-    console.log(`[${normalizedFileName}] 🆔 UploadId que enviamos: ${uploadId}`);
+    // 🔥 ENCOLAR EN BULLMQ EN LUGAR DE LLAMAR A N8N
+    console.log(`[${normalizedFileName}] 📡 Encolando job en ingestionQueue...`);
+    console.log(`[${normalizedFileName}] 🆔 UploadId: ${uploadId}`);
 
-    const WEBHOOK_TIMEOUT_MS = 390_000; // 6.5 minutos (5 min original + 1.5 min extra para lotes grandes)
-    const abortController = new AbortController();
-    const timeoutTimer = setTimeout(() => abortController.abort(), WEBHOOK_TIMEOUT_MS);
-
-    let webhookResponse: Response;
     try {
-      webhookResponse = await fetch(MICROSERVICE_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload),
-        signal: abortController.signal,
-      });
-    } catch (fetchError: any) {
-      clearTimeout(timeoutTimer);
-
-      // Si fue un timeout (AbortError), el webhook ya recibió la petición → éxito silencioso
-      if (fetchError.name === 'AbortError') {
-        console.warn(`⚠️ [${normalizedFileName}] Webhook tardó más de ${WEBHOOK_TIMEOUT_MS / 1000}s → asumiendo procesamiento en segundo plano`);
-        return {
-          success: true,
-          isDuplicate: false,
-          message: '✅ Archivo enviado. Los documentos se están analizando en segundo plano.',
-          url: publicUrl,
-          fileHash: mainFileHash,
-        };
-      }
-
-      // Error de red real (conexión rechazada, DNS, etc.) → sí falló
-      console.error(`❌ [${normalizedFileName}] Error de red al llamar al webhook:`, fetchError.message);
+      await ingestionQueue.add(
+        `ingest-${uploadId}`,
+        jobData,
+        { jobId: `ingest-${uploadId}` }
+      );
+      console.log(`✅ [${normalizedFileName}] Job encolado exitosamente en BullMQ.`);
+    } catch (queueError: any) {
+      console.error(`❌ [${normalizedFileName}] Error al encolar en BullMQ:`, queueError.message);
       const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
       await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
       await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
       throw new Error(userFriendlyMessage);
     }
-
-    clearTimeout(timeoutTimer);
-
-    // 🔥 VERIFICAR SI MICROSERVICE RETORNÓ ERROR (status code != 200)
-    if (!webhookResponse.ok) {
-      console.error(`❌ [${normalizedFileName}] Microservice retornó error HTTP: ${webhookResponse.status}`);
-
-      let internalErrorDetails = ''; // Para logs internos
-
-      try {
-        const errorData = await webhookResponse.json();
-        internalErrorDetails = errorData.message || errorData.error || 'Error desconocido';
-        console.error(`❌ [${normalizedFileName}] Error JSON:`, JSON.stringify(errorData, null, 2));
-      } catch {
-        const textError = await webhookResponse.text();
-        internalErrorDetails = `HTTP ${webhookResponse.status}: ${webhookResponse.statusText}`;
-        console.error(`❌ [${normalizedFileName}] Error TEXT:`, textError);
-      }
-
-      // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin mencionar Microservice o detalles técnicos)
-      const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-
-      console.log(`❌ [${normalizedFileName}] Marcando como fallido usando uploadId del scope: ${uploadId}`);
-      console.log(`❌ [${normalizedFileName}] Detalles internos: ${internalErrorDetails}`);
-
-      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-
-      return {
-        success: false,
-        message: userFriendlyMessage,
-      };
-    }
-
-    console.log(`✅ [${normalizedFileName}] Microservice respondió OK (${webhookResponse.status})`);
-
-    let webhookResult: any = null;
-    const responseText = await webhookResponse.text();
-
-    try {
-      webhookResult = JSON.parse(responseText);
-      console.log(`[${normalizedFileName}] Respuesta Microservice (JSON):`, webhookResult);
-    } catch (jsonError) {
-      console.warn(`[${normalizedFileName}] Respuesta Microservice (TEXT):`, responseText);
-      webhookResult = { mensaje: responseText };
-    }
-
-    if (webhookResult.status === 'DUPLICATE' || responseText.includes('duplicado') || responseText.includes('❌')) {
-      console.warn(`❌ DUPLICADO DETECTADO POR MICROSERVICE: ${normalizedFileName}`);
-
-      return {
-        success: false,
-        isDuplicate: true,
-        message: webhookResult.mensaje || responseText || '❌ Este documento ya existe en la empresa.',
-        fileHash: mainFileHash,
-        duplicateInfo: {
-          fileName: webhookResult.numero_documento_original || normalizedFileName,
-          uploadedAt: webhookResult.fecha_original || 'Fecha desconocida',
-          empresaId: empresaId,
-        },
-      };
-    }
-
-    // Nota: no tratamos webhookResult.error como fallo fatal porque n8n puede devolver
-    // warnings internos de nodos (ej: S3 item pairing) aunque el documento se haya
-    // procesado exitosamente. El estado real lo manda n8n via callback a /api/upload-progress.
-    if (webhookResult.error) {
-      console.warn(`⚠️ [${normalizedFileName}] n8n reportó un warning interno: ${webhookResult.error} — continuando, el callback confirmará el estado real.`);
-    }
-
-    console.log(`✅ [${normalizedFileName}] PROCESO COMPLETADO EXITOSAMENTE`);
 
     try {
       const { logAuditAction } = await import('./audit-service');
@@ -704,7 +616,7 @@ export async function uploadDocument(
     return {
       success: true,
       isDuplicate: false,
-      message: webhookResult.mensaje || `✅ Archivo "${normalizedFileName}" subido exitosamente.`,
+      message: `✅ Archivo "${normalizedFileName}" subido exitosamente. Analizando...`,
       url: publicUrl,
       fileHash: mainFileHash,
     };
@@ -852,7 +764,7 @@ export async function uploadDocumentFromApi(
       [filePath, mainFileHash, cif || null, uploadId]
     );
 
-    const webhookPayload: any = {
+    const jobData: IngestionJobData = {
       text: filePath,
       empresaId: empresaId,
       cif: cif,
@@ -860,6 +772,7 @@ export async function uploadDocumentFromApi(
       recargo: recargo,
       fileHash: mainFileHash,
       uploadId: uploadId,
+      parentUploadId: uploadId,
       fileName: normalizedFileName,
       originalFileName: normalizedFileName,
       fileSize: fileSize,
@@ -869,44 +782,17 @@ export async function uploadDocumentFromApi(
       normalizedFileType: normalizedFileType,
       fileExtension: fileExtension,
       fechaSubida: now.toISOString(),
+      origen: 'correo'
     };
 
-    console.log(`📡 [UploadAPI] Llamando webhook para ${normalizedFileName}...`);
+    console.log(`📡 [UploadAPI] Encolando ${normalizedFileName} en BullMQ...`);
     
     // Lo lanzamos sin esperar respuesta asíncronamente
-    fetch(MICROSERVICE_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload),
-    }).then(res => {
-      if (!res.ok) console.error(`❌ [UploadAPI] Microservice error HTTP: ${res.status}`);
-      else console.log(`✅ [UploadAPI] Webhook respondió OK (${res.status}) para ${uploadId}`);
-    }).catch(err => {
-      console.error(`❌ [UploadAPI] Fetch error a webhook:`, err.message);
+    ingestionQueue.add(`ingest-${uploadId}`, jobData, { jobId: `ingest-${uploadId}` }).catch(err => {
+      console.error(`❌ [UploadAPI] Error al encolar ${normalizedFileName} en BullMQ:`, err);
     });
-
-    try {
-      const { logAuditAction } = await import('./audit-service');
-      const { getCurrentUser } = await import('./user-service');
-      const user = await getCurrentUser();
-      
-      await logAuditAction({
-        empresaId: parseInt(empresaId, 10),
-        accion: 'SUBIDA',
-        usuarioEmail: apiKeyName ? `[API] ${apiKeyName}` : (user?.email || 'API/Desconocido'),
-        userId: apiUsuarioId || user?.id,
-        detalle: { 
-          fileName: normalizedFileName, 
-          fileHash: mainFileHash,
-          uploadId: uploadId 
-        }
-      });
-    } catch (auditErr) {
-      console.warn('⚠️ Error registrando auditoría SUBIDA en API:', auditErr);
-    }
-
   } catch (error: any) {
-    console.error(`❌ [UploadAPI] Error general:`, error.message);
-    await markUploadAsFailed(uploadId, 'Error inesperado durante el procesamiento.', 'Procesamiento general');
+    console.error(`❌ [UploadAPI] Error general procesando ${normalizedFileName}:`, error.message);
+    await markUploadAsFailed(uploadId, 'Error interno procesando archivo desde API', 'Procesamiento general');
   }
-}
+}

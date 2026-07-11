@@ -15,7 +15,7 @@ console.log('🚂 [Redis] Inicializando conexión a Railway...');
 console.log('🔗 [Redis] Host:', redisUrl.replace(/:[^:@]*@/, ':***@')); // Oculta password
 
 export const redis = new Redis(redisUrl, {
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: null,
   enableReadyCheck: true,
   retryStrategy(times) {
     const delay = Math.min(times * 50, 2000);
@@ -147,7 +147,7 @@ export function createProgressSubscriber(uploadId: string) {
   
   // Instancia SEPARADA para subscriber (requerimiento de Redis)
   const subscriber = new Redis(redisUrl!, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null,
     enableReadyCheck: true,
   });
 

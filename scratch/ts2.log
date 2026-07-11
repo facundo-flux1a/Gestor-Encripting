@@ -1,0 +1,6 @@
+src/workers/db-writer.worker.ts(10,23): error TS2307: Cannot find module '@/lib/redis' or its corresponding type declarations.
+src/workers/db-writer.worker.ts(11,70): error TS2307: Cannot find module '@/lib/queue' or its corresponding type declarations.
+src/workers/db-writer.worker.ts(12,41): error TS2307: Cannot find module '@/lib/ingestion-progress' or its corresponding type declarations.
+src/workers/db-writer.worker.ts(13,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.
+src/workers/db-writer.worker.ts(14,8): error TS1192: Module '"crypto"' has no default export.
+src/workers/db-writer.worker.ts(15,44): error TS2307: Cannot find module '@/lib/trimestre-utils' or its corresponding type declarations.

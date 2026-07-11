@@ -1,0 +1,62 @@
+{
+  "TIPO_DOCUMENTO": "CERTIFICADO DE EMPRESA",
+  "CATEGORIA_PRINCIPAL": "LABORAL Y RR.HH.",
+  "SUBCATEGORIA": "CERTIFICADO DE EMPRESA PARA PRESTACIÓN POR DESEMPLEO",
+  "INCIDENCIA": true,
+  "DESCRIPCION_INCIDENCIA": "Validación matemática falló: Base (0.00€) + IVA (0.00€) - Retención (0.00€) = 0.00€ ≠ Total declarado (1960.39€). Diferencia: 1960.39€",
+  "EMPRESA_EMISORA": {
+    "NOMBRE": "SERVICIO PÚBLICO DE EMPLEO ESTATAL (SEPE)",
+    "DIRECCION": "",
+    "CIF": "",
+    "TELEFONO": "",
+    "EMAIL": ""
+  },
+  "CLIENTE": {
+    "NOMBRE": "JOAQUIN ALBENTOSA MARTINEZ",
+    "DIRECCION": "",
+    "CIF": "20930835F",
+    "NUMERO_CLIENTE": "46/10960997/37",
+    "PUNTO_VENTA": "",
+    "DIRECCION_PUNTO_VENTA": ""
+  },
+  "DOCUMENTO": {
+    "NUMERO_DOCUMENTO": "",
+    "FECHA_EMISION": "2025-09-07",
+    "FORMA_PAGO": "",
+    "COMERCIAL": "",
+    "IMPORTE_TOTAL": 1960.39,
+    "IMPORTE_SIN_IVA": 0,
+    "FECHA_VENCIMIENTO": ""
+  },
+  "LINEAS": [
+    {
+      "DESCRIPCION": "BASE DE COTIZACIÓN POR CONTINGENCIAS COMUNES Y DESEMPLEO AGOSTO 2025",
+      "CANTIDAD": 31,
+      "PRECIO_UNITARIO": 0,
+      "IMPORTE_LINEA": 711.4
+    },
+    {
+      "DESCRIPCION": "BASE DE COTIZACIÓN POR CONTINGENCIAS COMUNES Y DESEMPLEO SEPTIEMBRE 2025",
+      "CANTIDAD": 7,
+      "PRECIO_UNITARIO": 0,
+      "IMPORTE_LINEA": 215.88
+    }
+  ],
+  "TOTALES_POR_IMPUESTO": [],
+  "METADATOS": {
+    "REMITENTE": "SERVICIO PÚBLICO DE EMPLEO ESTATAL (SEPE)",
+    "DESTINATARIO": "JOAQUIN ALBENTOSA MARTINEZ",
+    "NUMERO_REFERENCIA": "",
+    "ESTADO": "",
+    "PERIODO_FISCAL": "2025-07-01_2025-09-30",
+    "NIF_CIF_RELACIONADO": ""
+  },
+  "empresaId": "64",
+  "_validaciones": {
+    "retenciones_validadas": false,
+    "total_validado": false,
+    "incidencias_code2": [
+      "Validación matemática falló: Base (0.00€) + IVA (0.00€) - Retención (0.00€) = 0.00€ ≠ Total declarado (1960.39€). Diferencia: 1960.39€"
+    ]
+  }
+}

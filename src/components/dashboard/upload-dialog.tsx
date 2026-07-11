@@ -259,8 +259,8 @@ export function UploadDialog({
         });
       } else if (hasSuccess) {
         toast({
-          title: "✅ Completado",
-          description: `Se han subido ${successCount} archivos (Detectados ${duplicateCount} duplicados).`,
+          title: "✅ Archivos recibidos",
+          description: `La carga de ${successCount} archivo(s) ha iniciado y se están procesando en segundo plano (Detectados ${duplicateCount} duplicados).`,
         });
 
         // Evento global para Tutorial y Refetch

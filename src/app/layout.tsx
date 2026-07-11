@@ -59,7 +59,7 @@ export default async function RootLayout({
                 {/* Upload Progress Manager - siempre en primer plano */}
                 <div className="relative z-50">
                   <UploadProgressManager userId={userId} />
-                  <RetryMonitor userId={userId} />
+                  {/* <RetryMonitor userId={userId} /> - Desactivado: BullMQ ahora maneja los reintentos nativamente */}
                 </div>
               </TutorialProvider>
             </PreferencesProvider>

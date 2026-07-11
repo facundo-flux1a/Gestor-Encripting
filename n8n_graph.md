@@ -1,0 +1,493 @@
+# N8N Flow Graph
+
+## Connections
+- Webhook1 [Output 0] -> Wait6
+- S3 [Output 0] -> If
+- S3 [Output 1] -> HTTP Request5
+- Code2 [Output 0] -> Edit Fields
+- Code2 [Output 0] -> Edit Fields1
+- Code2 [Output 0] -> Insertar documento
+- Code2 [Output 0] -> MySQL4
+- Code2 [Output 1] -> HTTP Request8
+- Guardar URL PDF [Output 0] -> HTTP Request2
+- Analista [Output 0] -> MySQL2
+- Analista [Output 1] -> HTTP Request8
+- Insertar documento [Output 0] -> If1
+- Insertar documento [Output 1] -> HTTP Request9
+- Edit Fields [Output 0] -> Agente Analista AllBasev
+- Edit Fields1 [Output 0] -> Agente Validador AllBasev
+- If [Output 0] -> If3
+- If [Output 1] -> Analista4
+- Code [Output 0] -> Insertar documento1
+- Code [Output 0] -> Edit Fields2
+- Code [Output 0] -> Edit Fields3
+- Code [Output 0] -> MySQL11
+- Code [Output 1] -> HTTP Request11
+- Guardar URL PDF1 [Output 0] -> HTTP Request13
+- Analista1 [Output 0] -> MySQL9
+- Analista1 [Output 1] -> HTTP Request10
+- Insertar documento1 [Output 0] -> Switch
+- Edit Fields2 [Output 0] -> Agente Analista AllBasev1
+- Edit Fields3 [Output 0] -> Agente Validador AllBasev2
+- Loop Over Items [Output 0] -> HTTP Request16
+- Loop Over Items [Output 1] -> Code1
+- Compression [Output 0] -> HTTP Request15
+- Code1 [Output 0] -> S31
+- Code3 [Output 0] -> Loop Over Items
+- If1 [Output 0] -> HTTP Request7
+- If1 [Output 1] -> Guardar URL PDF
+- HTTP Request [Output 0] -> MySQL
+- HTTP Request1 [Output 0] -> Code2
+- HTTP Request2 [Output 0] -> HTTP Request3
+- HTTP Request3 [Output 0] -> If4
+- HTTP Request5 [Output 0] -> If14
+- HTTP Request6 [Output 0] -> If13
+- HTTP Request7 [Output 0] -> If10
+- HTTP Request8 [Output 0] -> If12
+- HTTP Request9 [Output 0] -> If11
+- MySQL [Output 0] -> S3
+- MySQL2 [Output 0] -> HTTP Request1
+- HTTP Request4 [Output 0] -> Code
+- MySQL9 [Output 0] -> HTTP Request4
+- HTTP Request10 [Output 0] -> MySQL10
+- MySQL10 [Output 0] -> Loop Over Items
+- HTTP Request11 [Output 0] -> MySQL12
+- MySQL12 [Output 0] -> Loop Over Items
+- HTTP Request12 [Output 0] -> If18
+- MySQL13 [Output 0] -> Loop Over Items
+- HTTP Request13 [Output 0] -> HTTP Request14
+- HTTP Request14 [Output 0] -> If5
+- MySQL14 [Output 0] -> Loop Over Items
+- HTTP Request16 [Output 0] -> If22
+- Wait [Output 0] -> Analista2
+- Analista2 [Output 0] -> MySQL2
+- Analista2 [Output 1] -> Wait1
+- Wait1 [Output 0] -> Analista3
+- Analista3 [Output 0] -> MySQL2
+- Analista3 [Output 1] -> HTTP Request6
+- MySQL15 [Output 0] -> Code3
+- HTTP Request15 [Output 0] -> MySQL15
+- S31 [Output 0] -> Analista33
+- If3 [Output 0] -> HTTP Request22
+- If3 [Output 1] -> Compression
+- If4 [Output 0] -> MySQL8
+- If4 [Output 1] -> MySQL17
+- If5 [Output 0] -> MySQL14
+- If5 [Output 1] -> MySQL18
+- MySQL18 [Output 0] -> Loop Over Items
+- Analista4 [Output 0] -> Wait2
+- Analista4 [Output 1] -> If24
+- If6 [Output 0] -> HTTP Request19
+- If6 [Output 1] -> Analista
+- Analista5 [Output 0] -> Code4
+- Analista5 [Output 1] -> HTTP Request18
+- Code4 [Output 0] -> Wait5
+- Code5 [Output 0] -> Loop Over Items1
+- Loop Over Items1 [Output 0] -> HTTP Request21
+- Loop Over Items1 [Output 1] -> HTTP Request88
+- HTTP Request18 [Output 0] -> If15
+- Insertar documento3 [Output 0] -> If26
+- Insertar documento3 [Output 1] -> HTTP Request36
+- HTTP Request19 [Output 0] -> Analista25
+- HTTP Request20 [Output 0] -> If17
+- Guardar URL PDF2 [Output 0] -> HTTP Request20
+- MySQL20 [Output 0] -> Loop Over Items1
+- HTTP Request22 [Output 0] -> Code9
+- Code7 [Output 0] -> Edit Fields4
+- Code7 [Output 0] -> Edit Fields5
+- Code7 [Output 0] -> MySQL23
+- Code7 [Output 0] -> If9
+- Code7 [Output 1] -> HTTP Request25
+- Guardar URL PDF3 [Output 0] -> HTTP Request27
+- Analista6 [Output 0] -> MySQL21
+- Analista6 [Output 1] -> HTTP Request24
+- Insertar documento4 [Output 0] -> If7
+- Edit Fields4 [Output 0] -> Agente Analista AllBasev2
+- Edit Fields5 [Output 0] -> Agente Validador AllBasev1
+- Loop Over Items2 [Output 0] -> HTTP Request29
+- Loop Over Items2 [Output 1] -> Code8
+- Code8 [Output 0] -> S32
+- If7 [Output 0] -> HTTP Request26
+- If7 [Output 1] -> Guardar URL PDF3
+- HTTP Request23 [Output 0] -> Code7
+- MySQL21 [Output 0] -> HTTP Request23
+- HTTP Request24 [Output 0] -> If21
+- HTTP Request25 [Output 0] -> MySQL24
+- MySQL24 [Output 0] -> Loop Over Items2
+- HTTP Request26 [Output 0] -> MySQL25
+- MySQL25 [Output 0] -> Loop Over Items2
+- HTTP Request27 [Output 0] -> HTTP Request28
+- HTTP Request28 [Output 0] -> If8
+- MySQL26 [Output 0] -> Loop Over Items2
+- HTTP Request29 [Output 0] -> MySQL27
+- S32 [Output 0] -> Analista40
+- If8 [Output 0] -> MySQL26
+- If8 [Output 1] -> MySQL28
+- MySQL28 [Output 0] -> Loop Over Items2
+- Code9 [Output 0] -> Loop Over Items2
+- If9 [Output 0] -> HTTP Request33
+- If9 [Output 1] -> Insertar documento4
+- MySQL22 [Output 0] -> Loop Over Items2
+- Analista7 [Output 0] -> Code10
+- Code10 [Output 0] -> Insertar documento6
+- Code11 [Output 0] -> Loop Over Items4
+- Loop Over Items4 [Output 0] -> HTTP Request35
+- Loop Over Items4 [Output 1] -> HTTP Request86
+- HTTP Request30 [Output 0] -> If20
+- Insertar documento6 [Output 0] -> If29
+- HTTP Request33 [Output 0] -> Analista30
+- HTTP Request34 [Output 0] -> If19
+- Guardar URL PDF5 [Output 0] -> HTTP Request34
+- MySQL31 [Output 0] -> Loop Over Items4
+- HTTP Request35 [Output 0] -> MySQL69
+- If10 [Output 0] -> MySQL7
+- If10 [Output 1] -> MySQL32
+- If11 [Output 0] -> MySQL33
+- If11 [Output 1] -> MySQL6
+- If12 [Output 0] -> MySQL34
+- If12 [Output 1] -> MySQL5
+- If13 [Output 0] -> MySQL35
+- If13 [Output 1] -> MySQL3
+- If14 [Output 0] -> MySQL36
+- If14 [Output 1] -> MySQL1
+- If15 [Output 0] -> MySQL37
+- If15 [Output 1] -> MySQL19
+- HTTP Request36 [Output 0] -> If16
+- If16 [Output 0] -> MySQL39
+- If16 [Output 1] -> MySQL38
+- If17 [Output 0] -> MySQL40
+- If17 [Output 1] -> MySQL20
+- MySQL40 [Output 0] -> Loop Over Items1
+- If18 [Output 0] -> MySQL41
+- If18 [Output 1] -> MySQL13
+- MySQL41 [Output 0] -> Loop Over Items
+- If19 [Output 0] -> MySQL42
+- If19 [Output 1] -> MySQL31
+- MySQL42 [Output 0] -> Loop Over Items4
+- If20 [Output 0] -> MySQL43
+- If20 [Output 1] -> MySQL29
+- If21 [Output 0] -> MySQL44
+- If21 [Output 1] -> MySQL22
+- MySQL44 [Output 0] -> Loop Over Items2
+- If22 [Output 0] -> MySQL16
+- If22 [Output 1] -> MySQL30
+- HTTP Request17 [Output 0] -> If23
+- If23 [Output 0] -> MySQL46
+- If23 [Output 1] -> MySQL45
+- If24 [Output 0] -> HTTP Request17
+- If24 [Output 1] -> HTTP Request31
+- HTTP Request31 [Output 0] -> If25
+- If25 [Output 0] -> MySQL48
+- If25 [Output 1] -> MySQL47
+- If26 [Output 0] -> HTTP Request38
+- If26 [Output 1] -> Guardar URL PDF2
+- Guardar URL PDF4 [Output 0] -> HTTP Request32
+- HTTP Request32 [Output 0] -> HTTP Request37
+- HTTP Request37 [Output 0] -> If27
+- If27 [Output 0] -> MySQL49
+- If27 [Output 1] -> MySQL50
+- HTTP Request38 [Output 0] -> If28
+- MySQL51 [Output 0] -> Loop Over Items1
+- If28 [Output 0] -> MySQL52
+- If28 [Output 1] -> MySQL51
+- MySQL52 [Output 0] -> Loop Over Items1
+- If29 [Output 0] -> HTTP Request39
+- If29 [Output 1] -> Guardar URL PDF5
+- HTTP Request39 [Output 0] -> If30
+- MySQL53 [Output 0] -> Loop Over Items4
+- If30 [Output 0] -> MySQL54
+- If30 [Output 1] -> MySQL53
+- MySQL54 [Output 0] -> Loop Over Items4
+- HTTP Request40 [Output 0] -> If31
+- If31 [Output 0] -> MySQL56
+- If31 [Output 1] -> MySQL55
+- Switch [Output 0] -> HTTP Request12
+- Switch [Output 1] -> HTTP Request12
+- Switch [Output 2] -> HTTP Request40
+- Switch [Output 3] -> Guardar URL PDF1
+- HTTP Request41 [Output 0] -> If32
+- If32 [Output 0] -> MySQL58
+- If32 [Output 1] -> MySQL57
+- Analista8 [Output 0] -> MySQL59
+- Analista8 [Output 1] -> HTTP Request41
+- MySQL57 [Output 0] -> Loop Over Items
+- MySQL58 [Output 0] -> Loop Over Items
+- HTTP Request42 [Output 0] -> MySQL60
+- MySQL59 [Output 0] -> HTTP Request42
+- Edit Fields6 [Output 0] -> Agente AllBasev1
+- Code12 [Output 0] -> Edit Fields6
+- Code12 [Output 0] -> Edit Fields7
+- Code12 [Output 0] -> If33
+- Code12 [Output 1] -> HTTP Request43
+- HTTP Request43 [Output 0] -> MySQL61
+- If33 [Output 0] -> HTTP Request45
+- If33 [Output 1] -> Insertar documento1
+- Analista9 [Output 0] -> Code13
+- Analista9 [Output 1] -> HTTP Request44
+- Code13 [Output 0] -> Wait4
+- Code14 [Output 0] -> Loop Over Items5
+- Loop Over Items5 [Output 0] -> HTTP Request47
+- Loop Over Items5 [Output 1] -> Insertar documento7
+- HTTP Request44 [Output 0] -> If35
+- Insertar documento7 [Output 0] -> If36
+- HTTP Request45 [Output 0] -> Analista28
+- HTTP Request46 [Output 0] -> If34
+- Guardar URL PDF6 [Output 0] -> HTTP Request46
+- MySQL63 [Output 0] -> Loop Over Items5
+- If34 [Output 0] -> MySQL64
+- If34 [Output 1] -> MySQL63
+- MySQL64 [Output 0] -> Loop Over Items5
+- If35 [Output 0] -> MySQL65
+- If35 [Output 1] -> MySQL62
+- If36 [Output 0] -> HTTP Request48
+- If36 [Output 1] -> HTTP Request50
+- HTTP Request48 [Output 0] -> If37
+- MySQL66 [Output 0] -> Loop Over Items5
+- If37 [Output 0] -> MySQL67
+- If37 [Output 1] -> MySQL66
+- MySQL67 [Output 0] -> Loop Over Items5
+- Edit Fields7 [Output 0] -> Agente AllBasev
+- MySQL60 [Output 0] -> Code12
+- HTTP Request47 [Output 0] -> MySQL68
+- MySQL68 [Output 0] -> Loop Over Items
+- MySQL38 [Output 0] -> Loop Over Items1
+- MySQL39 [Output 0] -> Loop Over Items1
+- Code6 [Output 0] -> Code15
+- Wait2 [Output 0] -> If38
+- Analista25 [Output 0] -> Code5
+- Analista25 [Output 1] -> HTTP Request18
+- Wait3 [Output 0] -> Insertar documento3
+- Analista28 [Output 0] -> Code in JavaScript6
+- Analista28 [Output 1] -> HTTP Request44
+- HTTP Request50 [Output 0] -> Guardar URL PDF6
+- Analista30 [Output 0] -> Code11
+- Analista30 [Output 1] -> HTTP Request30
+- Wait6 [Output 0] -> HTTP Request
+- If38 [Output 0] -> If39
+- If38 [Output 1] -> If6
+- Analista32 [Output 0] -> Code21
+- Analista32 [Output 1] -> HTTP Request6
+- Code21 [Output 0] -> Insertar documento19
+- Insertar documento19 [Output 0] -> If1
+- If39 [Output 0] -> HTTP Request52
+- If39 [Output 1] -> Analista32
+- Analista33 [Output 0] -> If40
+- Analista33 [Output 1] -> HTTP Request41
+- If40 [Output 0] -> Wait7
+- If40 [Output 1] -> Analista8
+- Code22 [Output 0] -> Insertar documento20
+- Analista34 [Output 0] -> Code22
+- Insertar documento20 [Output 0] -> Switch
+- Wait7 [Output 0] -> If41
+- If41 [Output 0] -> HTTP Request58
+- If41 [Output 1] -> Analista34
+- HTTP Request52 [Output 0] -> Analista37
+- Analista36 [Output 0] -> Code in JavaScript
+- Analista36 [Output 1] -> HTTP Request18
+- Analista37 [Output 0] -> Code in JavaScript9
+- Analista37 [Output 1] -> HTTP Request18
+- Loop Over Items3 [Output 1] -> Wait9
+- Wait9 [Output 0] -> Insertar documento21
+- Insertar documento21 [Output 0] -> If42
+- Insertar documento21 [Output 1] -> HTTP Request56
+- If42 [Output 0] -> HTTP Request55
+- If42 [Output 1] -> HTTP Request53
+- HTTP Request53 [Output 0] -> Guardar URL PDF7
+- Guardar URL PDF7 [Output 0] -> HTTP Request54
+- HTTP Request54 [Output 0] -> If43
+- If43 [Output 0] -> MySQL70
+- If43 [Output 1] -> MySQL71
+- HTTP Request55 [Output 0] -> If44
+- If44 [Output 0] -> MySQL72
+- If44 [Output 1] -> MySQL73
+- HTTP Request56 [Output 0] -> If45
+- If45 [Output 0] -> MySQL75
+- If45 [Output 1] -> MySQL74
+- HTTP Request57 [Output 0] -> If46
+- If46 [Output 0] -> MySQL76
+- If46 [Output 1] -> MySQL77
+- MySQL75 [Output 0] -> Loop Over Items3
+- MySQL74 [Output 0] -> Loop Over Items3
+- MySQL73 [Output 0] -> Loop Over Items3
+- MySQL72 [Output 0] -> Loop Over Items3
+- MySQL71 [Output 0] -> Loop Over Items3
+- MySQL70 [Output 0] -> Loop Over Items3
+- HTTP Request58 [Output 0] -> Analista39
+- Analista38 [Output 0] -> Code in JavaScript2
+- Analista38 [Output 1] -> HTTP Request62
+- Analista39 [Output 0] -> Code in JavaScript3
+- Analista39 [Output 1] -> HTTP Request62
+- Code in JavaScript2 [Output 0] -> Insertar documento27
+- Code in JavaScript3 [Output 0] -> Loop Over Items10
+- Loop Over Items6 [Output 1] -> Wait11
+- Wait11 [Output 0] -> Insertar documento22
+- If47 [Output 0] -> HTTP Request61
+- If47 [Output 1] -> HTTP Request59
+- HTTP Request59 [Output 0] -> Guardar URL PDF8
+- Guardar URL PDF8 [Output 0] -> HTTP Request60
+- HTTP Request60 [Output 0] -> If48
+- If48 [Output 0] -> MySQL78
+- If48 [Output 1] -> MySQL79
+- HTTP Request61 [Output 0] -> If49
+- If49 [Output 0] -> MySQL80
+- If49 [Output 1] -> MySQL81
+- Insertar documento22 [Output 0] -> If47
+- Insertar documento22 [Output 1] -> HTTP Request63
+- HTTP Request62 [Output 0] -> If50
+- If50 [Output 0] -> MySQL83
+- If50 [Output 1] -> MySQL82
+- HTTP Request63 [Output 0] -> If51
+- If51 [Output 0] -> MySQL85
+- If51 [Output 1] -> MySQL84
+- MySQL85 [Output 0] -> Loop Over Items6
+- MySQL84 [Output 0] -> Loop Over Items6
+- MySQL81 [Output 0] -> Loop Over Items6
+- MySQL80 [Output 0] -> Loop Over Items6
+- MySQL79 [Output 0] -> Loop Over Items6
+- MySQL78 [Output 0] -> Loop Over Items6
+- HTTP Request64 [Output 0] -> If52
+- If52 [Output 0] -> MySQL86
+- If52 [Output 1] -> MySQL87
+- MySQL87 [Output 0] -> Loop Over Items
+- MySQL86 [Output 0] -> Loop Over Items
+- MySQL83 [Output 0] -> Loop Over Items
+- MySQL82 [Output 0] -> Loop Over Items
+- Analista40 [Output 0] -> If53
+- If53 [Output 0] -> If54
+- If53 [Output 1] -> Wait12
+- Wait12 [Output 0] -> Analista6
+- Analista41 [Output 0] -> Code24
+- Code24 [Output 0] -> Insertar documento23
+- If54 [Output 0] -> HTTP Request65
+- If54 [Output 1] -> Wait13
+- Wait13 [Output 0] -> Analista41
+- Insertar documento23 [Output 0] -> If7
+- HTTP Request65 [Output 0] -> Analista43
+- Analista42 [Output 0] -> Code in JavaScript4
+- Analista42 [Output 1] -> HTTP Request70
+- Code in JavaScript4 [Output 0] -> Insertar documento24
+- Analista43 [Output 0] -> Code in JavaScript5
+- Analista43 [Output 1] -> HTTP Request70
+- Loop Over Items7 [Output 0] -> HTTP Request71
+- Loop Over Items7 [Output 1] -> HTTP Request87
+- Code in JavaScript5 [Output 0] -> Loop Over Items7
+- If55 [Output 0] -> HTTP Request68
+- If55 [Output 1] -> HTTP Request66
+- HTTP Request66 [Output 0] -> Guardar URL PDF9
+- Guardar URL PDF9 [Output 0] -> HTTP Request67
+- HTTP Request67 [Output 0] -> If56
+- If56 [Output 0] -> MySQL88
+- If56 [Output 1] -> MySQL89
+- HTTP Request68 [Output 0] -> If57
+- If57 [Output 0] -> MySQL90
+- If57 [Output 1] -> MySQL91
+- Insertar documento24 [Output 0] -> If55
+- Insertar documento24 [Output 1] -> HTTP Request69
+- MySQL89 [Output 0] -> Loop Over Items7
+- MySQL88 [Output 0] -> Loop Over Items7
+- MySQL90 [Output 0] -> Loop Over Items7
+- MySQL91 [Output 0] -> Loop Over Items7
+- HTTP Request69 [Output 0] -> If58
+- If58 [Output 0] -> MySQL92
+- If58 [Output 1] -> MySQL93
+- MySQL93 [Output 0] -> Loop Over Items7
+- MySQL92 [Output 0] -> Loop Over Items7
+- HTTP Request70 [Output 0] -> If59
+- If59 [Output 0] -> MySQL95
+- If59 [Output 1] -> MySQL94
+- MySQL95 [Output 0] -> Loop Over Items2
+- MySQL94 [Output 0] -> Loop Over Items2
+- HTTP Request71 [Output 0] -> If60
+- If60 [Output 0] -> MySQL96
+- If60 [Output 1] -> MySQL97
+- MySQL97 [Output 0] -> Loop Over Items2
+- MySQL96 [Output 0] -> Loop Over Items2
+- Code in JavaScript6 [Output 0] -> Loop Over Items8
+- Loop Over Items8 [Output 0] -> HTTP Request47
+- Loop Over Items8 [Output 1] -> Wait17
+- HTTP Request72 [Output 0] -> Code in JavaScript7
+- Code in JavaScript7 [Output 0] -> Analista44
+- Analista44 [Output 0] -> Code in JavaScript8
+- Code in JavaScript8 [Output 0] -> Insertar documento25
+- HTTP Request73 [Output 0] -> If61
+- Guardar URL PDF10 [Output 0] -> HTTP Request73
+- If61 [Output 0] -> MySQL99
+- If61 [Output 1] -> MySQL98
+- If62 [Output 0] -> HTTP Request74
+- If62 [Output 1] -> HTTP Request75
+- HTTP Request74 [Output 0] -> If63
+- If63 [Output 0] -> MySQL101
+- If63 [Output 1] -> MySQL100
+- HTTP Request75 [Output 0] -> Guardar URL PDF10
+- Insertar documento25 [Output 0] -> If62
+- MySQL100 [Output 0] -> Loop Over Items8
+- MySQL101 [Output 0] -> Loop Over Items8
+- MySQL98 [Output 0] -> Loop Over Items8
+- MySQL99 [Output 0] -> Loop Over Items8
+- Code in JavaScript9 [Output 0] -> Loop Over Items9
+- Loop Over Items9 [Output 0] -> HTTP Request57
+- Loop Over Items9 [Output 1] -> HTTP Request76
+- HTTP Request76 [Output 0] -> Code in JavaScript10
+- Analista45 [Output 0] -> Code in JavaScript11
+- Analista45 [Output 1] -> HTTP Request80
+- Code in JavaScript11 [Output 0] -> Insertar documento26
+- Insertar documento26 [Output 0] -> If65
+- HTTP Request77 [Output 0] -> If64
+- Guardar URL PDF11 [Output 0] -> HTTP Request77
+- If64 [Output 0] -> MySQL103
+- If64 [Output 1] -> MySQL102
+- If65 [Output 0] -> HTTP Request78
+- If65 [Output 1] -> HTTP Request79
+- HTTP Request78 [Output 0] -> If66
+- If66 [Output 0] -> MySQL105
+- If66 [Output 1] -> MySQL104
+- HTTP Request79 [Output 0] -> Guardar URL PDF11
+- Code in JavaScript10 [Output 0] -> Wait16
+- MySQL103 [Output 0] -> Loop Over Items9
+- MySQL102 [Output 0] -> Loop Over Items9
+- MySQL105 [Output 0] -> Loop Over Items9
+- MySQL104 [Output 0] -> Loop Over Items9
+- HTTP Request80 [Output 0] -> If67
+- If67 [Output 0] -> MySQL107
+- If67 [Output 1] -> MySQL106
+- MySQL107 [Output 0] -> Loop Over Items9
+- MySQL106 [Output 0] -> Loop Over Items9
+- Wait16 [Output 0] -> Analista45
+- Loop Over Items10 [Output 0] -> HTTP Request64
+- Loop Over Items10 [Output 1] -> HTTP Request81
+- HTTP Request81 [Output 0] -> Code in JavaScript12
+- Code in JavaScript12 [Output 0] -> Analista38
+- Insertar documento27 [Output 0] -> If68
+- Insertar documento27 [Output 1] -> HTTP Request85
+- If68 [Output 0] -> HTTP Request84
+- If68 [Output 1] -> HTTP Request82
+- HTTP Request82 [Output 0] -> Guardar URL PDF12
+- Guardar URL PDF12 [Output 0] -> HTTP Request83
+- HTTP Request83 [Output 0] -> If69
+- If69 [Output 0] -> MySQL108
+- If69 [Output 1] -> MySQL109
+- MySQL108 [Output 0] -> Loop Over Items10
+- MySQL109 [Output 0] -> Loop Over Items10
+- HTTP Request84 [Output 0] -> If70
+- If70 [Output 0] -> MySQL110
+- If70 [Output 1] -> MySQL111
+- MySQL110 [Output 0] -> Loop Over Items10
+- MySQL111 [Output 0] -> Loop Over Items10
+- HTTP Request85 [Output 0] -> If71
+- If71 [Output 0] -> MySQL113
+- If71 [Output 1] -> MySQL112
+- MySQL112 [Output 0] -> Loop Over Items10
+- MySQL113 [Output 0] -> Loop Over Items10
+- HTTP Request86 [Output 0] -> Code in JavaScript14
+- Analista48 [Output 0] -> Code25
+- Wait10 [Output 0] -> Analista7
+- Code in JavaScript14 [Output 0] -> Wait10
+- Analista49 [Output 0] -> Code26
+- Analista50 [Output 0] -> Code in JavaScript15
+- HTTP Request87 [Output 0] -> Code in JavaScript16
+- Code in JavaScript16 [Output 0] -> Analista42
+- Analista52 [Output 0] -> Code29
+- HTTP Request88 [Output 0] -> Code in JavaScript18
+- Code in JavaScript18 [Output 0] -> Analista52
+- Code29 [Output 0] -> Wait3
+- Wait17 [Output 0] -> HTTP Request72

@@ -1,0 +1,373 @@
+{
+  "simple_facturable_single": "{\n  \"tipo_documento\": \"ABONO EMITIDO\",\n  \"categoria_principal\": \"Fiscal y Contable\",\n  \"subcategoria\": \"Abonos\",\n  \"incidencia\": false,\n  \"descripcion_incidencia\": \"\",\n  \"empresa_emisora\": {\n    \"nombre\": \"VALENTIA ALIMENTACION, S.L.\",\n    \"direccion\": \"C/ Padre Estanislao, 3\\n46610 Guadassuar (Valencia)\",\n    \"cif\": \"B22859755\",\n    \"telefono\": \"\",\n    \"email\": \"\"\n  },\n  \"cliente\": {\n    \"nombre\": \"COMEDORES TAJO, S.A.\",\n    \"direccion\": \"Avenida Tajo, 65, 28006 Madrid\",\n    \"cif\": \"A20001266\",\n    \"numero_cliente\": \"\",\n    \"punto_venta\": \"\",\n    \"direccion_punto_venta\": \"\"\n  },\n  \"documento\": {\n    \"numero_documento\": \"AE-2026-0013\",\n    \"fecha_emision\": \"2026-06-19\",\n    \"forma_pago\": \"\",\n    \"comercial\": \"\",\n    \"importe_total\": -112.32,\n    \"importe_sin_iva\": -108.00,\n    \"fecha_vencimiento\": \"\"\n  },\n  \"lineas\": [\n    {\n      \"albaran\": \"\",\n      \"fecha_albaran\": \"\",\n      \"articulos\": [\n        {\n          \"codigo\": \"\",\n          \"descripcion\": \"Atún en aceite 1kg (caja 6u)\",\n          \"cantidad\": 1,\n          \"precio_unitario\": 30.00,\n          \"descuento_porcentaje\": 0,\n          \"precio_neto\": 30.00,\n          \"importe_linea\": -30.00\n        },\n        {\n          \"codigo\": \"\",\n          \"descripcion\": \"Jamón serrano (kg)\",\n          \"cantidad\": 2,\n          \"precio_unitario\": 9.00,\n          \"descuento_porcentaje\": 0,\n          \"precio_neto\": 9.00,\n          \"importe_linea\": -18.00\n        },\n        {\n          \"codigo\": \"\",\n          \"descripcion\": \"Queso curado (kg)\",\n          \"cantidad\": 5,\n          \"precio_unitario\": 12.00,\n          \"descuento_porcentaje\": 0,\n          \"precio_neto\": 12.00,\n          \"importe_linea\": -60.00\n        }\n      ]\n    }\n  ],\n  \"totales_por_impuesto\": [\n    {\n      \"tipo_iva\": \"IVA\",\n      \"porcentaje\": 4.0,\n      \"base_imponible\": -108.00,\n      \"cuota_iva\": -4.32,\n      \"total_con_iva\": -112.32\n    }\n  ],\n  \"metadatos\": {\n    \"remitente\": \"\",\n    \"destinatario\": \"\",\n    \"numero_referencia\": \"\",\n    \"estado\": \"\",\n    \"periodo_fiscal\": \"\",\n    \"nif_cif_relacionado\": \"\"\n  }\n}",
+  "simple_facturable_single_parsed": {
+    "tipo_documento": "ABONO EMITIDO",
+    "categoria_principal": "Fiscal y Contable",
+    "subcategoria": "Abonos",
+    "incidencia": false,
+    "descripcion_incidencia": "",
+    "empresa_emisora": {
+      "nombre": "VALENTIA ALIMENTACION, S.L.",
+      "direccion": "C/ Padre Estanislao, 3\n46610 Guadassuar (Valencia)",
+      "cif": "B22859755",
+      "telefono": "",
+      "email": ""
+    },
+    "cliente": {
+      "nombre": "COMEDORES TAJO, S.A.",
+      "direccion": "Avenida Tajo, 65, 28006 Madrid",
+      "cif": "A20001266",
+      "numero_cliente": "",
+      "punto_venta": "",
+      "direccion_punto_venta": ""
+    },
+    "documento": {
+      "numero_documento": "AE-2026-0013",
+      "fecha_emision": "2026-06-19",
+      "forma_pago": "",
+      "comercial": "",
+      "importe_total": -112.32,
+      "importe_sin_iva": -108,
+      "fecha_vencimiento": ""
+    },
+    "lineas": [
+      {
+        "albaran": "",
+        "fecha_albaran": "",
+        "articulos": [
+          {
+            "codigo": "",
+            "descripcion": "Atún en aceite 1kg (caja 6u)",
+            "cantidad": 1,
+            "precio_unitario": 30,
+            "descuento_porcentaje": 0,
+            "precio_neto": 30,
+            "importe_linea": -30
+          },
+          {
+            "codigo": "",
+            "descripcion": "Jamón serrano (kg)",
+            "cantidad": 2,
+            "precio_unitario": 9,
+            "descuento_porcentaje": 0,
+            "precio_neto": 9,
+            "importe_linea": -18
+          },
+          {
+            "codigo": "",
+            "descripcion": "Queso curado (kg)",
+            "cantidad": 5,
+            "precio_unitario": 12,
+            "descuento_porcentaje": 0,
+            "precio_neto": 12,
+            "importe_linea": -60
+          }
+        ]
+      }
+    ],
+    "totales_por_impuesto": [
+      {
+        "tipo_iva": "IVA",
+        "porcentaje": 4,
+        "base_imponible": -108,
+        "cuota_iva": -4.32,
+        "total_con_iva": -112.32
+      }
+    ],
+    "metadatos": {
+      "remitente": "",
+      "destinatario": "",
+      "numero_referencia": "",
+      "estado": "",
+      "periodo_fiscal": "",
+      "nif_cif_relacionado": ""
+    }
+  },
+  "classifier_facturable": "{\n  \"es_multiple\": true,\n  \"cantidad\": 40,\n  \"es_facturable\": true,\n  \"categoria_documento\": \"\"\n}",
+  "classifier_facturable_parsed": {
+    "es_multiple": true,
+    "cantidad": 40,
+    "es_facturable": true,
+    "categoria_documento": ""
+  },
+  "classifier_paginator": "[\n  {\"numero\": \"F-2026-001\", \"page_start\": 4, \"page_end\": 4},\n  {\"numero\": \"F-2026-002\", \"page_start\": 5, \"page_end\": 5},\n  {\"numero\": \"F-2026-003\", \"page_start\": 6, \"page_end\": 6},\n  {\"numero\": \"F-2026-004\", \"page_start\": 7, \"page_end\": 7},\n  {\"numero\": \"F-2026-005\", \"page_start\": 8, \"page_end\": 8},\n  {\"numero\": \"F-2026-006\", \"page_start\": 9, \"page_end\": 9},\n  {\"numero\": \"F-2026-007\", \"page_start\": 10, \"page_end\": 10},\n  {\"numero\": \"F-2026-008\", \"page_start\": 11, \"page_end\": 11},\n  {\"numero\": \"F-2026-009\", \"page_start\": 12, \"page_end\": 12},\n  {\"numero\": \"F-2026-010\", \"page_start\": 13, \"page_end\": 13},\n  {\"numero\": \"F-2026-011\", \"page_start\": 14, \"page_end\": 14},\n  {\"numero\": \"F-2026-012\", \"page_start\": 15, \"page_end\": 15},\n  {\"numero\": \"F-2026-013\", \"page_start\": 16, \"page_end\": 16},\n  {\"numero\": \"F-2026-014\", \"page_start\": 17, \"page_end\": 17},\n  {\"numero\": \"F-2026-015\", \"page_start\": 18, \"page_end\": 18},\n  {\"numero\": \"F-2026-016\", \"page_start\": 19, \"page_end\": 19},\n  {\"numero\": \"F-2026-017\", \"page_start\": 20, \"page_end\": 20},\n  {\"numero\": \"F-2026-018\", \"page_start\": 21, \"page_end\": 21},\n  {\"numero\": \"F-2026-019\", \"page_start\": 22, \"page_end\": 22},\n  {\"numero\": \"F-2026-020\", \"page_start\": 23, \"page_end\": 23},\n  {\"numero\": \"F-2026-021\", \"page_start\": 24, \"page_end\": 24},\n  {\"numero\": \"F-2026-022\", \"page_start\": 25, \"page_end\": 25},\n  {\"numero\": \"F-2026-023\", \"page_start\": 26, \"page_end\": 26},\n  {\"numero\": \"F-2026-024\", \"page_start\": 27, \"page_end\": 27},\n  {\"numero\": \"F-2026-025\", \"page_start\": 28, \"page_end\": 28},\n  {\"numero\": \"F-2026-026\", \"page_start\": 29, \"page_end\": 29},\n  {\"numero\": \"F-2026-027\", \"page_start\": 30, \"page_end\": 30},\n  {\"numero\": \"F-2026-028\", \"page_start\": 31, \"page_end\": 31},\n  {\"numero\": \"F-2026-029\", \"page_start\": 32, \"page_end\": 32},\n  {\"numero\": \"F-2026-030\", \"page_start\": 33, \"page_end\": 33},\n  {\"numero\": \"R-2026-001\", \"page_start\": 34, \"page_end\": 34},\n  {\"numero\": \"R-2026-002\", \"page_start\": 35, \"page_end\": 35},\n  {\"numero\": \"R-2026-003\", \"page_start\": 36, \"page_end\": 36},\n  {\"numero\": \"R-2026-004\", \"page_start\": 37, \"page_end\": 37},\n  {\"numero\": \"R-2026-005\", \"page_start\": 38, \"page_end\": 38},\n  {\"numero\": \"AB-2026-001\", \"page_start\": 39, \"page_end\": 39},\n  {\"numero\": \"AB-2026-002\", \"page_start\": 40, \"page_end\": 40},\n  {\"numero\": \"AB-2026-003\", \"page_start\": 41, \"page_end\": 41},\n  {\"numero\": \"AB-2026-004\", \"page_start\": 42, \"page_end\": 42},\n  {\"numero\": \"AB-2026-005\", \"page_start\": 43, \"page_end\": 43}\n]",
+  "classifier_paginator_parsed": [
+    {
+      "numero": "F-2026-001",
+      "page_start": 4,
+      "page_end": 4
+    },
+    {
+      "numero": "F-2026-002",
+      "page_start": 5,
+      "page_end": 5
+    },
+    {
+      "numero": "F-2026-003",
+      "page_start": 6,
+      "page_end": 6
+    },
+    {
+      "numero": "F-2026-004",
+      "page_start": 7,
+      "page_end": 7
+    },
+    {
+      "numero": "F-2026-005",
+      "page_start": 8,
+      "page_end": 8
+    },
+    {
+      "numero": "F-2026-006",
+      "page_start": 9,
+      "page_end": 9
+    },
+    {
+      "numero": "F-2026-007",
+      "page_start": 10,
+      "page_end": 10
+    },
+    {
+      "numero": "F-2026-008",
+      "page_start": 11,
+      "page_end": 11
+    },
+    {
+      "numero": "F-2026-009",
+      "page_start": 12,
+      "page_end": 12
+    },
+    {
+      "numero": "F-2026-010",
+      "page_start": 13,
+      "page_end": 13
+    },
+    {
+      "numero": "F-2026-011",
+      "page_start": 14,
+      "page_end": 14
+    },
+    {
+      "numero": "F-2026-012",
+      "page_start": 15,
+      "page_end": 15
+    },
+    {
+      "numero": "F-2026-013",
+      "page_start": 16,
+      "page_end": 16
+    },
+    {
+      "numero": "F-2026-014",
+      "page_start": 17,
+      "page_end": 17
+    },
+    {
+      "numero": "F-2026-015",
+      "page_start": 18,
+      "page_end": 18
+    },
+    {
+      "numero": "F-2026-016",
+      "page_start": 19,
+      "page_end": 19
+    },
+    {
+      "numero": "F-2026-017",
+      "page_start": 20,
+      "page_end": 20
+    },
+    {
+      "numero": "F-2026-018",
+      "page_start": 21,
+      "page_end": 21
+    },
+    {
+      "numero": "F-2026-019",
+      "page_start": 22,
+      "page_end": 22
+    },
+    {
+      "numero": "F-2026-020",
+      "page_start": 23,
+      "page_end": 23
+    },
+    {
+      "numero": "F-2026-021",
+      "page_start": 24,
+      "page_end": 24
+    },
+    {
+      "numero": "F-2026-022",
+      "page_start": 25,
+      "page_end": 25
+    },
+    {
+      "numero": "F-2026-023",
+      "page_start": 26,
+      "page_end": 26
+    },
+    {
+      "numero": "F-2026-024",
+      "page_start": 27,
+      "page_end": 27
+    },
+    {
+      "numero": "F-2026-025",
+      "page_start": 28,
+      "page_end": 28
+    },
+    {
+      "numero": "F-2026-026",
+      "page_start": 29,
+      "page_end": 29
+    },
+    {
+      "numero": "F-2026-027",
+      "page_start": 30,
+      "page_end": 30
+    },
+    {
+      "numero": "F-2026-028",
+      "page_start": 31,
+      "page_end": 31
+    },
+    {
+      "numero": "F-2026-029",
+      "page_start": 32,
+      "page_end": 32
+    },
+    {
+      "numero": "F-2026-030",
+      "page_start": 33,
+      "page_end": 33
+    },
+    {
+      "numero": "R-2026-001",
+      "page_start": 34,
+      "page_end": 34
+    },
+    {
+      "numero": "R-2026-002",
+      "page_start": 35,
+      "page_end": 35
+    },
+    {
+      "numero": "R-2026-003",
+      "page_start": 36,
+      "page_end": 36
+    },
+    {
+      "numero": "R-2026-004",
+      "page_start": 37,
+      "page_end": 37
+    },
+    {
+      "numero": "R-2026-005",
+      "page_start": 38,
+      "page_end": 38
+    },
+    {
+      "numero": "AB-2026-001",
+      "page_start": 39,
+      "page_end": 39
+    },
+    {
+      "numero": "AB-2026-002",
+      "page_start": 40,
+      "page_end": 40
+    },
+    {
+      "numero": "AB-2026-003",
+      "page_start": 41,
+      "page_end": 41
+    },
+    {
+      "numero": "AB-2026-004",
+      "page_start": 42,
+      "page_end": 42
+    },
+    {
+      "numero": "AB-2026-005",
+      "page_start": 43,
+      "page_end": 43
+    }
+  ],
+  "non_facturable_extractor": "{\n  \"tipo_documento\": \"NOTA SIMPLE INFORMATIVA\",\n  \"categoria_principal\": \"Legal y Societario\",\n  \"subcategoria\": \"Información de Registro de la Propiedad\",\n  \"incidencia\": false,\n  \"descripcion_incidencia\": \"\",\n  \"empresa_emisora\": {\n    \"nombre\": \"REGISTRO DE LA PROPIEDAD DE CADIZ N° 3\",\n    \"direccion\": \"C/ Paseo Marítimo, N° 3\\n11010-CADIZ\",\n    \"cif\": \"\",\n    \"telefono\": \"956258911\",\n    \"email\": \"cadiz3@registrodelapropiedad.org\"\n  },\n  \"cliente\": {\n    \"nombre\": \"JURISWEB INTERACTIVA, SL\",\n    \"direccion\": \"\",\n    \"cif\": \"\",\n    \"numero_cliente\": \"\",\n    \"punto_venta\": \"\",\n    \"direccion_punto_venta\": \"\"\n  },\n  \"documento\": {\n    \"numero_documento\": \"2110172818C8AC25\",\n    \"fecha_emision\": \"2025-10-17\",\n    \"forma_pago\": \"\",\n    \"comercial\": \"\",\n    \"importe_total\": 0,\n    \"importe_sin_iva\": 0,\n    \"fecha_vencimiento\": \"\"\n  },\n  \"lineas\": [],\n  \"totales_por_impuesto\": [],\n  \"metadatos\": {\n    \"remitente\": \"REGISTRO DE LA PROPIEDAD DE CADIZ N° 3\",\n    \"destinatario\": \"JURISWEB INTERACTIVA, SL\",\n    \"numero_referencia\": \"11017000251031\",\n    \"estado\": \"\",\n    \"periodo_fiscal\": \"\",\n    \"nif_cif_relacionado\": \"\"\n  }\n}",
+  "non_facturable_extractor_parsed": {
+    "tipo_documento": "NOTA SIMPLE INFORMATIVA",
+    "categoria_principal": "Legal y Societario",
+    "subcategoria": "Información de Registro de la Propiedad",
+    "incidencia": false,
+    "descripcion_incidencia": "",
+    "empresa_emisora": {
+      "nombre": "REGISTRO DE LA PROPIEDAD DE CADIZ N° 3",
+      "direccion": "C/ Paseo Marítimo, N° 3\n11010-CADIZ",
+      "cif": "",
+      "telefono": "956258911",
+      "email": "cadiz3@registrodelapropiedad.org"
+    },
+    "cliente": {
+      "nombre": "JURISWEB INTERACTIVA, SL",
+      "direccion": "",
+      "cif": "",
+      "numero_cliente": "",
+      "punto_venta": "",
+      "direccion_punto_venta": ""
+    },
+    "documento": {
+      "numero_documento": "2110172818C8AC25",
+      "fecha_emision": "2025-10-17",
+      "forma_pago": "",
+      "comercial": "",
+      "importe_total": 0,
+      "importe_sin_iva": 0,
+      "fecha_vencimiento": ""
+    },
+    "lineas": [],
+    "totales_por_impuesto": [],
+    "metadatos": {
+      "remitente": "REGISTRO DE LA PROPIEDAD DE CADIZ N° 3",
+      "destinatario": "JURISWEB INTERACTIVA, SL",
+      "numero_referencia": "11017000251031",
+      "estado": "",
+      "periodo_fiscal": "",
+      "nif_cif_relacionado": ""
+    }
+  },
+  "multiple_extractor_page": "[\n  {\n    \"orden\": 0,\n    \"tipo_documento\": \"PLANO\",\n    \"numero_documento\": \"6\",\n    \"page_start\": 1,\n    \"page_end\": 1,\n    \"shared_page\": false\n  },\n  {\n    \"orden\": 1,\n    \"tipo_documento\": \"CONTRATO DE ARRENDAMIENTO\",\n    \"numero_documento\": \"ARR-2026-0042\",\n    \"page_start\": 2,\n    \"page_end\": 2,\n    \"shared_page\": false\n  },\n  {\n    \"orden\": 2,\n    \"tipo_documento\": \"PLANO\",\n    \"numero_documento\": \"7\",\n    \"page_start\": 3,\n    \"page_end\": 3,\n    \"shared_page\": false\n  },\n  {\n    \"orden\": 3,\n    \"tipo_documento\": \"PLANO\",\n    \"numero_documento\": \"8\",\n    \"page_start\": 4,\n    \"page_end\": 4,\n    \"shared_page\": false\n  }\n]",
+  "multiple_extractor_page_parsed": [
+    {
+      "orden": 0,
+      "tipo_documento": "PLANO",
+      "numero_documento": "6",
+      "page_start": 1,
+      "page_end": 1,
+      "shared_page": false
+    },
+    {
+      "orden": 1,
+      "tipo_documento": "CONTRATO DE ARRENDAMIENTO",
+      "numero_documento": "ARR-2026-0042",
+      "page_start": 2,
+      "page_end": 2,
+      "shared_page": false
+    },
+    {
+      "orden": 2,
+      "tipo_documento": "PLANO",
+      "numero_documento": "7",
+      "page_start": 3,
+      "page_end": 3,
+      "shared_page": false
+    },
+    {
+      "orden": 3,
+      "tipo_documento": "PLANO",
+      "numero_documento": "8",
+      "page_start": 4,
+      "page_end": 4,
+      "shared_page": false
+    }
+  ]
+}

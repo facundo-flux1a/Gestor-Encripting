@@ -30,6 +30,7 @@ import {
   Calendar,
   Webhook,
   BookOpen,
+  UploadCloud,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -53,6 +54,8 @@ import { CompaniesSelector } from '../companies-selector';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { usePreferences } from '@/contexts/preferences-context';
 import { SuggestionBox } from '../suggestions/SuggestionBox';
+import { QueueTracker } from './queue-tracker';
+import { GlobalUploadTracker } from '@/components/upload/global-upload-tracker';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -331,6 +334,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     { href: '/dashboard/health-check', label: 'Salud Documental', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
+    { href: '/dashboard/upload-queue', label: 'Cola de Subidas', icon: UploadCloud },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
@@ -409,6 +413,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
+          
+          <QueueTracker />
+          <GlobalUploadTracker />
         </SidebarContent>
 
         <SidebarFooter>
