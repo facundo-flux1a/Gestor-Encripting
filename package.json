@@ -12,7 +12,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "hash-password": "node scripts/hash-admin-password.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && prisma generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.609.0",
