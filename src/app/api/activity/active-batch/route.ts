@@ -72,7 +72,19 @@ export async function GET(request: Request) {
 
       conn.release();
 
+      let etaSeconds = 0;
+      if (batchRows.length > 0 || individualRows.length > 0) {
+        try {
+          const { geminiQueue } = await import('@/lib/queue');
+          const counts = await geminiQueue.getJobCounts('waiting', 'delayed', 'active');
+          etaSeconds = (counts.waiting + counts.delayed + counts.active) * 10;
+        } catch (qErr) {
+          console.error('❌ [ETA] Error obteniendo colas:', qErr);
+        }
+      }
+
       return NextResponse.json({
+        etaSeconds,
         batches: batchRows.map(row => ({
           id: row.parent_upload_id,
           name: row.batch_name ? row.batch_name.replace(/_doc_\d+$/, '') : 'Lote de documentos',

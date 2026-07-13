@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import connection, { dbName } from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import JSZip from 'jszip';
+
 import { ingestionQueue, IngestionJobData } from '@/lib/queue';
 
 const UploadResponseSchema = z.object({
@@ -21,16 +22,18 @@ const UploadResponseSchema = z.object({
   }).optional(),
 });
 
+// ─── Helpers de nombre y tipo ──────────────────────────────────────────────────
+
 /**
- * 🔥 NORMALIZA EL NOMBRE DEL ARCHIVO: REEMPLAZA ESPACIOS POR GUIONES
- * Esto garantiza URLs limpias sin codificación %20
+ * Normaliza el nombre del archivo: reemplaza espacios por guiones.
+ * Garantiza URLs limpias sin codificación %20.
  */
 function normalizeFileName(fileName: string): string {
   return fileName.replace(/ /g, '-');
 }
 
 /**
- * Normaliza el tipo de archivo basándose en el MIME type y la extensión
+ * Normaliza el tipo de archivo basándose en el MIME type y la extensión.
  */
 function getNormalizedFileType(mimeType: string, extension?: string): string {
   const mime = mimeType.toLowerCase();
@@ -48,17 +51,32 @@ function getNormalizedFileType(mimeType: string, extension?: string): string {
 }
 
 /**
- * Calcula el hash SHA-256 del archivo
+ * Retorna el MIME type correcto según la extensión del archivo hijo.
  */
+function getMimeTypeFromFileName(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const map: Record<string, string> = {
+    pdf:  'application/pdf',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    png:  'image/png',
+    webp: 'image/webp',
+    doc:  'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls:  'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
+// ─── Hash y duplicados ─────────────────────────────────────────────────────────
+
 async function calculateFileHash(fileBuffer: ArrayBuffer): Promise<string> {
   const hash = crypto.createHash('sha256');
   hash.update(Buffer.from(fileBuffer));
   return hash.digest('hex');
 }
 
-/**
- * Verifica si el archivo ya existe en la base de datos por hash y empresaId
- */
 async function checkDuplicate(fileHash: string, empresaId: string): Promise<any> {
   try {
     const [rows] = await connection.query(
@@ -69,7 +87,6 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
        LIMIT 1`,
       [fileHash, empresaId]
     );
-
     const results = rows as any[];
     return results.length > 0 ? results[0] : null;
   } catch (error) {
@@ -78,109 +95,144 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
   }
 }
 
+// ─── Extracción ZIP/RAR con subida individual a MinIO ─────────────────────────
+
 /**
- * Descomprime un ZIP y calcula el hash SHA-256 de cada archivo individual
- * 🔥 NORMALIZA LOS NOMBRES DE ARCHIVO (quita espacios)
+ * Descomprime un ZIP, calcula el hash de cada hijo, lo sube individualmente
+ * a MinIO y retorna toda la info necesaria para encolar cada hijo.
+ * Replica el comportamiento que tenía n8n: descomprimir → subir hijo → usar URL del hijo.
  */
-async function extractAndHashZipFiles(fileBuffer: ArrayBuffer): Promise<{ [fileName: string]: string }> {
+async function extractAndUploadZipChildren(
+  fileBuffer: ArrayBuffer,
+  parentUploadId: string,
+  s3Client: S3Client,
+  bucketName: string,
+  minioEndpoint: string
+): Promise<{
+  fileHashes: Record<string, string>;
+  uploadIds: Record<string, string>;
+  filePaths: Record<string, string>;
+  publicUrls: Record<string, string>;
+}> {
   const zip = new JSZip();
   const zipContent = await zip.loadAsync(Buffer.from(fileBuffer));
-  const fileHashes: { [fileName: string]: string } = {};
+
+  const fileHashes: Record<string, string> = {};
+  const uploadIds: Record<string, string> = {};
+  const filePaths: Record<string, string> = {};
+  const publicUrls: Record<string, string> = {};
 
   for (const [originalFileName, zipEntry] of Object.entries(zipContent.files)) {
-    if (!zipEntry.dir) {
-      // 🔥 NORMALIZAR NOMBRE (quitar espacios)
-      const normalizedFileName = normalizeFileName(originalFileName);
+    if (zipEntry.dir) continue;
 
-      const fileData = await zipEntry.async('arraybuffer');
-      const hash = crypto.createHash('sha256');
-      hash.update(Buffer.from(fileData));
-      const fileHash = hash.digest('hex');
+    const normalizedFileName = normalizeFileName(originalFileName);
+    const fileData = await zipEntry.async('nodebuffer');
 
-      // 🔥 GUARDAR CON NOMBRE NORMALIZADO
-      fileHashes[normalizedFileName] = fileHash;
+    // Hash SHA-256
+    const hash = crypto.createHash('sha256').update(fileData).digest('hex');
+    fileHashes[normalizedFileName] = hash;
 
-      if (normalizedFileName !== originalFileName) {
-        console.log(`  [ZIP] "${originalFileName}" → "${normalizedFileName}" (Hash: ${fileHash})`);
-      } else {
-        console.log(`  [ZIP] ${normalizedFileName} → Hash: ${fileHash}`);
-      }
-    }
+    // Upload ID único para este hijo
+    const childUploadId = `${parentUploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+    uploadIds[normalizedFileName] = childUploadId;
+
+    // Subir el hijo individualmente a MinIO
+    const ext = normalizedFileName.includes('.') ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) : '';
+    const baseName = normalizedFileName.includes('.') ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) : normalizedFileName;
+    const childPath = `archivos/zip-children/${parentUploadId}/${baseName}${ext}`;
+    const childMimeType = getMimeTypeFromFileName(normalizedFileName);
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: childPath,
+      Body: fileData,
+      ContentType: childMimeType,
+      ACL: 'public-read',
+    }));
+
+    const childPublicUrl = `${minioEndpoint.replace(/\/$/, '')}/${bucketName}/${childPath}`;
+    filePaths[normalizedFileName] = childPath;
+    publicUrls[normalizedFileName] = childPublicUrl;
+
+    console.log(`  [ZIP] "${normalizedFileName}" → subido: ${childPath}`);
   }
 
-  return fileHashes;
+  return { fileHashes, uploadIds, filePaths, publicUrls };
 }
 
 /**
- * Extrae archivos RAR usando el microservicio de Railway
- * 🔥 NORMALIZA los nombres que vienen del microservicio
+ * Descomprime un RAR usando unrar-js (local, sin microservicio externo),
+ * calcula el hash de cada hijo, lo sube individualmente a MinIO
+ * y retorna toda la info necesaria para encolar cada hijo.
  */
-async function extractAndHashRarFiles(
+async function extractAndUploadRarChildren(
   fileBuffer: ArrayBuffer,
-  parentUploadId: string
+  parentUploadId: string,
+  s3Client: S3Client,
+  bucketName: string,
+  minioEndpoint: string
 ): Promise<{
-  fileHashes: { [fileName: string]: string },
-  uploadIds: { [fileName: string]: string }
+  fileHashes: Record<string, string>;
+  uploadIds: Record<string, string>;
+  filePaths: Record<string, string>;
+  publicUrls: Record<string, string>;
 }> {
-  const RAR_EXTRACTOR_URL = process.env.RAR_EXTRACTOR_URL || 'https://rar-extractor.onrender.com';
-  const RAR_SERVICE_ENDPOINT = `${RAR_EXTRACTOR_URL.replace(/\/$/, '')}/api/extract-rar`;
+  const buffer = Buffer.from(fileBuffer);
+  
+  // Usar node-unrar-js dinámicamente para evitar errores de Turbopack
+  const unrar = await import('node-unrar-js');
+  const extractor = await unrar.createExtractorFromData({ 
+    data: new Uint8Array(buffer) as unknown as ArrayBuffer 
+  });
 
-  console.log(`  [RAR] 🔄 Llamando al microservicio: ${RAR_SERVICE_ENDPOINT}`);
+  const extracted = extractor.extract();
 
-  const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: 'application/vnd.rar' });
-  formData.append('file', blob, 'archive.rar');
-  formData.append('parentUploadId', parentUploadId);
+  const fileHashes: Record<string, string> = {};
+  const uploadIds: Record<string, string> = {};
+  const filePaths: Record<string, string> = {};
+  const publicUrls: Record<string, string> = {};
 
-  try {
-    const response = await fetch(RAR_SERVICE_ENDPOINT, {
-      method: 'POST',
-      body: formData,
-    });
+  for (const file of extracted.files) {
+    if (!file.extraction || file.fileHeader.flags.directory) continue;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`RAR service error: ${errorText}`);
-    }
+    const originalFileName = file.fileHeader.name;
+    const normalizedFileName = normalizeFileName(originalFileName);
+    const fileData = Buffer.from(file.extraction);
 
-    const result = await response.json();
-    console.log(`  [RAR] ✅ Archivos extraídos: ${result.totalFiles}`);
+    // Hash SHA-256
+    const hash = crypto.createHash('sha256').update(fileData).digest('hex');
+    fileHashes[normalizedFileName] = hash;
 
-    if (!result.success || !result.fileHashes || !result.uploadIds) {
-      throw new Error('Respuesta inválida del microservicio RAR');
-    }
+    // Upload ID único para este hijo
+    const childUploadId = `${parentUploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
+    uploadIds[normalizedFileName] = childUploadId;
 
-    // 🔥 NORMALIZAR LOS NOMBRES DE ARCHIVO QUE VIENEN DEL MICROSERVICIO
-    const normalizedFileHashes: { [fileName: string]: string } = {};
-    const normalizedUploadIds: { [fileName: string]: string } = {};
+    // Subir el hijo individualmente a MinIO
+    const ext = normalizedFileName.includes('.') ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) : '';
+    const baseName = normalizedFileName.includes('.') ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) : normalizedFileName;
+    const childPath = `archivos/rar-children/${parentUploadId}/${baseName}${ext}`;
+    const childMimeType = getMimeTypeFromFileName(normalizedFileName);
 
-    for (const [originalFileName, hash] of Object.entries(result.fileHashes)) {
-      const normalizedFileName = normalizeFileName(originalFileName);
-      normalizedFileHashes[normalizedFileName] = hash as string;
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: childPath,
+      Body: fileData,
+      ContentType: childMimeType,
+      ACL: 'public-read',
+    }));
 
-      if (normalizedFileName !== originalFileName) {
-        console.log(`  [RAR] "${originalFileName}" → "${normalizedFileName}"`);
-      }
-    }
+    const childPublicUrl = `${minioEndpoint.replace(/\/$/, '')}/${bucketName}/${childPath}`;
+    filePaths[normalizedFileName] = childPath;
+    publicUrls[normalizedFileName] = childPublicUrl;
 
-    for (const [originalFileName, uploadId] of Object.entries(result.uploadIds)) {
-      const normalizedFileName = normalizeFileName(originalFileName);
-      normalizedUploadIds[normalizedFileName] = uploadId as string;
-    }
-
-    return {
-      fileHashes: normalizedFileHashes,
-      uploadIds: normalizedUploadIds
-    };
-  } catch (error: any) {
-    console.error(`  [RAR] ❌ Error:`, error.message);
-    throw new Error(`No se pudo procesar el archivo RAR: ${error.message}`);
+    console.log(`  [RAR] "${normalizedFileName}" → subido: ${childPath}`);
   }
+
+  return { fileHashes, uploadIds, filePaths, publicUrls };
 }
 
-/**
- * Registra la actividad inicial en la base de datos
- */
+// ─── Actividad y errores ───────────────────────────────────────────────────────
+
 async function createActivityRecord(
   uploadId: string,
   empresaId: string,
@@ -202,7 +254,7 @@ async function createActivityRecord(
         'iniciando',
         'Iniciando el flujo',
         0,
-        'Archivo recibido, preparando para procesamiento'
+        'Archivo recibido, preparando para procesamiento',
       ]
     );
     console.log(`[${fileName}] ✅ Registro de actividad creado (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''})`);
@@ -211,9 +263,6 @@ async function createActivityRecord(
   }
 }
 
-/**
- * 🔥 Marca el upload como fallido en la BD con mensaje genérico
- */
 async function markUploadAsFailed(
   uploadId: string,
   errorMessage: string,
@@ -221,21 +270,12 @@ async function markUploadAsFailed(
 ): Promise<void> {
   try {
     console.log(`❌ [Upload] Marcando como fallido: ${uploadId}`);
-    console.log(`❌ [Upload] Mensaje para usuario: ${errorMessage}`);
-    console.log(`❌ [Upload] Nodo: ${errorNode || 'Error general'}`);
-
     await connection.query(
       `UPDATE ${dbName}.actividad 
-       SET status = 'Fallido', 
-           step = ?, 
-           progress = 0, 
-           mensaje = ?, 
-           updated_at = NOW()
+       SET status = 'Fallido', step = ?, progress = 0, mensaje = ?, updated_at = NOW()
        WHERE upload_id = ?`,
       [errorNode || 'Error', errorMessage, uploadId]
     );
-
-    console.log(`✅ [Upload] Registro padre actualizado: ${uploadId}`);
 
     const [childRows] = await connection.query(
       `SELECT upload_id FROM ${dbName}.actividad WHERE parent_upload_id = ?`,
@@ -243,30 +283,19 @@ async function markUploadAsFailed(
     ) as any;
 
     if (childRows.length > 0) {
-      console.log(`❌ [Upload] Marcando ${childRows.length} archivos hijos como fallidos...`);
-
       await connection.query(
         `UPDATE ${dbName}.actividad 
-         SET status = 'Fallido', 
-             step = 'Error en archivo padre', 
-             progress = 0, 
-             mensaje = 'El archivo comprimido padre falló', 
-             updated_at = NOW()
+         SET status = 'Fallido', step = 'Error en archivo padre', progress = 0,
+             mensaje = 'El archivo comprimido padre falló', updated_at = NOW()
          WHERE parent_upload_id = ?`,
         [uploadId]
       );
-
-      console.log(`✅ [Upload] ${childRows.length} archivos hijos actualizados`);
     }
-
   } catch (error) {
     console.error(`❌ [Upload] Error al marcar como fallido:`, error);
   }
 }
 
-/**
- * 🔥 Notifica al frontend sobre el error via API con mensaje genérico
- */
 async function notifyFrontendError(
   uploadId: string,
   errorMessage: string,
@@ -274,34 +303,29 @@ async function notifyFrontendError(
 ): Promise<void> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:9002';
-
-    console.log(`📡 [Upload] Notificando error al frontend: ${uploadId}`);
-
-    const response = await fetch(`${baseUrl}/api/upload-progress`, {
+    await fetch(`${baseUrl}/api/upload-progress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        uploadId: uploadId,
+        uploadId,
         status: 'Fallido',
         step: errorNode || 'Error',
         progress: 0,
         message: errorMessage,
       }),
     });
-
-    if (response.ok) {
-      console.log(`✅ [Upload] Frontend notificado exitosamente`);
-    } else {
-      const errorText = await response.text();
-      console.error(`❌ [Upload] Error al notificar frontend (${response.status}): ${errorText}`);
-    }
   } catch (error) {
     console.error(`❌ [Upload] Error en notifyFrontendError:`, error);
   }
 }
 
+// ─── Upload desde Dashboard ────────────────────────────────────────────────────
+
 /**
- * Gestiona la subida de un documento a S3 con validación de duplicados
+ * Gestiona la subida de un documento a S3 con validación de duplicados.
+ * Soporta PDF, imágenes (JPG/PNG), ZIP y RAR.
+ * Para ZIP y RAR: extrae cada hijo en memoria, lo sube a MinIO individualmente
+ * y encola un job por cada hijo con su propio S3 path.
  */
 export async function uploadDocument(
   formData: FormData
@@ -314,43 +338,30 @@ export async function uploadDocument(
   console.log('📤 [UploadService] EmpresaId:', empresaId);
   console.log('📤 [UploadService] UploadId:', uploadId);
 
-  if (!file) {
-    throw new Error('No se ha proporcionado ningún archivo.');
-  }
+  if (!file)      throw new Error('No se ha proporcionado ningún archivo.');
+  if (!empresaId) throw new Error('No se ha proporcionado el ID de empresa.');
+  if (!uploadId)  throw new Error('No se ha proporcionado el Upload ID.');
 
-  if (!empresaId) {
-    throw new Error('No se ha proporcionado el ID de empresa.');
-  }
-
-  if (!uploadId) {
-    throw new Error('No se ha proporcionado el Upload ID.');
-  }
-
-  const originalFileName = file.name;
-
-  // 🔥 NORMALIZAR NOMBRE DE ARCHIVO (quitar espacios)
+  const originalFileName  = file.name;
   const normalizedFileName = normalizeFileName(originalFileName);
 
-  // Loguear solo si hubo cambios
   if (normalizedFileName !== originalFileName) {
     console.log(`📤 [UploadService] Nombre normalizado: "${originalFileName}" → "${normalizedFileName}"`);
   }
 
-  const fileSize = file.size;
-  const fileMimeType = file.type;
-  const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
+  const fileSize          = file.size;
+  const fileMimeType      = file.type;
+  const fileExtension     = normalizedFileName.toLowerCase().split('.').pop() || '';
   const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
 
-  console.log(`📤 [UploadService] MIME Type: ${fileMimeType}`);
-  console.log(`📤 [UploadService] Extensión: ${fileExtension}`);
-  console.log(`📤 [UploadService] Tipo normalizado: ${normalizedFileType}`);
+
+  console.log(`📤 [UploadService] MIME Type: ${fileMimeType}, Extensión: ${fileExtension}, Tipo: ${normalizedFileType}`);
 
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
   const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
-
     console.error('Missing environment variables for upload service.');
     throw new Error('Configuración del servidor incompleta. Contacte al administrador.');
   }
@@ -359,125 +370,105 @@ export async function uploadDocument(
     console.log(`[${normalizedFileName}] Leyendo archivo (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = await file.arrayBuffer();
 
-    console.log(`[${normalizedFileName}] Calculando hash SHA-256...`);
     const mainFileHash = await calculateFileHash(fileBuffer);
     console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);
 
-    console.log(`[${normalizedFileName}] Consultando CIF, Recargo y Nombre para empresaId: ${empresaId}`);
     const empresaPrisma = await prisma.empresas.findUnique({
       where: { id: BigInt(empresaId) },
-      select: { CIF: true, recargo: true, nombre_de_empresa: true }
+      select: { CIF: true, recargo: true, nombre_de_empresa: true },
     });
+    if (!empresaPrisma) throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
 
-    if (!empresaPrisma) {
-      throw new Error(`No se encontró la empresa con ID: ${empresaId}`);
-    }
-
-    const cif = empresaPrisma.CIF || '';
-    const recargo = !!empresaPrisma.recargo; // Convertir a booleano
+    const cif         = empresaPrisma.CIF || '';
+    const recargo     = !!empresaPrisma.recargo;
     const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
     console.log(`[${normalizedFileName}] Empresa: ${nombreEmpresa}, CIF: ${cif}, Recargo: ${recargo}`);
 
-    let individualFileHashes: { [fileName: string]: string } = {};
-    let individualUploadIds: { [fileName: string]: string } = {};
+    let individualFileHashes: Record<string, string> = {};
+    let individualUploadIds: Record<string, string>  = {};
+    let individualFilePaths: Record<string, string>  = {};
+    let individualPublicUrls: Record<string, string> = {};
     let isCompressedFile = false;
 
-    // 🔥 PROCESAR ARCHIVOS COMPRIMIDOS (ZIP O RAR)
+    // Crear el cliente S3 una sola vez (reutilizado para el padre y los hijos)
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
+    const s3Client = new S3Client({
+      region: process.env.MINIO_REGION || 'us-east-1',
+      endpoint: MINIO_ENDPOINT,
+      credentials: { accessKeyId: MINIO_ACCESS_KEY, secretAccessKey: MINIO_SECRET_KEY },
+      forcePathStyle: true,
+    });
+
+    // ── ZIP ────────────────────────────────────────────────────────────────────
     if (normalizedFileType === 'zip') {
       isCompressedFile = true;
       console.log(`[${normalizedFileName}] 📦 Detectado archivo ZIP`);
-
       try {
-        // 🔥 extractAndHashZipFiles ya normaliza los nombres internamente
-        individualFileHashes = await extractAndHashZipFiles(fileBuffer);
-        console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes`);
+        const result = await extractAndUploadZipChildren(
+          fileBuffer, uploadId, s3Client, MINIO_BUCKET_NAME, MINIO_ENDPOINT
+        );
+        individualFileHashes = result.fileHashes;
+        individualUploadIds  = result.uploadIds;
+        individualFilePaths  = result.filePaths;
+        individualPublicUrls = result.publicUrls;
+        console.log(`[${normalizedFileName}] ✅ ${Object.keys(individualFileHashes).length} hijos extraídos y subidos`);
 
-        for (const fileName of Object.keys(individualFileHashes)) {
-          const childUploadId = `${uploadId}_file_${crypto.randomBytes(4).toString('hex')}`;
-          individualUploadIds[fileName] = childUploadId;
-
-          await createActivityRecord(
-            childUploadId,
-            empresaId,
-            fileName, // Ya está normalizado
-            fileName.split('.').pop() || 'unknown',
-            uploadId
-          );
-
-          console.log(`  [ZIP] ${fileName} → UploadId: ${childUploadId}`);
+        for (const [childName, childId] of Object.entries(individualUploadIds)) {
+          await createActivityRecord(childId, empresaId, childName, childName.split('.').pop() || 'unknown', uploadId);
         }
-
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-
-      } catch (zipError: any) {
-        console.error(`[${normalizedFileName}] ❌ Error al extraer ZIP:`, zipError.message);
-
-        const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-        await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-        await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-
-        throw new Error(userFriendlyMessage);
+      } catch (err: any) {
+        console.error(`[${normalizedFileName}] ❌ Error ZIP:`, err.message);
+        const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+        await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
+        await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
+        throw new Error(msg);
       }
 
+    // ── RAR ───────────────────────────────────────────────────────────────────
     } else if (normalizedFileType === 'rar') {
       isCompressedFile = true;
       console.log(`[${normalizedFileName}] 📦 Detectado archivo RAR`);
-
       try {
-        // 🔥 extractAndHashRarFiles ya normaliza los nombres internamente
-        const { fileHashes, uploadIds } = await extractAndHashRarFiles(fileBuffer, uploadId);
-        individualFileHashes = fileHashes;
-        individualUploadIds = uploadIds;
+        const result = await extractAndUploadRarChildren(
+          fileBuffer, uploadId, s3Client, MINIO_BUCKET_NAME, MINIO_ENDPOINT
+        );
+        individualFileHashes = result.fileHashes;
+        individualUploadIds  = result.uploadIds;
+        individualFilePaths  = result.filePaths;
+        individualPublicUrls = result.publicUrls;
+        console.log(`[${normalizedFileName}] ✅ ${Object.keys(individualFileHashes).length} hijos extraídos y subidos`);
 
-        console.log(`[${normalizedFileName}] ✅ Calculados ${Object.keys(individualFileHashes).length} hashes (RAR)`);
-
-        for (const fileName of Object.keys(individualFileHashes)) {
-          const childUploadId = individualUploadIds[fileName];
-          await createActivityRecord(
-            childUploadId,
-            empresaId,
-            fileName, // Ya está normalizado
-            fileName.split('.').pop() || 'unknown',
-            uploadId
-          );
-
-          console.log(`  [RAR] ${fileName} → UploadId: ${childUploadId}`);
+        for (const [childName, childId] of Object.entries(individualUploadIds)) {
+          await createActivityRecord(childId, empresaId, childName, childName.split('.').pop() || 'unknown', uploadId);
         }
-
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-
-      } catch (rarError: any) {
-        console.error(`[${normalizedFileName}] ❌ Error al extraer RAR:`, rarError.message);
-
-        const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-        await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-        await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-
-        throw new Error(userFriendlyMessage);
+      } catch (err: any) {
+        console.error(`[${normalizedFileName}] ❌ Error RAR:`, err.message);
+        const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+        await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
+        await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
+        throw new Error(msg);
       }
 
+    // ── PDF / Imagen / Otros ──────────────────────────────────────────────────
     } else {
-      // ARCHIVOS NORMALES (NO COMPRIMIDOS)
       console.log(`[${normalizedFileName}] Verificando duplicados...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
-
       if (duplicateRecord) {
         console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
-
         await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-
         await markUploadAsFailed(
           uploadId,
           `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`,
           'Verificación de duplicados'
         );
-
         await notifyFrontendError(
           uploadId,
           `❌ Archivo duplicado (subido el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')})`,
           'Duplicado detectado'
         );
-
         return {
           success: false,
           isDuplicate: true,
@@ -486,20 +477,15 @@ export async function uploadDocument(
           duplicateInfo: {
             fileName: duplicateRecord.file_name,
             uploadedAt: new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR'),
-            empresaId: empresaId,
+            empresaId,
           },
         };
       }
-
       console.log(`[${normalizedFileName}] ✓ No hay duplicados`);
       await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
     }
 
-    // 🔥 SUBIR A MINIO CON NOMBRE NORMALIZADO
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
-
-    // 🔥 USAR normalizedFileName en lugar de originalFileName
+    // ── Subir archivo padre a MinIO ───────────────────────────────────────────
     const fileNameWithoutExt = normalizedFileName.includes('.')
       ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.'))
       : normalizedFileName;
@@ -511,16 +497,6 @@ export async function uploadDocument(
     const filePath = `archivos/${uniqueFileName}`;
 
     console.log(`[${normalizedFileName}] Subiendo a MinIO: ${filePath}`);
-    const s3Client = new S3Client({
-      region: process.env.MINIO_REGION || "us-east-1",
-      endpoint: MINIO_ENDPOINT,
-      credentials: {
-        accessKeyId: MINIO_ACCESS_KEY,
-        secretAccessKey: MINIO_SECRET_KEY,
-      },
-      forcePathStyle: true,
-    });
-
     await s3Client.send(new PutObjectCommand({
       Bucket: MINIO_BUCKET_NAME,
       Key: filePath,
@@ -530,84 +506,70 @@ export async function uploadDocument(
     }));
 
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
-    console.log(`[${normalizedFileName}] ✅ Subida a MinIO completada`);
-    console.log(`[${normalizedFileName}] 🔗 URL: ${publicUrl}`);
+    console.log(`[${normalizedFileName}] ✅ Subida completada → ${publicUrl}`);
 
-    // 🆕 Guardar file_path, file_hash y cif para que el sistema de reintentos pueda reconstruir el payload
+    // Guardar datos de reintento
     try {
       await connection.query(
-        `UPDATE ${dbName}.actividad 
-         SET file_path = ?, file_hash = ?, cif = ?
-         WHERE upload_id = ?`,
+        `UPDATE ${dbName}.actividad SET file_path = ?, file_hash = ?, cif = ? WHERE upload_id = ?`,
         [filePath, mainFileHash, cif || null, uploadId]
       );
-      console.log(`[${normalizedFileName}] ✅ Datos de reintento guardados (file_path, file_hash, cif)`);
     } catch (updateErr) {
       console.warn(`[${normalizedFileName}] ⚠️ No se pudieron guardar datos de reintento:`, updateErr);
     }
 
-    // 🔥 PREPARAR JOB DATA PARA BULLMQ (con nombre normalizado)
+    // ── Armar y encolar job en BullMQ ─────────────────────────────────────────
     const jobData: IngestionJobData = {
       text: filePath,
-      empresaId: empresaId,
-      cif: cif,
-      nombreEmpresa: nombreEmpresa, 
-      recargo: recargo,
+      empresaId,
+      cif,
+      nombreEmpresa,
+      recargo,
       fileHash: mainFileHash,
-      uploadId: uploadId,
+      uploadId,
       parentUploadId: uploadId,
-      fileName: normalizedFileName, 
-      originalFileName: originalFileName,
-      fileSize: fileSize,
-      publicUrl: publicUrl,
-      isCompressedFile: isCompressedFile,
+      fileName: normalizedFileName,
+      originalFileName,
+      fileSize,
+      publicUrl,
+      isCompressedFile,
       mimeType: fileMimeType,
-      normalizedFileType: normalizedFileType,
-      fileExtension: fileExtension,
+      normalizedFileType,
+      fileExtension,
       fechaSubida: now.toISOString(),
-      origen: 'dashboard'
+      origen: 'dashboard',
     };
 
-    if ((normalizedFileType === 'zip' || normalizedFileType === 'rar') && Object.keys(individualFileHashes).length > 0) {
+    if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
       jobData.individualFileHashes = individualFileHashes;
-      jobData.individualUploadIds = individualUploadIds;
-      console.log(`[${normalizedFileName}] 📦 Enviando ${Object.keys(individualFileHashes).length} archivos individuales`);
+      jobData.individualUploadIds  = individualUploadIds;
+      jobData.individualFilePaths  = individualFilePaths;
+      jobData.individualPublicUrls = individualPublicUrls;
+      console.log(`[${normalizedFileName}] 📦 ${Object.keys(individualFileHashes).length} hijos listos para encolar`);
     }
 
-    // 🔥 ENCOLAR EN BULLMQ EN LUGAR DE LLAMAR A N8N
-    console.log(`[${normalizedFileName}] 📡 Encolando job en ingestionQueue...`);
-    console.log(`[${normalizedFileName}] 🆔 UploadId: ${uploadId}`);
-
+    console.log(`[${normalizedFileName}] 📡 Encolando en BullMQ...`);
     try {
-      await ingestionQueue.add(
-        `ingest-${uploadId}`,
-        jobData,
-        { jobId: `ingest-${uploadId}` }
-      );
-      console.log(`✅ [${normalizedFileName}] Job encolado exitosamente en BullMQ.`);
+      await ingestionQueue.add(`ingest-${uploadId}`, jobData, { jobId: `ingest-${uploadId}` });
+      console.log(`✅ [${normalizedFileName}] Job encolado exitosamente.`);
     } catch (queueError: any) {
-      console.error(`❌ [${normalizedFileName}] Error al encolar en BullMQ:`, queueError.message);
-      const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-      throw new Error(userFriendlyMessage);
+      console.error(`❌ [${normalizedFileName}] Error al encolar:`, queueError.message);
+      const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
+      await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
+      await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
+      throw new Error(msg);
     }
 
     try {
       const { logAuditAction } = await import('./audit-service');
       const { getCurrentUser } = await import('./user-service');
       const user = await getCurrentUser();
-      
       await logAuditAction({
         empresaId: parseInt(empresaId, 10),
         accion: 'SUBIDA',
         usuarioEmail: user?.email || 'API/Desconocido',
         userId: user?.id,
-        detalle: { 
-          fileName: normalizedFileName, 
-          fileHash: mainFileHash,
-          uploadId: uploadId 
-        }
+        detalle: { fileName: normalizedFileName, fileHash: mainFileHash, uploadId },
       });
     } catch (auditErr) {
       console.warn('⚠️ Error registrando auditoría SUBIDA:', auditErr);
@@ -622,27 +584,20 @@ export async function uploadDocument(
     };
 
   } catch (error: any) {
-    console.error(`❌ [${normalizedFileName}] Error general en uploadDocument:`, error.message);
-    console.error(`❌ [${normalizedFileName}] Stack trace:`, error.stack);
-
-    // 🔥 MENSAJE GENÉRICO PARA EL USUARIO (sin detalles técnicos)
-    const userFriendlyMessage = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-
+    console.error(`❌ [${normalizedFileName}] Error general:`, error.message);
+    const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
     if (uploadId) {
-      console.log(`❌ Marcando como fallido usando uploadId del scope: ${uploadId}`);
-      console.log(`❌ Error interno: ${error.message}`);
-
-      await markUploadAsFailed(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
-      await notifyFrontendError(uploadId, userFriendlyMessage, 'Procesamiento del archivo');
+      await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
+      await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
     }
-
-    // 🔥 LANZAR ERROR GENÉRICO AL CLIENTE
-    throw new Error(userFriendlyMessage);
+    throw new Error(msg);
   }
 }
 
+// ─── Upload desde API externa ──────────────────────────────────────────────────
+
 /**
- * Función exclusiva para la API externa. 
+ * Función exclusiva para la API externa (n8n / webhook).
  * Es asíncrona y no interfiere con la UI.
  */
 export async function uploadDocumentFromApi(
@@ -662,19 +617,17 @@ export async function uploadDocumentFromApi(
     return;
   }
 
-  let normalizedFileName = `api_upload_${Date.now()}.pdf`; // default
+  let normalizedFileName = `api_upload_${Date.now()}.pdf`;
   let fileBuffer: ArrayBuffer;
   let fileMimeType = 'application/pdf';
 
   try {
-    console.log(`📡 [UploadAPI] Descargando archivo desde URL: ${fileUrl}`);
+    console.log(`📡 [UploadAPI] Descargando desde: ${fileUrl}`);
     const response = await fetch(fileUrl);
-    if (!response.ok) {
-      throw new Error(`Error HTTP al descargar: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`Error HTTP al descargar: ${response.status}`);
+
     fileBuffer = await response.arrayBuffer();
-    
+
     const contentDisposition = response.headers.get('content-disposition');
     if (contentDisposition && contentDisposition.includes('filename=')) {
       let extracted = contentDisposition.split('filename=')[1];
@@ -682,44 +635,41 @@ export async function uploadDocumentFromApi(
       normalizedFileName = normalizeFileName(extracted.replace(/["']/g, ''));
     } else {
       const urlObj = new URL(fileUrl);
-      const pathname = urlObj.pathname;
-      const parts = pathname.split('/');
+      const parts = urlObj.pathname.split('/');
       const lastPart = parts[parts.length - 1];
       if (lastPart && lastPart.includes('.')) {
         normalizedFileName = normalizeFileName(decodeURIComponent(lastPart));
       }
     }
-    
+
     fileMimeType = response.headers.get('content-type') || 'application/pdf';
   } catch (err: any) {
-    console.error(`❌ [UploadAPI] Error al descargar archivo:`, err.message);
+    console.error(`❌ [UploadAPI] Error al descargar:`, err.message);
     await markUploadAsFailed(uploadId, 'No se pudo descargar el archivo desde la URL proporcionada.', 'Descarga de archivo');
     return;
   }
 
-  const fileSize = fileBuffer.byteLength;
-  const fileExtension = normalizedFileName.toLowerCase().split('.').pop();
+  const fileSize          = fileBuffer.byteLength;
+  const fileExtension     = normalizedFileName.toLowerCase().split('.').pop() || '';
   const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
+
 
   try {
     const mainFileHash = await calculateFileHash(fileBuffer);
-    
+
     const empresaPrisma = await prisma.empresas.findUnique({
       where: { id: BigInt(empresaId) },
-      select: { CIF: true, recargo: true, nombre_de_empresa: true }
+      select: { CIF: true, recargo: true, nombre_de_empresa: true },
     });
+    if (!empresaPrisma) throw new Error(`Empresa no encontrada: ${empresaId}`);
 
-    if (!empresaPrisma) {
-      throw new Error(`Empresa no encontrada: ${empresaId}`);
-    }
-
-    const cif = empresaPrisma.CIF || '';
-    const recargo = !!empresaPrisma.recargo;
+    const cif         = empresaPrisma.CIF || '';
+    const recargo     = !!empresaPrisma.recargo;
     const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
 
     const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
     if (duplicateRecord) {
-      console.warn(`❌ [UploadAPI] DUPLICADO DETECTADO: ${normalizedFileName}`);
+      console.warn(`❌ [UploadAPI] DUPLICADO: ${normalizedFileName}`);
       await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
       await markUploadAsFailed(
         uploadId,
@@ -733,19 +683,16 @@ export async function uploadDocumentFromApi(
 
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
-    
+
     const fileNameWithoutExt = normalizedFileName.includes('.') ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) : normalizedFileName;
     const fileExt = normalizedFileName.includes('.') ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) : '';
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
     const filePath = `archivos/${uniqueFileName}`;
 
     const s3Client = new S3Client({
-      region: process.env.MINIO_REGION || "us-east-1",
+      region: process.env.MINIO_REGION || 'us-east-1',
       endpoint: MINIO_ENDPOINT,
-      credentials: {
-        accessKeyId: MINIO_ACCESS_KEY,
-        secretAccessKey: MINIO_SECRET_KEY,
-      },
+      credentials: { accessKeyId: MINIO_ACCESS_KEY, secretAccessKey: MINIO_SECRET_KEY },
       forcePathStyle: true,
     });
 
@@ -758,7 +705,7 @@ export async function uploadDocumentFromApi(
     }));
 
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
-    
+
     await connection.query(
       `UPDATE ${dbName}.actividad SET file_path = ?, file_hash = ?, cif = ? WHERE upload_id = ?`,
       [filePath, mainFileHash, cif || null, uploadId]
@@ -766,30 +713,28 @@ export async function uploadDocumentFromApi(
 
     const jobData: IngestionJobData = {
       text: filePath,
-      empresaId: empresaId,
-      cif: cif,
-      nombreEmpresa: nombreEmpresa,
-      recargo: recargo,
+      empresaId,
+      cif,
+      nombreEmpresa,
+      recargo,
       fileHash: mainFileHash,
-      uploadId: uploadId,
+      uploadId,
       parentUploadId: uploadId,
       fileName: normalizedFileName,
       originalFileName: normalizedFileName,
-      fileSize: fileSize,
-      publicUrl: publicUrl,
+      fileSize,
+      publicUrl,
       isCompressedFile: false,
       mimeType: fileMimeType,
-      normalizedFileType: normalizedFileType,
-      fileExtension: fileExtension,
+      normalizedFileType,
+      fileExtension,
       fechaSubida: now.toISOString(),
-      origen: 'correo'
+      origen: 'correo',
     };
 
-    console.log(`📡 [UploadAPI] Encolando ${normalizedFileName} en BullMQ...`);
-    
-    // Lo lanzamos sin esperar respuesta asíncronamente
-    ingestionQueue.add(`ingest-${uploadId}`, jobData, { jobId: `ingest-${uploadId}` }).catch(err => {
-      console.error(`❌ [UploadAPI] Error al encolar ${normalizedFileName} en BullMQ:`, err);
+    console.log(`📡 [UploadAPI] Encolando ${normalizedFileName}...`);
+    ingestionQueue.add(`ingest-${uploadId}`, jobData, { jobId: `ingest-${uploadId}` }).catch((err) => {
+      console.error(`❌ [UploadAPI] Error al encolar ${normalizedFileName}:`, err);
     });
   } catch (error: any) {
     console.error(`❌ [UploadAPI] Error general procesando ${normalizedFileName}:`, error.message);

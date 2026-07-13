@@ -10,34 +10,38 @@
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface Impuesto {
-  TIPO_IVA: string;
-  PORCENTAJE_IVA?: number;
-  BASE_IMPONIBLE?: number;
-  CUOTA_IVA: number;
+  tipo_iva: string;
+  porcentaje?: number;
+  porcentaje_iva?: number;
+  base_imponible?: number;
+  cuota_iva: number;
 }
 
 export interface EmpresaDoc {
-  NOMBRE?: string;
-  DIRECCION?: string;
-  CIF?: string;
-  TELEFONO?: string;
-  EMAIL?: string;
+  nombre?: string;
+  direccion?: string;
+  cif?: string;
+  telefono?: string;
+  email?: string;
 }
 
 export interface DocumentoGemini {
-  TIPO_DOCUMENTO?: string;
-  NUMERO_DOCUMENTO?: string;
-  FECHA_EMISION?: string;
-  FECHA_VENCIMIENTO?: string;
-  IMPORTE_TOTAL?: number;
-  IMPORTE_SIN_IMPUESTOS?: number;
-  MONEDA?: string;
-  FORMA_PAGO?: string;
-  OBSERVACIONES?: string;
-  ES_ABONO?: boolean;
-  EMPRESA_EMISORA?: EmpresaDoc;
-  EMPRESA_RECEPTORA?: EmpresaDoc;
-  DESGLOSE_IVA?: Impuesto[];
+  tipo_documento?: string;
+  numero_documento?: string;
+  fecha_emision?: string;
+  fecha_vencimiento?: string;
+  importe_total?: number;
+  importe_sin_impuestos?: number;
+  importe_sin_iva?: number;
+  moneda?: string;
+  forma_pago?: string;
+  observaciones?: string;
+  es_abono?: boolean;
+  empresa_emisora?: EmpresaDoc;
+  empresa_receptora?: EmpresaDoc;
+  cliente?: EmpresaDoc;
+  desglose_iva?: Impuesto[];
+  totales_por_impuesto?: Impuesto[];
   [key: string]: unknown;
 }
 
@@ -105,16 +109,14 @@ export class GeminiParseError extends Error {
 
 // ─── 2. validarRetenciones ────────────────────────────────────────────────────
 /**
- * Fuerza las retenciones a ser SIEMPRE negativas y normaliza su TIPO_IVA.
- *
- * Origen: Code10, Code2, Code in JavaScript (múltiples carriles, misma lógica).
+ * Fuerza las retenciones a ser SIEMPRE negativas y normaliza su tipo_iva.
  *
  * Regla de negocio: IRPF, RETENCION, RETENCIÓN, o cualquier tipo que contenga
- * "RET" se trata como retención → CUOTA_IVA siempre negativa.
+ * "RET" se trata como retención → cuota_iva siempre negativa.
  */
 export function validateRetenciones(impuestos: Impuesto[]): Impuesto[] {
   return impuestos.map((impuesto) => {
-    const tipo = String(impuesto.TIPO_IVA ?? '').toUpperCase();
+    const tipo = String(impuesto.tipo_iva ?? '').toUpperCase();
     const esRetencion =
       tipo === 'RETENCION' ||
       tipo === 'RETENCIÓN' ||
@@ -124,37 +126,32 @@ export function validateRetenciones(impuestos: Impuesto[]): Impuesto[] {
     if (esRetencion) {
       return {
         ...impuesto,
-        TIPO_IVA: 'RETENCION', // Normalizar siempre a este valor
-        CUOTA_IVA: -Math.abs(impuesto.CUOTA_IVA), // Forzar negativo
+        tipo_iva: 'RETENCION', // Normalizar siempre a este valor
+        cuota_iva: -Math.abs(impuesto.cuota_iva), // Forzar negativo
       };
     }
     return impuesto;
   });
 }
 
-// ─── 3. toUpperCaseDeep ───────────────────────────────────────────────────────
+// ─── 3. toLowerCaseKeysDeep ───────────────────────────────────────────────────────
 /**
- * Convierte todos los valores string de un objeto (de forma recursiva)
- * a MAYÚSCULAS. Arrays, números, booleanos y null se preservan sin cambio.
- *
- * Origen: Code10 y otros Code nodes — se aplica al objeto completo de
- * Gemini antes de pasarlo a la query SQL.
+ * Convierte todas las CLAVES de un objeto (de forma recursiva)
+ * a minúsculas. Arrays y valores se preservan.
+ * Esto asegura que tanto el JSON legacy (UPPERCASE) como el nuevo (lowercase)
+ * se procesen con la misma estructura en DB Writer.
  */
-export function toUpperCaseDeep<T>(obj: T): T {
-  if (typeof obj === 'string') {
-    return obj.toUpperCase() as unknown as T;
-  }
+export function toLowerCaseKeysDeep<T>(obj: T): T {
   if (Array.isArray(obj)) {
-    return obj.map(toUpperCaseDeep) as unknown as T;
+    return obj.map(toLowerCaseKeysDeep) as unknown as T;
   }
   if (obj !== null && typeof obj === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      result[key] = toUpperCaseDeep(value);
+      result[key.toLowerCase()] = toLowerCaseKeysDeep(value);
     }
     return result as T;
   }
-  // Numbers, booleans, null → sin cambio
   return obj;
 }
 
@@ -233,7 +230,7 @@ export function validateMathBalance(
   impuestos: Impuesto[],
   tolerancia = 2
 ): ValidationResult {
-  const sumaCuotas = impuestos.reduce((acc, i) => acc + (i.CUOTA_IVA ?? 0), 0);
+  const sumaCuotas = impuestos.reduce((acc, i) => acc + (i.cuota_iva ?? 0), 0);
   const totalCalculado = importeSinImpuestos + sumaCuotas;
   const diferencia = Math.abs(importeTotal - totalCalculado);
 
@@ -267,21 +264,25 @@ export function computeProgressForMultiple(
 /**
  * Orquesta todas las normalizaciones sobre el objeto de Gemini.
  * Aplica en orden:
- *   1. validateRetenciones (forzar negativas)
- *   2. toUpperCaseDeep (todo en mayúsculas)
+ *   1. toLowerCaseKeysDeep (todo en minúsculas en las CLAVES para estandarizar)
+ *   2. validateRetenciones (forzar negativas)
  *
  * No modifica el objeto original.
  */
 export function normalizeDocumentoFromGemini(doc: DocumentoGemini): DocumentoGemini {
-  const normalized = { ...doc };
+  // Primero convertimos todas las CLAVES a minúsculas
+  let normalized = toLowerCaseKeysDeep(doc);
 
-  // Normalizar retenciones ANTES de toUpperCase
-  // (toUpperCase cambiaría 'RETENCION' a 'RETENCION' — idempotente, pero
-  //  validarRetenciones necesita el campo CUOTA_IVA numérico intacto)
-  if (normalized.DESGLOSE_IVA && Array.isArray(normalized.DESGLOSE_IVA)) {
-    normalized.DESGLOSE_IVA = validateRetenciones(normalized.DESGLOSE_IVA);
+  // Normalizar retenciones en DESGLOSE_IVA (legacy) o totales_por_impuesto (nuevo)
+  if (normalized.desglose_iva && Array.isArray(normalized.desglose_iva)) {
+    normalized.desglose_iva = validateRetenciones(normalized.desglose_iva as Impuesto[]);
+  }
+  if (normalized.totales_por_impuesto && Array.isArray(normalized.totales_por_impuesto)) {
+    normalized.totales_por_impuesto = validateRetenciones(normalized.totales_por_impuesto as Impuesto[]);
   }
 
-  // Convertir todo a mayúsculas (igual que n8n antes de meter en la query)
-  return toUpperCaseDeep(normalized);
+  // Soporte para campos de No Facturables (valor_referencia_no_fiscal, concepto_valor_referencia)
+  // Aseguramos que si están presentes a nivel raíz, permanezcan en el objeto para ser mapeados en datos_extra
+  
+  return normalized;
 }

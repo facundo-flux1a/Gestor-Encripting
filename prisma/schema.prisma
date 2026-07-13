@@ -3,9 +3,8 @@ generator client {
   engineType = "library"
 }
 
-generator fieldEncryptionMigrations {
-  provider = "prisma-field-encryption"
-}
+
+
 
 datasource db {
   provider = "mysql"

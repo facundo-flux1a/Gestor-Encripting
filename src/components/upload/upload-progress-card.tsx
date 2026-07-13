@@ -34,6 +34,7 @@ interface UploadProgressData {
     error?: string;
     message?: string;
   };
+  etaSeconds?: number; // 🆕
 }
 
 interface UploadItem {
@@ -334,9 +335,26 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                   const isLastFailure = (normalizedStatus === 'fallido' || normalizedStatus === 'failed' || normalizedStatus === 'error') && (data.retryCount ?? 0) >= 3;
                   const isPermanentFail = normalizedStatus === 'permanent-fail';
                   
-                  // 🔥 SMART TIMEOUT: Si lleva más de 3 minutos (180s) procesando, delegar al Sidebar
-                  const isLongRunning = (Date.now() - upload.timestamp) > 180000;
+                  // 🔥 SMART TIMEOUT: Si lleva más de 5 minutos (300s) procesando, delegar al Sidebar
+                  const elapsed = Date.now() - upload.timestamp;
+                  const DELEGATE_MS = 300000; // 5 minutos
+                  const WARN_MS = 270000; // 4m 30s
+
+                  const isLongRunning = elapsed > DELEGATE_MS;
+                  const isAboutToDelegate = !isLongRunning && elapsed > WARN_MS;
                   const shouldDelegateToSidebar = isLongRunning && !isFinished;
+
+                  // ⚠️ PRE-AVISO: 30s antes del timeout, cambiar el mensaje
+                  if (isAboutToDelegate && !isFinished && current.connectionStatus === 'polling') {
+                    const prevMsg = current.progressData?.message || '';
+                    const warnMsg = '⏳ Este lote tomará un tiempo. Podrás seguir su progreso en "Subidas en proceso" (menú lateral).';
+                    if (prevMsg !== warnMsg) {
+                      current.progressData = {
+                        ...current.progressData,
+                        message: warnMsg
+                      };
+                    }
+                  }
 
                   if (shouldDelegateToSidebar && current.connectionStatus === 'polling') {
                     console.log('⏳ [Manager] Upload tardando mucho, delegando a Sidebar:', upload.uploadId);
@@ -344,7 +362,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
                     // Actualizar mensaje para avisar al usuario
                     current.progressData = {
                       ...current.progressData,
-                      message: 'El lote es grande y continuará en segundo plano. Progreso visible en la sección "Subidas en proceso" del menú lateral.'
+                      message: '✅ Procesando en segundo plano. Seguí el progreso en "Subidas en proceso" del menú lateral.'
                     };
                     current.connectionStatus = 'completed'; // Detener polling en este card
 
@@ -579,6 +597,11 @@ function UploadCard({
               <span className="truncate max-w-[70%]">{upload.progressData.step}</span>
               <span className="font-medium">{upload.progressData.progress}%</span>
             </div>
+            {upload.progressData.etaSeconds !== undefined && upload.progressData.etaSeconds > 0 && upload.progressData.status !== 'Completado' && upload.progressData.status !== 'completed' && (
+              <div className="text-xs text-violet-600 dark:text-violet-400 mt-1">
+                Tiempo estimado: ~{Math.ceil(upload.progressData.etaSeconds / 60)} min
+              </div>
+            )}
           </div>
 
           {/* 🆕 INDICADOR DE REINTENTOS */}

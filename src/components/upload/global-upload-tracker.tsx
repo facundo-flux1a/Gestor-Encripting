@@ -7,6 +7,7 @@ import { CloudUpload, FileText, Archive, ChevronDown, ChevronUp, Loader2, AlertC
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
+import { WorkerLogViewer } from '@/components/upload/worker-log-viewer';
 
 interface BatchUpload {
   id: string;
@@ -31,6 +32,7 @@ interface IndividualUpload {
 interface ActiveUploadsData {
   batches: BatchUpload[];
   individuals: IndividualUpload[];
+  etaSeconds?: number; // 🆕
 }
 
 export function GlobalUploadTracker() {
@@ -64,7 +66,16 @@ export function GlobalUploadTracker() {
   }, [selectedCompanyId]);
 
   if (!selectedCompanyId) return null;
-  if (data.batches.length === 0 && data.individuals.length === 0) return null;
+
+  // Si no hay uploads activos, mostramos solo el visor de logs (para debugging)
+  if (data.batches.length === 0 && data.individuals.length === 0) {
+    return (
+      <SidebarGroup className="px-2 mt-2 border-t pt-4">
+        {/* 🐛 DEBUG: Visor de logs */}
+        <WorkerLogViewer />
+      </SidebarGroup>
+    );
+  }
 
   return (
     <SidebarGroup className="px-2 mt-2 border-t pt-4">
@@ -72,6 +83,12 @@ export function GlobalUploadTracker() {
         <CloudUpload className="h-4 w-4 text-violet-500" />
         <span>Subidas en proceso</span>
       </SidebarGroupLabel>
+      {/* ETA global */}
+      {(data.etaSeconds ?? 0) > 0 && (
+        <p className={cn(state === 'collapsed' && 'sr-only', 'text-[10px] text-violet-500 px-1 mb-2 -mt-1')}>
+          Tiempo estimado: ~{Math.ceil((data.etaSeconds ?? 0) / 60)} min
+        </p>
+      )}
       <SidebarMenu className="space-y-2">
         {/* Lotes Masivos */}
         {data.batches.map(batch => {
@@ -162,6 +179,10 @@ export function GlobalUploadTracker() {
           </div>
         ))}
       </SidebarMenu>
+
+      {/* 🐛 DEBUG: Visor de logs de workers */}
+      <WorkerLogViewer />
+
     </SidebarGroup>
   );
 }

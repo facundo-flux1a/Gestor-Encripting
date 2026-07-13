@@ -76,8 +76,10 @@ export interface IngestionJobData {
   fechaSubida: string;       // ISO string
 
   // ── Hijos de ZIP/RAR (solo si isCompressedFile === true) ──────
-  individualFileHashes?: Record<string, string>;  // fileName → hash
-  individualUploadIds?: Record<string, string>;   // fileName → childUploadId
+  individualFileHashes?: Record<string, string>;   // fileName → hash
+  individualUploadIds?: Record<string, string>;    // fileName → childUploadId
+  individualFilePaths?: Record<string, string>;    // fileName → S3 path del hijo ya subido a MinIO
+  individualPublicUrls?: Record<string, string>;   // fileName → URL pública del hijo en MinIO
 
   // ── Origen ──────────────────────────────────────────────────
   origen: 'dashboard' | 'correo';
@@ -92,10 +94,11 @@ export interface IngestionJobData {
 // ─── Tipos de jobs de Gemini ──────────────────────────────────────────────────
 // El worker de ingesta pone estos jobs en geminiQueue después de clasificar.
 export type GeminiJobType =
-  | 'classify'           // Analista4/Analista33 — ¿facturable? ¿múltiple?
-  | 'paginate'           // Analista25/Analista30 — rangos de páginas por doc
-  | 'extract-facturable' // Analista/Analista8 — extractor completo con imagen ref
-  | 'extract-non-facturable'; // Analista32 — extractor no facturable
+  | 'classify'                // Analista4/Analista33 — ¿facturable? ¿múltiple?
+  | 'paginate'                // Analista25/Analista30 — rangos de páginas por doc
+  | 'extract-facturable'      // Analista/Analista8 — extractor completo
+  | 'extract-non-facturable'  // Analista32 — extractor no facturable
+  | 'extract-multiple-image'; // Imagen con múltiples facturas (sin paginación PDF)
 
 export interface GeminiJobData {
   type: GeminiJobType;

@@ -10,7 +10,7 @@ import {
   repairJSON,
   parseGeminiResponse,
   validateRetenciones,
-  toUpperCaseDeep,
+  toLowerCaseKeysDeep,
   normalizeCIF,
   detectTipoDocumento,
   validateMathBalance,
@@ -62,89 +62,82 @@ describe('parseGeminiResponse', () => {
 // ─── validateRetenciones ─────────────────────────────────────────────────────
 
 describe('validateRetenciones', () => {
-  it('fuerza CUOTA_IVA a negativo cuando TIPO_IVA es RETENCION', () => {
+  it('fuerza cuota_iva a negativo cuando tipo_iva es RETENCION', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'RETENCION', CUOTA_IVA: 150 }, // positivo → debe forzarse negativo
+      { tipo_iva: 'RETENCION', cuota_iva: 150 }, // positivo → debe forzarse negativo
     ];
     const result = validateRetenciones(impuestos);
-    expect(result[0].CUOTA_IVA).toBe(-150);
+    expect(result[0].cuota_iva).toBe(-150);
   });
 
-  it('fuerza CUOTA_IVA a negativo cuando TIPO_IVA es RETENCIÓN (con tilde)', () => {
+  it('fuerza cuota_iva a negativo cuando tipo_iva es RETENCIÓN (con tilde)', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'RETENCIÓN', CUOTA_IVA: 200 },
+      { tipo_iva: 'RETENCIÓN', cuota_iva: 200 },
     ];
-    expect(validateRetenciones(impuestos)[0].CUOTA_IVA).toBe(-200);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-200);
   });
 
-  it('fuerza CUOTA_IVA a negativo cuando TIPO_IVA es IRPF', () => {
+  it('fuerza cuota_iva a negativo cuando tipo_iva es IRPF', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'IRPF', CUOTA_IVA: 75.5 },
+      { tipo_iva: 'IRPF', cuota_iva: 75.5 },
     ];
-    expect(validateRetenciones(impuestos)[0].CUOTA_IVA).toBe(-75.5);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-75.5);
   });
 
-  it('fuerza CUOTA_IVA a negativo cuando TIPO_IVA contiene RET (partial match)', () => {
+  it('fuerza cuota_iva a negativo cuando tipo_iva es con RET (partial match)', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'RET. PROFESIONAL', CUOTA_IVA: 50 },
+      { tipo_iva: 'RET. PROFESIONAL', cuota_iva: 50 },
     ];
-    expect(validateRetenciones(impuestos)[0].CUOTA_IVA).toBe(-50);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-50);
   });
 
-  it('normaliza TIPO_IVA a "RETENCION" en todos los casos de retención', () => {
+  it('normaliza tipo_iva a "RETENCION" en todos los casos de retención', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'IRPF', CUOTA_IVA: 100 },
-      { TIPO_IVA: 'RETENCIÓN', CUOTA_IVA: 50 },
+      { tipo_iva: 'IRPF', cuota_iva: 100 },
+      { tipo_iva: 'RETENCIÓN', cuota_iva: 50 },
     ];
     const result = validateRetenciones(impuestos);
-    expect(result[0].TIPO_IVA).toBe('RETENCION');
-    expect(result[1].TIPO_IVA).toBe('RETENCION');
+    expect(result[0].tipo_iva).toBe('RETENCION');
+    expect(result[1].tipo_iva).toBe('RETENCION');
   });
 
   it('no modifica IVA normal (no retención)', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'IVA', CUOTA_IVA: 21 },
-      { TIPO_IVA: 'IVA_REDUCIDO', CUOTA_IVA: 10 },
+      { tipo_iva: 'IVA', cuota_iva: 21 },
+      { tipo_iva: 'IVA_REDUCIDO', cuota_iva: 10 },
     ];
     const result = validateRetenciones(impuestos);
-    expect(result[0].CUOTA_IVA).toBe(21);
-    expect(result[1].CUOTA_IVA).toBe(10);
+    expect(result[0].cuota_iva).toBe(21);
+    expect(result[1].cuota_iva).toBe(10);
   });
 
   it('no cambia una retención que ya era negativa', () => {
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'RETENCION', CUOTA_IVA: -150 }, // ya negativa
+      { tipo_iva: 'RETENCION', cuota_iva: -150 }, // ya negativa
     ];
-    expect(validateRetenciones(impuestos)[0].CUOTA_IVA).toBe(-150);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-150);
   });
 });
 
-// ─── toUpperCaseDeep ─────────────────────────────────────────────────────────
+// ─── toLowerCaseKeysDeep ─────────────────────────────────────────────────────
 
-describe('toUpperCaseDeep', () => {
-  it('convierte strings a mayúsculas', () => {
-    expect(toUpperCaseDeep('hola')).toBe('HOLA');
+describe('toLowerCaseKeysDeep', () => {
+  it('no modifica strings a nivel raíz', () => {
+    expect(toLowerCaseKeysDeep('hola')).toBe('hola');
   });
 
-  it('convierte strings en objetos anidados', () => {
-    const input = { nombre: 'servicios martinez', cif: 'b12345678' };
-    expect(toUpperCaseDeep(input)).toEqual({ nombre: 'SERVICIOS MARTINEZ', cif: 'B12345678' });
+  it('convierte claves a minúsculas en objetos anidados', () => {
+    const input = { NOMBRE: 'servicios martinez', CIF: 'b12345678' };
+    expect(toLowerCaseKeysDeep(input)).toEqual({ nombre: 'servicios martinez', cif: 'b12345678' });
   });
 
-  it('convierte strings en arrays', () => {
-    expect(toUpperCaseDeep(['hola', 'mundo'])).toEqual(['HOLA', 'MUNDO']);
+  it('procesa arrays recursivamente', () => {
+    expect(toLowerCaseKeysDeep([{ A: 1 }, { B: 2 }])).toEqual([{ a: 1 }, { b: 2 }]);
   });
 
-  it('preserva números sin cambio', () => {
-    expect(toUpperCaseDeep({ importe: 121.00 })).toEqual({ importe: 121.00 });
-  });
-
-  it('preserva booleanos sin cambio', () => {
-    expect(toUpperCaseDeep({ es_abono: true })).toEqual({ es_abono: true });
-  });
-
-  it('preserva null sin cambio', () => {
-    expect(toUpperCaseDeep({ campo: null })).toEqual({ campo: null });
+  it('preserva tipos primitivos', () => {
+    expect(toLowerCaseKeysDeep({ IMPORTE: 121.00, ES_ABONO: true, CAMPO: null }))
+      .toEqual({ importe: 121.00, es_abono: true, campo: null });
   });
 
   it('convierte objeto complejo de Gemini correctamente', () => {
@@ -153,11 +146,11 @@ describe('toUpperCaseDeep', () => {
       EMPRESA_EMISORA: { NOMBRE: 'servicios s.l.', CIF: 'b12345678' },
       DESGLOSE_IVA: [{ TIPO_IVA: 'iva', CUOTA_IVA: 21 }],
     };
-    const result = toUpperCaseDeep(input);
-    expect(result.TIPO_DOCUMENTO).toBe('FACTURA RECIBIDA');
-    expect((result.EMPRESA_EMISORA as any).NOMBRE).toBe('SERVICIOS S.L.');
-    expect((result.DESGLOSE_IVA as any)[0].TIPO_IVA).toBe('IVA');
-    expect((result.DESGLOSE_IVA as any)[0].CUOTA_IVA).toBe(21); // número sin cambio
+    const result: any = toLowerCaseKeysDeep(input);
+    expect(result.tipo_documento).toBe('factura recibida');
+    expect(result.empresa_emisora.nombre).toBe('servicios s.l.');
+    expect(result.desglose_iva[0].tipo_iva).toBe('iva');
+    expect(result.desglose_iva[0].cuota_iva).toBe(21);
   });
 });
 
@@ -242,14 +235,14 @@ describe('detectTipoDocumento', () => {
 describe('validateMathBalance', () => {
   it('valida un documento que cuadra exactamente', () => {
     // base=100, IVA=21 → total=121
-    const impuestos: Impuesto[] = [{ TIPO_IVA: 'IVA', CUOTA_IVA: 21 }];
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 21 }];
     const result = validateMathBalance(121, 100, impuestos);
     expect(result.ok).toBe(true);
     expect(result.diferencia).toBe(0);
   });
 
   it('valida con diferencia dentro de la tolerancia de 2€', () => {
-    const impuestos: Impuesto[] = [{ TIPO_IVA: 'IVA', CUOTA_IVA: 21 }];
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 21 }];
     // total=122.5 pero debería ser 121 → diferencia 1.5€ < 2€ → OK
     const result = validateMathBalance(122.5, 100, impuestos);
     expect(result.ok).toBe(true);
@@ -257,7 +250,7 @@ describe('validateMathBalance', () => {
   });
 
   it('falla con diferencia fuera de tolerancia', () => {
-    const impuestos: Impuesto[] = [{ TIPO_IVA: 'IVA', CUOTA_IVA: 21 }];
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 21 }];
     // total=125 pero debería ser 121 → diferencia 4€ > 2€ → FAIL
     const result = validateMathBalance(125, 100, impuestos);
     expect(result.ok).toBe(false);
@@ -267,8 +260,8 @@ describe('validateMathBalance', () => {
   it('incluye retenciones (negativas) en el cálculo', () => {
     // base=1000, IVA=210, retención=-150 → total=1060
     const impuestos: Impuesto[] = [
-      { TIPO_IVA: 'IVA', CUOTA_IVA: 210 },
-      { TIPO_IVA: 'RETENCION', CUOTA_IVA: -150 },
+      { tipo_iva: 'IVA', cuota_iva: 210 },
+      { tipo_iva: 'RETENCION', cuota_iva: -150 },
     ];
     const result = validateMathBalance(1060, 1000, impuestos);
     expect(result.ok).toBe(true);
@@ -276,7 +269,7 @@ describe('validateMathBalance', () => {
 
   it('caso real del golden dataset: ABONO EMITIDO con importes negativos', () => {
     // Del pinData de Analista: importe_total=-112.32, importe_sin_iva=-108.00
-    const impuestos: Impuesto[] = [{ TIPO_IVA: 'IVA', CUOTA_IVA: -4.32 }];
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: -4.32 }];
     const result = validateMathBalance(-112.32, -108.00, impuestos);
     expect(result.ok).toBe(true);
   });

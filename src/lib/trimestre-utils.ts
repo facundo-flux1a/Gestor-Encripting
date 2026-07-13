@@ -81,7 +81,7 @@ export async function estaTrimestreCerrado(
   año: number,
   trimestre: number,
   empresaId: number | null,
-  userId: number
+  userId?: number | null
 ): Promise<boolean> {
   try {
     let query = `
@@ -91,14 +91,18 @@ export async function estaTrimestreCerrado(
       WHERE d.año_trimestre = ?
         AND d.num_trimestre = ?
         AND d.trimestre_cerrado = 1
-        AND e.id_de_usuario = ?
     `;
     
-    const params: any[] = [año, trimestre, userId];
+    const params: any[] = [año, trimestre];
 
-    if (empresaId !== null) {
+    if (empresaId !== null && empresaId !== undefined) {
       query += ' AND d.id_de_empresa = ?';
       params.push(empresaId);
+    }
+
+    if (userId !== null && userId !== undefined) {
+      query += ' AND e.id_de_usuario = ?';
+      params.push(userId);
     }
 
     const [rows] = await db.query<RowDataPacket[]>(query, params);
@@ -119,29 +123,31 @@ export async function obtenerSiguienteTrimestreAbierto(
   añoInicial: number,
   trimestreInicial: number,
   empresaId: number | null,
-  userId: number
+  userId?: number | null
 ): Promise<{ año: number; trimestre: number }> {
   let año = añoInicial;
   let trimestre = trimestreInicial;
 
-  // Intentar hasta 8 trimestres adelante (2 años)
-  for (let i = 0; i < 8; i++) {
+  // Intentar hasta 40 trimestres adelante (10 años)
+  // Comenzamos comprobando el trimestre actual
+  for (let i = 0; i < 40; i++) {
+    const cerrado = await estaTrimestreCerrado(año, trimestre, empresaId, userId);
+    
+    if (!cerrado) {
+      console.log(`✅ [obtenerSiguienteTrimestreAbierto] Encontrado abierto: ${año}Q${trimestre} (tras ${i} iteraciones)`);
+      return { año, trimestre };
+    }
+
+    // Avanzar al siguiente trimestre
     trimestre++;
     if (trimestre > 4) {
       trimestre = 1;
       año++;
     }
-
-    const cerrado = await estaTrimestreCerrado(año, trimestre, empresaId, userId);
-    
-    if (!cerrado) {
-      console.log(`✅ [obtenerSiguienteTrimestreAbierto] Encontrado: ${año}Q${trimestre}`);
-      return { año, trimestre };
-    }
   }
 
-  // Si todos están cerrados (muy improbable), retornar el siguiente de todos modos
-  console.warn('⚠️ [obtenerSiguienteTrimestreAbierto] Todos los trimestres cerrados, retornando siguiente');
+  // Si todos están cerrados (muy improbable tras 10 años), retornar el último iterado
+  console.warn('⚠️ [obtenerSiguienteTrimestreAbierto] Todos los trimestres cerrados (límite 10 años), retornando siguiente');
   return { año, trimestre };
 }
 

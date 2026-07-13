@@ -16,7 +16,14 @@ export type IngestionStatus =
   | 'analyzing'
   | 'saving'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  // valores en español usados por los workers:
+  | 'procesando'
+  | 'iniciando'
+  | 'Fallido'
+  | 'Completado'
+  | 'Reintentando';
+
 
 export interface ProgressUpdate {
   status: IngestionStatus;
@@ -132,6 +139,18 @@ export async function updateParentProgress(parentUploadId: string): Promise<void
         ...(allCompleted ? { completed_at: new Date() } : {}),
       },
     });
+
+    // Cascading: Si este padre tiene a su vez un padre (ej. es un PDF dentro de un ZIP),
+    // propagar el progreso hacia arriba.
+    const parentRecord = await prisma.actividad.findFirst({
+      where: { upload_id: parentUploadId },
+      select: { parent_upload_id: true }
+    });
+    
+    if (parentRecord?.parent_upload_id) {
+      await updateParentProgress(parentRecord.parent_upload_id);
+    }
+
   } catch (err) {
     console.error(`[IngestionProgress] Error actualizando padre ${parentUploadId}:`, err);
   }

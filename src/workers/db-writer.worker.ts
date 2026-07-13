@@ -25,7 +25,8 @@ import { dbWriterQueue, DbWriterJobData, DB_WRITER_QUEUE_NAME } from '@/lib/queu
 import { updateIngestionProgress, updateParentProgress } from '@/lib/ingestion-progress';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
-import { calcularTrimestreExtendido } from '@/lib/trimestre-utils';
+import { calcularTrimestreExtendido, obtenerSiguienteTrimestreAbierto } from '@/lib/trimestre-utils';
+import { wLog } from '@/lib/worker-logger';
 
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
@@ -41,7 +42,7 @@ export function startDbWriterWorker() {
       const { ingestion, aiResult } = job.data;
       const { uploadId, fileName, empresaId } = ingestion;
 
-      console.log(`[DbWriterWorker] 💾 Iniciando guardado para ${fileName} (Job: ${job.id})`);
+      wLog('DbWriterWorker', `💾 Iniciando guardado: ${fileName} (Job ${job.id})`);
 
       try {
         await updateIngestionProgress(uploadId, {
@@ -53,14 +54,14 @@ export function startDbWriterWorker() {
 
         // =====================================================================
         // GUARDIA DE DATOS VACÍOS (anti-zombi)
-        // Verifica que el aiResult tenga al menos campos mínimos de un documento.
-        // "sin confirmar" es un resultado válido (incidencia, pero se guarda igual).
         // =====================================================================
         const hasData = aiResult && (
-          aiResult.TIPO_DOCUMENTO ||
-          aiResult.EMPRESA_EMISORA?.NOMBRE ||
-          aiResult.EMPRESA_RECEPTORA?.NOMBRE ||
-          (aiResult.IMPORTE_TOTAL !== undefined)
+          aiResult.tipo_documento ||
+          aiResult.empresa_emisora?.nombre ||
+          aiResult.empresa_receptora?.nombre ||
+          aiResult.cliente?.nombre ||
+          (aiResult.importe_total !== undefined) ||
+          (aiResult.documento?.importe_total !== undefined)
         );
 
         if (!hasData) {
@@ -75,38 +76,47 @@ export function startDbWriterWorker() {
         }
 
         // =====================================================================
-        // PREPARACIÓN DE DATOS
+        // PREPARACIÓN DE DATOS (Mapeo de Nuevo y Legacy Format)
         // =====================================================================
 
         // 1. Tipo de documento y clasificación emitida/recibida
-        const tipoDocumento = (aiResult.TIPO_DOCUMENTO || 'SIN CLASIFICAR').toString().toUpperCase();
+        const rawTipo = aiResult.tipo_documento || 'SIN CLASIFICAR';
+        const tipoDocumento = rawTipo.toString().toUpperCase();
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
         const multiplicador = isAbono ? -1 : 1;
 
-        // 2. Importes
-        const importeTotal    = (Number(aiResult.IMPORTE_TOTAL) || 0) * multiplicador;
-        const importeSinIva   = (Number(aiResult.IMPORTE_SIN_IMPUESTOS) || 0) * multiplicador;
-        const numeroDocumento = aiResult.NUMERO_DOCUMENTO || `Doc-${Date.now()}`;
-        const fechaEmisionRaw = aiResult.FECHA_EMISION || null;
+        // 2. Importes y Fechas (soportando anidado 'documento' o flat)
+        const docInfo = aiResult.documento || {};
+        const rawImporteTotal = docInfo.importe_total ?? aiResult.importe_total ?? 0;
+        const rawImporteSinIva = docInfo.importe_sin_iva ?? aiResult.importe_sin_impuestos ?? 0;
+        
+        const importeTotal    = (Number(rawImporteTotal) || 0) * multiplicador;
+        const importeSinIva   = (Number(rawImporteSinIva) || 0) * multiplicador;
+        const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
+        const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
         const fechaEmision    = fechaEmisionRaw ? new Date(fechaEmisionRaw) : new Date();
-        const fechaVencimientoRaw = aiResult.FECHA_VENCIMIENTO || null;
+        const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
         const fechaVencimiento = fechaVencimientoRaw ? new Date(fechaVencimientoRaw) : null;
+        const formaPago       = docInfo.forma_pago || aiResult.forma_pago || '';
 
         // 3. Trimestre fiscal
-        // n8n usaba la fecha de hoy para calcular el trimestre de subida, pero lo correcto 
-        // a nivel contable es fecha_emision. Lo mantendremos en fecha_emision pero
-        // usaremos calcularTrimestreExtendido para compatibilidad.
         const trimestreDataRaw = calcularTrimestreExtendido(fechaEmision);
-        const trimestreData = {
-          ano_trimestre: trimestreDataRaw.año,
-          num_trimestre: trimestreDataRaw.trimestre,
-        };
+        
+        console.log(`[DbWriterWorker] 📊 ${fileName} | Trimestre inicial calculado: ${trimestreDataRaw.trimestre}/${trimestreDataRaw.año} (Fecha emisión: ${fechaEmision.toISOString().split('T')[0]})`);
+        
+        // Buscar el trimestre abierto (hasta 10 años adelante)
+        const trimestreData = await obtenerSiguienteTrimestreAbierto(
+          trimestreDataRaw.año,
+          trimestreDataRaw.trimestre,
+          Number(empresaId), // Convertir a number para la query
+          null // No tenemos userId en el worker, pero empresaId es suficiente
+        );
 
-        console.log(`[DbWriterWorker] 📊 ${fileName} | Base: ${importeSinIva} | Total: ${importeTotal} | Trimestre: ${trimestreData.num_trimestre}/${trimestreData.ano_trimestre}`);
+        console.log(`[DbWriterWorker] 📊 ${fileName} | Base: ${importeSinIva} | Total: ${importeTotal} | Trimestre Asignado: ${trimestreData.trimestre}/${trimestreData.año}`);
 
         // 4. Entidades
-        const emisor   = aiResult.EMPRESA_EMISORA || {};
-        const receptor = aiResult.EMPRESA_RECEPTORA || {};
+        const emisor   = aiResult.empresa_emisora || {};
+        const receptor = aiResult.cliente || aiResult.empresa_receptora || {};
 
         // Determinar rol de cada entidad según tipo_documento
         const esEmitida  = tipoDocumento.includes('EMITIDA') || tipoDocumento.includes('EMITIDO');
@@ -125,7 +135,7 @@ export function startDbWriterWorker() {
         // =====================================================================
 
         console.log(`[DbWriterWorker] ⏳ [Paso 1/5] Iniciando transacción Prisma para ${fileName}...`);
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
 
           console.log(`[DbWriterWorker] 📝 [Paso 2/5] Creando registro principal del documento...`);
           const doc = await tx.documentos.create({
@@ -137,19 +147,21 @@ export function startDbWriterWorker() {
               fecha_vencimiento: fechaVencimiento,
               importe_total: importeTotal,
               importe_sin_impuestos: importeSinIva,
-              moneda: (aiResult.MONEDA || 'EUR').toString().toUpperCase(),
+              moneda: (aiResult.moneda || 'EUR').toString().toUpperCase(),
               id_de_empresa: BigInt(empresaId),
               is_new: 1,
               trimestre_cerrado: false,
               enviado_sii: false,
-              año_trimestre: trimestreData.ano_trimestre,
-              num_trimestre: trimestreData.num_trimestre,
+              año_trimestre: trimestreData.año,
+              num_trimestre: trimestreData.trimestre,
               dashboard_correo: ingestion.origen || 'dashboard',
               datos_extra: {
-                categoria: aiResult.CATEGORIA_PRINCIPAL || '',
-                subcategoria: aiResult.SUBCATEGORIA || '',
-                forma_pago: aiResult.FORMA_PAGO || '',
+                categoria: aiResult.categoria_principal || aiResult.categoria_documento || '',
+                subcategoria: aiResult.subcategoria || '',
+                forma_pago: formaPago,
                 cif: cifDocumento,
+                valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || '',
+                concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
               },
             }
           });
@@ -168,12 +180,12 @@ export function startDbWriterWorker() {
           console.log(`[DbWriterWorker] 🏢 [Paso 3/5] Documento creado (ID: ${doc.id}). Procesando entidades (emisor/receptor)...`);
 
           // 6. Entidad emisora
-          if (emisor.NOMBRE) {
-            const rawCif    = emisor.CIF    || '';
-            const rawNombre = emisor.NOMBRE || '';
-            const rawDir    = emisor.DIRECCION || '';
-            const rawTel    = emisor.TELEFONO || '';
-            const rawEmail  = emisor.EMAIL || '';
+          if (emisor.nombre) {
+            const rawCif    = emisor.cif    || '';
+            const rawNombre = emisor.nombre || '';
+            const rawDir    = emisor.direccion || '';
+            const rawTel    = emisor.telefono || '';
+            const rawEmail  = emisor.email || '';
             await tx.entidades_documento.create({
               data: {
                 documento_id: doc.id,
@@ -191,12 +203,12 @@ export function startDbWriterWorker() {
           }
 
           // 7. Entidad receptora / cliente
-          if (receptor.NOMBRE) {
-            const rawCif    = receptor.CIF    || '';
-            const rawNombre = receptor.NOMBRE || '';
-            const rawDir    = receptor.DIRECCION || '';
-            const rawTel    = receptor.TELEFONO || '';
-            const rawEmail  = receptor.EMAIL || '';
+          if (receptor.nombre) {
+            const rawCif    = receptor.cif    || '';
+            const rawNombre = receptor.nombre || '';
+            const rawDir    = receptor.direccion || '';
+            const rawTel    = receptor.telefono || '';
+            const rawEmail  = receptor.email || '';
             await tx.entidades_documento.create({
               data: {
                 documento_id: doc.id,
@@ -216,22 +228,32 @@ export function startDbWriterWorker() {
           console.log(`[DbWriterWorker] 🛒 [Paso 4/5] Entidades vinculadas. Procesando líneas de detalle...`);
 
           // 8. Líneas de detalle
-          const lineas = aiResult.LINEAS_PRODUCTO;
+          const lineas = aiResult.lineas || aiResult.lineas_producto;
           if (lineas && Array.isArray(lineas)) {
             const lineasToInsert: any[] = [];
-            for (const art of lineas) {
-              const cant       = Number(art.CANTIDAD)       || 1;
-              const precioUni  = Number(art.PRECIO_UNITARIO) || 0;
-              const precioNeto = Number(art.PRECIO_NETO)    || precioUni;
-              const importeLin = (Number(art.IMPORTE_LINEA) || (precioNeto * cant)) * multiplicador;
+            // Soportar array directo de artículos (legacy) o agrupados por albarán (nuevo)
+            const articulosList = [];
+            for (const item of lineas) {
+              if (item.articulos && Array.isArray(item.articulos)) {
+                articulosList.push(...item.articulos); // Nuevo formato
+              } else {
+                articulosList.push(item); // Legacy format
+              }
+            }
+
+            for (const art of articulosList) {
+              const cant       = Number(art.cantidad)       || 1;
+              const precioUni  = Number(art.precio_unitario) || 0;
+              const precioNeto = Number(art.precio_neto)    || precioUni;
+              const importeLin = (Number(art.importe_linea) || (precioNeto * cant)) * multiplicador;
 
               lineasToInsert.push({
                 documento_id: doc.id,
                 id_de_empresa: BigInt(empresaId),
-                descripcion: art.DESCRIPCION || 'Sin descripción',
+                descripcion: art.descripcion || 'Sin descripción',
                 cantidad: cant * multiplicador,
                 precio_unitario: precioUni,
-                descuento_porcentaje: Number(art.DESCUENTO_PORCENTAJE) || 0,
+                descuento_porcentaje: Number(art.descuento_porcentaje) || 0,
                 precio_neto: precioNeto,
                 importe_linea: importeLin,
               });
@@ -243,23 +265,24 @@ export function startDbWriterWorker() {
 
           console.log(`[DbWriterWorker] 💰 [Paso 5/5] Líneas guardadas. Procesando impuestos y cierre...`);
 
-          // 9. Impuestos / IVA (DESGLOSE_IVA)
-          const totales = aiResult.DESGLOSE_IVA;
+          // 9. Impuestos / IVA (nuevo: totales_por_impuesto, legacy: desglose_iva)
+          const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
           if (totales && Array.isArray(totales)) {
             const impuestosToInsert = totales.map((imp: any) => {
-              const tipo   = (imp.TIPO_IVA || 'IVA').toString().toUpperCase();
+              const tipo   = (imp.tipo_iva || 'IVA').toString().toUpperCase();
               // Retenciones siempre negativas
               const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
               const cuota  = esRet
-                ? -Math.abs(Number(imp.CUOTA_IVA) || 0)
-                : (Number(imp.CUOTA_IVA) || 0) * multiplicador;
-              const base   = (Number(imp.BASE_IMPONIBLE) || 0) * (esRet ? 1 : multiplicador);
+                ? -Math.abs(Number(imp.cuota_iva) || 0)
+                : (Number(imp.cuota_iva) || 0) * multiplicador;
+              const base   = (Number(imp.base_imponible) || 0) * (esRet ? 1 : multiplicador);
+              const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
 
               return {
                 documento_id: doc.id,
                 id_de_empresa: BigInt(empresaId),
                 tipo_impuesto: tipo,
-                porcentaje: Number(imp.PORCENTAJE_IVA) || 0,
+                porcentaje: porcentaje,
                 base_imponible: base,
                 cuota: cuota,
                 total_con_impuesto: base + cuota,
@@ -272,8 +295,9 @@ export function startDbWriterWorker() {
           }
 
           // 10. Incidencia (si el prompt marcó incidencia: true)
-          const tieneIncidencia    = aiResult.INCIDENCIA === true || aiResult.INCIDENCIA === 'TRUE';
-          const descIncidencia     = (aiResult.DESCRIPCION_INCIDENCIA || '').toString().trim();
+          const rawIncidencia = aiResult.incidencia;
+          const tieneIncidencia = rawIncidencia === true || String(rawIncidencia).toUpperCase() === 'TRUE';
+          const descIncidencia  = (aiResult.descripcion_incidencia || '').toString().trim();
 
           if (tieneIncidencia) {
             const descripcionFinal = descIncidencia ||
@@ -315,7 +339,35 @@ export function startDbWriterWorker() {
         }
 
       } catch (error: any) {
-        console.error(`[DbWriterWorker] ❌ Error en job ${job.id} (${fileName}):`, error.message);
+        // ─── Duplicado detectado ────────────────────────────────────────────────
+        // El constraint unique_hash_empresa evita insertar el mismo archivo dos veces
+        // para la misma empresa. Esto ocurre en reintentos de BullMQ cuando el 1er
+        // intento insertó el documento pero falló *después* (ej: al guardar entidades).
+        // En ese caso NO es un error real: el doc ya está guardado. Lo marcamos como
+        // Completado para evitar el bucle de reintentos.
+        const isDuplicate =
+          error?.code === 'P2002' ||
+          (error?.message || '').includes('unique_hash_empresa') ||
+          (error?.message || '').includes('Unique constraint');
+
+        if (isDuplicate) {
+          wLog('DbWriterWorker', `⚠️ Duplicado: ${fileName} ya existe en BD — marcado como Completado`, 'warn');
+          await updateIngestionProgress(uploadId, {
+            status: 'Completado',
+            step: 'Guardado (duplicado ignorado)',
+            progress: 100,
+            mensaje: 'Documento ya procesado anteriormente. Registro existente conservado.',
+          }).catch(() => {});
+
+          if (ingestion.parentUploadId) {
+            await updateParentProgress(ingestion.parentUploadId).catch(() => {});
+          }
+          // Retornar sin throw para que BullMQ marque el job como completado
+          return;
+        }
+
+        // ─── Error real ──────────────────────────────────────────────────────────
+        wLog('DbWriterWorker', `❌ Error en job ${job.id} (${fileName}): ${error.message}`, 'error');
         console.error(error.stack);
 
         await updateIngestionProgress(uploadId, {
@@ -334,8 +386,14 @@ export function startDbWriterWorker() {
     }
   );
 
-  worker.on('completed', (job) => console.log(`[DbWriterWorker] ✅ Job completado: ${job.id}`));
-  worker.on('failed', (job, err) => console.error(`[DbWriterWorker] ❌ Job fallido: ${job?.id} | ${err.message}`));
+  worker.on('completed', (job) => {
+    console.log(`[DbWriterWorker] ✅ Job completado: ${job.id}`);
+    wLog('DbWriterWorker', `✅ Guardado OK: ${job.id}`, 'success');
+  });
+  worker.on('failed', (job, err) => {
+    console.error(`[DbWriterWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
+    wLog('DbWriterWorker', `❌ Fallido: ${job?.id} — ${err.message}`, 'error');
+  });
 
   console.log(`[DbWriterWorker] 🚀 Arrancado con concurrency=${DB_WRITER_CONCURRENCY}`);
   return worker;

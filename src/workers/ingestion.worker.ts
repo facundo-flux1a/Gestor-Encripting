@@ -14,6 +14,7 @@ import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
 import { ingestionQueue, geminiQueue, IngestionJobData, INGESTION_QUEUE_NAME } from '@/lib/queue';
 import { updateIngestionProgress, PROGRESS, createIngestionRecord } from '@/lib/ingestion-progress';
+import { wLog } from '@/lib/worker-logger';
 
 // Cuántos jobs de ingesta (ZIP-routing) procesar en paralelo.
 // Es CPU-light, puede ser alto. Los Gemini calls tienen su propia limitación.
@@ -26,7 +27,7 @@ export function startIngestionWorker() {
       const data = job.data;
       const { uploadId, fileName, normalizedFileType, isCompressedFile } = data;
 
-      console.log(`[IngestionWorker] 📥 Job ${job.id} | ${fileName} | tipo: ${normalizedFileType}`);
+      wLog('IngestionWorker', `📥 Job ${job.id} | ${fileName} | ${normalizedFileType}`);
 
       try {
         // ── Caso 1: Es un archivo comprimido (ZIP o RAR) ──────────────────────
@@ -52,42 +53,44 @@ export function startIngestionWorker() {
           // Encolar cada hijo como job individual
           const childJobs = childFileNames.map((childFileName, idx) => {
             const childUploadId = data.individualUploadIds![childFileName];
-            const childHash = data.individualFileHashes![childFileName];
+            const childHash     = data.individualFileHashes![childFileName];
+
+            // Usar el S3 path y URL propios del hijo (ya subido individualmente en upload-service)
+            const childS3Path  = data.individualFilePaths?.[childFileName]  ?? data.text;
+            const childPubUrl  = data.individualPublicUrls?.[childFileName] ?? data.publicUrl;
 
             // Determinar el tipo del hijo por extensión
             const ext = childFileName.split('.').pop()?.toLowerCase() || '';
-            const childMimeType = getMimeTypeFromExt(ext);
+            const childMimeType       = getMimeTypeFromExt(ext);
             const childNormalizedType = getNormalizedTypeFromExt(ext);
 
             const childJobData: IngestionJobData = {
               // IDs
-              uploadId: childUploadId,
-              parentUploadId: uploadId, // el ZIP padre
+              uploadId:       childUploadId,
+              parentUploadId: uploadId, // el ZIP/RAR padre
 
               // Empresa (heredada)
-              empresaId: data.empresaId,
-              cif: data.cif,
+              empresaId:    data.empresaId,
+              cif:          data.cif,
               nombreEmpresa: data.nombreEmpresa,
-              recargo: data.recargo,
+              recargo:      data.recargo,
 
-              // El archivo hijo: la URL del ZIP padre con el nombre del hijo
-              // El worker de Gemini sabe cómo extraer el archivo correcto del ZIP
-              text: data.text, // S3 path del ZIP padre
-              fileName: childFileName,
-              originalFileName: childFileName,
-              fileHash: childHash,
-              publicUrl: data.publicUrl, // URL del ZIP padre
-              mimeType: childMimeType,
+              // El archivo hijo: su propio S3 path y URL pública (ya subido a MinIO)
+              text:               childS3Path,
+              fileName:           childFileName,
+              originalFileName:   childFileName,
+              fileHash:           childHash,
+              publicUrl:          childPubUrl,
+              mimeType:           childMimeType,
               normalizedFileType: childNormalizedType,
-              fileExtension: ext,
-              fileSize: 0, // desconocido hasta que se extrae
-              isCompressedFile: false,
-              fechaSubida: data.fechaSubida,
-
-              origen: data.origen,
+              fileExtension:      ext,
+              fileSize:           0, // desconocido en esta etapa
+              isCompressedFile:   false,
+              fechaSubida:        data.fechaSubida,
+              origen:             data.origen,
 
               // Progreso relativo al lote
-              documentoIndex: idx + 1,
+              documentoIndex:  idx + 1,
               totalDocumentos: totalHijos,
             };
 
@@ -95,8 +98,7 @@ export function startIngestionWorker() {
               name: `ingest-child-${childUploadId}`,
               data: childJobData,
               opts: {
-                // Escalonar los hijos para no sobrecargar
-                delay: idx * 200, // 200ms entre cada hijo
+                delay: idx * 200, // 200ms entre cada hijo para no sobrecargar
               },
             };
           });
@@ -149,10 +151,12 @@ export function startIngestionWorker() {
 
   worker.on('completed', (job) => {
     console.log(`[IngestionWorker] ✅ Job completado: ${job.id}`);
+    wLog('IngestionWorker', `✅ Job completado: ${job.id}`, 'success');
   });
 
   worker.on('failed', (job, err) => {
     console.error(`[IngestionWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
+    wLog('IngestionWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
   });
 
   worker.on('error', (err) => {

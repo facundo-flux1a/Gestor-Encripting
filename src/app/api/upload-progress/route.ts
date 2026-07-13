@@ -462,6 +462,19 @@ export async function GET(request: NextRequest) {
       }))
     };
 
+    // 🆕 ETA CALCULATION
+    if (mainRecord.status !== 'Completado' && mainRecord.status !== 'Fallido') {
+      try {
+        const { geminiQueue } = await import('@/lib/queue');
+        const counts = await geminiQueue.getJobCounts('waiting', 'delayed', 'active');
+        const pendingJobs = counts.waiting + counts.delayed + counts.active;
+        // Asumiendo INTER_JOB_DELAY_MS = 10000ms (10 segundos) por job
+        (response as any).etaSeconds = pendingJobs * 10;
+      } catch (qErr) {
+        console.error('❌ [ETA] Error obteniendo colas:', qErr);
+      }
+    }
+
     return NextResponse.json(response, {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
     });

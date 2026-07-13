@@ -42,8 +42,9 @@ export async function POST(req: NextRequest) {
     const unrar = await import('node-unrar-js');
     
     const extractor = await unrar.createExtractorFromData({
-      data: new Uint8Array(buffer)
+      data: new Uint8Array(buffer) as unknown as ArrayBuffer
     });
+
     
     const extracted = extractor.extract();
     const files = [];

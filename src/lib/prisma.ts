@@ -36,7 +36,7 @@ function createPrismaClient() {
     database,
     ssl: { rejectUnauthorized: false }, // necesario para Railway/cloud con TLS
     connectTimeout: 20000,              // timeout generoso para proxies remotos
-    connectionLimit: 5,                 // pool limitado para evitar saturar Railway
+    connectionLimit: 15,                // pool aumentado para soportar workers concurrentes sin saturar
   });
 
   const base = new PrismaClient({

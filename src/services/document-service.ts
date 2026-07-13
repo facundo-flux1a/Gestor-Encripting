@@ -2891,16 +2891,16 @@ export async function markDocumentAsRead(documentId: number) {
   try {
     console.log('🔄 [MARK-READ] Marcando documento como leído:', documentId);
 
-    await prisma.documentos.update({
+    const updated = await prisma.documentos.update({
       where: { id: BigInt(documentId) },
       data: { is_new: 0 }
     });
 
-    console.log('✅ [MARK-READ] Resultado:', { affectedRows: ids.length });
+    console.log('✅ [MARK-READ] Documento marcado como leído:', updated.id);
 
     return {
       success: true,
-      updated: ids.length > 0
+      updated: true
     };
   } catch (error) {
     console.error('❌ [MARK-READ] Error:', error);
