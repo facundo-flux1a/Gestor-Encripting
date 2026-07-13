@@ -128,7 +128,7 @@ export function startDbWriterWorker() {
         
         // Determinar CIF del documento para mostrar en Dashboard
         // Si es emitida o indeterminada, usamos el del cliente/receptor. Si es recibida, el del emisor/proveedor.
-        const cifDocumento = (esEmitida || isSinConfirmar ? receptor.CIF : emisor.CIF) || '';
+        const cifDocumento = (esEmitida || isSinConfirmar ? receptor.cif : emisor.cif) || '';
 
         // =====================================================================
         // TRANSACCIÓN ATÓMICA DE PRISMA

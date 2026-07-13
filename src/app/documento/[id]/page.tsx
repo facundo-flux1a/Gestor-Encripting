@@ -83,17 +83,11 @@ function DocumentoPageContent() {
   });
 
   const resetFormWithDocData = useCallback((docData: Document) => {
-    // Extraer CIF de datos_extra
-    const cifFromDatosExtra = docData.datos_extra?.CLIENTE?.CIF ||
-      docData.datos_extra?.METADATOS?.NIF_CIF_RELACIONADO ||
-      docData.datos_extra?.EMPRESA_EMISORA?.CIF ||
-      '';
-
     const formData = {
       ...docData,
       fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
       fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
-      cif: cifFromDatosExtra, // ⬅️ Agregar CIF desde datos_extra
+      cif: docData.cif || '', // ⬅️ Agregar CIF desde el campo cif del documento
     };
 
     form.reset(formData, {

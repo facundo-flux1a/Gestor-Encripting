@@ -250,7 +250,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const datosExtra: any = safeJsonParse(doc.datos_extra) || {};
 
     // Priorizar CIF de datos_extra si existe
-    const cifFromDatosExtra = datosExtra?.CLIENTE?.CIF ||
+    const cifFromDatosExtra = datosExtra?.cif ||
+      datosExtra?.CLIENTE?.CIF ||
       datosExtra?.METADATOS?.NIF_CIF_RELACIONADO ||
       datosExtra?.EMPRESA_EMISORA?.CIF;
 
