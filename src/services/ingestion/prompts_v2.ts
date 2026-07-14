@@ -43,7 +43,7 @@ Un documento es FACTURABLE si es alguno de estos tipos:
 - Albarán de entrega o recepción de mercancía
 - Ticket de compra o venta
 - Nota de cargo o débito
-- Proforma (si contiene importes y datos fiscales)
+- Proforma ÚNICAMENTE si fue formalmente aceptada y tiene número de documento asignado (es decir, funciona como factura). Un presupuesto o cotización sin aceptación formal, aunque tenga importes y CIFs, NO es facturable.
 
 Un documento es NO FACTURABLE si pertenece a alguna de estas categorías:
 
@@ -51,7 +51,7 @@ Un documento es NO FACTURABLE si pertenece a alguna de estas categorías:
 - LEGAL Y SOCIETARIO: escrituras, estatutos, actas de junta, poderes notariales, contratos mercantiles, NDAs, documentos de protección de datos (RGPD), pólizas de seguro, registros de propiedad intelectual o marcas, requerimientos judiciales o administrativos
 - LABORAL Y RR.HH.: contratos de trabajo, nóminas, finiquitos, TC1/TC2, altas/bajas de Seguridad Social, partes médicos, documentos de prevención de riesgos laborales, certificados de formación, currículums
 - BANCOS Y FINANCIACIÓN: extractos bancarios, recibos SEPA, contratos de préstamo, leasing/renting, avales, líneas de financiación (ICO/SGR/ENISA), justificantes de transferencia
-- CLIENTES (no facturables): contratos de cliente, propuestas o presupuestos no aceptados formalmente, comunicaciones, documentación KYC
+- CLIENTES (no facturables): contratos de cliente, propuestas, presupuestos o proformas no aceptados formalmente (aunque tengan importes y CIFs), comunicaciones, documentación KYC
 - PROVEEDORES (no facturables): contratos con proveedores, condiciones comerciales, certificados de calidad o cumplimiento
 - ADMINISTRACIÓN PÚBLICA: notificaciones de AEAT/Seguridad Social/ayuntamiento, solicitudes de subvenciones y ayudas, licencias y permisos, certificados administrativos, comunicaciones con organismos públicos
 - INTERNO / OPERACIONES: manuales, procedimientos internos, actas de reunión, presentaciones, plantillas, documentación técnica de proyectos, planos, esquemas, especificaciones técnicas
@@ -387,13 +387,12 @@ La imagen adjunta es el ÚLTIMO RECURSO — úsala únicamente si, tras agotar l
 🎫 DETECCIÓN Y MANEJO DE TICKETS (CRÍTICO)
 
 **¿QUÉ ES UN TICKET?**
-Un ticket es un comprobante de compra emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, etc.) que NO incluye el CIF/NIF del comprador. También se llama "factura simplificada" en España.
+Un ticket (o "factura simplificada") es un comprobante de compra emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, etc.) que habitualmente NO incluye el CIF/NIF del comprador.
 
 **SEÑALES PARA DETECTAR UN TICKET:**
-- No aparece CIF/NIF del receptor/comprador en ninguna parte del documento
-- Encabezado con nombre comercial y CIF del negocio pero sin sección "Cliente" ni "Facturar a"
+- Encabezado con nombre comercial y CIF del negocio pero sin sección formal "Cliente" ni "Facturar a"
 - Presencia de campos típicos de TPV: "Mesa", "Terr", "Nº Op.", "Comensales", "Camarero"
-- Palabras: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA", "FACTURA PROFORMA" en establecimientos de hostelería
+- Palabras: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA" en establecimientos de hostelería
 - Categoría del negocio: restaurante, bar, cafetería, pizzería, hamburguesería, parking, peaje, gasolinera, supermercado
 
 **REGLA FISCAL IMPORTANTE:**
@@ -407,9 +406,9 @@ Un ticket es un comprobante de compra emitido por un establecimiento (restaurant
 3. importe_sin_iva: igual que importe_total (todo es gasto, no hay IVA deducible)
 4. totales_por_impuesto: array vacío []
 5. NO intentar clasificar como EMITIDA/RECIBIDA
-6. NO marcar incidencia por falta de CIF del cliente (es normal en tickets)
+6. ⚠️ REGLA CRÍTICA DE INCIDENCIAS EN TICKETS: La ausencia de CIF o nombre del cliente en un ticket es COMPLETAMENTE NORMAL y NO genera incidencia bajo ningún concepto. NUNCA marques incidencia solo porque falta el cliente en un ticket.
 7. empresa_emisora: extraer nombre, CIF del negocio, dirección si aparecen
-8. cliente: dejar vacío (no aplica en tickets)
+8. cliente: Si el ticket incluye explícitamente el CIF o nombre del cliente (ticket nominal), extráelos. Si no aparecen, deja el objeto cliente vacío — es lo habitual y correcto.
 
 **EJEMPLO DE SALIDA PARA UN TICKET DE RESTAURANTE:**
 \`\`\`json
@@ -565,7 +564,7 @@ Tu objetivo PRINCIPAL y OBLIGATORIO es determinar si cada documento es EMITIDA o
    - tipo_documento: "ABONO RECIBIDO"
    - Importes: deben ser NEGATIVOS
 
-**PROCESO DE CLASIFICACIÓN (paso a paso):**
+**PROCESO DE CLASIFICACIÓN (paso a paso OBLIGATORIO):**
 
 \`\`\`
 ¿El documento fue clasificado como "TICKET"? → SÍ: saltar esta sección completa | NO: continuar
@@ -577,14 +576,16 @@ Tu objetivo PRINCIPAL y OBLIGATORIO es determinar si cada documento es EMITIDA o
 3. Extrae identificación fiscal y nombre de cliente del documento (búsqueda exhaustiva)
 4. Compara con los datos del dashboard: CIF {{CIF_EMPRESA}} y nombre {{NOMBRE_EMPRESA}}
 
-5. SI el CIF O el nombre de empresa_emisora coincide con los datos del dashboard:
+5. ⚠️ REGLA DE ORO: NO TE DEJES ENGAÑAR por palabras impresas en el documento como "RECIBIDA", "EMITIDA", "Copia", etc. LA ÚNICA forma de clasificar es comparar las entidades con los datos del dashboard.
+
+6. SI (y solo si) el CIF O el nombre de empresa_emisora coincide EXACTAMENTE con los datos del dashboard ({{CIF_EMPRESA}} o {{NOMBRE_EMPRESA}}):
    → Documento es EMITIDO → NO agregar INCIDENCIA
    
-6. SI el CIF O el nombre de cliente coincide con los datos del dashboard:
+7. SI (y solo si) el CIF O el nombre de cliente coincide EXACTAMENTE con los datos del dashboard ({{CIF_EMPRESA}} o {{NOMBRE_EMPRESA}}):
    → Documento es RECIBIDO → NO agregar INCIDENCIA
 
-7. SI no hay identificaciones fiscales O no coinciden:
-   → usar "(sin confirmar)" + REPORTAR INCIDENCIA
+8. SI NINGUNA de las entidades coincide con los datos del dashboard (porque son empresas distintas, o porque los datos del dashboard son "NO_PROPORCIONADO", o faltan en el documento):
+   → DEBES usar "(sin confirmar)" como tipo_documento + REPORTAR INCIDENCIA = true. ¡NUNCA lo clasifiques como emitido ni recibido en este caso!
 \`\`\`
 
 **CUÁNDO USAR "(sin confirmar)" Y REPORTAR INCIDENCIA:**

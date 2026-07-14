@@ -25,7 +25,7 @@ export default function CookiesPage() {
                         <strong>De Preferencias:</strong> Permiten recordar tu empresa seleccionada o filtros preferidos en el dashboard.
                     </li>
                     <li>
-                        <strong>Analíticas:</strong> Utilizamos herramientas como Redis para analytics de sesión internos que nos ayudan a detectar errores y mejorar el rendimiento.
+                        <strong>Analíticas:</strong> Utilizamos herramientas propias de análisis de sesión que nos ayudan a detectar errores y mejorar el rendimiento de la plataforma.
                     </li>
                 </ul>
 

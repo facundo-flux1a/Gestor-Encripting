@@ -77,18 +77,17 @@ export function startGeminiWorker() {
           if (consecutive === 1) await redis.expire(CONSECUTIVE_429_KEY, 3600); // limpiar en 1h
 
           let blockSeconds = 60;
-          if (consecutive === 2) blockSeconds = 300;       // 5 min
-          else if (consecutive === 3) blockSeconds = 900;  // 15 min
-          else if (consecutive >= 4) blockSeconds = 1800;  // 30 min
+          if (consecutive === 2) blockSeconds = 120;       // 2 min
+          else if (consecutive >= 3) blockSeconds = 300;   // 5 min (techo máximo)
 
           wLog('GeminiWorker', `⏳ Rate limit 429 consecutivo #${consecutive}. Bloqueando ${blockSeconds}s → ${fileName}`, 'rate');
           await redis.setex(RPM_REDIS_KEY, blockSeconds, String(RPM_LIMIT + 1)).catch(() => {});
 
           await updateIngestionProgress(uploadId, {
             status: 'processing',
-            step: 'Esperando cupo de API',
+            step: 'Esperando cupo de procesamiento',
             progress: 50,
-            mensaje: `Soft-ban detectado. Enfriando API por ${Math.ceil(blockSeconds/60)} minutos...`,
+            mensaje: `Pausado para optimizar rendimiento. Retomando en ${Math.ceil(blockSeconds/60)} minutos...`,
           }).catch(() => {});
           
           if (ingestion.parentUploadId) {
@@ -263,9 +262,9 @@ async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): P
       if (uploadId) {
         await updateIngestionProgress(uploadId, {
           status: 'processing',
-          step: 'Esperando cuota de IA',
+          step: 'Esperando cupo de procesamiento',
           progress: 50,
-          mensaje: `Pausado por límite ${causa} Vertex AI. Retomando en ${waitSec}s...`,
+          mensaje: `Pausado para optimizar rendimiento. Retomando en ${waitSec}s...`,
         }).catch(() => {});
       }
       if (parentUploadId) {
@@ -611,8 +610,8 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
   const basePrompt = PROMPT_EXTRACTOR_FACTURABLE;
 
   let prompt = basePrompt
-    .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || '')
-    .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || '')
+    .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || 'NO_PROPORCIONADO')
+    .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || 'NO_PROPORCIONADO')
     .replace(/\{\{RECARGO_EMPRESA\}\}/g, recargo);
 
   let finalBuffer = fileBuffer;
@@ -683,8 +682,8 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
   });
 
   const noFacturablePrompt = PROMPT_EXTRACTOR_NO_FACTURABLE
-    .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || '')
-    .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || '')
+    .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || 'NO_PROPORCIONADO')
+    .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || 'NO_PROPORCIONADO')
     .replace(/\{\{RECARGO_EMPRESA\}\}/g, 'false');
 
   const result = await callGemini(

@@ -84,7 +84,7 @@ export default function HealthCheckPage() {
                     const doc = result.documents.find((d: any) => d.id_documento === docId);
                     toast({
                         title: "Análisis IA en curso",
-                        description: `Gemini está analizando la factura ${doc?.numero_documento || `#${docId}`} en segundo plano...`,
+                        description: `Muvail AI está analizando la factura ${doc?.numero_documento || `#${docId}`} en segundo plano...`,
                         variant: "default",
                     });
                 });
@@ -115,7 +115,7 @@ export default function HealthCheckPage() {
                 // @ts-ignore
                 toast({
                     title: "Error en el diagnóstico",
-                    description: result.error || "No se pudo realizar el análisis con Vertex AI.",
+                    description: result.error || "No se pudo completar el análisis inteligente del documento.",
                     variant: "destructive"
                 });
             }

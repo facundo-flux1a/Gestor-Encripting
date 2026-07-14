@@ -61,7 +61,7 @@ export function HealthCheckTutorial() {
         element: '[data-tutorial="health-ia"]',
         popover: {
           title: '✨ Diagnóstico IA',
-          description: '¿No encuentras el error? Haz clic en el botón IA y Gemini analizará el documento para sugerirte la corrección exacta.',
+          description: '¿No encuentras el error? Haz clic en el botón IA y Muvail AI analizará el documento para sugerirte la corrección exacta.',
           side: 'left',
           align: 'center',
         },

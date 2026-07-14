@@ -37,7 +37,62 @@ export function startIngestionWorker() {
         //   - Nos manda individualFileHashes e individualUploadIds
         //
         // Nuestro trabajo: encolar cada hijo en ingestionQueue como job individual.
-        if (isCompressedFile && data.individualFileHashes && data.individualUploadIds) {
+        if (isCompressedFile) {
+          // Si el ZIP/RAR viene del webhook, no tendrá individualFileHashes y debemos extraerlo ahora
+          if (!data.individualFileHashes || !data.individualUploadIds) {
+            console.log(`[IngestionWorker] 📦 ZIP/RAR de origen webhook sin extraer. Descargando y extrayendo...`);
+            
+            await updateIngestionProgress(uploadId, {
+              status: 'procesando',
+              step: 'Extrayendo lote',
+              progress: 5,
+              mensaje: 'Descargando archivo comprimido para extraer documentos...',
+            });
+
+            const response = await fetch(data.publicUrl);
+            if (!response.ok) throw new Error(`Error HTTP al descargar ZIP/RAR de MinIO: ${response.status}`);
+            const fileBuffer = await response.arrayBuffer();
+
+            const { S3Client } = await import('@aws-sdk/client-s3');
+            const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
+            const s3Client = new S3Client({
+              region: process.env.MINIO_REGION || 'us-east-1',
+              endpoint: MINIO_ENDPOINT,
+              credentials: {
+                accessKeyId: process.env.MINIO_ACCESS_KEY!,
+                secretAccessKey: process.env.MINIO_SECRET_KEY!,
+              },
+              forcePathStyle: true,
+            });
+
+            const { extractAndUploadZipChildren, extractAndUploadRarChildren } = await import('@/services/upload-service');
+            const bucketName = process.env.MINIO_BUCKET_NAME || 'gestor-documental';
+            
+            let extractResult;
+            if (data.normalizedFileType === 'rar') {
+              extractResult = await extractAndUploadRarChildren(fileBuffer, uploadId, s3Client, bucketName, MINIO_ENDPOINT);
+            } else {
+              extractResult = await extractAndUploadZipChildren(fileBuffer, uploadId, s3Client, bucketName, MINIO_ENDPOINT);
+            }
+
+            data.individualFileHashes = extractResult.fileHashes;
+            data.individualUploadIds  = extractResult.uploadIds;
+            data.individualFilePaths  = extractResult.filePaths;
+            data.individualPublicUrls = extractResult.publicUrls;
+
+            // Crear registros de actividad inicial para cada hijo
+            for (const [childName, childId] of Object.entries(extractResult.uploadIds)) {
+              await createIngestionRecord({
+                uploadId: childId,
+                parentUploadId: uploadId,
+                empresaId: BigInt(data.empresaId),
+                documentoNombre: childName,
+                fileHash: extractResult.fileHashes[childName],
+                origen: (data.origen as 'dashboard' | 'correo') || 'correo',
+              });
+            }
+          }
+
           const childFileNames = Object.keys(data.individualFileHashes);
           const totalHijos = childFileNames.length;
 
@@ -45,9 +100,9 @@ export function startIngestionWorker() {
 
           await updateIngestionProgress(uploadId, {
             status: 'procesando',
-            step: `Lote recibido: ${totalHijos} archivos`,
-            progress: 5,
-            mensaje: `Archivo comprimido con ${totalHijos} documentos. Procesando en cola...`,
+            step: `Lote extraído: ${totalHijos} archivos`,
+            progress: 10,
+            mensaje: `Archivo comprimido extraído exitosamente. Encolando ${totalHijos} documentos...`,
           });
 
           // Encolar cada hijo como job individual

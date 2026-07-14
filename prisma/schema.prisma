@@ -67,7 +67,7 @@ model empresas {
   mail_de_carga         String?                 @db.Text
   recargo               Boolean                 @default(false)
   config_roles          Json?                   @default(dbgenerated("(json_object())"))
-  cif_hash              String?                 @unique(map: "cif_hash") @db.VarChar(64)
+  cif_hash              String?                 @db.VarChar(64)
   mail_de_carga_hash    String?                 @unique(map: "mail_de_carga_hash") @db.VarChar(64)
   actividad             actividad[]
   archivos_documento    archivos_documento[]
@@ -81,6 +81,8 @@ model empresas {
   trimestres            trimestres[]
   usuarios              usuarios[]
   webhooks_empresa      webhooks_empresa[]
+
+  @@index([cif_hash], map: "idx_cif_hash")
 }
 
 model entidades_documento {

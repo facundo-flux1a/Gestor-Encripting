@@ -1106,11 +1106,25 @@ export default function ActivityTable({
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-xs sm:text-sm font-medium flex items-center gap-2 group-hover:text-primary transition-colors">
+                <p className="text-xs sm:text-sm font-medium flex items-center gap-2 group-hover:text-primary transition-colors flex-wrap">
                   <span className="truncate">{zipActivity.documento_nombre}</span>
-                  <span className="text-xs text-muted-foreground font-normal whitespace-nowrap bg-muted px-2 py-0.5 rounded-full">
-                    {children.length}
-                  </span>
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <span className="text-xs text-muted-foreground font-normal whitespace-nowrap bg-muted px-2 py-0.5 rounded-full" title="Total documentos">
+                      {children.length} total
+                    </span>
+                    {children.filter(c => c.status?.toLowerCase() === 'completado').length > 0 && (
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium whitespace-nowrap bg-green-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {children.filter(c => c.status?.toLowerCase() === 'completado').length}
+                      </span>
+                    )}
+                    {children.filter(c => ['fallido', 'error', 'interrumpido'].includes(c.status?.toLowerCase() || '')).length > 0 && (
+                      <span className="text-xs text-red-600 dark:text-red-400 font-medium whitespace-nowrap bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <XCircle className="w-3 h-3" />
+                        {children.filter(c => ['fallido', 'error', 'interrumpido'].includes(c.status?.toLowerCase() || '')).length}
+                      </span>
+                    )}
+                  </div>
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 hidden sm:block">{zipActivity.step}</p>
                 {zipActivity.mensaje && (

@@ -102,7 +102,7 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
  * a MinIO y retorna toda la info necesaria para encolar cada hijo.
  * Replica el comportamiento que tenía n8n: descomprimir → subir hijo → usar URL del hijo.
  */
-async function extractAndUploadZipChildren(
+export async function extractAndUploadZipChildren(
   fileBuffer: ArrayBuffer,
   parentUploadId: string,
   s3Client: S3Client,
@@ -165,7 +165,7 @@ async function extractAndUploadZipChildren(
  * calcula el hash de cada hijo, lo sube individualmente a MinIO
  * y retorna toda la info necesaria para encolar cada hijo.
  */
-async function extractAndUploadRarChildren(
+export async function extractAndUploadRarChildren(
   fileBuffer: ArrayBuffer,
   parentUploadId: string,
   s3Client: S3Client,
@@ -357,11 +357,10 @@ export async function uploadDocument(
 
   console.log(`📤 [UploadService] MIME Type: ${fileMimeType}, Extensión: ${fileExtension}, Tipo: ${normalizedFileType}`);
 
-  const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
   const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
 
-  if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
+  if (!MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
     console.error('Missing environment variables for upload service.');
     throw new Error('Configuración del servidor incompleta. Contacte al administrador.');
   }
@@ -384,10 +383,6 @@ export async function uploadDocument(
     const nombreEmpresa = empresaPrisma.nombre_de_empresa || '';
     console.log(`[${normalizedFileName}] Empresa: ${nombreEmpresa}, CIF: ${cif}, Recargo: ${recargo}`);
 
-    let individualFileHashes: Record<string, string> = {};
-    let individualUploadIds: Record<string, string>  = {};
-    let individualFilePaths: Record<string, string>  = {};
-    let individualPublicUrls: Record<string, string> = {};
     let isCompressedFile = false;
 
     // Crear el cliente S3 una sola vez (reutilizado para el padre y los hijos)
@@ -400,59 +395,14 @@ export async function uploadDocument(
       forcePathStyle: true,
     });
 
-    // ── ZIP ────────────────────────────────────────────────────────────────────
-    if (normalizedFileType === 'zip') {
+    // ── ZIP / RAR: Crear actividad de inmediato y dejar la extracción al worker ──
+    if (normalizedFileType === 'zip' || normalizedFileType === 'rar') {
       isCompressedFile = true;
-      console.log(`[${normalizedFileName}] 📦 Detectado archivo ZIP`);
-      try {
-        const result = await extractAndUploadZipChildren(
-          fileBuffer, uploadId, s3Client, MINIO_BUCKET_NAME, MINIO_ENDPOINT
-        );
-        individualFileHashes = result.fileHashes;
-        individualUploadIds  = result.uploadIds;
-        individualFilePaths  = result.filePaths;
-        individualPublicUrls = result.publicUrls;
-        console.log(`[${normalizedFileName}] ✅ ${Object.keys(individualFileHashes).length} hijos extraídos y subidos`);
+      console.log(`[${normalizedFileName}] 📦 Archivo comprimido (${normalizedFileType.toUpperCase()}) — la extracción se hará en background por el worker.`);
+      // Creamos el registro de actividad AHORA para que la UI lo muestre de inmediato
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
 
-        for (const [childName, childId] of Object.entries(individualUploadIds)) {
-          await createActivityRecord(childId, empresaId, childName, childName.split('.').pop() || 'unknown', uploadId);
-        }
-        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-      } catch (err: any) {
-        console.error(`[${normalizedFileName}] ❌ Error ZIP:`, err.message);
-        const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-        await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
-        await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
-        throw new Error(msg);
-      }
-
-    // ── RAR ───────────────────────────────────────────────────────────────────
-    } else if (normalizedFileType === 'rar') {
-      isCompressedFile = true;
-      console.log(`[${normalizedFileName}] 📦 Detectado archivo RAR`);
-      try {
-        const result = await extractAndUploadRarChildren(
-          fileBuffer, uploadId, s3Client, MINIO_BUCKET_NAME, MINIO_ENDPOINT
-        );
-        individualFileHashes = result.fileHashes;
-        individualUploadIds  = result.uploadIds;
-        individualFilePaths  = result.filePaths;
-        individualPublicUrls = result.publicUrls;
-        console.log(`[${normalizedFileName}] ✅ ${Object.keys(individualFileHashes).length} hijos extraídos y subidos`);
-
-        for (const [childName, childId] of Object.entries(individualUploadIds)) {
-          await createActivityRecord(childId, empresaId, childName, childName.split('.').pop() || 'unknown', uploadId);
-        }
-        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
-      } catch (err: any) {
-        console.error(`[${normalizedFileName}] ❌ Error RAR:`, err.message);
-        const msg = '❌ Ocurrió un error inesperado al procesar el archivo. Por favor, inténtalo nuevamente en unos minutos.';
-        await markUploadAsFailed(uploadId, msg, 'Procesamiento del archivo');
-        await notifyFrontendError(uploadId, msg, 'Procesamiento del archivo');
-        throw new Error(msg);
-      }
-
-    // ── PDF / Imagen / Otros ──────────────────────────────────────────────────
+    // ── PDF / Imagen / Otros: Verificar duplicados antes de encolar ───────────
     } else {
       console.log(`[${normalizedFileName}] Verificando duplicados...`);
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
@@ -540,12 +490,8 @@ export async function uploadDocument(
       origen: 'dashboard',
     };
 
-    if (isCompressedFile && Object.keys(individualFileHashes).length > 0) {
-      jobData.individualFileHashes = individualFileHashes;
-      jobData.individualUploadIds  = individualUploadIds;
-      jobData.individualFilePaths  = individualFilePaths;
-      jobData.individualPublicUrls = individualPublicUrls;
-      console.log(`[${normalizedFileName}] 📦 ${Object.keys(individualFileHashes).length} hijos listos para encolar`);
+    if (isCompressedFile) {
+      console.log(`[${normalizedFileName}] 📦 Comprimido — el worker extraerá los hijos desde MinIO.`);
     }
 
     console.log(`[${normalizedFileName}] 📡 Encolando en BullMQ...`);

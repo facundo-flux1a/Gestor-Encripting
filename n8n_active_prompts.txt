@@ -1,0 +1,66 @@
+=== Analista33 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Analiza este documento y determina DOS cosas independientes:\n\n1) Si contiene UNA o MÚLTIPLES facturas/albaranes/abonos comerciales.\n2) Si el documento es de naturaleza FACTURABLE o NO FACTURABLE.\n\n---\n
+
+---
+
+=== Analista28 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Analiza este PDF que contiene múltiples facturas, abonos o rectificativas.\n\nDevuelve ÚNICAMENTE un JSON array sin texto adicional, sin markdown, sin bloques de código.\n\nPara cada documento presente en el
+
+---
+
+=== Analista37 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Analiza este PDF que contiene múltiples documentos NO facturables (nóminas, contratos, planos, actas, manuales, pólizas, etc.).\n\nDevuelve ÚNICAMENTE un JSON array sin texto adicional, sin markdown, sin blo
+
+---
+
+=== Analista6 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "⏱️ INSTRUCCIÓN CRÍTICA SOBRE TIEMPO Y EXHAUSTIVIDAD:\n\n**TÓMATE TODO EL TIEMPO QUE SEA NECESARIO.**\n\n- No hay prisa. La precisión y completitud son MÁS IMPORTANTES que la velocidad\n- Si necesitas revisar
+
+---
+
+=== Analista38 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "⏱️ INSTRUCCIÓN CRÍTICA SOBRE TIEMPO Y EXHAUSTIVIDAD:\n\n**TÓMATE TODO EL TIEMPO QUE SEA NECESARIO.**\n\n- No hay prisa. La precisión y completitud son MÁS IMPORTANTES que la velocidad\n- Si necesitas revisar
+
+---
+
+=== Analista40 === (regex no match)
+={
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Analiza este documento y determina DOS cosas independientes:\n\n1) Si contiene UNA o MÚLTIPLES facturas/albaranes/abonos comerciales.\n2) Si el documento es de naturaleza FACTURABLE o NO FACTURABLE.\n\n---\n
+
+---
+

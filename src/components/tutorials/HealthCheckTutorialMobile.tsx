@@ -51,7 +51,7 @@ export function HealthCheckTutorialMobile() {
         element: '[data-tutorial="health-ia"]',
         popover: {
           title: '✨ Diagnóstico IA',
-          description: 'Usa a Gemini para analizar y corregir errores automáticamente.',
+          description: 'Usa Muvail AI para analizar y corregir errores automáticamente.',
           side: 'top',
           align: 'center',
         },

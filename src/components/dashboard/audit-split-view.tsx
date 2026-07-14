@@ -94,7 +94,7 @@ export function AuditSplitView({
                             Modo Auditoría: {documentName}
                         </h2>
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">Vertex AI Powered</span>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">Muvail AI · Auditoría Inteligente</span>
                             {isFixed ? (
                                 <Badge variant="secondary" className="bg-green-500/10 text-green-500 border-none text-[10px] py-0 h-4 uppercase font-bold tracking-tighter">
                                     <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Documento Cuadrado

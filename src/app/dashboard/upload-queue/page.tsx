@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   ServerIcon, RefreshCw, FileText, UploadCloud,
   Trash2, CheckCircle2, XCircle, Clock, Loader2,
-  ChevronDown, ChevronUp, AlertCircle, Zap,
+  ChevronDown, ChevronUp, AlertCircle, Zap, X, CheckCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,6 +36,8 @@ interface ChildSummary {
     step: string;
     progress: number;
     mensaje: string;
+    createdAt?: string;
+    updatedAt?: string;
   }[];
 }
 
@@ -49,6 +51,7 @@ interface ActiveUpload {
   updatedAt: string;
   createdAt: string;
   childrenSummary: ChildSummary | null;
+  isNew?: boolean;
 }
 
 // ─── Helpers de estado ────────────────────────────────────────────────────────
@@ -59,8 +62,28 @@ function isRateLimitPaused(job: { step?: string; mensaje?: string }) {
   return s.includes('cuota') || s.includes('esperando') || m.includes('pausado') || m.includes('límite');
 }
 
+function isDuplicate(job: { step?: string; mensaje?: string }) {
+  const s = (job.step || '').toLowerCase();
+  const m = (job.mensaje || '').toLowerCase();
+  return s.includes('duplicado') || m.includes('duplicado');
+}
+
+function formatDuration(start?: string, end?: string) {
+  if (!start || !end) return null;
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  const diffMs = endTime - startTime;
+  if (diffMs < 0) return '0s';
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  return `${mins}m ${secs}s`;
+}
+
 function getStatusColor(status: string, step?: string, mensaje?: string) {
   if (isRateLimitPaused({ step, mensaje })) return 'text-amber-400';
+  if (isDuplicate({ step, mensaje })) return 'text-amber-500';
   const s = status?.toLowerCase();
   if (s === 'completed' || s === 'completado') return 'text-green-400';
   if (s === 'failed' || s === 'fallido') return 'text-red-400';
@@ -70,6 +93,8 @@ function getStatusColor(status: string, step?: string, mensaje?: string) {
 function getStatusBadgeClass(status: string, step?: string, mensaje?: string) {
   if (isRateLimitPaused({ step, mensaje }))
     return 'bg-amber-500/15 text-amber-400 border border-amber-500/30';
+  if (isDuplicate({ step, mensaje }))
+    return 'bg-amber-500/15 text-amber-500 border border-amber-500/30';
   const s = status?.toLowerCase();
   if (s === 'completed' || s === 'completado')
     return 'bg-green-500/15 text-green-400 border border-green-500/30';
@@ -91,12 +116,20 @@ function getProgressColor(step?: string, mensaje?: string) {
   return '';
 }
 
+function cleanText(text?: string) {
+  if (!text) return '';
+  // Remover emojis comunes usados en los workers
+  return text.replace(/[🍪🧠📦✅❌⚠️🔄🚀💾📊📝🏢🛒💰⏳🔑📬📄📅🎯🔧💡🌐🎫🎉🔥⛔🚫🚨❗❓✨🏥📋🔍🏆✂🖼🛑⏱️]/gu, '').trim();
+}
+
 // ─── Sub-componente: Tarjeta de Job Principal ─────────────────────────────────
 
-function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) => void }) {
+function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (id: string) => void; onDismiss: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const paused = isRateLimitPaused(job);
   const cs = job.childrenSummary;
+  const isFinished = ['completado', 'completed', 'fallido', 'failed'].includes(job.status?.toLowerCase());
+  const duration = isFinished ? formatDuration(job.createdAt, job.updatedAt) : null;
 
   const secondsRematch = job.mensaje?.match(/Retomando en (\d+)s/);
   const secondsLeft = secondsRematch ? parseInt(secondsRematch[1]) : null;
@@ -115,10 +148,16 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
                 <h3 className="font-semibold text-base leading-tight line-clamp-1" title={job.nombre}>
                   {job.nombre || 'Documento sin nombre'}
                 </h3>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                   <span className="font-mono opacity-70">{job.uploadId.split('_').pop()?.slice(-8)}</span>
                   <span>•</span>
                   <span>Actualizado: {new Date(job.updatedAt).toLocaleTimeString('es-AR')}</span>
+                  {duration && (
+                    <>
+                      <span>•</span>
+                      <span className="font-medium text-foreground/80">Tomó {duration}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -128,15 +167,27 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
                 <StatusIcon status={job.status} step={job.step} mensaje={job.mensaje} size="w-3 h-3" />
                 {paused ? 'En pausa' : (job.status || 'Procesando')}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
-                onClick={() => onDelete(job.uploadId)}
-                title="Eliminar registro"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+              {['completado', 'completed', 'fallido', 'failed', 'error', 'permanent-fail'].includes(job.status?.toLowerCase() || '') ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
+                  onClick={() => onDismiss(job.uploadId)}
+                  title="Marcar como visto (ocultar de la cola)"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={() => onDelete(job.uploadId)}
+                  title="Eliminar registro"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
 
@@ -145,7 +196,7 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
             <div className="flex items-center justify-between text-sm">
               <span className={`font-medium flex items-center gap-1.5 ${getStatusColor(job.status, job.step, job.mensaje)}`}>
                 {paused && <AlertCircle className="w-3.5 h-3.5" />}
-                {job.step || 'Iniciando'}
+                {cleanText(job.step) || 'Iniciando'}
               </span>
               <span className="font-semibold tabular-nums">{job.progress ?? 0}%</span>
             </div>
@@ -154,7 +205,7 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
               className={`h-2 ${getProgressColor(job.step, job.mensaje)}`}
             />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {job.mensaje || 'En espera...'}
+              {cleanText(job.mensaje) || 'En espera...'}
               {secondsLeft && (
                 <span className="ml-1 text-amber-400 font-medium">({secondsLeft}s)</span>
               )}
@@ -226,14 +277,21 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
                         <span className="font-medium line-clamp-1 flex-1" title={child.nombre}>
                           {child.nombre}
                         </span>
-                        <span className={`shrink-0 flex items-center gap-1 ${getStatusColor(child.status, child.step, child.mensaje)}`}>
-                          <StatusIcon status={child.status} step={child.step} mensaje={child.mensaje} size="w-3 h-3" />
-                          {child.step || child.status}
-                        </span>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {child.createdAt && child.updatedAt && ['completado', 'completed', 'fallido', 'failed'].includes(child.status?.toLowerCase() || '') && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {formatDuration(child.createdAt, child.updatedAt)}
+                            </span>
+                          )}
+                          <span className={`flex items-center gap-1 ${getStatusColor(child.status, child.step, child.mensaje)}`}>
+                            <StatusIcon status={child.status} step={child.step} mensaje={child.mensaje} size="w-3 h-3" />
+                            {cleanText(child.step) || child.status}
+                          </span>
+                        </div>
                       </div>
                       <Progress value={child.progress ?? 0} className={`h-1 ${getProgressColor(child.step, child.mensaje)}`} />
                       {child.mensaje && (
-                        <p className="text-muted-foreground/80 line-clamp-1">{child.mensaje}</p>
+                        <p className="text-muted-foreground/80 line-clamp-1">{cleanText(child.mensaje)}</p>
                       )}
                     </div>
                   ))}
@@ -249,8 +307,8 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
             <div className="flex items-center gap-2 text-xs text-amber-400">
               <Zap className="w-3.5 h-3.5 shrink-0" />
               <span>
-                El procesamiento está pausado por el límite de tokens por minuto de Vertex AI.
-                Retomará automáticamente cuando se libere el cupo.
+                El procesamiento está pausado para optimizar el rendimiento del sistema.
+                Retomará automáticamente cuando haya cupo disponible.
               </span>
             </div>
           </div>
@@ -264,6 +322,7 @@ function JobCard({ job, onDelete }: { job: ActiveUpload; onDelete: (id: string) 
 
 export default function UploadQueuePage() {
   const [activeUploads, setActiveUploads] = useState<ActiveUpload[]>([]);
+  const [etaSeconds, setEtaSeconds] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [uploadToDelete, setUploadToDelete] = useState<string | null>(null);
@@ -281,6 +340,7 @@ export default function UploadQueuePage() {
       if (res.ok) {
         const data = await res.json();
         setActiveUploads(data.activeUploads || []);
+        setEtaSeconds(data.etaSeconds || 0);
       }
     } catch (error) {
       console.error('Error fetching queue:', error);
@@ -299,6 +359,28 @@ export default function UploadQueuePage() {
       console.error('Error calling delete:', error);
     } finally {
       setUploadToDelete(null);
+    }
+  };
+
+  const dismissUpload = async (uploadId: string) => {
+    try {
+      const res = await fetch(`/api/activity/upload/${uploadId}/dismiss`, { method: 'PATCH' });
+      if (res.ok) setActiveUploads(prev => prev.filter(u => u.uploadId !== uploadId));
+    } catch (error) {
+      console.error('Error al descartar:', error);
+    }
+  };
+
+  const dismissAll = async () => {
+    if (!selectedCompanyIds.length) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/activity/upload/dismiss-all?empresaId=${selectedCompanyIds[0]}`, { method: 'PATCH' });
+      if (res.ok) fetchQueue();
+    } catch (error) {
+      console.error('Error al descartar todos:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -322,15 +404,34 @@ export default function UploadQueuePage() {
             description="Monitorea en tiempo real los documentos procesados por la IA en background."
             icon={UploadCloud}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchQueue}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refrescar
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchQueue}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refrescar
+            </Button>
+            {etaSeconds > 0 && (
+              <span className="text-[10px] text-violet-500 font-semibold bg-violet-500/10 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                ETA: ~{Math.ceil(etaSeconds / 60)} min
+              </span>
+            )}
+            {activeUploads.some(j => ['completado', 'completed', 'fallido', 'failed', 'error', 'permanent-fail'].includes(j.status?.toLowerCase() || '')) && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={dismissAll}
+                className="mt-2 bg-primary/90 hover:bg-primary transition-all shadow-sm"
+              >
+                <CheckCheck className="w-4 h-4 mr-2" />
+                Marcar todos vistos
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Barra de estadísticas globales */}
@@ -375,6 +476,7 @@ export default function UploadQueuePage() {
                 key={job.uploadId}
                 job={job}
                 onDelete={(id) => setUploadToDelete(id)}
+                onDismiss={dismissUpload}
               />
             ))
           )}
