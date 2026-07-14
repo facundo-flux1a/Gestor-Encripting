@@ -5,13 +5,18 @@ async function nukeAll() {
   console.log('💣 Limpieza total de todas las colas BullMQ...\n');
 
   for (const q of [ingestionQueue, geminiQueue, dbWriterQueue]) {
-    const waiting = await q.getJobs(['waiting', 'delayed', 'active', 'paused']);
-    for (const job of waiting) {
-      await job.remove().catch(() => {});
+    try {
+      // pause queue first to stop workers from grabbing jobs while we nuke
+      await q.pause(); 
+      // obliterate destruye la cola por completo, el force ignora locks de jobs activos
+      await q.obliterate({ force: true });
+      console.log(`✅ ${q.name}: completamente aniquilada (obliterated)`);
+    } catch (e: any) {
+      console.log(`⚠️ ${q.name}: error al aniquilar (${e.message})`);
+    } finally {
+      // reactivar por las dudas (aunque obliterate la borra de redis)
+      await q.resume();
     }
-    await q.clean(0, 10000, 'failed');
-    await q.clean(0, 10000, 'completed');
-    console.log(`✅ ${q.name}: ${waiting.length} jobs eliminados`);
   }
 
   console.log('\n🎉 Todas las colas vacías. Sistema listo para prueba limpia.');
