@@ -2,7 +2,7 @@
 import Redis from 'ioredis';
 
 // ==========================================
-// Cliente Redis Principal (Railway)
+// Cliente Redis (local o remoto según REDIS_URL)
 // ==========================================
 const redisUrl = process.env.REDIS_URL;
 
@@ -11,8 +11,9 @@ if (!redisUrl) {
   throw new Error('REDIS_URL no configurada en variables de entorno');
 }
 
-console.log('🚂 [Redis] Inicializando conexión a Railway...');
-console.log('🔗 [Redis] Host:', redisUrl.replace(/:[^:@]*@/, ':***@')); // Oculta password
+const redisHostLabel = redisUrl.replace(/:[^:@]*@/, ':***@');
+console.log('🚂 [Redis] Inicializando conexión...');
+console.log('🔗 [Redis] Host:', redisHostLabel);
 
 export const redis = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
@@ -32,7 +33,7 @@ export const redis = new Redis(redisUrl, {
 // Eventos de Conexión
 // ==========================================
 redis.on('connect', () => {
-  console.log('🔌 [Redis] Conectando a Railway...');
+  console.log('🔌 [Redis] Conectando...');
 });
 
 redis.on('ready', () => {

@@ -12,7 +12,9 @@ import crypto from 'crypto';
  * @returns A promise that resolves to the User object or null if not found or not authenticated.
  */
 export async function getCurrentUser(): Promise<User | null> {
+  const t0 = performance.now();
   const session = await getSession();
+  console.log(`⏱️ [PERF] getCurrentUser | ${Math.round(performance.now() - t0)}ms | hasSession=${!!session?.userId}`);
 
   if (!session?.userId) {
     return null;

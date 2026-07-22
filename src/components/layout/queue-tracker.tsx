@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useSidebar, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
+import { useSidebar, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Activity, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -21,35 +21,72 @@ interface AllStats {
   total: QueueStats;
 }
 
+const IDLE_POLL_MS = 30_000;
+const ACTIVE_POLL_MS = 10_000;
+
 export function QueueTracker() {
   const { state } = useSidebar();
   const [stats, setStats] = React.useState<AllStats | null>(null);
   const [error, setError] = React.useState<boolean>(false);
+  const hasActivityRef = React.useRef(false);
 
   React.useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = hasActivityRef.current ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+      timeoutId = setTimeout(fetchStats, delay);
+    };
+
     const fetchStats = async () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        scheduleNext();
+        return;
+      }
+
       try {
         const res = await fetch('/api/queues/stats');
         if (!res.ok) throw new Error('Failed to fetch');
         const data = await res.json();
+        if (cancelled) return;
         setStats(data);
         setError(false);
+        hasActivityRef.current =
+          data.total.active > 0 ||
+          data.total.waiting > 0 ||
+          data.total.delayed > 0 ||
+          data.total.failed > 0;
       } catch (err) {
         console.error('Error fetching queue stats:', err);
-        setError(true);
+        if (!cancelled) setError(true);
+      } finally {
+        scheduleNext();
       }
     };
 
     fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
+
+    const onVisibility = () => {
+      if (!document.hidden) fetchStats();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   if (error || !stats) return null;
 
-  // Solo mostrar si hay algo en proceso, pendiente o fallido.
-  // Si está todo en 0, no mostramos nada para no ensuciar el sidebar.
-  const hasActivity = stats.total.active > 0 || stats.total.waiting > 0 || stats.total.delayed > 0 || stats.total.failed > 0;
+  const hasActivity =
+    stats.total.active > 0 ||
+    stats.total.waiting > 0 ||
+    stats.total.delayed > 0 ||
+    stats.total.failed > 0;
 
   if (!hasActivity) return null;
 

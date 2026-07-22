@@ -139,7 +139,12 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
   }
 }
 
+// Cache corto de "usuario activo" — evita ~650ms de MySQL remoto en CADA /api/*
+const activoCache = new Map<number, { activo: boolean; expires: number }>();
+const ACTIVO_TTL_MS = 60_000;
+
 export async function getSession(cookie?: string): Promise<SessionPayload | null> {
+  const t0 = performance.now();
   let sessionCookie = cookie;
 
   if (!sessionCookie) {
@@ -149,17 +154,30 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
 
   if (!sessionCookie) return null;
 
+  const tDecrypt = performance.now();
   const session = await decrypt(sessionCookie);
+  const decryptMs = Math.round(performance.now() - tDecrypt);
   if (!session) return null;
 
+  // JWT ya firmado + middleware verificó firma. El check activo va cacheado 60s.
+  const cached = activoCache.get(session.userId);
+  if (cached && cached.expires > Date.now()) {
+    if (!cached.activo) return null;
+    console.log(`⏱️ [PERF] getSession | ${Math.round(performance.now() - t0)}ms |`, { decryptMs, dbMs: 0, cache: 'hit', userId: session.userId });
+    return session;
+  }
+
   try {
+    const tDb = performance.now();
     const user = await prisma.usuarios.findUnique({
       where: { id: BigInt(session.userId) },
       select: { activo: true }
     });
-
+    const dbMs = Math.round(performance.now() - tDb);
     const isActive = user?.activo === true;
+    activoCache.set(session.userId, { activo: isActive, expires: Date.now() + ACTIVO_TTL_MS });
 
+    // Usuario inexistente o desactivado → cookie zombie
     if (!isActive) {
       console.warn(`⚠️ [getSession] Usuario ${session.userId} inactivo o eliminado. Limpiando cookie zombie.`);
       try {
@@ -168,17 +186,19 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
       } catch (e) {
         console.error("No se pudo borrar la cookie (quizás server component context):", e);
       }
+      console.log(`⏱️ [PERF] getSession | ${Math.round(performance.now() - t0)}ms |`, { decryptMs, dbMs, result: 'inactive' });
       return null;
     }
+    console.log(`⏱️ [PERF] getSession | ${Math.round(performance.now() - t0)}ms |`, { decryptMs, dbMs, cache: 'miss', userId: session.userId });
     return session;
   } catch (error) {
-    console.error('Error in getSession DB query:', error);
-    // Asumimos inactivo/error, es mejor borrar y forzar login
-    try {
-      const cookieStore = await cookies();
-      cookieStore.delete(SESSION_COOKIE_NAME);
-    } catch (e) { }
-    return null;
+    // Fallos transitorios de red/DB (Railway ECONNRESET, etc.): NO borrar cookie.
+    // Forzar logout aquí te echa en cada blip de conexión remota.
+    console.error('Error in getSession DB query (manteniendo sesión):', error);
+    // En error de red, asumir activo un rato para no martillar la DB caída
+    activoCache.set(session.userId, { activo: true, expires: Date.now() + ACTIVO_TTL_MS });
+    console.log(`⏱️ [PERF] getSession | ${Math.round(performance.now() - t0)}ms |`, { decryptMs, result: 'db_error_keep_session' });
+    return session;
   }
 }
 

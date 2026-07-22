@@ -28,12 +28,29 @@ export function useDuplicateDetection(empresaId?: number) {
       });
 
       if (!response.ok) {
-        throw new Error('Error al verificar duplicados');
+        let bodyText = '';
+        try {
+          bodyText = await response.text();
+        } catch {
+          bodyText = '(sin body)';
+        }
+        console.error('❌ [useDuplicateDetection] HTTP no OK', {
+          status: response.status,
+          statusText: response.statusText,
+          body: bodyText.slice(0, 500),
+          empresaId,
+        });
+        setDuplicates(new Set());
+        setDuplicateGroups([]);
+        return null;
       }
 
       const result = await response.json();
       
-      console.log('✅ [useDuplicateDetection] Resultado:', result);
+      console.log('✅ [useDuplicateDetection] Resultado:', {
+        groups: Array.isArray(result.duplicates) ? result.duplicates.length : 0,
+        result,
+      });
       
       // Extraer y guardar los IDs de documentos duplicados
       if (result.duplicates && Array.isArray(result.duplicates)) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import connection, { dbName } from '@/lib/db';
+import { dbName, queryWithRetry } from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import { ActivityService } from '@/services/activity-service';
 import { prisma } from '@/lib/prisma';
@@ -24,14 +24,14 @@ export async function GET(request: Request) {
     const dateTo = searchParams.get('dateTo');
     const search = searchParams.get('search');
 
-    // Obtener empresas del usuario para descifrarlas con Prisma y poder buscar sobre ellas
-    const [userEmpRows] = await connection.query(`SELECT id FROM ${dbName}.empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))`, [session.userId]);
-    const userEmpIds = (userEmpRows as any[]).map(r => Number(r.id));
-    
-    const empresasPrisma = userEmpIds.length > 0 ? await prisma.empresas.findMany({
-       where: { id: { in: userEmpIds } },
-       select: { id: true, nombre_de_empresa: true, CIF: true }
-    }) : [];
+    // Empresas del user vía Prisma (evita pool mysql2 crudo que hace ETIMEDOUT)
+    const allEmpresas = await prisma.empresas.findMany({
+      select: { id: true, nombre_de_empresa: true, CIF: true, id_de_usuario: true },
+    });
+    const empresasPrisma = allEmpresas.filter((row) => {
+      const ids: number[] = Array.isArray(row.id_de_usuario) ? (row.id_de_usuario as any[]) : [];
+      return ids.includes(session.userId);
+    });
     
     const empresaMap: Record<number, { nombre: string, cif: string }> = {};
     empresasPrisma.forEach(e => {
@@ -130,7 +130,7 @@ export async function GET(request: Request) {
     query += ` ORDER BY a.created_at DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
-    const [rows] = await connection.query(query, params);
+    const [rows] = await queryWithRetry(query, params);
 
     // Contar total
     let countQuery = `
@@ -192,7 +192,7 @@ export async function GET(request: Request) {
       countParams.push(...p);
     }
 
-    const [countRows] = await connection.query(countQuery, countParams);
+    const [countRows] = await queryWithRetry(countQuery, countParams);
     const total = (countRows as any[])[0].total;
 
     // 🔥 PROACTIVE RESCUE: Ahora gestionado por <RetryMonitor /> en el frontend.
@@ -272,7 +272,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID de actividad requerido' }, { status: 400 });
     }
 
-    const [checkRows] = await connection.query(
+    const [checkRows] = await queryWithRetry(
       `SELECT a.id 
        FROM ${dbName}.actividad a
        INNER JOIN ${dbName}.empresas e ON a.id_de_empresa = e.id
@@ -284,7 +284,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Actividad no encontrada' }, { status: 404 });
     }
 
-    await connection.query(
+    await queryWithRetry(
       `DELETE FROM ${dbName}.actividad WHERE id = ?`,
       [activityId]
     );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/services/auth-service';
+import { reconcileStaleActividad } from '@/services/actividad-reconcile';
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,14 +18,30 @@ export async function GET(req: NextRequest) {
       empresaIds = empresaIdParam.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
     }
 
+    // Sin empresaId: todas las empresas del usuario (para rehidratar chip tras refresh)
+    if (empresaIds.length === 0) {
+      const empresas = await prisma.empresas.findMany({
+        where: { id_de_usuario: { array_contains: session.userId } },
+        select: { id: true },
+      });
+      empresaIds = empresas.map((e: { id: bigint | number }) => Number(e.id));
+    }
+
     if (empresaIds.length === 0) {
       return NextResponse.json({ activeUploads: [] });
     }
 
+    const empresaBigs = empresaIds.map((id) => BigInt(id));
+
+    // Cerrar fantasmas/huérfanos antes de listar (contrato: no mentir "en proceso")
+    await reconcileStaleActividad({ empresaIds }).catch((e) => {
+      console.warn('[active-uploads] reconcile falló:', e);
+    });
+
     // Traer SOLO los registros padre (parent_upload_id IS NULL) activos
     const parentUploads = await prisma.actividad.findMany({
       where: {
-        id_de_empresa: { in: empresaIds.map(id => BigInt(id)) },
+        id_de_empresa: { in: empresaBigs },
         parent_upload_id: null,
         OR: [
           { status: { notIn: ['completed', 'failed', 'Completado', 'Fallido', 'permanent-fail'] } },
@@ -33,12 +50,15 @@ export async function GET(req: NextRequest) {
       },
       select: {
         upload_id: true,
+        batch_id: true,
+        documento_id: true,
         documento_nombre: true,
         status: true,
         step: true,
         progress: true,
         mensaje: true,
         is_new: true,
+        webhook_payload: true,
         created_at: true,
         updated_at: true,
       },
@@ -60,24 +80,37 @@ export async function GET(req: NextRequest) {
             step: true,
             progress: true,
             mensaje: true,
+            created_at: true,
             updated_at: true,
           },
           // Quitamos el orderBy de Prisma porque lo vamos a ordenar en memoria con más inteligencia
         });
 
+        const isWaitingCapacity = (c: { status?: string | null; step?: string | null; mensaje?: string | null }) => {
+          const st = (c.status || '').toLowerCase();
+          if (st === 'waiting_capacity') return true;
+          const step = (c.step || '').toLowerCase();
+          const msg = (c.mensaje || '').toLowerCase();
+          return (
+            step.includes('cuota') ||
+            step.includes('cupo') ||
+            step.includes('esperando') ||
+            msg.includes('pausado') ||
+            msg.includes('capacidad')
+          );
+        };
+
         const totalChildren = children.length;
         const completedChildren = children.filter(c => c.status === 'completed' || c.status === 'Completado').length;
         const failedChildren = children.filter(c => c.status === 'failed' || c.status === 'Fallido').length;
-        const waitingChildren = children.filter(c =>
-          c.step?.toLowerCase().includes('cuota') ||
-          c.mensaje?.toLowerCase().includes('pausado') ||
-          c.step?.toLowerCase().includes('esperando')
-        ).length;
+        const waitingChildren = children.filter(isWaitingCapacity).length;
         const processingChildren = totalChildren - completedChildren - failedChildren;
         totalPendingChildren += processingChildren;
 
         return {
           uploadId: parent.upload_id,
+          batchId: parent.batch_id,
+          documentId: parent.documento_id ? Number(parent.documento_id) : null,
           nombre: parent.documento_nombre,
           status: parent.status,
           step: parent.step,
@@ -97,8 +130,8 @@ export async function GET(req: NextRequest) {
             recentActive: children
               .sort((a, b) => {
                 // Primero: los pausados van al fondo
-                const aPaused = a.mensaje?.toLowerCase().includes('pausado') || a.step?.toLowerCase().includes('esperando');
-                const bPaused = b.mensaje?.toLowerCase().includes('pausado') || b.step?.toLowerCase().includes('esperando');
+                const aPaused = isWaitingCapacity(a);
+                const bPaused = isWaitingCapacity(b);
                 
                 if (aPaused && !bPaused) return 1;
                 if (!aPaused && bPaused) return -1;

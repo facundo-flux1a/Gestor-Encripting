@@ -6,10 +6,13 @@ export const dynamic = 'force-dynamic';
 
 // GET - Obtener empresas (CON mail_de_carga)
 export async function GET() {
+  const t0 = performance.now();
   try {
     console.log('🏢 [API-COMPANIES] Iniciando GET...');
 
+    const tUser = performance.now();
     const user = await getCurrentUser();
+    console.log(`⏱️ [PERF] api/companies.getCurrentUser | ${Math.round(performance.now() - tUser)}ms`);
     console.log('👤 [API-COMPANIES] Usuario actual:', user?.id, user?.email);
 
     if (!user) {
@@ -21,6 +24,7 @@ export async function GET() {
 
     // Usar Prisma para que los campos encriptados se desencripten automáticamente
     // ⚠️ Sin orderBy en nombre_de_empresa — no se puede ordenar sobre campos encriptados en BD
+    const tDb = performance.now();
     const allRows = await prisma.empresas.findMany({
       select: {
         id: true,
@@ -33,6 +37,7 @@ export async function GET() {
         config_roles: true
       }
     });
+    console.log(`⏱️ [PERF] api/companies.empresas.findMany | ${Math.round(performance.now() - tDb)}ms | rows=${allRows.length}`);
 
     // Filtrar por usuario y ordenar en memoria DESPUÉS de desencriptar
     const formattedCompanies = allRows
@@ -54,6 +59,7 @@ export async function GET() {
     console.log('📋 [API-COMPANIES] Empresas:',
       formattedCompanies.map((c: any) => ({ id: c.id, name: c.name, mail: c.mail_de_carga, recargo: c.recargo }))
     );
+    console.log(`⏱️ [PERF] api/companies.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=${formattedCompanies.length}`);
 
     return NextResponse.json(formattedCompanies);
 

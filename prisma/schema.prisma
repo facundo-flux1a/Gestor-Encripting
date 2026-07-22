@@ -269,6 +269,7 @@ model actividad {
   id                 Int       @id @default(autoincrement())
   upload_id          String    @unique(map: "upload_id") @db.VarChar(255)
   parent_upload_id   String?   @db.VarChar(255)
+  batch_id           String?   @db.VarChar(255)
   id_de_empresa      BigInt
   documento_id       BigInt?
   documento_nombre   String?   @db.VarChar(500)
@@ -298,6 +299,7 @@ model actividad {
   @@index([id_de_empresa], map: "idx_id_de_empresa")
   @@index([status], map: "idx_status")
   @@index([upload_id], map: "idx_upload_id")
+  @@index([batch_id], map: "idx_batch_id")
 }
 
 model ai_daily_usage {

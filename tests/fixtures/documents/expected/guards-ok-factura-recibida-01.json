@@ -1,0 +1,27 @@
+{
+  "id": "guards-ok-factura-recibida-01",
+  "archetype": "pdf_digital_small",
+  "empresaCif": "B97376321",
+  "expectRevision": false,
+  "expected": {
+    "tipo_documento": "FACTURA RECIBIDA",
+    "empresa_emisora": { "nombre": "Proveedor Demo SA", "cif": "A12345674" },
+    "cliente": { "nombre": "ESPAI DE DUES S.L.", "cif": "B97376321" },
+    "documento": {
+      "numero_documento": "F-2026-001",
+      "fecha_emision": "2026-01-15",
+      "importe_total": 121.0,
+      "importe_sin_iva": 100.0
+    },
+    "totales_por_impuesto": [
+      {
+        "tipo_iva": "IVA",
+        "porcentaje": 21,
+        "base_imponible": 100.0,
+        "cuota_iva": 21.0
+      }
+    ],
+    "incidencia": false,
+    "descripcion_incidencia": ""
+  }
+}

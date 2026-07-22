@@ -12,6 +12,8 @@ import { prisma } from './prisma';
 
 export type IngestionStatus =
   | 'waiting'
+  | 'waiting_capacity'
+  | 'queued'
   | 'processing'
   | 'analyzing'
   | 'saving'
@@ -22,7 +24,8 @@ export type IngestionStatus =
   | 'iniciando'
   | 'Fallido'
   | 'Completado'
-  | 'Reintentando';
+  | 'Reintentando'
+  | 'Duplicado';
 
 
 export interface ProgressUpdate {

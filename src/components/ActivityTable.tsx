@@ -307,8 +307,17 @@ export default function ActivityTable({
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
       if (filters.searchText) params.append('search', filters.searchText);
 
-      const response = await fetch(`/api/activity?${params}`);
-      if (!response.ok) throw new Error('Error al cargar actividades');
+      // 1 reintento: el proxy Railway a veces corta con ETIMEDOUT
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        response = await fetch(`/api/activity?${params}`);
+        if (response.ok) break;
+        if (attempt === 0) {
+          console.warn(`⚠️ [ActivityTable] /api/activity ${response.status}, reintentando...`);
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+      if (!response || !response.ok) throw new Error('Error al cargar actividades');
 
       const data = await response.json();
       setActivities(data.actividades);

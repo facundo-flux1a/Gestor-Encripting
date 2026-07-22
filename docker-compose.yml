@@ -1,0 +1,16 @@
+# Redis local para desarrollo (colas BullMQ / rate-limit).
+# No usar el Redis de Railway desde la máquina de desarrollo.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: gestor-redis-local
+    ports:
+      # 6380: evita chocar con otros Redis locales en 6379
+      - "6380:6379"
+    volumes:
+      - gestor_redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  gestor_redis_data:

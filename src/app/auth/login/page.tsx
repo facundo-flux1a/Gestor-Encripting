@@ -1,7 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
-import { login, handleGoogleSignInOnServer } from '@/services/auth-service';
+import { login } from '@/services/auth-service';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,12 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Chrome, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import React, { Suspense, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
-import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
 import { LogoutDetector } from '@/components/auth/LogoutDetector';
 import {
   Dialog,
@@ -31,50 +28,6 @@ function LoginButton() {
   return (
     <Button className="w-full" type="submit" disabled={pending}>
       {pending ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-    </Button>
-  );
-}
-
-function GoogleLoginButton() {
-  const { toast } = useToast();
-  const router = useRouter();
-
-  const handleGoogleSignIn = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const firebaseUser = result.user;
-
-      const serverResponse = await handleGoogleSignInOnServer({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-      });
-
-      if (serverResponse.success) {
-        router.push('/dashboard');
-      } else {
-        throw new Error(serverResponse.error || 'El inicio de sesión con Google falló en el servidor.');
-      }
-    } catch (error: any) {
-      let errorMessage = 'No se pudo iniciar sesión con Google.';
-      if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'El proceso de inicio de sesión fue cancelado.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      toast({
-        title: 'Error de Autenticación',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  return (
-    <Button variant="outline" className="w-full" type="button" onClick={handleGoogleSignIn}>
-      <Chrome className="mr-2 h-4 w-4" />
-      Continuar con Google
     </Button>
   );
 }
@@ -301,12 +254,6 @@ export default function LoginPage() {
           <Suspense fallback={null}>
             <LoginForm />
           </Suspense>
-          <div className="my-4 flex items-center">
-            <div className="flex-grow border-t border-muted" />
-            <span className="mx-4 flex-shrink text-xs uppercase text-muted-foreground">O</span>
-            <div className="flex-grow border-t border-muted" />
-          </div>
-          <GoogleLoginButton />
           <Suspense fallback={<div className="mt-4 text-center text-sm">¿No tienes una cuenta? <span className="underline">Regístrate</span></div>}>
             <LoginFooter />
           </Suspense>

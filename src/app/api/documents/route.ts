@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // GET - Obtener documentos
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
   try {
     console.log('🚀 [API-DOCUMENTS] Iniciando...');
 
@@ -36,11 +37,13 @@ export async function GET(req: NextRequest) {
     const documents = await getDocuments(empresaIds, true);
 
     console.log('✅ [API-DOCUMENTS] Documentos obtenidos:', documents.length);
+    console.log(`⏱️ [PERF] api/documents.TOTAL | ${Math.round(performance.now() - t0)}ms | docs=${documents.length}`);
 
     return NextResponse.json(documents);
 
   } catch (error) {
     console.error('❌ [API-DOCUMENTS] Error:', error);
+    console.log(`⏱️ [PERF] api/documents.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Error desconocido'
     }, { status: 500 });

@@ -1,0 +1,532 @@
+[
+  {
+    "file": "pdf_digital_small__Factura-5310678875.PDF",
+    "finishReason": "STOP",
+    "tokens": 16769,
+    "summary": {
+      "tipo": "(sin confirmar)",
+      "numero": "5310678875",
+      "fecha": "2025-05-09",
+      "emisor": "CAMPOFRIO FOOD GROUP, S.A.U.",
+      "cif_emisor": "A-09000928",
+      "cliente": "ESPAI DE DUES S.L.",
+      "cif_cliente": "B97376321",
+      "total": 223.85,
+      "base": 204.27,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 10,
+          "base": 190.16,
+          "cuota": 19.02
+        },
+        {
+          "tipo": "IVA",
+          "pct": 4,
+          "base": 14.11,
+          "cuota": 0.56
+        }
+      ],
+      "incidencia": true,
+      "desc_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: CAMPOFRIO FOOD GROUP, S.A.U., receptor/cliente: ESP"
+    },
+    "guards": {
+      "ok": false,
+      "failures": [
+        {
+          "code": "TIPO_INDETERMINADO",
+          "message": "No se pudo clasificar emitida/recibida respecto a la empresa"
+        }
+      ]
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "(sin confirmar)",
+      "categoria_principal": "Fiscal y Contable",
+      "subcategoria": "Factura",
+      "incidencia": true,
+      "descripcion_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: CAMPOFRIO FOOD GROUP, S.A.U., receptor/cliente: ESPAI DE DUES S.L.) coincide con los datos de la empresa del sistema (CIF: B12345678, Nombre: Empresa Test SL). Se requiere revisión manual.",
+      "empresa_emisora": {
+        "nombre": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "direccion": "Avda. de Europa, 24, 28108 ALCOBENDAS (MADRID)",
+        "cif": "A-09000928",
+        "telefono": "912970169",
+        "email": ""
+      },
+      "cliente": {
+        "nombre": "ESPAI DE DUES S.L.",
+        "direccion": "CL SAN JUAN 14, 46133 MELIANA, Valencia",
+        "cif": "B97376321",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": ""
+      },
+      "documento": {
+        "numero_documento": "5310678875",
+        "fecha_emision": "2025-05-09",
+        "forma_pago": "Domiciliación",
+        "comercial": "",
+        "importe_total": 223.85,
+        "importe_sin_iva": 204.27,
+        "fecha_vencimiento": "2025-05-21"
+      },
+      "lineas": [
+        {
+          "albaran": "5163961579 95-2507-686156",
+          "fecha_albaran": "",
+          "articulos": [
+            {
+              "codigo": "33248",
+              "descripcion": "J. RESERVA NAV 4 ESTACIONES LON 96G 2E",
+              "cantidad": 13,
+              "precio_unitario": 1.446,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.446,
+              "importe_linea": 18.8
+            },
+            {
+              "codigo": "3511",
+              "descripcion": "JAMON DE CEBO IBERICO NAV LONCH 40G 2,",
+              "cantidad": 28,
+              "precio_unitario": 1.6,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.6,
+              "importe_linea": 44.8
+            },
+            {
+              "codigo": "39805",
+              "descripcion": "NAVIDUL LONCHAS LOMO 40G 1,10E",
+              "cantidad": 24,
+              "precio_unitario": 0.786,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.786,
+              "importe_linea": 18.86
+            },
+            {
+              "codigo": "33502",
+              "descripcion": "FUETERIA EL INTENSO 150G 8UDS",
+              "cantidad": 8,
+              "precio_unitario": 1.656,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.656,
+              "importe_linea": 13.25
+            },
+            {
+              "codigo": "38105",
+              "descripcion": "MORTADELA DE PAVO 95G 1E CJ*12",
+              "cantidad": 12,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 8.28
+            },
+            {
+              "codigo": "2736",
+              "descripcion": "SALCH FRANKFURT CF 140G P4",
+              "cantidad": 12,
+              "precio_unitario": 1.541,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.541,
+              "importe_linea": 18.49
+            },
+            {
+              "codigo": "37112",
+              "descripcion": "CUIDAT+ JAMON COCIDO 65G 1E",
+              "cantidad": 18,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 12.42
+            },
+            {
+              "codigo": "3350",
+              "descripcion": "PIZZA JAMON/QUESO SALSA MOZZARELLA 360",
+              "cantidad": 14,
+              "precio_unitario": 1.961,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.961,
+              "importe_linea": 27.45
+            },
+            {
+              "codigo": "3352",
+              "descripcion": "PIZZA 5 QUESOS C/SALSA QUESO SEMICURAD",
+              "cantidad": 7,
+              "precio_unitario": 1.964,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.964,
+              "importe_linea": 13.75
+            },
+            {
+              "codigo": "3543",
+              "descripcion": "PIZZA & SALSA CF BARBACOA 410G",
+              "cantidad": 7,
+              "precio_unitario": 2.009,
+              "descuento_porcentaje": 0,
+              "precio_neto": 2.009,
+              "importe_linea": 14.06
+            },
+            {
+              "codigo": "37867",
+              "descripcion": "NAV RALLADO 4 QUESOS 100% NATURALES 90",
+              "cantidad": 16,
+              "precio_unitario": 0.882,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.882,
+              "importe_linea": 14.11
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 10,
+          "base_imponible": 190.16,
+          "cuota_iva": 19.02,
+          "total_con_iva": 209.18
+        },
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 4,
+          "base_imponible": 14.11,
+          "cuota_iva": 0.56,
+          "total_con_iva": 14.67
+        }
+      ],
+      "metadatos": {
+        "remitente": "",
+        "destinatario": "",
+        "numero_referencia": "",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": ""
+      }
+    }
+  },
+  {
+    "file": "pdf_digital_small__FR-2026-0006.pdf",
+    "finishReason": "STOP",
+    "tokens": 15845,
+    "summary": {
+      "tipo": "(sin confirmar)",
+      "numero": "FR-2026-0006",
+      "fecha": "2026-03-17",
+      "emisor": "DISTRIBUCIONES ALIMENTARIAS LEVANTE SL",
+      "cif_emisor": "B46112231",
+      "cliente": "FERRUM INVERSIONES SOSTENIBLES SL",
+      "cif_cliente": "B01645415",
+      "total": 2541.9,
+      "base": 2330,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 4,
+          "base": 810,
+          "cuota": 32.4
+        },
+        {
+          "tipo": "IVA",
+          "pct": 10,
+          "base": 1270,
+          "cuota": 127
+        },
+        {
+          "tipo": "IVA",
+          "pct": 21,
+          "base": 250,
+          "cuota": 52.5
+        }
+      ],
+      "incidencia": true,
+      "desc_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: DISTRIBUCIONES ALIMENTARIAS LEVANTE SL, receptor/cl"
+    },
+    "guards": {
+      "ok": false,
+      "failures": [
+        {
+          "code": "TIPO_INDETERMINADO",
+          "message": "No se pudo clasificar emitida/recibida respecto a la empresa"
+        }
+      ]
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "(sin confirmar)",
+      "categoria_principal": "Proveedores",
+      "subcategoria": "Suministro",
+      "incidencia": true,
+      "descripcion_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: DISTRIBUCIONES ALIMENTARIAS LEVANTE SL, receptor/cliente: FERRUM INVERSIONES SOSTENIBLES SL) coincide con los datos de la empresa del sistema (CIF: B12345678, Nombre: Empresa Test SL). Se requiere revisión manual.",
+      "empresa_emisora": {
+        "nombre": "DISTRIBUCIONES ALIMENTARIAS LEVANTE SL",
+        "direccion": "Pol. Fuente del Jarro, Nave 12, 46988 Paterna (Valencia)",
+        "cif": "B46112231",
+        "telefono": "",
+        "email": ""
+      },
+      "cliente": {
+        "nombre": "FERRUM INVERSIONES SOSTENIBLES SL",
+        "direccion": "Calle San Vicente Martir 838 M. 46007, Valencia (Valencia). Espana",
+        "cif": "B01645415",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": ""
+      },
+      "documento": {
+        "numero_documento": "FR-2026-0006",
+        "fecha_emision": "2026-03-17",
+        "forma_pago": "transferencia a 30 dias",
+        "comercial": "",
+        "importe_total": 2541.9,
+        "importe_sin_iva": 2330,
+        "fecha_vencimiento": ""
+      },
+      "lineas": [
+        {
+          "albaran": "",
+          "fecha_albaran": "",
+          "articulos": [
+            {
+              "codigo": "",
+              "descripcion": "Arroz bomba Valencia saco 25 kg",
+              "cantidad": 10,
+              "precio_unitario": 33,
+              "descuento_porcentaje": 0,
+              "precio_neto": 33,
+              "importe_linea": 330
+            },
+            {
+              "codigo": "",
+              "descripcion": "Aceite oliva virgen extra garrafa 5 L",
+              "cantidad": 20,
+              "precio_unitario": 30,
+              "descuento_porcentaje": 0,
+              "precio_neto": 30,
+              "importe_linea": 600
+            },
+            {
+              "codigo": "",
+              "descripcion": "Azucar blanquilla saco 25 kg",
+              "cantidad": 10,
+              "precio_unitario": 20,
+              "descuento_porcentaje": 0,
+              "precio_neto": 20,
+              "importe_linea": 200
+            },
+            {
+              "codigo": "",
+              "descripcion": "Harina de trigo T-45 saco 25 kg",
+              "cantidad": 20,
+              "precio_unitario": 15,
+              "descuento_porcentaje": 0,
+              "precio_neto": 15,
+              "importe_linea": 300
+            },
+            {
+              "codigo": "",
+              "descripcion": "Sal marina fina saco 10 kg",
+              "cantidad": 10,
+              "precio_unitario": 10,
+              "descuento_porcentaje": 0,
+              "precio_neto": 10,
+              "importe_linea": 100
+            },
+            {
+              "codigo": "",
+              "descripcion": "Pasta macarron caja 10 kg",
+              "cantidad": 10,
+              "precio_unitario": 15,
+              "descuento_porcentaje": 0,
+              "precio_neto": 15,
+              "importe_linea": 150
+            },
+            {
+              "codigo": "",
+              "descripcion": "Tomate triturado lata 3 kg (pack 6)",
+              "cantidad": 10,
+              "precio_unitario": 12,
+              "descuento_porcentaje": 0,
+              "precio_neto": 12,
+              "importe_linea": 120
+            },
+            {
+              "codigo": "",
+              "descripcion": "Legumbre garbanzo saco 20 kg",
+              "cantidad": 10,
+              "precio_unitario": 18,
+              "descuento_porcentaje": 0,
+              "precio_neto": 18,
+              "importe_linea": 180
+            },
+            {
+              "codigo": "",
+              "descripcion": "Vinagre de vino garrafa 5 L",
+              "cantidad": 20,
+              "precio_unitario": 5,
+              "descuento_porcentaje": 0,
+              "precio_neto": 5,
+              "importe_linea": 100
+            },
+            {
+              "codigo": "",
+              "descripcion": "Especias variadas caja surtida",
+              "cantidad": 5,
+              "precio_unitario": 50,
+              "descuento_porcentaje": 0,
+              "precio_neto": 50,
+              "importe_linea": 250
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 4,
+          "base_imponible": 810,
+          "cuota_iva": 32.4,
+          "total_con_iva": 842.4
+        },
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 10,
+          "base_imponible": 1270,
+          "cuota_iva": 127,
+          "total_con_iva": 1397
+        },
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 21,
+          "base_imponible": 250,
+          "cuota_iva": 52.5,
+          "total_con_iva": 302.5
+        }
+      ],
+      "metadatos": {
+        "remitente": "DISTRIBUCIONES ALIMENTARIAS LEVANTE SL",
+        "destinatario": "FERRUM INVERSIONES SOSTENIBLES SL",
+        "numero_referencia": "FR-2026-0006",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": ""
+      }
+    }
+  },
+  {
+    "file": "pdf_large_or_scanlike__CamScanner-11-01-2026-21.08_2026_05_06_13_47_17.pdf",
+    "error": "No se pudo parsear la respuesta de Gemini después de reparación: Unterminated string in JSON at position 866"
+  },
+  {
+    "file": "image_scan__Imagen-pegada_2026_07_14_00_41_12.png",
+    "finishReason": "STOP",
+    "tokens": 14661,
+    "summary": {
+      "tipo": "(sin confirmar)",
+      "numero": "01/2026",
+      "fecha": "2026-05-08",
+      "emisor": "Adaix Graogandia",
+      "cif_emisor": "20027991-M",
+      "cliente": "Alquila y descansa S.L",
+      "cif_cliente": "B56214109",
+      "total": 4515.6,
+      "base": 4260,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 21,
+          "base": 4260,
+          "cuota": 894.6
+        },
+        {
+          "tipo": "RETENCION",
+          "pct": 15,
+          "base": 4260,
+          "cuota": -639
+        }
+      ],
+      "incidencia": true,
+      "desc_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: Adaix Graogandia, receptor/cliente: Alquila y desca"
+    },
+    "guards": {
+      "ok": false,
+      "failures": [
+        {
+          "code": "TIPO_INDETERMINADO",
+          "message": "No se pudo clasificar emitida/recibida respecto a la empresa"
+        }
+      ]
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "(sin confirmar)",
+      "categoria_principal": "Fiscal y Contable",
+      "subcategoria": "Factura",
+      "incidencia": true,
+      "descripcion_incidencia": "No se pudo determinar si el documento es emitido o recibido. Ninguna de las entidades identificadas (emisor: Adaix Graogandia, receptor/cliente: Alquila y descansa S.L) coincide con los datos de la empresa del sistema (CIF: B12345678, Nombre: Empresa Test SL). Se requiere revisión manual.",
+      "empresa_emisora": {
+        "nombre": "Adaix Graogandia",
+        "direccion": "c/Joan XXIII nº10 bajo c.p. 46730(Valencia)",
+        "cif": "20027991-M",
+        "telefono": "660341917",
+        "email": "graogandia@adaix.com"
+      },
+      "cliente": {
+        "nombre": "Alquila y descansa S.L",
+        "direccion": "Marva 5, 3º pta 6 (Valencia)",
+        "cif": "B56214109",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": ""
+      },
+      "documento": {
+        "numero_documento": "01/2026",
+        "fecha_emision": "2026-05-08",
+        "forma_pago": "",
+        "comercial": "",
+        "importe_total": 4515.6,
+        "importe_sin_iva": 4260,
+        "fecha_vencimiento": ""
+      },
+      "lineas": [
+        {
+          "albaran": "",
+          "fecha_albaran": "",
+          "articulos": [
+            {
+              "codigo": "",
+              "descripcion": "Honorarios inmobiliaria",
+              "cantidad": 1,
+              "precio_unitario": 4260,
+              "descuento_porcentaje": 0,
+              "precio_neto": 4260,
+              "importe_linea": 4260
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 21,
+          "base_imponible": 4260,
+          "cuota_iva": 894.6,
+          "total_con_iva": 5154.6
+        },
+        {
+          "tipo_iva": "RETENCION",
+          "porcentaje": 15,
+          "base_imponible": 4260,
+          "cuota_iva": -639,
+          "total_con_iva": -639
+        }
+      ],
+      "metadatos": {
+        "remitente": "",
+        "destinatario": "",
+        "numero_referencia": "",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": ""
+      }
+    }
+  }
+]

@@ -13,6 +13,11 @@
 # testing
 /coverage
 
+# Corpus MinIO descargado (solo lectura remota; binarios locales no versionar)
+/tests/fixtures/documents/raw/
+!/tests/fixtures/documents/manifest.json
+!/tests/fixtures/documents/expected/
+
 # next.js
 /.next/
 /out/

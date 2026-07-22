@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-07-21T12:36:52.762Z",
+  "cases": 2,
+  "guardsPassRate": 1,
+  "fieldAccuracy": 1,
+  "rows": [
+    {
+      "id": "guards-ok-factura-recibida-01",
+      "archetype": "pdf_digital_small",
+      "guardOk": true,
+      "failures": [],
+      "fields": {
+        "cif_emisor": true,
+        "cif_receptor": true,
+        "tipo": true,
+        "importe_total": true
+      },
+      "expectRevision": false
+    },
+    {
+      "id": "guards-revision-sin-cif-emisor-01",
+      "archetype": "pdf_digital_small",
+      "guardOk": false,
+      "failures": [
+        {
+          "code": "CIF_EMISOR_AUSENTE",
+          "message": "CIF del emisor ausente"
+        }
+      ],
+      "fields": {
+        "cif_emisor": true,
+        "cif_receptor": true,
+        "tipo": true,
+        "importe_total": true
+      },
+      "expectRevision": true
+    }
+  ]
+}

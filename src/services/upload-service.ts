@@ -233,34 +233,122 @@ export async function extractAndUploadRarChildren(
 
 // ─── Actividad y errores ───────────────────────────────────────────────────────
 
+async function activityExists(uploadId: string): Promise<boolean> {
+  const [rows] = await connection.query(
+    `SELECT id FROM ${dbName}.actividad WHERE upload_id = ? LIMIT 1`,
+    [uploadId]
+  ) as any;
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * Crea fila de actividad si no existe. Si ya existe (lote pre-registrado), no re-INSERT.
+ */
 async function createActivityRecord(
   uploadId: string,
   empresaId: string,
   fileName: string,
   fileType: string,
-  parentUploadId?: string
+  parentUploadId?: string,
+  batchId?: string | null,
+  opts?: { status?: string; step?: string; mensaje?: string }
 ): Promise<void> {
   try {
+    if (await activityExists(uploadId)) {
+      console.log(`[${fileName}] ℹ️ Actividad ya existía (uploadId: ${uploadId}) — skip INSERT`);
+      if (opts?.status || opts?.step || opts?.mensaje) {
+        await connection.query(
+          `UPDATE ${dbName}.actividad
+           SET status = COALESCE(?, status),
+               step = COALESCE(?, step),
+               mensaje = COALESCE(?, mensaje),
+               documento_tipo = COALESCE(?, documento_tipo),
+               updated_at = NOW()
+           WHERE upload_id = ?`,
+          [
+            opts?.status ?? null,
+            opts?.step ?? null,
+            opts?.mensaje ?? null,
+            fileType || null,
+            uploadId,
+          ]
+        );
+      }
+      return;
+    }
+
     await connection.query(
       `INSERT INTO ${dbName}.actividad 
-        (upload_id, parent_upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (upload_id, parent_upload_id, batch_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uploadId,
         parentUploadId || null,
+        batchId || null,
         empresaId,
         fileName,
         fileType,
-        'iniciando',
-        'Iniciando el flujo',
+        opts?.status ?? 'iniciando',
+        opts?.step ?? 'Iniciando el flujo',
         0,
-        'Archivo recibido, preparando para procesamiento',
+        opts?.mensaje ?? 'Archivo recibido, preparando para procesamiento',
       ]
     );
-    console.log(`[${fileName}] ✅ Registro de actividad creado (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''})`);
+    console.log(`[${fileName}] ✅ Registro de actividad creado (uploadId: ${uploadId}${parentUploadId ? `, parent: ${parentUploadId}` : ''}${batchId ? `, batch: ${batchId}` : ''})`);
   } catch (error) {
     console.error(`[${fileName}] ❌ Error al crear registro de actividad:`, error);
   }
+}
+
+export type BatchFileInput = {
+  fileName: string;
+  size?: number;
+  mimeType?: string;
+};
+
+export type BatchItemResult = {
+  uploadId: string;
+  fileName: string;
+};
+
+/**
+ * Reserva uploadIds + batchId SIN crear filas de actividad.
+ * La actividad se crea en /api/uploads/file cuando ya llegaron los bytes (MinIO).
+ * Así un refresh no deja fantasmas "Esperando bytes".
+ */
+export async function createActivityBatch(
+  empresaId: string,
+  files: BatchFileInput[]
+): Promise<{ batchId: string; items: BatchItemResult[] }> {
+  if (!empresaId) throw new Error('empresaId requerido');
+  if (!files?.length) throw new Error('Se requiere al menos un archivo');
+
+  // Limpiar fantasmas viejos (queued sin archivo) de lotes anteriores
+  const { invalidateQueuedGhostsForEmpresa } = await import('@/services/actividad-reconcile');
+  const invalidated = await invalidateQueuedGhostsForEmpresa(empresaId);
+  if (invalidated > 0) {
+    console.log(`🧹 [createActivityBatch] Invalidated ${invalidated} queued-without-file rows`);
+  }
+
+  const batchId = `batch_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const items: BatchItemResult[] = [];
+
+  for (const file of files) {
+    const fileName = (file.fileName || '').trim();
+    if (!fileName) continue;
+
+    const uploadId = `upload_${Date.now()}_${crypto.randomBytes(5).toString('hex')}`;
+    items.push({ uploadId, fileName: normalizeFileName(fileName) });
+    // Pequeño jitter para no colisionar timestamps en el mismo ms
+    await new Promise((r) => setTimeout(r, 1));
+  }
+
+  if (items.length === 0) throw new Error('Ningún nombre de archivo válido');
+
+  console.log(
+    `📦 [createActivityBatch] batch=${batchId} items=${items.length} empresa=${empresaId} (sin INSERT actividad)`
+  );
+  return { batchId, items };
 }
 
 async function markUploadAsFailed(
@@ -333,10 +421,13 @@ export async function uploadDocument(
   const file = formData.get('file') as File | null;
   const empresaId = formData.get('empresaId') as string | null;
   const uploadId = formData.get('uploadId') as string | null;
+  const batchIdRaw = formData.get('batchId') as string | null;
+  const batchId = batchIdRaw?.trim() || null;
 
   console.log('📤 [UploadService] Recibido archivo:', file?.name);
   console.log('📤 [UploadService] EmpresaId:', empresaId);
   console.log('📤 [UploadService] UploadId:', uploadId);
+  console.log('📤 [UploadService] BatchId:', batchId);
 
   if (!file)      throw new Error('No se ha proporcionado ningún archivo.');
   if (!empresaId) throw new Error('No se ha proporcionado el ID de empresa.');
@@ -399,8 +490,11 @@ export async function uploadDocument(
     if (normalizedFileType === 'zip' || normalizedFileType === 'rar') {
       isCompressedFile = true;
       console.log(`[${normalizedFileName}] 📦 Archivo comprimido (${normalizedFileType.toUpperCase()}) — la extracción se hará en background por el worker.`);
-      // Creamos el registro de actividad AHORA para que la UI lo muestre de inmediato
-      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType, undefined, batchId, {
+        status: 'iniciando',
+        step: 'Iniciando el flujo',
+        mensaje: 'Archivo recibido, preparando para procesamiento',
+      });
 
     // ── PDF / Imagen / Otros: Verificar duplicados antes de encolar ───────────
     } else {
@@ -408,11 +502,15 @@ export async function uploadDocument(
       const duplicateRecord = await checkDuplicate(mainFileHash, empresaId);
       if (duplicateRecord) {
         console.warn(`❌ DUPLICADO DETECTADO: ${normalizedFileName}`);
-        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+        await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType, undefined, batchId, {
+          status: 'iniciando',
+          step: 'Verificación de duplicados',
+          mensaje: 'Comprobando hash de archivo',
+        });
         await markUploadAsFailed(
           uploadId,
           `❌ Este archivo ya fue subido anteriormente a esta empresa el ${new Date(duplicateRecord.uploaded_at).toLocaleString('es-AR')}`,
-          'Verificación de duplicados'
+          'Duplicado detectado'
         );
         await notifyFrontendError(
           uploadId,
@@ -432,7 +530,11 @@ export async function uploadDocument(
         };
       }
       console.log(`[${normalizedFileName}] ✓ No hay duplicados`);
-      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType);
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType, undefined, batchId, {
+        status: 'iniciando',
+        step: 'Iniciando el flujo',
+        mensaje: 'Archivo recibido, preparando para procesamiento',
+      });
     }
 
     // ── Subir archivo padre a MinIO ───────────────────────────────────────────

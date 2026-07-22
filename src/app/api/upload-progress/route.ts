@@ -394,8 +394,10 @@ export async function GET(request: NextRequest) {
     ) as any;
 
     if (rows.length === 0) {
+      // exists:false → el cliente corta el polling fantasma (localStorage zombie)
       return NextResponse.json(
         {
+          exists: false,
           status: 'waiting',
           step: 'Iniciando',
           progress: 0,
@@ -421,26 +423,18 @@ export async function GET(request: NextRequest) {
       children = childRows;
     }
 
-    // 🆕 VERIFICAR SI EL DOCUMENTO ÚNICO TIENE INCIDENCIAS (solo display UI)
+    // Solo display UI — el webhook se dispara en el POST al marcar Completado (no en cada poll)
     let hasIncidents = false;
-    
-    // 🔔 WEBHOOK TRIGGER desde GET: Asegura disparo en caso que POST haya fallado
-    if (mainRecord.status === 'Completado') {
-      if (mainRecord.documento_id && children.length === 0) {
-        const [incidentRows] = await connection.query(
-          `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ?`,
-          [mainRecord.documento_id]
-        ) as any;
-        hasIncidents = incidentRows[0]?.count > 0;
-      }
-      
-      // Disparamos el webhook usando la misma función central en background
-      after(async () => {
-        await dispatchCompletionWebhook(uploadId);
-      });
+    if (mainRecord.status === 'Completado' && mainRecord.documento_id && children.length === 0) {
+      const [incidentRows] = await connection.query(
+        `SELECT COUNT(*) as count FROM ${dbName}.incidencias_documento WHERE documento_id = ? AND validado = 0`,
+        [mainRecord.documento_id]
+      ) as any;
+      hasIncidents = incidentRows[0]?.count > 0;
     }
 
     const response = {
+      exists: true,
       id: mainRecord.id,
       status: mainRecord.status,
       step: mainRecord.step,
@@ -450,6 +444,8 @@ export async function GET(request: NextRequest) {
       timestamp: Date.now(),
       isCompressed: children.length > 0,
       hasIncidents,
+      documentId: mainRecord.documento_id ? Number(mainRecord.documento_id) : null,
+      batchId: mainRecord.batch_id || null,
       children: children.map((child: any) => ({
         id: child.id,
         uploadId: child.upload_id,
@@ -458,22 +454,12 @@ export async function GET(request: NextRequest) {
         step: child.step,
         progress: child.progress,
         message: child.mensaje,
-        retryCount: child.retry_count || 0
+        retryCount: child.retry_count || 0,
+        documentId: child.documento_id ? Number(child.documento_id) : null,
       }))
     };
 
-    // 🆕 ETA CALCULATION
-    if (mainRecord.status !== 'Completado' && mainRecord.status !== 'Fallido') {
-      try {
-        const { geminiQueue } = await import('@/lib/queue');
-        const counts = await geminiQueue.getJobCounts('waiting', 'delayed', 'active');
-        const pendingJobs = counts.waiting + counts.delayed + counts.active;
-        // Asumiendo INTER_JOB_DELAY_MS = 10000ms (10 segundos) por job
-        (response as any).etaSeconds = pendingJobs * 10;
-      } catch (qErr) {
-        console.error('❌ [ETA] Error obteniendo colas:', qErr);
-      }
-    }
+    // Sin ETA en cada poll: pegaba a Redis y las estimaciones no eran fiables.
 
     return NextResponse.json(response, {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }

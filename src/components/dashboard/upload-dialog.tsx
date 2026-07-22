@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
-import { uploadDocument } from '@/services/upload-service';
+import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadDialogProps {
@@ -70,51 +70,130 @@ export function UploadDialog({
     e.stopPropagation();
   };
 
-  const processDroppedFiles = (droppedFiles: File[]) => {
-    const acceptedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'image/jpeg',
-      'image/jpg',
-      'image/png',
-      'application/zip',
-      'application/x-rar-compressed',
-      'application/vnd.rar',
-    ];
+  const acceptedTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'application/zip',
+    'application/x-rar-compressed',
+    'application/vnd.rar',
+    'application/x-zip-compressed',
+  ];
+  const acceptedExts = new Set([
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar',
+  ]);
 
-    const validFiles = droppedFiles.filter(file => {
-      const isValidType = acceptedTypes.includes(file.type);
-      const isValidSize = validateFileSize(file);
+  const isAcceptedFile = (file: File) => {
+    const ext = file.name.includes('.')
+      ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+      : '';
+    // Linux/Windows a menudo dejan file.type vacío en extensiones .PDF (mayúsculas)
+    return acceptedTypes.includes(file.type) || acceptedExts.has(ext);
+  };
 
-      if (!isValidType) {
-        return false;
+  /** Lee archivos de un drop, incluyendo carpetas (webkitGetAsEntry). */
+  const collectFilesFromDataTransfer = async (dataTransfer: DataTransfer): Promise<File[]> => {
+    const items = dataTransfer.items;
+    if (!items?.length) {
+      return Array.from(dataTransfer.files);
+    }
+
+    const readEntry = async (entry: FileSystemEntry): Promise<File[]> => {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve, reject) => {
+          (entry as FileSystemFileEntry).file(resolve, reject);
+        });
+        return [file];
       }
+      if (entry.isDirectory) {
+        const reader = (entry as FileSystemDirectoryEntry).createReader();
+        const entries: FileSystemEntry[] = [];
+        // readEntries llega en lotes; hay que llamar hasta vaciar
+        const readBatch = (): Promise<void> =>
+          new Promise((resolve, reject) => {
+            reader.readEntries(async (batch) => {
+              try {
+                if (batch.length === 0) {
+                  resolve();
+                  return;
+                }
+                entries.push(...batch);
+                await readBatch();
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            }, reject);
+          });
+        await readBatch();
+        const nested = await Promise.all(entries.map(readEntry));
+        return nested.flat();
+      }
+      return [];
+    };
 
-      return isValidSize;
+    const collected: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) {
+        collected.push(...(await readEntry(entry)));
+      } else if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) collected.push(file);
+      }
+    }
+
+    // Fallback si el navegador no expone entries
+    if (collected.length === 0) {
+      return Array.from(dataTransfer.files);
+    }
+    return collected;
+  };
+
+  const processDroppedFiles = (droppedFiles: File[]) => {
+    // Carpetas sin extensión llegan como "archivo" vacío/sin tipo — no son inválidas, son carpetas mal leídas
+    const candidates = droppedFiles.filter((file) => file.size > 0 || file.name.includes('.'));
+
+    const validFiles = candidates.filter(file => {
+      const isValidType = isAcceptedFile(file);
+      const isValidSize = validateFileSize(file);
+      return isValidType && isValidSize;
     });
 
     if (validFiles.length > 0) {
       setFiles(prevFiles => [...prevFiles, ...validFiles]);
     }
 
-    const invalidTypeFiles = droppedFiles.filter(file => !acceptedTypes.includes(file.type));
+    const invalidTypeFiles = candidates.filter(file => !isAcceptedFile(file));
     if (invalidTypeFiles.length > 0) {
+      const names = invalidTypeFiles.map(f => f.name).slice(0, 5).join(', ');
+      const more = invalidTypeFiles.length > 5 ? ` (+${invalidTypeFiles.length - 5} más)` : '';
       toast({
         title: "⚠️ Archivos no válidos",
-        description: "Algunos archivos no tienen un formato válido y fueron ignorados",
+        description: `Ignorados: ${names}${more}`,
+        variant: "destructive",
+      });
+    } else if (droppedFiles.length > 0 && validFiles.length === 0) {
+      toast({
+        title: "⚠️ No se encontraron archivos",
+        description: "Si soltaste una carpeta, prueba de nuevo o selecciona los PDF con el botón.",
         variant: "destructive",
       });
     }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    processDroppedFiles(Array.from(e.dataTransfer.files));
+    const files = await collectFilesFromDataTransfer(e.dataTransfer);
+    processDroppedFiles(files);
   };
 
   // Fullscreen drag and drop listeners
@@ -146,14 +225,15 @@ export function UploadDialog({
       e.stopPropagation();
     };
 
-    const handleWindowDrop = (e: DragEvent) => {
+    const handleWindowDrop = async (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
       dragCounter = 0;
-      
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        processDroppedFiles(Array.from(e.dataTransfer.files));
+
+      if (e.dataTransfer) {
+        const files = await collectFilesFromDataTransfer(e.dataTransfer);
+        processDroppedFiles(files);
       }
     };
 
@@ -172,6 +252,10 @@ export function UploadDialog({
 
   const handleUpload = () => {
     if (!selectedCompanyId || files.length === 0) {
+      console.warn('⚠️ [UploadDialog] Abortado: empresa o archivos faltantes', {
+        companyId: selectedCompanyId,
+        files: files.length,
+      });
       toast({
         title: "⚠️ Datos incompletos",
         description: "Por favor selecciona una empresa y al menos un archivo",
@@ -182,6 +266,10 @@ export function UploadDialog({
 
     const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
+      console.warn('⚠️ [UploadDialog] Abortado: archivos demasiado grandes', {
+        count: oversizedFiles.length,
+        names: oversizedFiles.map(f => f.name),
+      });
       toast({
         title: "❌ Archivos demasiado grandes",
         description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
@@ -190,91 +278,58 @@ export function UploadDialog({
       return;
     }
 
-    // 🚀 CERRAR INMEDIATAMENTE (UX PETICIÓN USUARIO)
-    onClose();
-
-    // Iniciar uploads en segundo plano
     const filesToUpload = [...files];
     const companyId = selectedCompanyId;
 
-    // Limpiar estado por si acaso (aunque se desmonte)
+    console.log('🚀 [UploadDialog] Inicio carga persistente (IndexedDB)', {
+      empresaId: companyId,
+      totalArchivos: filesToUpload.length,
+    });
+
+    onClose();
     setFiles([]);
     setSelectedCompanyId('');
     setIsUploading(false);
 
-    // Notificar inicio
     toast({
-      title: "⏳ Iniciando carga...",
-      description: `Los archivos se están procesando en segundo plano.`,
+      title: '⏳ Carga en curso',
+      description: `${filesToUpload.length} archivo(s). Podés navegar; si recargás, se reanuda sola.`,
     });
 
-    // Proceso en segundo plano (Fire and Forget)
     (async () => {
-      let successCount = 0;
-      let errorCount = 0;
-      let duplicateCount = 0;
+      try {
+        const summary = await enqueueClientUploadBatch({
+          empresaId: companyId,
+          files: filesToUpload,
+        });
 
-      for (const file of filesToUpload) {
-        try {
-          const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          console.log('📤 [UploadDialog] Subiendo:', file.name, 'uploadId:', uploadId);
+        const parts = [
+          `${summary.successCount} encolado(s)`,
+          summary.duplicateCount > 0 ? `${summary.duplicateCount} duplicado(s)` : null,
+          summary.errorCount > 0 ? `${summary.errorCount} error(es)` : null,
+        ].filter(Boolean);
 
-          if ((window as any).__uploadProgressManager) {
-            (window as any).__uploadProgressManager.addUpload(uploadId, file.name);
-          }
+        toast({
+          title:
+            summary.errorCount > 0 && summary.successCount === 0 && summary.duplicateCount === 0
+              ? '❌ Error en el lote'
+              : '✅ Lote enviado',
+          description:
+            parts.join(' · ') + (summary.errorDetails[0] ? `. ${summary.errorDetails[0]}` : ''),
+          variant:
+            summary.errorCount > 0 && summary.successCount === 0 ? 'destructive' : 'default',
+        });
 
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('empresaId', companyId);
-          formData.append('uploadId', uploadId);
-
-          const result = await uploadDocument(formData);
-
-          if (result.isDuplicate) {
-            duplicateCount++;
-          } else {
-            successCount++;
-          }
-
-        } catch (error: any) {
-          console.error('❌ [UploadDialog] Error subiendo:', file.name, error);
-          errorCount++;
-
-          if (error.message?.includes('duplicado') || error.message?.includes('Archivo duplicado')) {
-            duplicateCount++;
-            errorCount--;
-          }
+        if (summary.successCount > 0 || summary.duplicateCount > 0) {
+          window.dispatchEvent(new Event('documentUploaded'));
+          onUploadComplete?.();
         }
-      }
-
-      // 🏁 FIN DE PROCESO (Background)
-      const totalProcessed = successCount + duplicateCount + errorCount;
-      const hasSuccess = successCount > 0 || duplicateCount > 0;
-
-      if (errorCount === totalProcessed && errorCount > 0) {
+      } catch (err: any) {
+        console.error('❌ [UploadDialog] Fallo en cola persistente:', err);
         toast({
-          title: "❌ Error",
-          description: "No se pudo procesar ningún archivo.",
-          variant: "destructive",
-        });
-      } else if (hasSuccess) {
-        toast({
-          title: "✅ Archivos recibidos",
-          description: `La carga de ${successCount} archivo(s) ha iniciado y se están procesando en segundo plano (Detectados ${duplicateCount} duplicados).`,
-        });
-
-        // Evento global para Tutorial y Refetch
-        console.log('🎯 [UploadDialog] Evento documentUploaded (Background)');
-        window.dispatchEvent(new Event('documentUploaded'));
-
-        // Notificar al padre para refetch
-        onUploadComplete?.();
-
-      } else {
-        toast({
-          title: "⚠️ Finalizado con observaciones",
-          description: "Revisa las notificaciones de error para más detalles.",
-          variant: "destructive",
+          title: '❌ No se pudo iniciar el lote',
+          description: err?.message || 'Error al registrar / guardar la cola local.',
+          variant: 'destructive',
         });
       }
     })();
@@ -373,7 +428,7 @@ export function UploadDialog({
               onChange={handleFileChange}
               className="hidden"
               id="file-upload"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar"
+              accept=".pdf,.PDF,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar,application/pdf"
             />
             <Button
               variant="outline"

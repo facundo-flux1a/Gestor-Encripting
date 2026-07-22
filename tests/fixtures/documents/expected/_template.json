@@ -1,0 +1,30 @@
+{
+  "id": "ejemplo-factura-recibida-01",
+  "archetype": "pdf_digital_small",
+  "empresaCif": "B12345678",
+  "sourceMinioKey": "archivos/ejemplo.pdf",
+  "localRaw": "tests/fixtures/documents/raw/pdf_digital_small__ejemplo.pdf",
+  "expectRevision": false,
+  "expected": {
+    "tipo_documento": "FACTURA RECIBIDA",
+    "empresa_emisora": { "nombre": "Proveedor SA", "cif": "A11111111" },
+    "cliente": { "nombre": "Mi Empresa SL", "cif": "B12345678" },
+    "documento": {
+      "numero_documento": "F-2026-001",
+      "fecha_emision": "2026-01-15",
+      "importe_total": 121.0,
+      "importe_sin_iva": 100.0
+    },
+    "totales_por_impuesto": [
+      {
+        "tipo_iva": "IVA",
+        "porcentaje": 21,
+        "base_imponible": 100.0,
+        "cuota_iva": 21.0
+      }
+    ],
+    "incidencia": false,
+    "descripcion_incidencia": ""
+  }
+}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        

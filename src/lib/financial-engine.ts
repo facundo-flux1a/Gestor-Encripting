@@ -1,4 +1,5 @@
 import { Document } from './types';
+import { isFiscalmenteValido } from './document-fiscal-status';
 
 export const VAT_RATES = [21, 15, 10, 4, 0];
 
@@ -74,6 +75,11 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
     const totalNeto = createEmptySummary();
 
     documents.forEach(doc => {
+        // Docs en REVISION no entran a agregados de control (dashboard/trimestres)
+        if (!isFiscalmenteValido(doc.datos_extra)) {
+            return;
+        }
+
         // 1. Determinar Trimestre
         let q = doc.num_trimestre;
         if (!q && doc.fecha_emision) {

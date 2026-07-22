@@ -70,11 +70,17 @@ function DocumentsPageContent() {
   React.useEffect(() => {
     async function loadDocuments() {
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+        console.log('📭 [DocumentsPage] Sin empresas seleccionadas — lista vacía');
         setDocuments([]);
         setLoading(false);
         return;
       }
 
+      const t0 = performance.now();
+      console.log('📥 [DocumentsPage] Cargando documentos...', {
+        companyIds: selectedCompanyIds,
+        refetchKey: key,
+      });
       try {
         setLoading(true);
         setError(null);
@@ -90,14 +96,21 @@ function DocumentsPageContent() {
         });
 
         if (!response.ok) {
+          console.error('❌ [DocumentsPage] API documents no OK', {
+            status: response.status,
+            statusText: response.statusText,
+            url,
+          });
           throw new Error('Error al cargar documentos desde la API');
         }
 
         const data = await response.json();
         const docs = data.documents || data;
         setDocuments(docs);
+        console.log(`⏱️ [PERF:client] DocumentsPage.fetch | ${Math.round(performance.now() - t0)}ms | docs=${Array.isArray(docs) ? docs.length : '?'} companies=${selectedCompanyIds.join(',')}`);
       } catch (err) {
         console.error('❌ [DocumentsPage] Error loading documents:', err);
+        console.log(`⏱️ [PERF:client] DocumentsPage.fetch | ${Math.round(performance.now() - t0)}ms | error=1`);
         setError('Error al cargar los documentos');
       } finally {
         setLoading(false);

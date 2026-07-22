@@ -4,7 +4,8 @@
  * Worker principal de ingesta. Escucha la `ingestionQueue` y enruta cada job:
  *
  *   ZIP/RAR  →  re-encola cada hijo como job individual en ingestionQueue
- *   PDF/IMG  →  encola en geminiQueue con type: 'classify'
+ *   PDF/IMG  →  encola en geminiQueue con type: 'extract-facturable'
+ *               (routing facturable/multi en la misma respuesta; sin hop classify)
  *
  * El archivo físico NO se descarga aquí — solo se enruta.
  * La descarga y llamada a Gemini ocurre en gemini.worker.ts.
@@ -165,25 +166,35 @@ export function startIngestionWorker() {
         }
 
         // ── Caso 2: Archivo individual (PDF, imagen, Word, Excel...) ──────────
-        // Encolar en geminiQueue para clasificación. El gemini worker se encarga
-        // de llamar a Analista4/Analista33 y luego bifurcar.
-        console.log(`[IngestionWorker] 📄 Archivo individual. Encolando en geminiQueue para clasificación...`);
+        // Directo a extract-facturable: es_facturable / es_multiple viajan en la
+        // misma respuesta; el gemini worker bifurca a paginate / NF / multi-img.
+        console.log(`[IngestionWorker] 📄 Archivo individual. Encolando extract (sin classify)...`);
 
         await updateIngestionProgress(uploadId, PROGRESS.RECEIVED);
 
+        // Pacing también en carga singular (antes solo lotes multi tenían delay).
+        // Evita que N subidas 1-a-1 saturen Vertex al mismo segundo.
+        const singularDelayMs = parseInt(process.env.SINGULAR_CLASSIFY_DELAY_MS || '1500', 10);
+        const staggerIndex = typeof data.documentoIndex === 'number' ? Math.max(0, data.documentoIndex - 1) : 0;
+        // Si no viene de lote, usar un jitter estable por uploadId para no alinear todos en t=0
+        const hashDelay = !data.documentoIndex
+          ? (Array.from(uploadId).reduce((a, c) => a + c.charCodeAt(0), 0) % 5) * singularDelayMs
+          : staggerIndex * singularDelayMs;
+
         await geminiQueue.add(
-          `classify-${uploadId}`,
+          `extract-facturable-${uploadId}`,
           {
-            type: 'classify',
+            type: 'extract-facturable',
             ingestion: data,
           },
           {
-            jobId: `classify-${uploadId}`, // deduplicación
+            jobId: `extract-facturable-${uploadId}`,
+            delay: hashDelay,
           }
         );
 
-        console.log(`[IngestionWorker] ✅ Job de clasificación encolado para ${fileName}`);
-        return { clasificando: true };
+        console.log(`[IngestionWorker] ✅ Job de extracción encolado para ${fileName}`);
+        return { extrayendo: true };
 
       } catch (error: any) {
         console.error(`[IngestionWorker] ❌ Error en job ${job.id} (${fileName}):`, error.message);

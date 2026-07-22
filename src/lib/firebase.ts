@@ -1,18 +1,9 @@
+/**
+ * Firebase desactivado temporalmente (login email/password alcanza).
+ * Evita cargar el SDK y desbloquea Turbopack / arranque más rápido.
+ * Para reactivar: restaurar imports de firebase/app + firebase/auth.
+ */
 
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-
-const firebaseConfig = {
-  "projectId": "fluxidocs",
-  "appId": "1:789878664580:web:484bd65feab371b5d281d1",
-  "storageBucket": "fluxidocs.firebasestorage.app",
-  "apiKey": "AIzaSyDOKEMSeFD2qnYxgitFjB4c8yQfvXPsnFE",
-  "authDomain": "fluxidocs.firebaseapp.com",
-  "messagingSenderId": "789878664580"
-};
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
-
-export { app, auth, googleProvider };
+export const app = null;
+export const auth = null;
+export const googleProvider = null;

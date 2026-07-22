@@ -1,4 +1,7 @@
 import type { NextConfig } from 'next';
+import path from 'path';
+
+const root = path.join(__dirname);
 
 const nextConfig: NextConfig = {
   typescript: {
@@ -6,6 +9,19 @@ const nextConfig: NextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  // Evita que Turbopack/Next tome /home/kornegor como root por un package-lock.json padre
+  outputFileTracingRoot: root,
+  turbopack: {
+    root,
+  },
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.modules = [
+      path.join(root, 'node_modules'),
+      ...(config.resolve.modules || ['node_modules']),
+    ];
+    return config;
   },
   images: {
     remotePatterns: [

@@ -688,16 +688,29 @@ CATEGORÍAS PRINCIPALES
 
 ---
 
+🔥 ENRUTADO (obligatorio en la misma respuesta — no hay llamada de clasificación previa)
+
+1) \`es_facturable\`: true si es factura / albarán / abono / ticket / proforma con importes fiscales.
+   false si es contrato, nómina, plano, extracto, modelo AEAT, póliza, acta, manual, etc.
+2) \`es_multiple\`: true si el archivo contiene 2+ documentos independientes (distintos números de factura, o mezcla de categorías/emisores).
+
+Si \`es_facturable\` es false:
+- Devolvé SOLO: {"es_facturable": false, "es_multiple": false|true, "categoria_documento": "<categoría>", "tipo_documento": "", "incidencia": false, "descripcion_incidencia": ""}
+- No inventes importes ni líneas fiscales.
+- categoria_documento: una de "Fiscal y Contable", "Legal y Societario", "Laboral y RR.HH.", "Bancos y Financiación", "Clientes", "Proveedores", "Administración Pública", "Interno / Operaciones".
+
+---
+
 🔥 DETECCIÓN DE MÚLTIPLES DOCUMENTOS EN UN MISMO ARCHIVO
 
-**CASO NORMAL (un solo documento):**
-Devuelve el JSON con la estructura habitual y \`"es_multiple": false\`.
+**CASO NORMAL (un solo documento facturable):**
+Devuelve el JSON completo con \`"es_facturable": true\` y \`"es_multiple": false\`.
 
 **SI DETECTÁS MÁS DE UN DOCUMENTO en el archivo (más de una factura, abono, etc.):**
 
 1. **NO intentes extraer todos** — extrae únicamente los datos del **primer documento** que encuentres
 2. Completa todos los campos normalmente con los datos de ese primer documento
-3. Establece \`"es_multiple": true\` en el JSON de salida
+3. Establece \`"es_facturable": true\` y \`"es_multiple": true\` en el JSON de salida
 4. Incluye en \`descripcion_incidencia\` (además de cualquier otra incidencia): "El archivo contiene múltiples documentos. Se extrajeron solo los datos del primero. Se requiere reprocesamiento."
 5. Establece \`"incidencia": true\`
 
@@ -707,6 +720,7 @@ Devuelve el JSON con la estructura habitual y \`"es_multiple": false\`.
 
 SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
 {
+  "es_facturable": true,
   "es_multiple": false,
   "tipo_documento": "",
   "categoria_principal": "",
@@ -775,6 +789,7 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
 
 **CHECKLIST FINAL ANTES DE RESPONDER:**
 □ ¿Revisé el documento AL MENOS 2-3 veces?
+□ ¿es_facturable correcto? (factura/albarán/abono/ticket → true; contrato/nómina/plano/modelo → false y JSON corto)
 □ ¿El archivo contiene más de un documento? Si es así → es_multiple: true + solo datos del primero + incidencia: true
 □ ¿El documento es un TICKET? → Si sí: ¿puse tipo_documento = "TICKET", importe_sin_iva = importe_total y totales_por_impuesto = []?
 □ ¿Busqué AMBOS CIFs (emisor y cliente) exhaustivamente, incluyendo zonas no convencionales (pie, márgenes, laterales, entre textos legales, rotados, solapados)?

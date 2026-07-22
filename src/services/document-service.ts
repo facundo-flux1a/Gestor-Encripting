@@ -296,10 +296,13 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
  * Obtiene todas las empresas del usuario actual
  */
 export async function getCompanies(): Promise<Company[]> {
+  const t0 = performance.now();
   try {
     console.log('🔍 [getCompanies] Iniciando...');
 
+    const tUser = performance.now();
     const user = await getCurrentUser();
+    console.log(`⏱️ [PERF] getCompanies.getCurrentUser | ${Math.round(performance.now() - tUser)}ms`);
 
     console.log('👤 [getCompanies] Usuario obtenido:', user);
 
@@ -312,6 +315,7 @@ export async function getCompanies(): Promise<Company[]> {
 
     // Prisma: fetch all companies and filter in-memory (JSON array field)
     // ⚠️ No usar orderBy en campos encriptados — se ordena en memoria después de desencriptar
+    const tDb = performance.now();
     const allRows = await prisma.empresas.findMany({
       select: {
         id: true,
@@ -324,6 +328,7 @@ export async function getCompanies(): Promise<Company[]> {
         config_roles: true
       }
     });
+    console.log(`⏱️ [PERF] getCompanies.empresas.findMany | ${Math.round(performance.now() - tDb)}ms | rows=${allRows.length}`);
 
     const rows = allRows.filter(row => {
       const ids: number[] = Array.isArray(row.id_de_usuario) ? row.id_de_usuario as any[] : [];
@@ -333,6 +338,7 @@ export async function getCompanies(): Promise<Company[]> {
     console.log('📊 [getCompanies] Filas obtenidas:', rows.length);
 
     if (!rows || rows.length === 0) {
+      console.log(`⏱️ [PERF] getCompanies.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=0`);
       return [];
     }
 
@@ -351,10 +357,12 @@ export async function getCompanies(): Promise<Company[]> {
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }));
 
     console.log('✅ [getCompanies] Empresas mapeadas:', companies);
+    console.log(`⏱️ [PERF] getCompanies.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=${companies.length}`);
 
     return companies as Company[];
   } catch (error) {
     console.error("❌ [getCompanies] Error:", error);
+    console.log(`⏱️ [PERF] getCompanies.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
     return [];
   }
 }
@@ -480,10 +488,13 @@ export async function createCompany(data: {
  * Obtiene todos los documentos, opcionalmente filtrados por empresas
  */
 export async function getDocuments(empresaIds?: number[], excludeIncidents: boolean = false): Promise<Document[]> {
+  const t0 = performance.now();
   console.log('🎯 [document-service] getDocuments llamado con:', { empresaIds, excludeIncidents });
 
   try {
+    const tUser = performance.now();
     const user = await getCurrentUser();
+    console.log(`⏱️ [PERF] getDocuments.getCurrentUser | ${Math.round(performance.now() - tUser)}ms`);
     if (!user) {
       console.warn('⚠️ [document-service] No hay usuario autenticado');
       return [];
@@ -506,10 +517,12 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
       
       // Excluir manualmente los documentos con fallos en el health check 
       // (no se puede por relación Prisma porque documento_id es Int y documentos.id es BigInt)
+      const tHc = performance.now();
       const unverifiedHealthChecks = await prisma.health_check_status.findMany({
         where: { verified: false },
         select: { documento_id: true }
       });
+      console.log(`⏱️ [PERF] getDocuments.health_check | ${Math.round(performance.now() - tHc)}ms | rows=${unverifiedHealthChecks.length}`);
       
       if (unverifiedHealthChecks.length > 0) {
         const unverifiedIds = unverifiedHealthChecks.map(hc => BigInt(hc.documento_id));
@@ -517,6 +530,7 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
       }
     }
 
+    const tDocs = performance.now();
     const docs = await prisma.documentos.findMany({
       where: whereClause,
       orderBy: { fecha_emision: 'desc' },
@@ -528,6 +542,7 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
         }
       }
     });
+    console.log(`⏱️ [PERF] getDocuments.documentos.findMany | ${Math.round(performance.now() - tDocs)}ms | rows=${docs.length}`);
 
     console.log('📊 [document-service] Filas obtenidas de BD:', docs.length);
 
@@ -569,13 +584,17 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
       });
     }
 
+    const tMap = performance.now();
     const result = await mapDocumentPacketsToDocuments(documentRows);
+    console.log(`⏱️ [PERF] getDocuments.mapPackets | ${Math.round(performance.now() - tMap)}ms | docs=${result.length}`);
 
     console.log('✅ [document-service] Documentos mapeados:', result.length);
+    console.log(`⏱️ [PERF] getDocuments.TOTAL | ${Math.round(performance.now() - t0)}ms`);
 
     return result;
   } catch (error) {
     console.error("❌ [document-service] Error al obtener documentos:", error);
+    console.log(`⏱️ [PERF] getDocuments.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
     return [];
   }
 }
@@ -1458,24 +1477,30 @@ export async function deleteDocument(
 
     let snapshot = null;
     try {
-      snapshot = await getSnapshotBeforeUpdate(documentId, db);
+      snapshot = await getSnapshotBeforeUpdate(documentId);
     } catch (e) {
       console.warn('⚠️ [deleteDocument] Falló captura de snapshot previo a eliminar:', e);
     }
 
-    // Insertar registro de auditoría (VeriFactu)
+    // Auditoría DELETE sin FK al doc: fk_audit_documento es NO ACTION y bloquearía el delete.
     await prisma.documentos_auditoria.create({
       data: {
-        documento_id: BigInt(documentId),
+        documento_id: null,
         id_de_empresa: BigInt(docData.id_de_empresa),
         accion: 'DELETE',
         usuario: user.email || 'Desconocido',
-        detalle: JSON.stringify({ previo: snapshot }),
+        detalle: JSON.stringify({ documento_id: documentId, previo: snapshot }),
         fecha_accion: new Date()
       }
     });
 
-    // Eliminar el documento (las tablas relacionadas se eliminarán en cascada)
+    // Soltar FKs NO ACTION de auditorías previas (UPDATE/CREATE) que aún apuntan al doc
+    await prisma.documentos_auditoria.updateMany({
+      where: { documento_id: BigInt(documentId) },
+      data: { documento_id: null },
+    });
+
+    // Eliminar el documento (resto de tablas relacionadas: CASCADE)
     await prisma.documentos.delete({ where: { id: BigInt(documentId) } });
 
     console.log('✅ [deleteDocument] Documento y auditoría eliminados correctamente');
@@ -4749,21 +4774,21 @@ export async function getDashboardExportData(
  * ✅ NUEVA FUNCIÓN: Acepta filtro por empresas
  */
 export async function getUniqueClients(empresaIds?: number[]): Promise<string[]> {
+  const t0 = performance.now();
   try {
     const user = await getCurrentUser();
     if (!user) return [];
 
-    // Obtenemos las empresas permitidas para el usuario usando Prisma (ya incluye filtro de seguridad JSON)
-    const allowedCompanies = await getCompanies();
-    const allowedEmpresaIds = allowedCompanies.map(c => c.id);
-
-    // Cruzamos con las pedidas (si hay) para asegurar que no se pidan empresas ajenas
-    const targetEmpresaIds = empresaIds && empresaIds.length > 0 
-      ? empresaIds.filter(id => allowedEmpresaIds.includes(id))
-      : allowedEmpresaIds;
-
+    // Si el client manda empresaIds, usarlos (ya vienen del CompanyProvider del user).
+    // Evita getCompanies() extra (~1.3s) en cada filtro.
+    let targetEmpresaIds = empresaIds && empresaIds.length > 0 ? empresaIds : [];
+    if (targetEmpresaIds.length === 0) {
+      const allowedCompanies = await getCompanies();
+      targetEmpresaIds = allowedCompanies.map(c => c.id);
+    }
     if (targetEmpresaIds.length === 0) return [];
 
+    const tEnt = performance.now();
     const entidades = await prisma.entidades_documento.findMany({
       where: {
         documentos: {
@@ -4775,6 +4800,7 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
         nombre: true
       }
     });
+    console.log(`⏱️ [PERF] getUniqueClients.entidades | ${Math.round(performance.now() - tEnt)}ms | rows=${entidades.length}`);
 
     // Filtramos en memoria nulos/vacíos y sacamos valores únicos, luego ordenamos (post-desencriptación)
     const nombres = entidades
@@ -4784,9 +4810,11 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
     const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
 
     console.log('✅ [getUniqueClients] Clientes únicos (Prisma):', uniqueNombres.length);
+    console.log(`⏱️ [PERF] getUniqueClients.TOTAL | ${Math.round(performance.now() - t0)}ms`);
     return uniqueNombres;
   } catch (error) {
     console.error('❌ [getUniqueClients] Error:', error);
+    console.log(`⏱️ [PERF] getUniqueClients.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
     return [];
   }
 }
@@ -4796,19 +4824,19 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
  * ✅ REEMPLAZA la función existente getUniqueProviders() que retorna DocumentEntity[]
  */
 export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<string[]> {
+  const t0 = performance.now();
   try {
     const user = await getCurrentUser();
     if (!user) return [];
 
-    const allowedCompanies = await getCompanies();
-    const allowedEmpresaIds = allowedCompanies.map(c => c.id);
-
-    const targetEmpresaIds = empresaIds && empresaIds.length > 0 
-      ? empresaIds.filter(id => allowedEmpresaIds.includes(id))
-      : allowedEmpresaIds;
-
+    let targetEmpresaIds = empresaIds && empresaIds.length > 0 ? empresaIds : [];
+    if (targetEmpresaIds.length === 0) {
+      const allowedCompanies = await getCompanies();
+      targetEmpresaIds = allowedCompanies.map(c => c.id);
+    }
     if (targetEmpresaIds.length === 0) return [];
 
+    const tEnt = performance.now();
     const entidades = await prisma.entidades_documento.findMany({
       where: {
         documentos: {
@@ -4820,6 +4848,7 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
         nombre: true
       }
     });
+    console.log(`⏱️ [PERF] getUniqueProvidersNames.entidades | ${Math.round(performance.now() - tEnt)}ms | rows=${entidades.length}`);
 
     const nombres = entidades
       .map(e => e.nombre)
@@ -4828,9 +4857,11 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
     const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
 
     console.log('✅ [getUniqueProvidersNames] Proveedores únicos (Prisma):', uniqueNombres.length);
+    console.log(`⏱️ [PERF] getUniqueProvidersNames.TOTAL | ${Math.round(performance.now() - t0)}ms`);
     return uniqueNombres;
   } catch (error) {
     console.error('❌ [getUniqueProvidersNames] Error:', error);
+    console.log(`⏱️ [PERF] getUniqueProvidersNames.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
     return [];
   }
 }
@@ -4931,31 +4962,37 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
     // Obtener información del usuario para auditoría
     const userEmail = (await getCurrentUser())?.email || 'Desconocido';
 
-    // Capturar snapshots e insertar auditoría
+    // Capturar snapshots e insertar auditoría (sin FK: fk_audit_documento es NO ACTION)
+    const bigIds = ids.map(id => BigInt(id));
     for (const doc of docsToWebhook) {
       let snapshot = null;
       try {
-        snapshot = await getSnapshotBeforeUpdate(doc.documento_id, db);
+        snapshot = await getSnapshotBeforeUpdate(Number(doc.documento_id));
       } catch (e) {
         console.warn(`⚠️ [deleteDocuments] Falló captura de snapshot previo a eliminar doc ${doc.documento_id}:`, e);
       }
 
       await prisma.documentos_auditoria.create({
         data: {
-          documento_id: BigInt(doc.documento_id),
+          documento_id: null,
           id_de_empresa: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : BigInt(0),
           accion: 'DELETE',
           usuario: userEmail,
-          detalle: JSON.stringify({ previo: snapshot }),
+          detalle: JSON.stringify({ documento_id: Number(doc.documento_id), previo: snapshot }),
           fecha_accion: new Date()
         }
       });
     }
 
+    await prisma.documentos_auditoria.updateMany({
+      where: { documento_id: { in: bigIds } },
+      data: { documento_id: null },
+    });
+
     // Eliminar documentos en cascada (las relaciones en el schema tienen onDelete: Cascade)
     const result = await prisma.documentos.deleteMany({
       where: {
-        id: { in: ids.map(id => BigInt(id)) },
+        id: { in: bigIds },
         OR: [
           { id_de_empresa: null },
           { empresas: { id_de_usuario: { array_contains: userId } } }

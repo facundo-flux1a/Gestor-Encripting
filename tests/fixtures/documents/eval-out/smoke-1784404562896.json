@@ -1,0 +1,473 @@
+[
+  {
+    "file": "pdf_digital_small__Factura-5310678875.PDF",
+    "finishReason": "STOP",
+    "tokens": 16460,
+    "summary": {
+      "tipo": "FACTURA RECIBIDA",
+      "numero": "5310678875",
+      "fecha": "2025-05-09",
+      "emisor": "CAMPOFRIO FOOD GROUP, S.A.U.",
+      "cif_emisor": "A-09000928",
+      "cliente": "ESPAI DE DUES S.L.",
+      "cif_cliente": "B97376321",
+      "total": 223.85,
+      "base": 204.27,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 10,
+          "base": 190.16,
+          "cuota": 19.02
+        },
+        {
+          "tipo": "IVA",
+          "pct": 4,
+          "base": 14.11,
+          "cuota": 0.56
+        }
+      ],
+      "incidencia": false,
+      "desc_incidencia": ""
+    },
+    "guards": {
+      "ok": true,
+      "failures": []
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "FACTURA RECIBIDA",
+      "categoria_principal": "Proveedores",
+      "subcategoria": "Suministro",
+      "incidencia": false,
+      "descripcion_incidencia": "",
+      "empresa_emisora": {
+        "nombre": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "direccion": "Avda. de Europa, 24, 28108 ALCOBENDAS (MADRID)",
+        "cif": "A-09000928",
+        "telefono": "912 970 169",
+        "email": ""
+      },
+      "cliente": {
+        "nombre": "ESPAI DE DUES S.L.",
+        "direccion": "CL SAN JUAN 14, 46133 MELIANA, Valencia",
+        "cif": "B97376321",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": ""
+      },
+      "documento": {
+        "numero_documento": "5310678875",
+        "fecha_emision": "2025-05-09",
+        "forma_pago": "Domiciliación",
+        "comercial": "",
+        "importe_total": 223.85,
+        "importe_sin_iva": 204.27,
+        "fecha_vencimiento": "2025-05-21"
+      },
+      "lineas": [
+        {
+          "albaran": "5163961579",
+          "fecha_albaran": "",
+          "articulos": [
+            {
+              "codigo": "33248",
+              "descripcion": "J. RESERVA NAV 4 ESTACIONES LON 96G 2E",
+              "cantidad": 13,
+              "precio_unitario": 1.446,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.446,
+              "importe_linea": 18.8
+            },
+            {
+              "codigo": "3511",
+              "descripcion": "JAMON DE CEBO IBERICO NAV LONCH 40G 2,",
+              "cantidad": 28,
+              "precio_unitario": 1.6,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.6,
+              "importe_linea": 44.8
+            },
+            {
+              "codigo": "39805",
+              "descripcion": "NAVIDUL LONCHAS LOMO 40G 1,10E",
+              "cantidad": 24,
+              "precio_unitario": 0.786,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.786,
+              "importe_linea": 18.86
+            },
+            {
+              "codigo": "33502",
+              "descripcion": "FUETERIA EL INTENSO 150G 8UDS",
+              "cantidad": 8,
+              "precio_unitario": 1.656,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.656,
+              "importe_linea": 13.25
+            },
+            {
+              "codigo": "38105",
+              "descripcion": "MORTADELA DE PAVO 95G 1E CJ*12",
+              "cantidad": 12,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 8.28
+            },
+            {
+              "codigo": "2736",
+              "descripcion": "SALCH FRANKFURT CF 140G P4",
+              "cantidad": 12,
+              "precio_unitario": 1.541,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.541,
+              "importe_linea": 18.49
+            },
+            {
+              "codigo": "37112",
+              "descripcion": "CUIDAT+ JAMON COCIDO 65G 1E",
+              "cantidad": 18,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 12.42
+            },
+            {
+              "codigo": "3350",
+              "descripcion": "PIZZA JAMON/QUESO SALSA MOZZARELLA 360",
+              "cantidad": 14,
+              "precio_unitario": 1.961,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.961,
+              "importe_linea": 27.45
+            },
+            {
+              "codigo": "3352",
+              "descripcion": "PIZZA 5 QUESOS C/SALSA QUESO SEMICURAD",
+              "cantidad": 7,
+              "precio_unitario": 1.964,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.964,
+              "importe_linea": 13.75
+            },
+            {
+              "codigo": "3543",
+              "descripcion": "PIZZA & SALSA CF BARBACOA 410G",
+              "cantidad": 7,
+              "precio_unitario": 2.009,
+              "descuento_porcentaje": 0,
+              "precio_neto": 2.009,
+              "importe_linea": 14.06
+            },
+            {
+              "codigo": "37867",
+              "descripcion": "NAV RALLADO 4 QUESOS 100% NATURALES 90",
+              "cantidad": 16,
+              "precio_unitario": 0.882,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.882,
+              "importe_linea": 14.11
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 10,
+          "base_imponible": 190.16,
+          "cuota_iva": 19.02,
+          "total_con_iva": 209.18
+        },
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 4,
+          "base_imponible": 14.11,
+          "cuota_iva": 0.56,
+          "total_con_iva": 14.67
+        }
+      ],
+      "metadatos": {
+        "remitente": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "destinatario": "ESPAI DE DUES S.L.",
+        "numero_referencia": "92e44acc-ec13-",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": "A-09000928"
+      }
+    }
+  },
+  {
+    "file": "pdf_digital_small__Factura_5310788021.PDF",
+    "finishReason": "STOP",
+    "tokens": 16195,
+    "summary": {
+      "tipo": "FACTURA RECIBIDA",
+      "numero": "5310788021",
+      "fecha": "2025-06-25",
+      "emisor": "CAMPOFRIO FOOD GROUP, S.A.U.",
+      "cif_emisor": "A-09000928",
+      "cliente": "ESPAI DE DUES S.L.",
+      "cif_cliente": "B97376321",
+      "total": 111.1,
+      "base": 102.58,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 10,
+          "base": 73.62,
+          "cuota": 7.36
+        },
+        {
+          "tipo": "IVA",
+          "pct": 4,
+          "base": 28.96,
+          "cuota": 1.16
+        }
+      ],
+      "incidencia": false,
+      "desc_incidencia": ""
+    },
+    "guards": {
+      "ok": true,
+      "failures": []
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "FACTURA RECIBIDA",
+      "categoria_principal": "Proveedores",
+      "subcategoria": "Suministro",
+      "incidencia": false,
+      "descripcion_incidencia": "",
+      "empresa_emisora": {
+        "nombre": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "direccion": "Avda. de Europa, 24\n28108 ALCOBENDAS (MADRID)",
+        "cif": "A-09000928",
+        "telefono": "912 970 169",
+        "email": ""
+      },
+      "cliente": {
+        "nombre": "ESPAI DE DUES S.L.",
+        "direccion": "CL SAN JUAN 14\n46133 MELIANA\nValencia",
+        "cif": "B97376321",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": "P. Verde\nESPAI DUES GUADASSUAR\nCL PARE ESTANISLAO 3\n46610 GUADASSUAR\nValencia"
+      },
+      "documento": {
+        "numero_documento": "5310788021",
+        "fecha_emision": "2025-06-25",
+        "forma_pago": "Domiciliación",
+        "comercial": "",
+        "importe_total": 111.1,
+        "importe_sin_iva": 102.58,
+        "fecha_vencimiento": "2025-07-05"
+      },
+      "lineas": [
+        {
+          "albaran": "5164108971",
+          "fecha_albaran": "2025-06-20",
+          "articulos": [
+            {
+              "codigo": "2736",
+              "descripcion": "SALCH FRANKFURT CF 140G P4",
+              "cantidad": 12,
+              "precio_unitario": 1.541,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.541,
+              "importe_linea": 18.49
+            },
+            {
+              "codigo": "3350",
+              "descripcion": "PIZZA JAMON/QUESO SALSA MOZZARELLA 360",
+              "cantidad": 7,
+              "precio_unitario": 1.961,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.961,
+              "importe_linea": 13.73
+            },
+            {
+              "codigo": "37112",
+              "descripcion": "CUIDAT+ JAMON COCIDO 65G 1E",
+              "cantidad": 18,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 12.42
+            },
+            {
+              "codigo": "39824",
+              "descripcion": "JAMON COCIDO XJ 75G 1E",
+              "cantidad": 18,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 12.42
+            },
+            {
+              "codigo": "38099",
+              "descripcion": "MORTADELA CLASICA 95G 1E",
+              "cantidad": 12,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 8.28
+            },
+            {
+              "codigo": "38105",
+              "descripcion": "MORTADELA DE PAVO 95G 1E CJ*12",
+              "cantidad": 12,
+              "precio_unitario": 0.69,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.69,
+              "importe_linea": 8.28
+            },
+            {
+              "codigo": "37867",
+              "descripcion": "NAV RALLADO 4 QUESOS 100% NATURALES 90",
+              "cantidad": 16,
+              "precio_unitario": 0.882,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.882,
+              "importe_linea": 14.11
+            },
+            {
+              "codigo": "37869",
+              "descripcion": "QUESO SEMICURADO NAVIDUL RALLADO 100G",
+              "cantidad": 16,
+              "precio_unitario": 0.928,
+              "descuento_porcentaje": 0,
+              "precio_neto": 0.928,
+              "importe_linea": 14.85
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 10,
+          "base_imponible": 73.62,
+          "cuota_iva": 7.36,
+          "total_con_iva": 80.98
+        },
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 4,
+          "base_imponible": 28.96,
+          "cuota_iva": 1.16,
+          "total_con_iva": 30.12
+        }
+      ],
+      "metadatos": {
+        "remitente": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "destinatario": "ESPAI DE DUES S.L.",
+        "numero_referencia": "95-2504-699082",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": ""
+      }
+    }
+  },
+  {
+    "file": "pdf_digital_small__Factura-5410752373_2026_07_17_13_55_52.PDF",
+    "finishReason": "STOP",
+    "tokens": 14814,
+    "summary": {
+      "tipo": "ABONO RECIBIDO",
+      "numero": "5410752373",
+      "fecha": "2025-07-23",
+      "emisor": "CAMPOFRIO FOOD GROUP, S.A.U.",
+      "cif_emisor": "A-09000928",
+      "cliente": "ESPAI DE DUES S.L.",
+      "cif_cliente": "B97376321",
+      "total": -10.8,
+      "base": -9.82,
+      "impuestos": [
+        {
+          "tipo": "IVA",
+          "pct": 10,
+          "base": -9.82,
+          "cuota": -0.98
+        }
+      ],
+      "incidencia": false,
+      "desc_incidencia": ""
+    },
+    "guards": {
+      "ok": true,
+      "failures": []
+    },
+    "rawNormalized": {
+      "es_multiple": false,
+      "tipo_documento": "ABONO RECIBIDO",
+      "categoria_principal": "Proveedores",
+      "subcategoria": "",
+      "incidencia": false,
+      "descripcion_incidencia": "",
+      "empresa_emisora": {
+        "nombre": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "direccion": "Avda. de Europa, 24, 28108 ALCOBENDAS (MADRID)",
+        "cif": "A-09000928",
+        "telefono": "912 970 169",
+        "email": ""
+      },
+      "cliente": {
+        "nombre": "ESPAI DE DUES S.L.",
+        "direccion": "CL SAN JUAN 14, 46133 MELIANA, Valencia",
+        "cif": "B97376321",
+        "numero_cliente": "",
+        "punto_venta": "",
+        "direccion_punto_venta": ""
+      },
+      "documento": {
+        "numero_documento": "5410752373",
+        "fecha_emision": "2025-07-23",
+        "forma_pago": "Domiciliación",
+        "comercial": "",
+        "importe_total": -10.8,
+        "importe_sin_iva": -9.82,
+        "fecha_vencimiento": "2025-07-16"
+      },
+      "lineas": [
+        {
+          "albaran": "5253107431",
+          "fecha_albaran": "2025-07-01",
+          "articulos": [
+            {
+              "codigo": "3352",
+              "descripcion": "PIZZA 5 QUESOS C/SALSA QUESO SEMICURAD",
+              "cantidad": 5,
+              "precio_unitario": 1.964,
+              "descuento_porcentaje": 0,
+              "precio_neto": 1.964,
+              "importe_linea": -9.82
+            }
+          ]
+        }
+      ],
+      "totales_por_impuesto": [
+        {
+          "tipo_iva": "IVA",
+          "porcentaje": 10,
+          "base_imponible": -9.82,
+          "cuota_iva": -0.98,
+          "total_con_iva": -10.8
+        }
+      ],
+      "metadatos": {
+        "remitente": "CAMPOFRIO FOOD GROUP, S.A.U.",
+        "destinatario": "ESPAI DE DUES S.L.",
+        "numero_referencia": "95-2507-686156",
+        "estado": "",
+        "periodo_fiscal": "",
+        "nif_cif_relacionado": ""
+      }
+    }
+  },
+  {
+    "file": "pdf_medium__Factura_5310763843.PDF",
+    "error": "No se pudo parsear la respuesta de Gemini después de reparación: Unterminated string in JSON at position 1515"
+  }
+]

@@ -13,17 +13,39 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { VertexAI, Part } from '@google-cloud/vertexai';
 import * as crypto from 'crypto';
 import {
-  PROMPT_CLASIFICADOR,
   PROMPT_PAGINADOR,
-  PROMPT_PAGINADOR_NO_FACTURABLE,
   PROMPT_EXTRACTOR_FACTURABLE,
   PROMPT_EXTRACTOR_NO_FACTURABLE
 } from '@/services/ingestion/prompts_v2';
-import { parseGeminiResponse, normalizeDocumentoFromGemini } from '@/services/ingestion/normalize';
+import { parseGeminiResponse, normalizeDocumentoFromGemini, DocumentoGemini } from '@/services/ingestion/normalize';
+import { analyzeInvoiceDocument, isAzureDiConfigured } from '@/services/ingestion/azure-di';
+import {
+  azureDiLooksLikeInvoice,
+  mapAzureDiInvoiceToGeminiShape,
+} from '@/services/ingestion/azure-di-map';
+import { resolveExtractRoute } from '@/services/ingestion/extract-route';
+import { resolvePreflight } from '@/services/ingestion/pdf-preflight';
+import {
+  recordVertexCall,
+  callTypeFromJobType,
+  VertexCallType,
+} from '@/services/ingestion/vertex-metrics';
+import {
+  callAzureOpenAiChat,
+  getLlmProvider,
+  parseLlmJson,
+} from '@/services/ingestion/azure-openai';
+import { runFiscalGuards, formatGuardFailures, isRepairableGuardFailure } from '@/services/ingestion/fiscal-guards';
+import { FiscalStatus } from '@/lib/document-fiscal-status';
 import { wLog } from '@/lib/worker-logger';
 
-// 15 RPM es el límite seguro para la capa gratuita de Vertex AI Gemini 2.5 Flash
-const GEMINI_CONCURRENCY = parseInt(process.env.GEMINI_CONCURRENCY || '1', 10);
+// Concurrency: Azure OpenAI aguanta más; Vertex se queda en 1 por defecto.
+const LLM_PROVIDER = getLlmProvider();
+const GEMINI_CONCURRENCY = parseInt(
+  process.env.GEMINI_CONCURRENCY || (LLM_PROVIDER === 'azure-openai' ? '2' : '1'),
+  10
+);
+const MAX_EXTRACT_REPAIRS = parseInt(process.env.MAX_EXTRACT_REPAIRS || '1', 10);
 
 export function startGeminiWorker() {
   const worker = new Worker<GeminiJobData>(
@@ -62,6 +84,9 @@ export function startGeminiWorker() {
           case 'extract-multiple-image':
             await handleExtractMultipleImage(job, fileBuffer);
             break;
+          case 'extract-repair':
+            await handleExtractRepair(job, fileBuffer);
+            break;
           default:
             throw new Error(`Tipo de job Gemini no soportado: ${type}`);
         }
@@ -70,21 +95,25 @@ export function startGeminiWorker() {
         const is429 = error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED');
         
         if (is429) {
-          // BACKOFF EXPONENCIAL PARA SOFT-BANS
-          // Si Vertex nos banea, no insistimos cada minuto porque eso puede extender el ban.
-          // Incrementamos el castigo exponencialmente: 1m, 5m, 15m, 30m.
+          // BACKOFF EXPONENCIAL PARA SOFT-BANS (techo 300s). Con concurrency=1 no hay ráfaga paralela.
           const consecutive = await redis.incr(CONSECUTIVE_429_KEY).catch(() => 1);
-          if (consecutive === 1) await redis.expire(CONSECUTIVE_429_KEY, 3600); // limpiar en 1h
+          if (consecutive === 1) await redis.expire(CONSECUTIVE_429_KEY, 3600);
 
           let blockSeconds = 60;
-          if (consecutive === 2) blockSeconds = 120;       // 2 min
-          else if (consecutive >= 3) blockSeconds = 300;   // 5 min (techo máximo)
+          if (consecutive === 2) blockSeconds = 120;
+          else if (consecutive >= 3) blockSeconds = 300;
 
           wLog('GeminiWorker', `⏳ Rate limit 429 consecutivo #${consecutive}. Bloqueando ${blockSeconds}s → ${fileName}`, 'rate');
           await redis.setex(RPM_REDIS_KEY, blockSeconds, String(RPM_LIMIT + 1)).catch(() => {});
 
+          await recordVertexCall({
+            uploadId,
+            callType: callTypeFromJobType(type),
+            is429: true,
+          }).catch(() => {});
+
           await updateIngestionProgress(uploadId, {
-            status: 'processing',
+            status: 'waiting_capacity',
             step: 'Esperando cupo de procesamiento',
             progress: 50,
             mensaje: `Pausado para optimizar rendimiento. Retomando en ${Math.ceil(blockSeconds/60)} minutos...`,
@@ -135,7 +164,7 @@ export function startGeminiWorker() {
       // Limitar a nivel de worker (Rate limit interno de BullMQ)
       // NOTA: defaultJobOptions no existe en WorkerOptions, va en la Queue (ver lib/queue.ts)
       limiter: {
-        max: parseInt(process.env.GEMINI_RPM_LIMIT || '6', 10),
+        max: RPM_LIMIT,
         duration: 60000,
       },
     }
@@ -150,7 +179,9 @@ export function startGeminiWorker() {
     wLog('GeminiWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
   });
   
-  console.log(`[GeminiWorker] 🚀 Arrancado con concurrency=${GEMINI_CONCURRENCY}`);
+  console.log(
+    `[GeminiWorker] 🚀 Arrancado con concurrency=${GEMINI_CONCURRENCY} | LLM=${LLM_PROVIDER} | TPM=${TPM_LIMIT} | RPM=${RPM_LIMIT}`
+  );
   return worker;
 }
 
@@ -189,14 +220,29 @@ async function getFileBufferFromS3(s3Path: string): Promise<Buffer> {
 // usage real de cada respuesta y lo acumulamos en Redis con TTL de 60s.
 // Antes de cada llamada verificamos si hay presupuesto disponible; si no, esperamos.
 
-const TPM_REDIS_KEY = 'vertex:tpm:window';
-const RPM_REDIS_KEY = 'vertex:rpm:window';
-const CONSECUTIVE_429_KEY = 'vertex:429:consecutive';
-const TPM_LIMIT = parseInt(process.env.GEMINI_TPM_LIMIT || '30000', 10);
-const RPM_LIMIT = parseInt(process.env.GEMINI_RPM_LIMIT || '6', 10);
+const TPM_REDIS_KEY = LLM_PROVIDER === 'azure-openai' ? 'openai:tpm:window' : 'vertex:tpm:window';
+const RPM_REDIS_KEY = LLM_PROVIDER === 'azure-openai' ? 'openai:rpm:window' : 'vertex:rpm:window';
+const CONSECUTIVE_429_KEY =
+  LLM_PROVIDER === 'azure-openai' ? 'openai:429:consecutive' : 'vertex:429:consecutive';
+const TPM_LIMIT = parseInt(
+  process.env.OPENAI_TPM_LIMIT ||
+    process.env.GEMINI_TPM_LIMIT ||
+    (LLM_PROVIDER === 'azure-openai' ? '1000000' : '30000'),
+  10
+);
+const RPM_LIMIT = parseInt(
+  process.env.OPENAI_RPM_LIMIT ||
+    process.env.GEMINI_RPM_LIMIT ||
+    (LLM_PROVIDER === 'azure-openai' ? '120' : '30'),
+  10
+);
 const TPM_SAFETY_MARGIN = 0.85; // usar solo el 85% del límite como techo proactivo
 // Tokens estimados por documento (para calcular delays proactivos)
-const TOKENS_PER_DOC_ESTIMATE = parseInt(process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE || '12000', 10);
+const TOKENS_PER_DOC_ESTIMATE = parseInt(
+  process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE ||
+    (LLM_PROVIDER === 'azure-openai' ? '8000' : '12000'),
+  10
+);
 
 /**
  * Suma tokens y requests al contador de la ventana actual (60s).
@@ -261,7 +307,7 @@ async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): P
       // Avisar en la UI
       if (uploadId) {
         await updateIngestionProgress(uploadId, {
-          status: 'processing',
+          status: 'waiting_capacity',
           step: 'Esperando cupo de procesamiento',
           progress: 50,
           mensaje: `Pausado para optimizar rendimiento. Retomando en ${waitSec}s...`,
@@ -285,14 +331,61 @@ async function callGemini(
   mimeType: string,
   jsonSchema?: any,
   uploadId?: string,
-  parentUploadId?: string
+  parentUploadId?: string,
+  callType: VertexCallType = 'other'
 ): Promise<any> {
+  const started = Date.now();
+  const provider = getLlmProvider();
+
+  if (provider === 'azure-openai') {
+    await waitForTokenBudget(uploadId, parentUploadId);
+
+    // json_object no admite array raíz → pedimos { documents: [...] } si el prompt pide array
+    const azurePrompt =
+      /JSON array|array sin texto|ÚNICAMENTE un JSON array/i.test(prompt)
+        ? `${prompt}\n\nIMPORTANTE: envuelve el array en un objeto JSON: {"documents":[...]}`
+        : prompt;
+
+    try {
+      const { text, usage } = await callAzureOpenAiChat({
+        prompt: azurePrompt,
+        fileBuffer,
+        mimeType,
+        json: true,
+        maxCompletionTokens: 16384,
+      });
+
+      const totalTokens = usage?.total_tokens || 0;
+      if (totalTokens > 0) await recordTokenUsage(totalTokens);
+
+      if (uploadId) {
+        await recordVertexCall({
+          uploadId,
+          callType,
+          bytes: fileBuffer.length,
+          durationMs: Date.now() - started,
+        });
+      }
+
+      await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
+
+      console.log(`[AzureOpenAI] 📝 Texto RAW (primeros 500 chars):\n${text.substring(0, 500)}`);
+      const parsed = parseLlmJson(text);
+      console.log(`[AzureOpenAI] ✅ JSON parseado correctamente`);
+      return parsed;
+    } catch (e: any) {
+      const status = e?.status || e?.statusCode;
+      if (status === 429) throw e;
+      throw e;
+    }
+  }
+
   const projectId = process.env.VERTEX_AI_PROJECT_ID;
   const location = process.env.VERTEX_AI_LOCATION || 'us-central1';
   const modelName = process.env.VERTEX_AI_MODEL || 'gemini-2.5-flash';
 
   console.log(`[Gemini] 🔧 Config → project: ${projectId} | location: ${location} | model: ${modelName}`);
-  console.log(`[Gemini] 📄 Archivo → mimeType: ${mimeType} | buffer: ${fileBuffer.length} bytes`);
+  console.log(`[Gemini] 📄 Archivo → mimeType: ${mimeType} | buffer: ${fileBuffer.length} bytes | callType: ${callType}`);
 
   let credentials;
   try {
@@ -315,18 +408,24 @@ async function callGemini(
       project: projectId!,
       location: location,
       googleAuthOptions: credentials ? { credentials } : undefined,
-      // Fix para que "global" no rompa el SDK y use la URL correcta que usabas en n8n
       ...(location === 'global' ? { apiEndpoint: 'aiplatform.googleapis.com' } : {})
   });
+
+  // media_resolution medium en PDF: menos tokens de input (plan Fase 1). Fallback si el SDK ignora el campo.
+  const isPdf = Boolean(mimeType?.includes('pdf'));
+  const mediaResolution =
+    process.env.GEMINI_MEDIA_RESOLUTION ||
+    (isPdf ? 'MEDIA_RESOLUTION_MEDIUM' : undefined);
 
   const generativeModel = vertexAI.getGenerativeModel({
       model: modelName,
       generationConfig: {
-          maxOutputTokens: 65536, // Máximo del modelo — necesario para lotes grandes (ej: 200 facturas)
-          temperature: 0.1, // Baja temp para mayor determinismo
+          maxOutputTokens: 65536,
+          temperature: 0.1,
           responseMimeType: 'application/json',
-          ...(jsonSchema && { responseSchema: jsonSchema })
-      },
+          ...(jsonSchema && { responseSchema: jsonSchema }),
+          ...(mediaResolution ? { mediaResolution } : {}),
+      } as any,
   });
 
   const filePart: Part = {
@@ -341,7 +440,6 @@ async function callGemini(
       contents: [{ role: 'user', parts: [textPart, filePart] }],
   };
 
-  // Verificar presupuesto de TPM antes de llamar — proactivo, evita el 429
   await waitForTokenBudget(uploadId, parentUploadId);
 
   console.log(`[Gemini] 🚀 Enviando request a Vertex AI...`);
@@ -351,11 +449,19 @@ async function callGemini(
   const finishReason = candidate?.finishReason;
   console.log(`[Gemini] 📬 Respuesta → finishReason: ${finishReason} | candidatos: ${result.response.candidates?.length ?? 0}`);
 
-  // Registrar tokens reales consumidos en Redis (ventana de 60s)
   const usage = (result.response as any).usageMetadata;
   if (usage?.totalTokenCount) {
     console.log(`[Gemini] 📊 Tokens → input: ${usage.promptTokenCount ?? '?'} | output: ${usage.candidatesTokenCount ?? '?'} | total: ${usage.totalTokenCount}`);
     await recordTokenUsage(usage.totalTokenCount);
+  }
+
+  if (uploadId) {
+    await recordVertexCall({
+      uploadId,
+      callType,
+      bytes: fileBuffer.length,
+      durationMs: Date.now() - started,
+    });
   }
 
   if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
@@ -365,7 +471,6 @@ async function callGemini(
     throw new Error(`Gemini finalizó con razón inesperada: ${finishReason}`);
   }
 
-  // La petición fue exitosa, Google nos quitó cualquier soft-ban. Reseteamos el contador de 429s.
   await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
 
   let text = candidate?.content?.parts?.[0]?.text || '{}';
@@ -427,63 +532,15 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
 
 // ─── Handlers por Tipo ────────────────────────────────────────────────────────
 
-async function handleClassify(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handleClassify(job: Job<GeminiJobData>, _fileBuffer: Buffer) {
+  // Compat: jobs `classify-*` aún en cola Redis → reencolar extract sin llamar a Vertex.
   const { ingestion } = job.data;
-  
-  console.log(`[GeminiWorker] Clasificando ${ingestion.fileName}...`);
-  const schema = {
-    type: 'OBJECT',
-    properties: {
-      es_facturable: { type: 'BOOLEAN' },
-      es_multiple: { type: 'BOOLEAN' },
-      cantidad: { type: 'INTEGER' },
-      categoria_documento: { type: 'STRING' }
-    },
-    required: ['es_facturable', 'es_multiple', 'cantidad', 'categoria_documento']
-  };
-
-  const aiResult = await callGemini(
-    PROMPT_CLASIFICADOR,
-    fileBuffer, 
-    ingestion.mimeType,
-    schema,
-    ingestion.uploadId
+  wLog('GeminiWorker', `↪️  classify legacy → extract-facturable (${ingestion.fileName})`);
+  await geminiQueue.add(
+    `extract-facturable-${ingestion.uploadId}`,
+    { type: 'extract-facturable', ingestion },
+    { jobId: `extract-facturable-${ingestion.uploadId}` }
   );
-  
-  console.log(`[GeminiWorker] 📊 Resultado clasificación: ${JSON.stringify(aiResult)}`);
-
-  const esFacturable = aiResult.es_facturable !== false;
-  const esMultiple   = aiResult.es_multiple === true;
-
-  // Detectar si el archivo es una imagen (JPG, PNG, WEBP, etc.)
-  const isImage = ingestion.mimeType?.startsWith('image/');
-
-  if (!esFacturable) {
-    await geminiQueue.add(`extract-non-${ingestion.uploadId}`, {
-      type: 'extract-non-facturable',
-      ingestion
-    });
-  } else if (esMultiple && isImage) {
-    // Imagen con múltiples facturas: no se puede paginar como PDF.
-    // Usamos el handler especial que hace múltiples llamadas a Gemini si es necesario.
-    console.log(`[GeminiWorker] 🖼️  Imagen múltiple detectada → usando extract-multiple-image`);
-    await geminiQueue.add(`extract-multi-img-${ingestion.uploadId}`, {
-      type: 'extract-multiple-image',
-      ingestion
-    });
-  } else if (esMultiple && !isImage) {
-    // PDF/Word con múltiples documentos → paginación normal
-    await geminiQueue.add(`paginate-${ingestion.uploadId}`, {
-      type: 'paginate',
-      ingestion
-    });
-  } else {
-    // Documento único (PDF o imagen)
-    await geminiQueue.add(`extract-facturable-${ingestion.uploadId}`, {
-      type: 'extract-facturable',
-      ingestion
-    });
-  }
 }
 
 async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
@@ -510,13 +567,24 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
     }
   };
 
-  const pages = await callGemini(
+  const pagesRaw = await callGemini(
     PROMPT_PAGINADOR,
     fileBuffer,
     ingestion.mimeType,
     schema,
-    ingestion.uploadId
+    ingestion.uploadId,
+    undefined,
+    'paginate'
   );
+  const pages = Array.isArray(pagesRaw)
+    ? pagesRaw
+    : Array.isArray((pagesRaw as any)?.documents)
+      ? (pagesRaw as any).documents
+      : [];
+
+  if (pages.length === 0) {
+    throw new Error('Paginador no devolvió documentos (array vacío)');
+  }
 
   console.log(`[GeminiWorker] 📑 Paginación completada: ${pages.length} documentos encontrados.`);
 
@@ -597,6 +665,25 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
   const { ingestion, pageStart, pageEnd } = job.data;
   console.log(`[GeminiWorker] Extrayendo facturable ${ingestion.fileName}...`);
 
+  // Fase 2: raíz sin recorte → preflight local. Alta confianza multi → paginate sin extract desechable.
+  if (pageStart == null && pageEnd == null) {
+    const pre = resolvePreflight(fileBuffer, ingestion.mimeType);
+    wLog('GeminiWorker', `🧭 Preflight ${ingestion.fileName}: ${pre.decision} (${pre.reason})`);
+    if (pre.decision === 'paginate') {
+      await updateIngestionProgress(ingestion.uploadId, {
+        status: 'procesando',
+        step: 'Múltiples documentos (preflight)',
+        progress: 40,
+        mensaje: 'Alta confianza de multi-doc: paginando sin extract previo...',
+      });
+      await geminiQueue.add(`paginate-${ingestion.uploadId}`, {
+        type: 'paginate',
+        ingestion,
+      });
+      return;
+    }
+  }
+
   await updateIngestionProgress(ingestion.uploadId, {
     status: 'procesando',
     step: 'Extrayendo datos fiscales',
@@ -635,38 +722,339 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
     console.log(`[GeminiWorker] 🖼️  Imagen con rango de páginas indicado — ignorando recorte (no aplica a imágenes).`);
   }
 
+  // Primario: Azure DI (prebuilt-invoice) para PDF/imagen. Gemini = fallback.
+  const preferAzure =
+    (process.env.EXTRACT_PRIMARY || 'azure-di').toLowerCase() !== 'gemini' &&
+    isAzureDiConfigured();
+  const canUseAzureDi =
+    preferAzure &&
+    (ingestion.mimeType === 'application/pdf' ||
+      Boolean(ingestion.mimeType?.startsWith('image/')) ||
+      /\.pdf$/i.test(ingestion.fileName || ''));
+
+  let rawParsed: DocumentoGemini | Record<string, unknown>;
+  let usedExtractor: 'azure-di' | 'gemini' = 'gemini';
+
+  if (canUseAzureDi) {
+    try {
+      await updateIngestionProgress(ingestion.uploadId, {
+        status: 'procesando',
+        step: 'Extrayendo con Azure DI',
+        progress: 58,
+        mensaje: 'Document Intelligence (prebuilt-invoice)...',
+      });
+      const diResult = await analyzeInvoiceDocument(finalBuffer, ingestion.mimeType);
+      if (azureDiLooksLikeInvoice(diResult)) {
+        rawParsed = mapAzureDiInvoiceToGeminiShape(diResult, { empresaCif: ingestion.cif });
+        usedExtractor = 'azure-di';
+        wLog(
+          'GeminiWorker',
+          `✅ Azure DI OK ${ingestion.fileName} (conf=${String((rawParsed as any)._azure_di_confidence ?? '?')})`
+        );
+      } else {
+        wLog('GeminiWorker', `↪️  Azure DI sin factura clara → Gemini (${ingestion.fileName})`, 'warn');
+        const result = await callGemini(
+          prompt,
+          finalBuffer,
+          ingestion.mimeType,
+          undefined,
+          ingestion.uploadId,
+          ingestion.parentUploadId,
+          'extract'
+        );
+        rawParsed = parseGeminiResponse(JSON.stringify(result));
+      }
+    } catch (diErr: any) {
+      wLog(
+        'GeminiWorker',
+        `↪️  Azure DI falló → Gemini (${ingestion.fileName}): ${diErr?.message || diErr}`,
+        'warn'
+      );
+      const result = await callGemini(
+        prompt,
+        finalBuffer,
+        ingestion.mimeType,
+        undefined,
+        ingestion.uploadId,
+        ingestion.parentUploadId,
+        'extract'
+      );
+      rawParsed = parseGeminiResponse(JSON.stringify(result));
+    }
+  } else {
+    const result = await callGemini(
+      prompt,
+      finalBuffer,
+      ingestion.mimeType,
+      undefined,
+      ingestion.uploadId,
+      ingestion.parentUploadId,
+      'extract'
+    );
+    console.log(`[GeminiWorker] ✅ Respuesta cruda de Gemini recibida para ${ingestion.fileName}`);
+    rawParsed = parseGeminiResponse(JSON.stringify(result));
+  }
+
+  // Si Azure DI ya vio multi-factura, no hace falta persistir el Frankenstein:
+  // resolveExtractRoute → paginate (Gemini/partes). Log explícito.
+  if (usedExtractor === 'azure-di' && (rawParsed as any)?.es_multiple === true) {
+    wLog(
+      'GeminiWorker',
+      `↪️  Azure DI detectó multi-factura → paginate (${ingestion.fileName})`,
+      'warn'
+    );
+  }
+
+  // Normalizar los datos
+  console.log(
+    `[GeminiWorker] 🔄 Validando y normalizando JSON estructurado (extractor=${usedExtractor})...`
+  );
+  const rawObj =
+    rawParsed && typeof rawParsed === 'object' && !Array.isArray(rawParsed)
+      ? (rawParsed as Record<string, unknown>)
+      : {};
+
+  const route = resolveExtractRoute({
+    raw: rawObj,
+    mimeType: ingestion.mimeType,
+    pageStart,
+    pageEnd,
+  });
+
+  if (route === 'non-facturable') {
+    wLog('GeminiWorker', `↪️  extract → no facturable (${ingestion.fileName})`);
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: 'Documento no facturable',
+      progress: 45,
+      mensaje: 'Reencaminando a extractor de archivo / categoría...',
+    });
+    await geminiQueue.add(`extract-non-${ingestion.uploadId}`, {
+      type: 'extract-non-facturable',
+      ingestion,
+    });
+    return;
+  }
+
+  if (route === 'paginate') {
+    wLog('GeminiWorker', `↪️  extract → paginate multi-PDF (${ingestion.fileName})`);
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: 'Múltiples documentos detectados',
+      progress: 40,
+      mensaje: 'Identificando rangos de páginas para cada documento...',
+    });
+    await geminiQueue.add(`paginate-${ingestion.uploadId}`, {
+      type: 'paginate',
+      ingestion,
+    });
+    return;
+  }
+
+  if (route === 'multi-image') {
+    wLog('GeminiWorker', `↪️  extract → multi-image (${ingestion.fileName})`);
+    await geminiQueue.add(`extract-multi-img-${ingestion.uploadId}`, {
+      type: 'extract-multiple-image',
+      ingestion,
+    });
+    return;
+  }
+
+  const normalized = normalizeDocumentoFromGemini(rawParsed);
+  console.log(`[GeminiWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
+
+  await enqueueAfterFiscalGuards({
+    job,
+    ingestion: { ...ingestion, publicUrl: fileUrlForDb },
+    normalized,
+    pageStart,
+    pageEnd,
+  });
+}
+
+/**
+ * Tras normalize: si guards OK → db-writer VALIDADO.
+ * Si fallan y quedan repairs → extract-repair.
+ * Si se agotaron repairs → db-writer REVISION (archivo queda, fuera de agregados).
+ */
+async function enqueueAfterFiscalGuards(params: {
+  job: Job<GeminiJobData>;
+  ingestion: GeminiJobData['ingestion'];
+  normalized: DocumentoGemini;
+  pageStart?: number;
+  pageEnd?: number;
+}) {
+  const { job, ingestion, normalized, pageStart, pageEnd } = params;
+  const repairAttempt = job.data.repairAttempt || 0;
+  const guard = runFiscalGuards(normalized, { empresaCif: ingestion.cif });
+
+  if (guard.ok) {
+    await dbWriterQueue.add(
+      `db-writer-${ingestion.uploadId}`,
+      {
+        ingestion,
+        aiResult: normalized,
+        fiscalStatus: FiscalStatus.VALIDADO,
+      },
+      {
+        jobId: `db-writer-${ingestion.uploadId}-v${repairAttempt}`,
+        removeOnComplete: true,
+        removeOnFail: 3,
+      }
+    );
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: 'Normalizado y validado',
+      progress: 80,
+      mensaje: 'Guards fiscales OK. Guardando en base de datos...',
+    });
+    return;
+  }
+
+  const failureSummary = formatGuardFailures(guard.failures);
+  wLog('GeminiWorker', `⚠️ Guards fallaron (attempt ${repairAttempt}): ${failureSummary}`, 'warn');
+
+  const canRepair =
+    repairAttempt < MAX_EXTRACT_REPAIRS && isRepairableGuardFailure(guard.failures);
+
+  if (canRepair) {
+    const nextAttempt = repairAttempt + 1;
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: `Reintentando extracción (${nextAttempt}/${MAX_EXTRACT_REPAIRS})`,
+      progress: 55,
+      mensaje: `Corrigiendo extracción: ${failureSummary.substring(0, 120)}`,
+    });
+
+    await geminiQueue.add(
+      `extract-repair-${ingestion.uploadId}-${nextAttempt}`,
+      {
+        type: 'extract-repair',
+        ingestion,
+        pageStart,
+        pageEnd,
+        repairAttempt: nextAttempt,
+        previousFailures: guard.failures.map((f) => ({ code: f.code, message: f.message })),
+        previousAiResult: normalized,
+      },
+      {
+        jobId: `extract-repair-${ingestion.uploadId}-${nextAttempt}`,
+        delay: 2000,
+      }
+    );
+    return;
+  }
+
+  if (repairAttempt < MAX_EXTRACT_REPAIRS && !isRepairableGuardFailure(guard.failures)) {
+    wLog(
+      'GeminiWorker',
+      `↪️  Guards no repairables → REVISION directa (${failureSummary})`,
+      'warn'
+    );
+  }
+
+  // Agotados repairs o no repairable → persistir en REVISION
+  await dbWriterQueue.add(
+    `db-writer-${ingestion.uploadId}`,
+    {
+      ingestion,
+      aiResult: normalized,
+      fiscalStatus: FiscalStatus.REVISION,
+      fiscalRevisionReasons: guard.failures.map((f) => ({ code: f.code, message: f.message })),
+    },
+    {
+      jobId: `db-writer-${ingestion.uploadId}-revision`,
+      removeOnComplete: true,
+      removeOnFail: 3,
+    }
+  );
+
+  await updateIngestionProgress(ingestion.uploadId, {
+    status: 'procesando',
+    step: 'Encolado en revisión',
+    progress: 80,
+    mensaje:
+      repairAttempt < MAX_EXTRACT_REPAIRS && !isRepairableGuardFailure(guard.failures)
+        ? `Guards no auto-reparables. Guardando en REVISIÓN.`
+        : `Guards fallaron tras ${MAX_EXTRACT_REPAIRS} repairs. Guardando en REVISIÓN.`,
+  });
+}
+
+async function handleExtractRepair(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+  const { ingestion, previousFailures, previousAiResult, pageStart, pageEnd } = job.data;
+  console.log(`[GeminiWorker] 🔧 Repair #${job.data.repairAttempt} para ${ingestion.fileName}`);
+
+  await updateIngestionProgress(ingestion.uploadId, {
+    status: 'procesando',
+    step: 'Reparando extracción',
+    progress: 58,
+    mensaje: 'Re-extracción dirigida por fallos de validación fiscal...',
+  });
+
+  const recargo = ingestion.recargo === true ? 'true' : 'false';
+  const failureText = (previousFailures || [])
+    .map((f) => `- ${f.code}: ${f.message}`)
+    .join('\n');
+
+  const basePrompt = PROMPT_EXTRACTOR_FACTURABLE
+    .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || 'NO_PROPORCIONADO')
+    .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || 'NO_PROPORCIONADO')
+    .replace(/\{\{RECARGO_EMPRESA\}\}/g, recargo);
+
+  const repairPrompt = `${basePrompt}
+
+═══════════════════════════════════════════════════════════════════
+CORRECCIÓN OBLIGATORIA (extract-repair)
+La extracción anterior falló estas validaciones duras:
+${failureText || '(sin detalle)'}
+
+JSON anterior (corregí SOLO lo necesario para pasar esas validaciones; no inventes importes):
+${JSON.stringify(previousAiResult || {}, null, 2)}
+
+Reglas:
+- Emisor y receptor NUNCA pueden compartir el mismo CIF.
+- Cada cuota de IVA debe ser base × porcentaje (±0,05€).
+- importe_total ≈ base + sum(cuotas) incluyendo retenciones negativas.
+- Devolvé un único objeto JSON completo del documento (mismo schema).
+═══════════════════════════════════════════════════════════════════`;
+
+  let finalBuffer = fileBuffer;
+  let fileUrlForDb = ingestion.publicUrl;
+  const isImage = ingestion.mimeType?.startsWith('image/');
+  if (pageStart && pageEnd && !isImage) {
+    try {
+      const cropped = await splitPdfWithTools(
+        ingestion.publicUrl,
+        pageStart,
+        pageEnd,
+        `doc_repair_${ingestion.uploadId}`
+      );
+      finalBuffer = cropped.buffer;
+      fileUrlForDb = cropped.croppedUrl;
+    } catch (error: any) {
+      console.warn(`[GeminiWorker] Repair sin recorte pdftools: ${error.message}`);
+    }
+  }
+
   const result = await callGemini(
-    prompt,
+    repairPrompt,
     finalBuffer,
     ingestion.mimeType,
     undefined,
     ingestion.uploadId,
-    ingestion.parentUploadId  // para propagar pausa de cuota al padre también
+    ingestion.parentUploadId,
+    'repair'
   );
 
-  console.log(`[GeminiWorker] ✅ Respuesta cruda de Gemini recibida para ${ingestion.fileName}`);
-  
-  // Normalizar los datos
-  console.log(`[GeminiWorker] 🔄 Validando y normalizando JSON estructurado...`);
   const rawParsed = parseGeminiResponse(JSON.stringify(result));
   const normalized = normalizeDocumentoFromGemini(rawParsed);
-  console.log(`[GeminiWorker] ✅ Validación matemática completada exitosamente.`);
-  
-  await dbWriterQueue.add(`db-writer-${ingestion.uploadId}`, {
-    // Pasar la URL del recorte como publicUrl para que el DbWriter la guarde en archivos_documento
+
+  await enqueueAfterFiscalGuards({
+    job,
     ingestion: { ...ingestion, publicUrl: fileUrlForDb },
-    aiResult: normalized
-  }, {
-    jobId: `db-writer-${ingestion.uploadId}`,
-    removeOnComplete: true,   // No dejar jobs completados acumulados en Redis
-    removeOnFail: 3,          // Conservar los últimos 3 fallidos para debug, luego eliminar
-  });
-  
-  await updateIngestionProgress(ingestion.uploadId, {
-    status: 'procesando',
-    step: 'Normalizado y encolado para DB',
-    progress: 80,
-    mensaje: 'Validación matemática completada. Guardando en base de datos...',
+    normalized,
+    pageStart,
+    pageEnd,
   });
 }
 
@@ -691,7 +1079,9 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
     fileBuffer,
     ingestion.mimeType,
     undefined,
-    ingestion.uploadId
+    ingestion.uploadId,
+    undefined,
+    'nf'
   );
 
   console.log(`[GeminiWorker] ✅ Extracción NO facturable completada para ${ingestion.fileName}`);
@@ -830,69 +1220,35 @@ Ya extrajiste los siguientes documentos en llamadas anteriores: ${numerosYaExtra
 Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no quedan más documentos en la imagen, devuelve un array vacío [].`;
     }
 
-    // Acceder a finishReason directamente desde la respuesta raw
-    const projectId   = process.env.VERTEX_AI_PROJECT_ID;
-    const location    = process.env.VERTEX_AI_LOCATION || 'us-central1';
-    const modelName   = process.env.VERTEX_AI_MODEL || 'gemini-2.5-flash';
-
-    let credentials;
-    try {
-      let rawCreds = process.env.VERTEX_AI_CREDENTIALS?.trim() || '';
-      if (rawCreds && !rawCreds.startsWith('{')) rawCreds = rawCreds.replace(/^['"]/,'').replace(/['"]$/,'').trim();
-      credentials = rawCreds ? JSON.parse(rawCreds) : undefined;
-    } catch (e) {
-      throw new Error('Error parseando VERTEX_AI_CREDENTIALS');
-    }
-
-    const { VertexAI: VtxAI } = await import('@google-cloud/vertexai');
-
-    const vertexAI = new VtxAI({
-      project: projectId!,
-      location,
-      googleAuthOptions: credentials ? { credentials } : undefined,
-      ...(location === 'global' ? { apiEndpoint: 'aiplatform.googleapis.com' } : {})
-    });
-    const model = vertexAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: { maxOutputTokens: 65536, temperature: 0.1, responseMimeType: 'application/json' }
-    });
-
-    await waitForTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [
-        { text: prompt } as any,
-        { inlineData: { data: fileBuffer.toString('base64'), mimeType: ingestion.mimeType } } as any
-      ]}]
-    });
-
-    const candidate    = result.response.candidates?.[0];
-    const finishReason = candidate?.finishReason;
-    const usage        = (result.response as any).usageMetadata;
-    if (usage?.totalTokenCount) await recordTokenUsage(usage.totalTokenCount);
-    await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
-
-    let rawText = candidate?.content?.parts?.[0]?.text || '[]';
-    if (rawText.includes('```')) rawText = rawText.replace(/```json\n?|```/g, '').trim();
+    // Usa callGemini → Azure OpenAI si LLM_PROVIDER=azure-openai
+    const parsed = await callGemini(
+      prompt +
+        '\n\nIMPORTANTE: envuelve el resultado en JSON objeto {"documentos":[...]} si hace falta.',
+      fileBuffer,
+      ingestion.mimeType,
+      undefined,
+      ingestion.uploadId,
+      ingestion.parentUploadId,
+      'multi-img'
+    );
 
     let iterDocs: any[] = [];
-    try {
-      const parsed = JSON.parse(rawText);
-      iterDocs = Array.isArray(parsed) ? parsed : (parsed.documentos || parsed.facturas || [parsed]);
-    } catch (e) {
-      console.error(`[GeminiWorker] ❌ Error parseando JSON en iteración ${iteration}:`, e);
+    if (Array.isArray(parsed)) {
+      iterDocs = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      iterDocs = parsed.documentos || parsed.facturas || parsed.documents || [parsed];
+      if (!Array.isArray(iterDocs)) iterDocs = [parsed];
     }
 
-    console.log(`[GeminiWorker] ✅ Iteración ${iteration}: ${iterDocs.length} documentos extraídos | finishReason: ${finishReason}`);
+    console.log(
+      `[GeminiWorker] ✅ Iteración ${iteration}: ${iterDocs.length} documentos extraídos | LLM=${getLlmProvider()}`
+    );
     allDocumentos.push(...iterDocs);
 
-    // Si terminó normalmente, o si no extrajo nada nuevo, paramos
-    if (finishReason === 'STOP' || iterDocs.length === 0) {
-      continueExtracting = false;
-    } else if (finishReason !== 'MAX_TOKENS') {
+    // Sin finishReason de Vertex: paramos si no hay docs nuevos o ya hay muchos
+    if (iterDocs.length === 0 || allDocumentos.length >= 30) {
       continueExtracting = false;
     }
-    // Si finishReason === 'MAX_TOKENS' → continúa el bucle
   }
 
   console.log(`[GeminiWorker] 📊 Total documentos extraídos de imagen: ${allDocumentos.length} en ${iteration} iteración(es)`);

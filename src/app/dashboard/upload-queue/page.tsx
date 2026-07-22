@@ -43,6 +43,8 @@ interface ChildSummary {
 
 interface ActiveUpload {
   uploadId: string;
+  batchId?: string | null;
+  documentId?: number | null;
   nombre: string;
   status: string;
   step: string;
@@ -56,10 +58,12 @@ interface ActiveUpload {
 
 // ─── Helpers de estado ────────────────────────────────────────────────────────
 
-function isRateLimitPaused(job: { step?: string; mensaje?: string }) {
+function isRateLimitPaused(job: { status?: string; step?: string; mensaje?: string }) {
+  const st = (job.status || '').toLowerCase();
+  if (st === 'waiting_capacity') return true;
   const s = (job.step || '').toLowerCase();
   const m = (job.mensaje || '').toLowerCase();
-  return s.includes('cuota') || s.includes('esperando') || m.includes('pausado') || m.includes('límite');
+  return s.includes('cuota') || s.includes('cupo') || s.includes('esperando') || m.includes('pausado') || m.includes('límite') || m.includes('capacidad');
 }
 
 function isDuplicate(job: { step?: string; mensaje?: string }) {
@@ -82,7 +86,7 @@ function formatDuration(start?: string, end?: string) {
 }
 
 function getStatusColor(status: string, step?: string, mensaje?: string) {
-  if (isRateLimitPaused({ step, mensaje })) return 'text-amber-400';
+  if (isRateLimitPaused({ status, step, mensaje })) return 'text-amber-400';
   if (isDuplicate({ step, mensaje })) return 'text-amber-500';
   const s = status?.toLowerCase();
   if (s === 'completed' || s === 'completado') return 'text-green-400';
@@ -91,7 +95,7 @@ function getStatusColor(status: string, step?: string, mensaje?: string) {
 }
 
 function getStatusBadgeClass(status: string, step?: string, mensaje?: string) {
-  if (isRateLimitPaused({ step, mensaje }))
+  if (isRateLimitPaused({ status, step, mensaje }))
     return 'bg-amber-500/15 text-amber-400 border border-amber-500/30';
   if (isDuplicate({ step, mensaje }))
     return 'bg-amber-500/15 text-amber-500 border border-amber-500/30';
@@ -104,15 +108,15 @@ function getStatusBadgeClass(status: string, step?: string, mensaje?: string) {
 }
 
 function StatusIcon({ status, step, mensaje, size = 'w-5 h-5' }: { status: string; step?: string; mensaje?: string; size?: string }) {
-  if (isRateLimitPaused({ step, mensaje })) return <Clock className={`${size} text-amber-400`} />;
+  if (isRateLimitPaused({ status, step, mensaje })) return <Clock className={`${size} text-amber-400`} />;
   const s = status?.toLowerCase();
   if (s === 'completed' || s === 'completado') return <CheckCircle2 className={`${size} text-green-400`} />;
   if (s === 'failed' || s === 'fallido') return <XCircle className={`${size} text-red-400`} />;
   return <Loader2 className={`${size} text-primary animate-spin`} />;
 }
 
-function getProgressColor(step?: string, mensaje?: string) {
-  if (isRateLimitPaused({ step, mensaje })) return '[&>*]:bg-amber-400';
+function getProgressColor(status?: string, step?: string, mensaje?: string) {
+  if (isRateLimitPaused({ status, step, mensaje })) return '[&>*]:bg-amber-400';
   return '';
 }
 
@@ -150,6 +154,14 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                   <span className="font-mono opacity-70">{job.uploadId.split('_').pop()?.slice(-8)}</span>
+                  {job.batchId && (
+                    <>
+                      <span>•</span>
+                      <span className="font-mono text-violet-500/90" title={job.batchId}>
+                        lote {job.batchId.split('_').pop()?.slice(0, 8)}
+                      </span>
+                    </>
+                  )}
                   <span>•</span>
                   <span>Actualizado: {new Date(job.updatedAt).toLocaleTimeString('es-AR')}</span>
                   {duration && (
@@ -165,7 +177,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
             <div className="flex items-center gap-2 shrink-0">
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getStatusBadgeClass(job.status, job.step, job.mensaje)}`}>
                 <StatusIcon status={job.status} step={job.step} mensaje={job.mensaje} size="w-3 h-3" />
-                {paused ? 'En pausa' : (job.status || 'Procesando')}
+                {paused ? 'Esperando capacidad' : (job.status || 'Procesando')}
               </span>
               {['completado', 'completed', 'fallido', 'failed', 'error', 'permanent-fail'].includes(job.status?.toLowerCase() || '') ? (
                 <Button
@@ -202,7 +214,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
             </div>
             <Progress
               value={job.progress ?? 0}
-              className={`h-2 ${getProgressColor(job.step, job.mensaje)}`}
+              className={`h-2 ${getProgressColor(job.status, job.step, job.mensaje)}`}
             />
             <p className="text-xs text-muted-foreground leading-relaxed">
               {cleanText(job.mensaje) || 'En espera...'}
@@ -289,7 +301,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
                           </span>
                         </div>
                       </div>
-                      <Progress value={child.progress ?? 0} className={`h-1 ${getProgressColor(child.step, child.mensaje)}`} />
+                      <Progress value={child.progress ?? 0} className={`h-1 ${getProgressColor(child.status, child.step, child.mensaje)}`} />
                       {child.mensaje && (
                         <p className="text-muted-foreground/80 line-clamp-1">{cleanText(child.mensaje)}</p>
                       )}
@@ -325,12 +337,14 @@ export default function UploadQueuePage() {
   const [etaSeconds, setEtaSeconds] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [uploadToDelete, setUploadToDelete] = useState<string | null>(null);
   const { selectedCompanyIds } = useCompanyContext();
 
   const fetchQueue = async () => {
-    if (selectedCompanyIds.length === 0) {
+    if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
       setActiveUploads([]);
+      setFetchError(null);
       setIsLoading(false);
       return;
     }
@@ -341,9 +355,14 @@ export default function UploadQueuePage() {
         const data = await res.json();
         setActiveUploads(data.activeUploads || []);
         setEtaSeconds(data.etaSeconds || 0);
+        setFetchError(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setFetchError(data.error || `Error ${res.status} al cargar la cola`);
       }
     } catch (error) {
       console.error('Error fetching queue:', error);
+      setFetchError('No se pudo conectar con la cola de subidas');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -462,6 +481,18 @@ export default function UploadQueuePage() {
               <RefreshCw className="w-8 h-8 animate-spin mb-4 text-primary" />
               <p>Cargando cola de trabajos...</p>
             </div>
+          ) : fetchError ? (
+            <Card className="border-destructive/40 bg-destructive/5">
+              <CardContent className="flex flex-col items-center justify-center p-10 text-center gap-3">
+                <AlertCircle className="w-10 h-10 text-destructive opacity-80" />
+                <p className="text-lg font-medium text-destructive">No se pudo cargar la cola</p>
+                <p className="text-sm text-muted-foreground">{fetchError}</p>
+                <Button variant="outline" size="sm" onClick={fetchQueue}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reintentar
+                </Button>
+              </CardContent>
+            </Card>
           ) : activeUploads.length === 0 ? (
             <Card className="border-dashed border-2 bg-muted/10">
               <CardContent className="flex flex-col items-center justify-center p-14 text-center text-muted-foreground">

@@ -94,11 +94,12 @@ export interface IngestionJobData {
 // ─── Tipos de jobs de Gemini ──────────────────────────────────────────────────
 // El worker de ingesta pone estos jobs en geminiQueue después de clasificar.
 export type GeminiJobType =
-  | 'classify'                // Analista4/Analista33 — ¿facturable? ¿múltiple?
+  | 'classify'                // legacy: reencola extract-facturable (sin Vertex)
   | 'paginate'                // Analista25/Analista30 — rangos de páginas por doc
-  | 'extract-facturable'      // Analista/Analista8 — extractor completo
+  | 'extract-facturable'      // extractor + routing es_facturable/es_multiple
   | 'extract-non-facturable'  // Analista32 — extractor no facturable
-  | 'extract-multiple-image'; // Imagen con múltiples facturas (sin paginación PDF)
+  | 'extract-multiple-image'  // Imagen con múltiples facturas (sin paginación PDF)
+  | 'extract-repair';         // Reintento dirigido tras fallo de fiscal-guards
 
 export interface GeminiJobData {
   type: GeminiJobType;
@@ -112,12 +113,22 @@ export interface GeminiJobData {
   documentoIndex?: number;
   totalDocumentos?: number;
   numeroDocumento?: string;  // número extraído por el paginador
+
+  /** Intentos de repair ya consumidos (0 = primer extract) */
+  repairAttempt?: number;
+  /** Fallos de guards del intento anterior (solo extract-repair) */
+  previousFailures?: Array<{ code: string; message: string }>;
+  /** JSON normalizado previo para corrección dirigida */
+  previousAiResult?: unknown;
 }
 
 // ─── Tipos de jobs del DB Writer ──────────────────────────────────────────────
 export interface DbWriterJobData {
   ingestion: IngestionJobData;
   aiResult: any; // El JSON final normalizado (DocumentoGemini)
+  /** VALIDADO | REVISION — default VALIDADO si se omite (legacy) */
+  fiscalStatus?: 'VALIDADO' | 'REVISION';
+  fiscalRevisionReasons?: Array<{ code: string; message: string }>;
 }
 
 // ─── Cola de escritura en BD (Db Writer) ──────────────────────────────────────

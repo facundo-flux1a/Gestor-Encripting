@@ -42,6 +42,7 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
   // ─── Load companies + restore saved selection ────────────────────────────
   useEffect(() => {
     async function loadCompanies() {
+      const t0 = performance.now();
       try {
         setIsLoading(true);
 
@@ -50,6 +51,7 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
           fetch('/api/companies'),
           fetch('/api/user/selected-companies'),
         ]);
+        console.log(`⏱️ [PERF:client] CompanyProvider.fetch | ${Math.round(performance.now() - t0)}ms | companies=${companiesRes.status} selection=${selectionRes.status}`);
 
         if (!companiesRes.ok) {
           if (companiesRes.status === 401 || companiesRes.status === 403) {
@@ -77,8 +79,10 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
           }
           return prev;
         });
+        console.log(`⏱️ [PERF:client] CompanyProvider.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=${data.length} selected=${restoredIds.length}`);
       } catch (error) {
         console.error('❌ [CompanyProvider] Error loading companies:', error);
+        console.log(`⏱️ [PERF:client] CompanyProvider.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
         // Only wipe on critical hard error, maybe keep old state if it's intermittent failure
       } finally {
         setIsLoading(false);

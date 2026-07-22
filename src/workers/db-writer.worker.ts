@@ -27,6 +27,15 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { calcularTrimestreExtendido, obtenerSiguienteTrimestreAbierto } from '@/lib/trimestre-utils';
 import { wLog } from '@/lib/worker-logger';
+import {
+  FiscalStatus,
+  FISCAL_GUARD_VERSION,
+  FISCAL_GUARD_VERSION_KEY,
+  FISCAL_REVISION_REASONS_KEY,
+  FISCAL_STATUS_KEY,
+} from '@/lib/document-fiscal-status';
+import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
+import { forceAbonoSign } from '@/services/duplicates/canonical';
 
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
@@ -39,8 +48,11 @@ export function startDbWriterWorker() {
   const worker = new Worker<DbWriterJobData>(
     DB_WRITER_QUEUE_NAME,
     async (job: Job<DbWriterJobData>) => {
-      const { ingestion, aiResult } = job.data;
+      const { ingestion, aiResult, fiscalStatus, fiscalRevisionReasons } = job.data;
       const { uploadId, fileName, empresaId } = ingestion;
+      const resolvedFiscalStatus =
+        fiscalStatus === FiscalStatus.REVISION ? FiscalStatus.REVISION : FiscalStatus.VALIDADO;
+      const revisionReasons = fiscalRevisionReasons || [];
 
       wLog('DbWriterWorker', `💾 Iniciando guardado: ${fileName} (Job ${job.id})`);
 
@@ -83,15 +95,15 @@ export function startDbWriterWorker() {
         const rawTipo = aiResult.tipo_documento || 'SIN CLASIFICAR';
         const tipoDocumento = rawTipo.toString().toUpperCase();
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
-        const multiplicador = isAbono ? -1 : 1;
+        const applySign = (n: number) => (isAbono ? forceAbonoSign(n) : n);
 
         // 2. Importes y Fechas (soportando anidado 'documento' o flat)
         const docInfo = aiResult.documento || {};
         const rawImporteTotal = docInfo.importe_total ?? aiResult.importe_total ?? 0;
         const rawImporteSinIva = docInfo.importe_sin_iva ?? aiResult.importe_sin_impuestos ?? 0;
         
-        const importeTotal    = (Number(rawImporteTotal) || 0) * multiplicador;
-        const importeSinIva   = (Number(rawImporteSinIva) || 0) * multiplicador;
+        const importeTotal    = applySign(Number(rawImporteTotal) || 0);
+        const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
         const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
         const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
         const fechaEmision    = fechaEmisionRaw ? new Date(fechaEmisionRaw) : new Date();
@@ -135,6 +147,7 @@ export function startDbWriterWorker() {
         // =====================================================================
 
         console.log(`[DbWriterWorker] ⏳ [Paso 1/5] Iniciando transacción Prisma para ${fileName}...`);
+        let savedDocumentoId: bigint | null = null;
         await prisma.$transaction(async (tx: any) => {
 
           console.log(`[DbWriterWorker] 📝 [Paso 2/5] Creando registro principal del documento...`);
@@ -162,9 +175,15 @@ export function startDbWriterWorker() {
                 cif: cifDocumento,
                 valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || '',
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
+                [FISCAL_STATUS_KEY]: resolvedFiscalStatus,
+                [FISCAL_GUARD_VERSION_KEY]: FISCAL_GUARD_VERSION,
+                ...(revisionReasons.length > 0
+                  ? { [FISCAL_REVISION_REASONS_KEY]: revisionReasons }
+                  : {}),
               },
             }
           });
+          savedDocumentoId = doc.id;
 
           // 5. Vincular archivo
           await tx.archivos_documento.create({
@@ -245,13 +264,13 @@ export function startDbWriterWorker() {
               const cant       = Number(art.cantidad)       || 1;
               const precioUni  = Number(art.precio_unitario) || 0;
               const precioNeto = Number(art.precio_neto)    || precioUni;
-              const importeLin = (Number(art.importe_linea) || (precioNeto * cant)) * multiplicador;
+              const importeLin = applySign(Number(art.importe_linea) || (precioNeto * cant));
 
               lineasToInsert.push({
                 documento_id: doc.id,
                 id_de_empresa: BigInt(empresaId),
                 descripcion: art.descripcion || 'Sin descripción',
-                cantidad: cant * multiplicador,
+                cantidad: isAbono ? -Math.abs(cant) : cant,
                 precio_unitario: precioUni,
                 descuento_porcentaje: Number(art.descuento_porcentaje) || 0,
                 precio_neto: precioNeto,
@@ -274,8 +293,10 @@ export function startDbWriterWorker() {
               const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
               const cuota  = esRet
                 ? -Math.abs(Number(imp.cuota_iva) || 0)
-                : (Number(imp.cuota_iva) || 0) * multiplicador;
-              const base   = (Number(imp.base_imponible) || 0) * (esRet ? 1 : multiplicador);
+                : applySign(Number(imp.cuota_iva) || 0);
+              const base   = esRet
+                ? (Number(imp.base_imponible) || 0)
+                : applySign(Number(imp.base_imponible) || 0);
               const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
 
               return {
@@ -294,14 +315,18 @@ export function startDbWriterWorker() {
             }
           }
 
-          // 10. Incidencia (si el prompt marcó incidencia: true)
+          // 10. Incidencia: guards en REVISION y/o incidencia blanda del extractor
           const rawIncidencia = aiResult.incidencia;
-          const tieneIncidencia = rawIncidencia === true || String(rawIncidencia).toUpperCase() === 'TRUE';
-          const descIncidencia  = (aiResult.descripcion_incidencia || '').toString().trim();
+          const tieneIncidenciaBlanda =
+            rawIncidencia === true || String(rawIncidencia).toUpperCase() === 'TRUE';
+          const descIncidencia = (aiResult.descripcion_incidencia || '').toString().trim();
+          const enRevision = resolvedFiscalStatus === FiscalStatus.REVISION;
 
-          if (tieneIncidencia) {
-            const descripcionFinal = descIncidencia ||
-              `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`;
+          if (enRevision || tieneIncidenciaBlanda) {
+            const descripcionFinal = enRevision
+              ? `REVISION fiscal: ${formatGuardFailures(revisionReasons as any) || descIncidencia || 'fallo de validación dura'}`
+              : descIncidencia ||
+                `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`;
 
             await tx.incidencias_documento.create({
               data: {
@@ -321,12 +346,16 @@ export function startDbWriterWorker() {
           timeout: 10000,
         });
 
-        // ÉXITO: marcar el hijo como completado
+        // ÉXITO: marcar el hijo como completado (VALIDADO o REVISION — archivo siempre queda)
         await updateIngestionProgress(uploadId, {
           status: 'Completado',
-          step: 'Guardado',
+          step: resolvedFiscalStatus === FiscalStatus.REVISION ? 'Guardado en revisión' : 'Guardado',
           progress: 100,
-          mensaje: `Documento procesado y guardado correctamente.`,
+          mensaje:
+            resolvedFiscalStatus === FiscalStatus.REVISION
+              ? 'Documento guardado en REVISIÓN (excluido de agregados hasta corregir).'
+              : 'Documento procesado y validado correctamente.',
+          documentoId: savedDocumentoId ?? undefined,
         });
 
         // Si este job es un hijo de un lote, propagar el progreso al padre.

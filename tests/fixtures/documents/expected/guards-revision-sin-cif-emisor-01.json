@@ -1,0 +1,27 @@
+{
+  "id": "guards-revision-sin-cif-emisor-01",
+  "archetype": "pdf_digital_small",
+  "empresaCif": "B97376321",
+  "expectRevision": true,
+  "expected": {
+    "tipo_documento": "FACTURA RECIBIDA",
+    "empresa_emisora": { "nombre": "Proveedor Sin CIF", "cif": "" },
+    "cliente": { "nombre": "ESPAI DE DUES S.L.", "cif": "B97376321" },
+    "documento": {
+      "numero_documento": "F-BAD-001",
+      "fecha_emision": "2026-01-15",
+      "importe_total": 121.0,
+      "importe_sin_iva": 100.0
+    },
+    "totales_por_impuesto": [
+      {
+        "tipo_iva": "IVA",
+        "porcentaje": 21,
+        "base_imponible": 100.0,
+        "cuota_iva": 21.0
+      }
+    ],
+    "incidencia": true,
+    "descripcion_incidencia": "CIF emisor ausente"
+  }
+}
