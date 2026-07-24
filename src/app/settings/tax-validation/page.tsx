@@ -2,6 +2,8 @@
 
 'use server';
 
+export const dynamic = 'force-dynamic';
+
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { getTaxValidationRules, createTaxValidationRule, updateTaxRuleVigente, deleteTaxRule } from "@/services/tax-validation-service";
 import { Button } from "@/components/ui/button";
