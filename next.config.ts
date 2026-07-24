@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
     'genkit',
     'unrar-js',
     'node-unrar-js',
+    'bullmq',
+    'ioredis',
+    '@ioredis/commands',
+    'redis',
   ],
   experimental: {
     serverActions: {
