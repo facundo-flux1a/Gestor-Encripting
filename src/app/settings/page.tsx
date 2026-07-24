@@ -1,5 +1,3 @@
-'use server';
-
 export const dynamic = 'force-dynamic';
 
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
