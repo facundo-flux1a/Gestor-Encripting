@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
       path.join(root, 'node_modules'),
       ...(config.resolve.modules || ['node_modules']),
     ];
+    // Force all packages to use the same React instance (prevents createContext errors)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      react: path.resolve(path.join(root, 'node_modules/react')),
+      'react-dom': path.resolve(path.join(root, 'node_modules/react-dom')),
+    };
     return config;
   },
   images: {
