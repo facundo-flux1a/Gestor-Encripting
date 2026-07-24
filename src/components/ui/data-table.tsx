@@ -129,9 +129,9 @@ function Filter<TData, TValue>({
     </div>
   ) : (
     <Input
-      value={(columnFilterValue ?? '') as string}
+      value={Array.isArray(columnFilterValue) ? '' : (columnFilterValue ?? '') as string}
       onChange={e => column.setFilterValue(e.target.value)}
-      placeholder={`Filtrar...`}
+      placeholder={Array.isArray(columnFilterValue) ? 'Filtrado por grupo...' : 'Filtrar...'}
       className="h-8 border-dashed"
     />
   )

@@ -202,6 +202,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       nombre: e.nombre,
       direccion: e.direccion,
       identificador_fiscal: e.identificador_fiscal,
+      identificador_fiscal_hash: (e as any).identificador_fiscal_hash ?? null,
       telefono: e.telefono,
       email: e.email,
       datos_extra: safeJsonParse(e.datos_extra),
@@ -1723,8 +1724,8 @@ export async function getProvidersWithStats(companyIds: number[]): Promise<Provi
   const showCompanyName = companyIds.length > 1;
 
   const whereDocType = `AND(
-  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%emitid%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%emitid%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
@@ -1916,9 +1917,10 @@ export async function getClientsWithStats(companyIds: number[]): Promise<Provide
   const placeholders = companyIds.map(() => '?').join(',');
   const showCompanyName = companyIds.length > 1;
 
+  // Clientes solo aparecen en facturas EMITIDAS por la empresa
   const whereDocType = `AND(
-  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
-OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+  (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) LIKE '%emitid%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) LIKE '%emitid%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
@@ -4789,25 +4791,34 @@ export async function getUniqueClients(empresaIds?: number[]): Promise<string[]>
     if (targetEmpresaIds.length === 0) return [];
 
     const tEnt = performance.now();
+    // Solo clientes de facturas EMITIDAS. Seleccionamos también el hash para deduplicar por CIF.
     const entidades = await prisma.entidades_documento.findMany({
       where: {
         documentos: {
-          id_de_empresa: { in: targetEmpresaIds.map(id => BigInt(id)) }
+          id_de_empresa: { in: targetEmpresaIds.map(id => BigInt(id)) },
+          tipo_documento: { contains: 'EMITIDA' }
         },
         rol: { in: ['receptor', 'cliente'] }
       },
       select: {
-        nombre: true
+        nombre: true,
+        identificador_fiscal_hash: true
       }
     });
     console.log(`⏱️ [PERF] getUniqueClients.entidades | ${Math.round(performance.now() - tEnt)}ms | rows=${entidades.length}`);
 
-    // Filtramos en memoria nulos/vacíos y sacamos valores únicos, luego ordenamos (post-desencriptación)
-    const nombres = entidades
-      .map(e => e.nombre)
-      .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
-
-    const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
+    // Deduplicar por fiscal_hash (si existe) → un nombre canónico por CIF, ignorando diferencias de case/typo
+    const seenHashes = new Set<string>();
+    const uniqueNombres: string[] = [];
+    for (const e of entidades) {
+      if (!e.nombre || e.nombre.trim() === '') continue;
+      const key = e.identificador_fiscal_hash || e.nombre.trim().toLowerCase();
+      if (!seenHashes.has(key)) {
+        seenHashes.add(key);
+        uniqueNombres.push(e.nombre.trim());
+      }
+    }
+    uniqueNombres.sort((a, b) => a.localeCompare(b));
 
     console.log('✅ [getUniqueClients] Clientes únicos (Prisma):', uniqueNombres.length);
     console.log(`⏱️ [PERF] getUniqueClients.TOTAL | ${Math.round(performance.now() - t0)}ms`);
@@ -4837,6 +4848,7 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
     if (targetEmpresaIds.length === 0) return [];
 
     const tEnt = performance.now();
+    // Seleccionamos también el hash para deduplicar por CIF (colapsa variantes de mayúsculas/typos)
     const entidades = await prisma.entidades_documento.findMany({
       where: {
         documentos: {
@@ -4845,16 +4857,24 @@ export async function getUniqueProvidersNames(empresaIds?: number[]): Promise<st
         rol: { in: ['proveedor', 'emisor'] }
       },
       select: {
-        nombre: true
+        nombre: true,
+        identificador_fiscal_hash: true
       }
     });
     console.log(`⏱️ [PERF] getUniqueProvidersNames.entidades | ${Math.round(performance.now() - tEnt)}ms | rows=${entidades.length}`);
 
-    const nombres = entidades
-      .map(e => e.nombre)
-      .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
-
-    const uniqueNombres = Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b));
+    // Deduplicar por fiscal_hash → un nombre canónico por CIF, evita duplicados por case ("ALMACENES BEM" vs "Almacenes Bem")
+    const seenHashes = new Set<string>();
+    const uniqueNombres: string[] = [];
+    for (const e of entidades) {
+      if (!e.nombre || e.nombre.trim() === '') continue;
+      const key = e.identificador_fiscal_hash || e.nombre.trim().toLowerCase();
+      if (!seenHashes.has(key)) {
+        seenHashes.add(key);
+        uniqueNombres.push(e.nombre.trim());
+      }
+    }
+    uniqueNombres.sort((a, b) => a.localeCompare(b));
 
     console.log('✅ [getUniqueProvidersNames] Proveedores únicos (Prisma):', uniqueNombres.length);
     console.log(`⏱️ [PERF] getUniqueProvidersNames.TOTAL | ${Math.round(performance.now() - t0)}ms`);

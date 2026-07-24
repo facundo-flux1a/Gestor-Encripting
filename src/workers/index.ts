@@ -15,7 +15,8 @@ import { reconcileStaleActividad } from '@/services/actividad-reconcile';
 const HEARTBEAT_KEY = 'workers:heartbeat';
 const HEARTBEAT_TTL_SEC = 120;
 const HEARTBEAT_EVERY_MS = 15_000;
-const WORKER_LOCK_KEY = 'workers:singleton-lock';
+const envPrefix = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
+const WORKER_LOCK_KEY = `workers:${envPrefix}:singleton-lock`;
 const WORKER_LOCK_TTL_SEC = 60;
 const RECONCILE_EVERY_MS = 2 * 60 * 1000;
 

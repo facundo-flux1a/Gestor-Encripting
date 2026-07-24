@@ -42,8 +42,61 @@ function ProveedoresPageContent() {
             }
 
             const data = await response.json();
-            // proveedores => { providers: [] }, clientes => { clients: [] }
-            setProviders(data.providers || data.clients || []);
+            const rawList: ProviderWithStats[] = data.providers || data.clients || [];
+
+            const cleanCif = (raw: string | null | undefined): string => {
+                if (!raw) return '';
+                return raw.toUpperCase().replace(/[\s\-./]/g, '').replace(/^ES/, '');
+            };
+
+            const unifiedMap = new Map<string, ProviderWithStats & { companyNames: Set<string> }>();
+            const noCifList: ProviderWithStats[] = [];
+
+            rawList.forEach(p => {
+                const normCif = cleanCif(p.identificador_fiscal);
+                if (!normCif || p.identificador_fiscal === 'N/A') {
+                    noCifList.push(p);
+                    return;
+                }
+
+                if (!unifiedMap.has(normCif)) {
+                    unifiedMap.set(normCif, {
+                        ...p,
+                        companyNames: new Set(p.empresaNombre ? p.empresaNombre.split(', ') : [])
+                    });
+                } else {
+                    const existing = unifiedMap.get(normCif)!;
+                    existing.totalSpent += p.totalSpent;
+                    existing.totalDocuments += p.totalDocuments;
+                    existing.uniqueProducts = Math.max(existing.uniqueProducts, p.uniqueProducts);
+                    
+                    if (p.empresaNombre) {
+                        p.empresaNombre.split(', ').forEach(name => existing.companyNames.add(name));
+                    }
+
+                    if (p.nombre && p.nombre !== 'N/A' && existing.nombre === 'N/A') existing.nombre = p.nombre;
+                    if (p.direccion && p.direccion !== 'N/A' && existing.direccion === 'N/A') existing.direccion = p.direccion;
+                    if (p.telefono && p.telefono !== 'N/A' && existing.telefono === 'N/A') existing.telefono = p.telefono;
+                    if (p.email && p.email !== 'N/A' && existing.email === 'N/A') existing.email = p.email;
+                    if (p.cuenta_compra && !existing.cuenta_compra) existing.cuenta_compra = p.cuenta_compra;
+                    if (p.cuenta_venta && !existing.cuenta_venta) existing.cuenta_venta = p.cuenta_venta;
+                }
+            });
+
+            const finalUnified = Array.from(unifiedMap.values()).map(p => {
+                const { companyNames, ...rest } = p;
+                return {
+                    ...rest,
+                    empresaNombre: showCompanyColumn && companyNames.size > 0 
+                        ? Array.from(companyNames).join(', ') 
+                        : undefined
+                };
+            });
+
+            const merged = [...finalUnified, ...noCifList];
+            merged.sort((a, b) => b.totalSpent - a.totalSpent);
+
+            setProviders(merged);
         } catch (error) {
             console.error('Error cargando entidades:', error);
             setProviders([]);

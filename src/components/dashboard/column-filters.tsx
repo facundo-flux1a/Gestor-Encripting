@@ -19,10 +19,15 @@ import {
 import { useState, useMemo } from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
 
+export interface FilterOption {
+  value: string; // CIF hash o CIF raw — usado internamente como clave del filtro
+  label: string; // Nombre canónico a mostrar en el dropdown
+}
+
 interface DataTableFacetedFilterProps<TData, TValue> {
   column?: Column<TData, TValue>;
   title?: string;
-  options: string[];
+  options: FilterOption[];
   isLoading?: boolean;
 }
 
@@ -75,15 +80,16 @@ export function DataTableFacetedFilter<TData, TValue>({
               <CommandEmpty>No se encontraron resultados</CommandEmpty>
               <CommandGroup className="max-h-64 overflow-auto">
                 {options.map((option) => {
-                  const isSelected = selectedValues.has(option);
+                  const isSelected = selectedValues.has(option.value);
                   return (
                     <CommandItem
-                      key={option}
+                      key={option.value}
+                      value={option.label} // para la búsqueda del CommandInput
                       onSelect={() => {
                         if (isSelected) {
-                          selectedValues.delete(option);
+                          selectedValues.delete(option.value);
                         } else {
-                          selectedValues.add(option);
+                          selectedValues.add(option.value);
                         }
                         const filterValues = Array.from(selectedValues);
                         column?.setFilterValue(
@@ -101,7 +107,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                       >
                         <Check className={cn('h-4 w-4')} />
                       </div>
-                      <span className="truncate">{option}</span>
+                      <span className="truncate">{option.label}</span>
                     </CommandItem>
                   );
                 })}
@@ -114,7 +120,7 @@ export function DataTableFacetedFilter<TData, TValue>({
   );
 }
 
-// ✅ Filtro de Cliente: Trae todos desde API y filtra por los que están en la tabla
+// ✅ Filtro de Cliente: agrupa por identificador_fiscal_hash — evita duplicados por variación de nombre
 export function ClienteFilter<TData, TValue>({
   column,
   table,
@@ -122,22 +128,28 @@ export function ClienteFilter<TData, TValue>({
   column?: Column<TData, TValue>;
   table?: Table<TData>;
 }) {
-  // Opciones desde la tabla ya cargada — sin /api/filters (antes: ~2.6s × N remounts)
   const rowCount = table?.getPreFilteredRowModel().rows.length ?? 0;
   const companyKey = useCompanyContext().selectedCompanyIds.join(',');
 
-  const clientes = useMemo(() => {
+  // hash/cif → nombre canónico (el primero encontrado para ese hash)
+  const clientes = useMemo((): FilterOption[] => {
     if (!table) return [];
-    const names = new Set<string>();
+    const hashToName = new Map<string, string>();
     table.getPreFilteredRowModel().rows.forEach((row: any) => {
       const cliente = row.original.entidades?.find(
         (e: any) => e.rol === 'cliente' || e.rol === 'receptor'
       );
-      if (cliente?.nombre && cliente.nombre !== 'Sin cliente') {
-        names.add(cliente.nombre);
+      if (!cliente?.nombre || cliente.nombre === 'Sin cliente') return;
+      const key: string = cliente.identificador_fiscal_hash
+        || cliente.identificador_fiscal
+        || cliente.nombre;
+      if (key && !hashToName.has(key)) {
+        hashToName.set(key, cliente.nombre);
       }
     });
-    return Array.from(names).sort();
+    return Array.from(hashToName.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [table, rowCount, companyKey]);
 
   return (
@@ -150,7 +162,7 @@ export function ClienteFilter<TData, TValue>({
   );
 }
 
-// ✅ Filtro de Proveedor: Trae todos desde API y filtra por los que están en la tabla
+// ✅ Filtro de Proveedor: agrupa por identificador_fiscal_hash — evita duplicados por variación de nombre
 export function ProveedorFilter<TData, TValue>({
   column,
   table,
@@ -158,20 +170,29 @@ export function ProveedorFilter<TData, TValue>({
   column?: Column<TData, TValue>;
   table?: Table<TData>;
 }) {
-  // Opciones desde la tabla ya cargada — sin /api/filters (antes: ~2.6s × N remounts)
   const rowCount = table?.getPreFilteredRowModel().rows.length ?? 0;
   const companyKey = useCompanyContext().selectedCompanyIds.join(',');
 
-  const proveedores = useMemo(() => {
+  // hash/cif → nombre canónico (el primero encontrado para ese hash)
+  const proveedores = useMemo((): FilterOption[] => {
     if (!table) return [];
-    const names = new Set<string>();
+    const hashToName = new Map<string, string>();
     table.getPreFilteredRowModel().rows.forEach((row: any) => {
-      const proveedor = row.original.proveedor;
-      if (proveedor && proveedor !== 'N/A' && proveedor !== 'Sin proveedor') {
-        names.add(proveedor);
+      const nombre: string = row.original.proveedor;
+      if (!nombre || nombre === 'N/A' || nombre === 'Sin proveedor') return;
+      const emisor = row.original.entidades?.find(
+        (e: any) => e.rol === 'proveedor' || e.rol === 'emisor'
+      );
+      const key: string = emisor?.identificador_fiscal_hash
+        || emisor?.identificador_fiscal
+        || nombre;
+      if (key && !hashToName.has(key)) {
+        hashToName.set(key, nombre);
       }
     });
-    return Array.from(names).sort();
+    return Array.from(hashToName.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [table, rowCount, companyKey]);
 
   return (

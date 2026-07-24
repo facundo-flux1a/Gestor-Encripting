@@ -10,7 +10,26 @@ export type AzureOpenAiCallOpts = {
   /** Si true, pide JSON (response_format json_object). */
   json?: boolean;
   maxCompletionTokens?: number;
+  /** URL pública de imagen de ejemplo para few-shot visual prompting */
+  exampleImageUrl?: string;
 };
+
+// Cache en memoria para la imagen de ejemplo (se descarga 1 sola vez por proceso)
+let _exampleImageCache: { b64: string; mime: string } | null = null;
+
+async function fetchExampleImage(url: string): Promise<{ b64: string; mime: string } | null> {
+  if (_exampleImageCache) return _exampleImageCache;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const mime = res.headers.get('content-type') || 'image/jpeg';
+    _exampleImageCache = { b64: Buffer.from(buf).toString('base64'), mime };
+    return _exampleImageCache;
+  } catch {
+    return null;
+  }
+}
 
 function requireEnv(name: string): string {
   const v = process.env[name]?.trim();
@@ -54,11 +73,12 @@ function chatUrl(): string {
   return `${base}/models/chat/completions?api-version=${apiVersion}`;
 }
 
-function buildUserContent(
+async function buildUserContent(
   prompt: string,
   fileBuffer?: Buffer,
-  mimeType?: string
-): string | Array<Record<string, unknown>> {
+  mimeType?: string,
+  exampleImageUrl?: string
+): Promise<string | Array<Record<string, unknown>>> {
   if (!fileBuffer || fileBuffer.length === 0) return prompt;
 
   const mime = mimeType || 'application/octet-stream';
@@ -66,19 +86,41 @@ function buildUserContent(
   const dataUrl = `data:${mime};base64,${b64}`;
   const isImage = mime.startsWith('image/');
 
+  // Prefijo de ejemplo (few-shot visual prompting) si hay URL configurada
+  const exampleParts: Array<Record<string, unknown>> = [];
+  if (exampleImageUrl) {
+    const example = await fetchExampleImage(exampleImageUrl);
+    if (example) {
+      exampleParts.push({
+        type: 'text',
+        text: 'REFERENCIA VISUAL: En algunas facturas el CIF del proveedor aparece impreso verticalmente (rotado 90°) en el margen izquierdo o inferior de cada página, como se muestra en esta imagen de ejemplo. DEBES buscarlo ahí también:',
+      });
+      exampleParts.push({
+        type: 'image_url',
+        image_url: { url: `data:${example.mime};base64,${example.b64}` },
+      });
+      exampleParts.push({
+        type: 'text',
+        text: 'Ahora analiza el siguiente documento real y extrae todos los datos, incluyendo el CIF que pueda aparecer rotado en los márgenes:',
+      });
+    }
+  }
+
   if (isImage) {
     return [
       { type: 'text', text: prompt },
+      ...exampleParts,
       { type: 'image_url', image_url: { url: dataUrl } },
     ];
   }
 
-  // PDF / otros: Foundry chat completions acepta type=file (no image_url con application/pdf)
+  // PDF / otros: Foundry chat completions acepta type=file
   const filename =
     mime.includes('pdf') ? 'document.pdf' : mime.startsWith('image/') ? 'document.png' : 'document.bin';
 
   return [
     { type: 'text', text: prompt },
+    ...exampleParts,
     {
       type: 'file',
       file: {
@@ -97,12 +139,18 @@ export async function callAzureOpenAiChat(opts: AzureOpenAiCallOpts): Promise<{
   const deployment = requireEnv('AZURE_OPENAI_DEPLOYMENT');
   const url = chatUrl();
 
+  // URL de imagen de ejemplo para few-shot visual prompting (configurable en .env)
+  const exampleImageUrl =
+    opts.exampleImageUrl ??
+    process.env.OPENAI_EXAMPLE_CIF_IMAGE_URL ??
+    undefined;
+
   const body: Record<string, unknown> = {
     model: deployment,
     messages: [
       {
         role: 'user',
-        content: buildUserContent(opts.prompt, opts.fileBuffer, opts.mimeType),
+        content: await buildUserContent(opts.prompt, opts.fileBuffer, opts.mimeType, exampleImageUrl),
       },
     ],
     max_completion_tokens: opts.maxCompletionTokens ?? 16384,

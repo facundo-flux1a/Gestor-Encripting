@@ -278,33 +278,45 @@ export function TrimestresFilterBar({
             .finally(() => setLoadingTipos(false));
 
         setLoadingProveedores(true);
-        fetch(`/api/filters/proveedores?${params}`)
-            .then(r => r.json())
-            .then(d => {
-                const inTabla = new Set(
-                    documentos.map(doc => doc.proveedor).filter((p): p is string => !!p && p !== 'N/A')
-                );
-                setProveedoresFromDB((d.proveedores || []).filter((p: string) => inTabla.has(p)));
-            })
-            .catch(() => setProveedoresFromDB([]))
-            .finally(() => setLoadingProveedores(false));
+        const cifToProvName = new Map<string, string>();
+        const uniqueProvNamesNoCif = new Set<string>();
+
+        documentos.forEach(doc => {
+            const rawProv = doc.proveedor;
+            if (!rawProv || rawProv === 'N/A') return;
+            const cleanedCif = doc.cif ? doc.cif.toUpperCase().replace(/[\s\-./]/g, '').replace(/^ES/, '') : '';
+            if (cleanedCif) {
+                if (!cifToProvName.has(cleanedCif)) {
+                    cifToProvName.set(cleanedCif, rawProv);
+                }
+            } else {
+                uniqueProvNamesNoCif.add(rawProv);
+            }
+        });
+        const finalProvs = [...Array.from(cifToProvName.values()), ...Array.from(uniqueProvNamesNoCif)].sort((a, b) => a.localeCompare(b));
+        setProveedoresFromDB(finalProvs);
+        setLoadingProveedores(false);
 
         setLoadingClientes(true);
-        fetch(`/api/filters/clientes?${params}`)
-            .then(r => r.json())
-            .then(d => {
-                const inTabla = new Set(
-                    documentos.flatMap(doc =>
-                        (doc.entidades || [])
-                            .filter(e => e.rol === 'cliente' || e.rol === 'receptor')
-                            .map(e => e.nombre)
-                            .filter(Boolean)
-                    )
-                );
-                setClientesFromDB((d.clientes || []).filter((c: string) => inTabla.has(c)));
-            })
-            .catch(() => setClientesFromDB([]))
-            .finally(() => setLoadingClientes(false));
+        const cifToCliName = new Map<string, string>();
+        const uniqueCliNamesNoCif = new Set<string>();
+
+        documentos.forEach(doc => {
+            const clientEntity = doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+            const rawClient = clientEntity?.nombre;
+            if (!rawClient || rawClient === 'N/A') return;
+            const cleanedCif = clientEntity?.identificador_fiscal ? clientEntity.identificador_fiscal.toUpperCase().replace(/[\s\-./]/g, '').replace(/^ES/, '') : '';
+            if (cleanedCif) {
+                if (!cifToCliName.has(cleanedCif)) {
+                    cifToCliName.set(cleanedCif, rawClient);
+                }
+            } else {
+                uniqueCliNamesNoCif.add(rawClient);
+            }
+        });
+        const finalClientes = [...Array.from(cifToCliName.values()), ...Array.from(uniqueCliNamesNoCif)].sort((a, b) => a.localeCompare(b));
+        setClientesFromDB(finalClientes);
+        setLoadingClientes(false);
 
     }, [empresaIds, año, trimestre, documentos]);
 

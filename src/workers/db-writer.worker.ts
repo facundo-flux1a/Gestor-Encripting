@@ -41,7 +41,8 @@ const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10'
 
 function getSha256(text: string | null | undefined): string | null {
   if (!text) return null;
-  return crypto.createHash('sha256').update(text.toLowerCase().trim()).digest('hex');
+  const cleanText = text.toLowerCase().replace(/[,.]/g, '').trim();
+  return crypto.createHash('sha256').update(cleanText).digest('hex');
 }
 
 export function startDbWriterWorker() {
@@ -93,8 +94,31 @@ export function startDbWriterWorker() {
 
         // 1. Tipo de documento y clasificación emitida/recibida
         const rawTipo = aiResult.tipo_documento || 'SIN CLASIFICAR';
-        const tipoDocumento = rawTipo.toString().toUpperCase();
+        let tipoDocumento = rawTipo.toString().toUpperCase();
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
+
+        // VALIDACIÓN FUERTE POR CIF (Ignorando a la IA si el CIF es exacto)
+        const cleanCif = (c: any) => {
+          let cif = (c || '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          if (cif.startsWith('ES') && cif.length > 9) {
+            cif = cif.slice(2);
+          }
+          return cif;
+        };
+        const cifDashboard = cleanCif(ingestion.cif);
+        const cifEmisor = cleanCif(aiResult.empresa_emisora?.cif);
+        const cifCliente = cleanCif(aiResult.cliente?.cif || aiResult.empresa_receptora?.cif);
+
+        if (cifDashboard) {
+          if (cifEmisor === cifDashboard) {
+            tipoDocumento = isAbono ? 'ABONO EMITIDO' : 'FACTURA EMITIDA';
+            wLog('DbWriterWorker', `🔍 Clasificación forzada por CIF: EMITIDA (${cifDashboard})`);
+          } else if (cifCliente === cifDashboard) {
+            tipoDocumento = isAbono ? 'ABONO RECIBIDO' : 'FACTURA RECIBIDA';
+            wLog('DbWriterWorker', `🔍 Clasificación forzada por CIF: RECIBIDA (${cifDashboard})`);
+          }
+        }
+
         const applySign = (n: number) => (isAbono ? forceAbonoSign(n) : n);
 
         // 2. Importes y Fechas (soportando anidado 'documento' o flat)
@@ -200,7 +224,7 @@ export function startDbWriterWorker() {
 
           // 6. Entidad emisora
           if (emisor.nombre) {
-            const rawCif    = emisor.cif    || '';
+            const rawCif    = cleanCif(emisor.cif)    || '';
             const rawNombre = emisor.nombre || '';
             const rawDir    = emisor.direccion || '';
             const rawTel    = emisor.telefono || '';
@@ -223,7 +247,7 @@ export function startDbWriterWorker() {
 
           // 7. Entidad receptora / cliente
           if (receptor.nombre) {
-            const rawCif    = receptor.cif    || '';
+            const rawCif    = cleanCif(receptor.cif)    || '';
             const rawNombre = receptor.nombre || '';
             const rawDir    = receptor.direccion || '';
             const rawTel    = receptor.telefono || '';

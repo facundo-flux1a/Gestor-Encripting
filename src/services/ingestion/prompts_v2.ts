@@ -330,10 +330,11 @@ cliente.nombre = ""  ← no encontrado, pero no se duplica
 - Va en: cliente en el JSON
 - **OBLIGATORIO**: Busca exhaustivamente en secciones de facturación y destinatario
 
-**⚠️ ESFUERZO MÁXIMO EN EXTRACCIÓN DE AMBOS CIF:**
-- Busca 2-3 veces en zonas diferentes si no encuentras a la primera
-- Si encontraste solo uno, busca el otro en zonas no convencionales (laterales, notas legales, pie de página)
-- NO te conformes con dejar un CIF vacío sin haber buscado exhaustivamente
+**⚠️ ESFUERZO MÁXIMO EN EXTRACCIÓN DE AMBOS CIF (ESPECIAL ATENCIÓN AL TEXTO VERTICAL):**
+- 🔥 INSTRUCCIÓN ULTRA CRÍTICA: Muchos documentos tienen el CIF del emisor impreso en TEXTO VERTICAL (rotado 90 grados) a lo largo de todo el MARGEN IZQUIERDO o DERECHO.
+- REVISA OBLIGATORIAMENTE LAS BANDAS LATERALES DE LA IMAGEN buscando secuencias que parezcan un CIF/NIF.
+- Busca 2-3 veces en zonas diferentes si no encuentras a la primera.
+- NO te conformes con dejar un CIF vacío sin haber escaneado visualmente los cuatro bordes del documento.
 - Si tras búsqueda exhaustiva no lo encuentras: déjalo vacío ("") y marca incidencia: true
 
 **REGLA CRÍTICA - CAMPO CLIENTE OBLIGATORIO:**
@@ -350,7 +351,7 @@ El campo "cliente" SIEMPRE debe estar presente y completo:
   * UK: VAT con formato GB-XXX-XXXX-XX
 - Buscar cerca de nombres de empresas
 - No confundir con: números de factura, códigos de cliente, teléfonos
-- Si no encuentras identificación en la ubicación típica, búscala en pies de página o márgenes
+- Si no encuentras identificación en la ubicación típica, búscala en pies de página o MÁRGENES LATERALES (a menudo rotado 90 grados).
 
 **SI FALTA IDENTIFICACIÓN FISCAL:**
 - Déjalo vacío ("") en el JSON
@@ -363,7 +364,7 @@ El campo "cliente" SIEMPRE debe estar presente y completo:
 Se adjunta una imagen de referencia que muestra un caso concreto en el que el CIF de una de las entidades (en ese caso el proveedor/emisor) aparece cortado, parcialmente oculto o ilegible en el documento original. Esta imagen es solo un ejemplo ilustrativo de un tipo de situación, pero en la práctica los CIFs pueden estar escondidos o ser difíciles de leer de muchas otras formas:
 
 - En letra muy pequeña en el pie de página, mezclado con textos legales o condiciones generales
-- En los márgenes laterales del documento (izquierdo o derecho), a veces rotados 90°
+- En los márgenes laterales del documento (izquierdo o derecho), rotados 90° (¡Frecuente!)
 - Cortados por un mal escaneo (primeros o últimos caracteres invisibles, línea cortada)
 - Solapados o tapados por un logo, sello, marca de agua o recuadro
 - En zonas intermedias del documento que no son ni cabecera ni pie
@@ -578,13 +579,13 @@ Tu objetivo PRINCIPAL y OBLIGATORIO es determinar si cada documento es EMITIDA o
 
 5. ⚠️ REGLA DE ORO: NO TE DEJES ENGAÑAR por palabras impresas en el documento como "RECIBIDA", "EMITIDA", "Copia", etc. LA ÚNICA forma de clasificar es comparar las entidades con los datos del dashboard.
 
-6. SI (y solo si) el CIF O el nombre de empresa_emisora coincide EXACTAMENTE con los datos del dashboard ({{CIF_EMPRESA}} o {{NOMBRE_EMPRESA}}):
+6. SI el CIF O el nombre de empresa_emisora coincide CON LOS DATOS DEL DASHBOARD (incluso si hay variaciones leves en el nombre, abreviaturas, o falta el "S.L."/"S.A."):
    → Documento es EMITIDO → NO agregar INCIDENCIA
    
-7. SI (y solo si) el CIF O el nombre de cliente coincide EXACTAMENTE con los datos del dashboard ({{CIF_EMPRESA}} o {{NOMBRE_EMPRESA}}):
+7. SI el CIF O el nombre de cliente coincide CON LOS DATOS DEL DASHBOARD (incluso si hay variaciones leves en el nombre, abreviaturas, o falta el "S.L."/"S.A."):
    → Documento es RECIBIDO → NO agregar INCIDENCIA
 
-8. SI NINGUNA de las entidades coincide con los datos del dashboard (porque son empresas distintas, o porque los datos del dashboard son "NO_PROPORCIONADO", o faltan en el documento):
+8. SI NINGUNA de las entidades coincide con los datos del dashboard (porque son empresas completamente distintas, o faltan los datos):
    → DEBES usar "(sin confirmar)" como tipo_documento + REPORTAR INCIDENCIA = true. ¡NUNCA lo clasifiques como emitido ni recibido en este caso!
 \`\`\`
 

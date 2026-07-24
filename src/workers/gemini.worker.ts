@@ -428,16 +428,18 @@ async function callGemini(
       } as any,
   });
 
-  const filePart: Part = {
+  const parts: Part[] = [{ text: prompt }];
+  if (fileBuffer && fileBuffer.length > 0) {
+    parts.push({
       inlineData: {
-          data: fileBuffer.toString("base64"),
-          mimeType
+        data: fileBuffer.toString("base64"),
+        mimeType
       }
-  };
-  const textPart: Part = { text: prompt };
+    });
+  }
 
   const request = {
-      contents: [{ role: 'user', parts: [textPart, filePart] }],
+      contents: [{ role: 'user', parts }],
   };
 
   await waitForTokenBudget(uploadId, parentUploadId);
@@ -722,7 +724,8 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
     console.log(`[GeminiWorker] 🖼️  Imagen con rango de páginas indicado — ignorando recorte (no aplica a imágenes).`);
   }
 
-  // Primario: Azure DI (prebuilt-invoice) para PDF/imagen. Gemini = fallback.
+  // Primario: Azure DI (prebuilt-invoice o azure-di-hybrid) para PDF/imagen. Gemini = fallback.
+  const isHybrid = (process.env.EXTRACT_PRIMARY || '').toLowerCase() === 'azure-di-hybrid';
   const preferAzure =
     (process.env.EXTRACT_PRIMARY || 'azure-di').toLowerCase() !== 'gemini' &&
     isAzureDiConfigured();
@@ -733,18 +736,42 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
       /\.pdf$/i.test(ingestion.fileName || ''));
 
   let rawParsed: DocumentoGemini | Record<string, unknown>;
-  let usedExtractor: 'azure-di' | 'gemini' = 'gemini';
+  let usedExtractor: 'azure-di' | 'azure-di-hybrid' | 'gemini' = 'gemini';
 
   if (canUseAzureDi) {
     try {
       await updateIngestionProgress(ingestion.uploadId, {
         status: 'procesando',
-        step: 'Extrayendo con Azure DI',
+        step: isHybrid ? 'Leyendo layout con Azure' : 'Extrayendo con Azure DI',
         progress: 58,
-        mensaje: 'Document Intelligence (prebuilt-invoice)...',
+        mensaje: isHybrid ? 'Ejecutando OCR avanzado Layout...' : 'Document Intelligence (prebuilt-invoice)...',
       });
       const diResult = await analyzeInvoiceDocument(finalBuffer, ingestion.mimeType);
-      if (azureDiLooksLikeInvoice(diResult)) {
+      
+      if (isHybrid) {
+        wLog('GeminiWorker', `✅ Azure DI Layout OK. Enviando OCR a LLM para estructuración (${ingestion.fileName})`);
+        const promptWithOcr = `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
+        
+        await updateIngestionProgress(ingestion.uploadId, {
+          status: 'procesando',
+          step: 'Estructurando con LLM',
+          progress: 68,
+          mensaje: 'Analizando OCR y estructurando datos fiscales...',
+        });
+
+        // Llamamos al LLM con el OCR en el prompt y pasamos buffer vacío para ahorrar tokens de visión
+        const result = await callGemini(
+          promptWithOcr,
+          Buffer.alloc(0),
+          'text/plain',
+          undefined,
+          ingestion.uploadId,
+          ingestion.parentUploadId,
+          'extract'
+        );
+        rawParsed = parseGeminiResponse(JSON.stringify(result));
+        usedExtractor = 'azure-di-hybrid';
+      } else if (azureDiLooksLikeInvoice(diResult)) {
         rawParsed = mapAzureDiInvoiceToGeminiShape(diResult, { empresaCif: ingestion.cif });
         usedExtractor = 'azure-di';
         wLog(

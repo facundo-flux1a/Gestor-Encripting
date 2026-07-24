@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/services/user-service';
+import crypto from 'crypto';
+
+function getSha256(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const cleanText = text.toLowerCase().replace(/[,.]/g, '').trim();
+  return crypto.createHash('sha256').update(cleanText).digest('hex');
+}
 
 export async function PUT(
   request: Request,
@@ -25,12 +32,16 @@ export async function PUT(
       userId: user.id
     });
 
+    const currentFiscalHash = getSha256(currentFiscalId);
+    const newFiscalHash = getSha256(identificador_fiscal);
+    const newNombreHash = nombre ? getSha256(nombre) : undefined;
+
     // ✅ Normalizar email vacío
     if (!email || email.trim() === '') {
       // Si está vacío, buscar el email actual via Prisma para que venga desencriptado
       const currentProvider = await prisma.entidades_documento.findFirst({
         where: {
-          identificador_fiscal: currentFiscalId,
+          identificador_fiscal_hash: currentFiscalHash,
           rol: { in: ['proveedor', 'emisor', 'cliente', 'receptor'] }
         },
         select: { email: true }
@@ -45,7 +56,7 @@ export async function PUT(
     // Verificar que el proveedor origen existe para este usuario
     const providerCheck = await prisma.entidades_documento.findFirst({
       where: {
-        identificador_fiscal: currentFiscalId,
+        identificador_fiscal_hash: currentFiscalHash,
         rol: { in: ['proveedor', 'emisor', 'cliente', 'receptor'] },
         documentos: {
           empresas: {
@@ -57,7 +68,7 @@ export async function PUT(
     });
 
     if (!providerCheck) {
-      console.error('❌ Proveedor origen no encontrado:', currentFiscalId);
+      console.error('❌ Proveedor origen no encontrado (por hash):', currentFiscalId);
       return NextResponse.json(
         { error: 'Proveedor no encontrado' },
         { status: 404 }
@@ -67,7 +78,7 @@ export async function PUT(
     // Obtener todos los IDs de entidades que matchean el CIF actual y pertenecen al usuario
     const entitiesToUpdate = await prisma.entidades_documento.findMany({
       where: {
-        identificador_fiscal: currentFiscalId,
+        identificador_fiscal_hash: currentFiscalHash,
         rol: { in: ['proveedor', 'emisor', 'cliente', 'receptor'] },
         documentos: {
           empresas: {
@@ -92,6 +103,7 @@ export async function PUT(
         where: { id: { in: entityIds } },
         data: {
           nombre: nombre ?? undefined,
+          nombre_hash: newNombreHash ?? undefined,
           direccion: direccion ?? undefined,
           telefono: telefono ?? undefined,
           email: email ?? undefined,
@@ -112,7 +124,7 @@ export async function PUT(
 
     const existingProvider = await prisma.entidades_documento.findFirst({
       where: {
-        identificador_fiscal,
+        identificador_fiscal_hash: newFiscalHash,
         rol: { in: ['proveedor', 'emisor', 'cliente', 'receptor'] },
         documentos: {
           empresas: {
@@ -135,7 +147,9 @@ export async function PUT(
       where: { id: { in: entityIds } },
       data: {
         nombre: nombre ?? undefined,
+        nombre_hash: newNombreHash ?? undefined,
         identificador_fiscal,
+        identificador_fiscal_hash: newFiscalHash,
         direccion: direccion ?? undefined,
         telefono: telefono ?? undefined,
         email: email ?? undefined,

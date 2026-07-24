@@ -67,6 +67,7 @@ export const DocumentEntitySchema = z.object({
   nombre: z.string().nullable(),
   direccion: z.string().nullable(),
   identificador_fiscal: z.string().nullable(),
+  identificador_fiscal_hash: z.string().nullable().optional(),
   telefono: z.string().nullable(),
   email: z.string().nullable(),
   datos_extra: z.any().nullable(),

@@ -346,15 +346,19 @@ const getColumns = (
       filterFn: (row, id, value) => {
         if (!value || (Array.isArray(value) && value.length === 0)) return true;
 
-        const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+        const cliente = row.original.entidades?.find((e: any) => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
+        // El valor del filtro ahora es el hash o CIF raw del cliente
+        const rowKey = (cliente as any)?.identificador_fiscal_hash
+          || cliente?.identificador_fiscal
+          || nombre;
 
-        // Si es array (Filtro de faceta - Dropdown)
+        // Si es array (Filtro de faceta - Dropdown: valores = hashes)
         if (Array.isArray(value)) {
-          return value.includes(nombre);
+          return value.includes(rowKey);
         }
 
-        // Si es string (Input de texto manual)
+        // Si es string (Input de texto manual: buscar por nombre)
         if (typeof value === 'string') {
           return nombre.toLowerCase().includes(value.toLowerCase());
         }
@@ -524,14 +528,21 @@ const getColumns = (
       filterFn: (row, id, value) => {
         if (!value || (Array.isArray(value) && value.length === 0)) return true;
 
-        // Si es array (Filtro de faceta - Dropdown)
+        const nombre = row.original.proveedor;
+        const emisor = row.original.entidades?.find((e: any) => e.rol === 'proveedor' || e.rol === 'emisor');
+        // El valor del filtro ahora es el hash o CIF raw del emisor
+        const rowKey = (emisor as any)?.identificador_fiscal_hash
+          || emisor?.identificador_fiscal
+          || nombre;
+
+        // Si es array (Filtro de faceta - Dropdown: valores = hashes)
         if (Array.isArray(value)) {
-          return value.includes(row.original.proveedor);
+          return value.includes(rowKey);
         }
 
-        // Si es string (Input de texto manual)
+        // Si es string (Input de texto manual: buscar por nombre)
         if (typeof value === 'string') {
-          return row.original.proveedor?.toLowerCase().includes(value.toLowerCase());
+          return nombre?.toLowerCase().includes(value.toLowerCase());
         }
 
         return true;

@@ -156,10 +156,40 @@ function TrimestresPageContent() {
         if (!haystack.includes(q)) return false;
       }
       if (selectedTipos.length > 0 && !selectedTipos.includes(doc.tipo_documento)) return false;
-      if (selectedProveedores.length > 0 && !selectedProveedores.includes(doc.proveedor || '')) return false;
+      const cleanCif = (raw: string | null | undefined): string => {
+        if (!raw) return '';
+        return raw.toUpperCase().replace(/[\s\-./]/g, '').replace(/^ES/, '');
+      };
+
+      if (selectedProveedores.length > 0) {
+        const selectedCifs = new Set(
+          docs
+            .filter(d => selectedProveedores.includes(d.proveedor))
+            .map(d => cleanCif(d.cif))
+            .filter(Boolean)
+        );
+        const cleanedDocCif = cleanCif(doc.cif);
+        const matchesCif = cleanedDocCif && selectedCifs.has(cleanedDocCif);
+        const matchesName = selectedProveedores.includes(doc.proveedor || '');
+        if (!matchesCif && !matchesName) return false;
+      }
+
       if (selectedClientes.length > 0) {
-        const cliente = doc.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '';
-        if (!selectedClientes.includes(cliente)) return false;
+        const getClientName = (d: Document) => d.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.nombre || '';
+        const getClientCif = (d: Document) => d.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor')?.identificador_fiscal || '';
+        
+        const selectedCifs = new Set(
+          docs
+            .filter(d => selectedClientes.includes(getClientName(d)))
+            .map(d => cleanCif(getClientCif(d)))
+            .filter(Boolean)
+        );
+        
+        const clientName = getClientName(doc);
+        const cleanedDocCif = cleanCif(getClientCif(doc));
+        const matchesCif = cleanedDocCif && selectedCifs.has(cleanedDocCif);
+        const matchesName = selectedClientes.includes(clientName);
+        if (!matchesCif && !matchesName) return false;
       }
       if (selectedEmpresas.length > 0 && !selectedEmpresas.includes(doc.empresa_nombre || '')) return false;
 
