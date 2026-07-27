@@ -134,6 +134,9 @@ export function startDbWriterWorker() {
         const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
         const fechaVencimiento = fechaVencimientoRaw ? new Date(fechaVencimientoRaw) : null;
         const formaPago       = docInfo.forma_pago || aiResult.forma_pago || '';
+        
+        const descuentoGlobal = applySign(Number(docInfo.descuento_global ?? aiResult.descuento_global ?? 0));
+        const baseNoSujeta    = applySign(Number(docInfo.base_no_sujeta ?? aiResult.base_no_sujeta ?? 0));
 
         // 3. Trimestre fiscal
         const trimestreDataRaw = calcularTrimestreExtendido(fechaEmision);
@@ -199,6 +202,8 @@ export function startDbWriterWorker() {
                 cif: cifDocumento,
                 valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || '',
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
+                descuento_global: descuentoGlobal,
+                base_no_sujeta: baseNoSujeta,
                 [FISCAL_STATUS_KEY]: resolvedFiscalStatus,
                 [FISCAL_GUARD_VERSION_KEY]: FISCAL_GUARD_VERSION,
                 ...(revisionReasons.length > 0

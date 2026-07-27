@@ -33,6 +33,8 @@ export interface DocumentoGemini {
   importe_total?: number;
   importe_sin_impuestos?: number;
   importe_sin_iva?: number;
+  descuento_global?: number;
+  base_no_sujeta?: number;
   moneda?: string;
   forma_pago?: string;
   observaciones?: string;
@@ -228,10 +230,11 @@ export function validateMathBalance(
   importeTotal: number,
   importeSinImpuestos: number,
   impuestos: Impuesto[],
-  tolerancia = 2
+  tolerancia = 2,
+  baseNoSujeta = 0
 ): ValidationResult {
   const sumaCuotas = impuestos.reduce((acc, i) => acc + (i.cuota_iva ?? 0), 0);
-  const totalCalculado = importeSinImpuestos + sumaCuotas;
+  const totalCalculado = importeSinImpuestos + sumaCuotas + baseNoSujeta;
   const diferencia = Math.abs(importeTotal - totalCalculado);
 
   return {

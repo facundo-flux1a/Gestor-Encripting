@@ -55,13 +55,24 @@ export function EditableEntityCard({ isEditing, form, entityIndex, removeEntity 
         );
     };
 
-    const capitalizedRole = entity.rol.charAt(0).toUpperCase() + entity.rol.slice(1);
+    const rolLower = entity.rol.toLowerCase();
+    const isCliente = rolLower.includes('cliente') || rolLower.includes('receptor');
+    const isProveedor = rolLower.includes('proveedor') || rolLower.includes('emisor');
+
+    // Mapeo de etiquetas de visualización: normalizamos nombres internos a nombres amigables
+    const rolDisplayMap: Record<string, string> = {
+        receptor: 'Cliente',
+        emisor: 'Proveedor',
+        cliente: 'Cliente',
+        proveedor: 'Proveedor',
+    };
+    const capitalizedRole = rolDisplayMap[rolLower] ?? (entity.rol.charAt(0).toUpperCase() + entity.rol.slice(1));
 
     return (
         <Card>
             <CardHeader className="flex flex-row items-start sm:items-center justify-between pb-3 sm:pb-4 px-3 sm:px-6 py-3 sm:py-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                    {entity.rol.toLowerCase().includes('cliente') || entity.rol.toLowerCase().includes('receptor') ? (
+                    {isCliente ? (
                         <User className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                     ) : (
                         <Building className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />

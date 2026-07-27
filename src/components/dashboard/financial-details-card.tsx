@@ -55,7 +55,7 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
             </CardHeader>
             <CardContent className="space-y-3 sm:space-y-4 text-xs sm:text-sm px-3 sm:px-6 pb-3 sm:pb-6">
                 {isEditing ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1 px-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 px-1">
                         <FormField
                             control={form.control}
                             name="base_imponible"
@@ -99,6 +99,23 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                         />
                         <FormField
                             control={form.control}
+                            name="base_no_sujeta"
+                            render={({ field }) => (
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-0.5" title="Importes sin IVA (Tasas, suplidos)">Base no sujeta</label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        {...field}
+                                        value={field.value ?? 0}
+                                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                                        className="h-8 sm:h-9 text-xs sm:text-sm font-medium tabular-nums transition-all duration-200 focus:ring-2 focus:ring-primary/20 bg-background/50 border-muted-foreground/20 text-indigo-600 dark:text-indigo-400"
+                                    />
+                                </div>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
                             name="total"
                             render={({ field }) => (
                                 <div className="space-y-1">
@@ -124,6 +141,12 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                             <div className="flex justify-between items-center">
                                 <span className="text-muted-foreground">Descuento Global</span>
                                 <span className="font-medium text-orange-600 dark:text-orange-400">-{formatCurrency((doc as any).descuento_global, doc.moneda)}</span>
+                            </div>
+                        )}
+                        {Number((doc as any).base_no_sujeta) > 0 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Base no sujeta / Suplidos</span>
+                                <span className="font-medium text-indigo-600 dark:text-indigo-400">{formatCurrency((doc as any).base_no_sujeta, doc.moneda)}</span>
                             </div>
                         )}
                         <div className="flex justify-between items-center text-base sm:text-lg font-bold">

@@ -64,6 +64,7 @@ import { useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import React, { useMemo, useState, useEffect, KeyboardEvent, useRef } from "react";
 import Link from "next/link";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useRouter } from 'next/navigation';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -93,11 +94,12 @@ interface DocumentViewProps {
     doc: Document;
     isEditing: boolean;
     form: UseFormReturn<DocumentUpdatePayload>;
+    hideLines?: boolean;
 }
 
 const ITEMS_PER_PAGE = 5;
 
-export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
+export function DocumentView({ doc, isEditing, form, hideLines = false }: DocumentViewProps) {
     const router = useRouter();
     const { fields: lineaFields, append: appendLinea, remove: removeLinea } = useFieldArray({ control: form.control, name: "lineas" });
     const formValues = useWatch({ control: form.control });
@@ -216,158 +218,10 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
 
     // CONTINÚA EN PARTE 2...// CONTINUACIÓN DE PARTE 1
 
-    return (
-        <>
-            <div className="mb-3 sm:mb-4 animate-fade-in">
-                <Button variant="ghost" size="sm" onClick={() => router.back()} className="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm group">
-                    <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 group-hover:-translate-x-1" /> Volver
-                </Button>
-            </div>
-
-            <Card className="mb-3 sm:mb-4 lg:mb-6 animate-fade-in">
-                <CardHeader className="px-3 py-3 sm:px-4 lg:px-6 sm:py-4">
-                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
-                        <Info className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-blue-600 dark:text-blue-400" /> Información General
-                    </CardTitle>
-                    {isEditing ? (
-                        <div className="text-xs sm:text-sm text-muted-foreground mt-2">
-                            <FormField control={form.control} name="tipo_documento" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-xs">Tipo de Documento</FormLabel>
-                                    <FormControl>
-                                        <DocumentTypeSelector
-                                            value={field.value ?? ''}
-                                            onChange={(newType) => {
-                                                convertSignsOnTypeChange(form, field.value ?? '', newType);
-                                                field.onChange(newType);
-                                            }}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                        </div>
-                    ) : <CardDescription className="text-xs sm:text-sm mt-1">{doc.tipo_documento}</CardDescription>}
-                </CardHeader>
-                <CardContent className="px-3 sm:px-4 lg:px-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
-                        {renderEditableField("numero_documento", "Nº Documento")}
-                        {renderEditableDate("fecha_emision", "Fecha Emisión")}
-                        {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
-                        <FormItem>
-                            <FormLabel className="text-muted-foreground text-xs sm:text-sm">Fecha Creación</FormLabel>
-                            <p className="text-xs sm:text-sm font-medium">{formatDate(doc.fecha_creacion)}</p>
-                        </FormItem>
-                        {renderEditableField("moneda", "Moneda")}
-
-
-                        {/* 🆕 Campo CIF del documento (datos_extra) */}
-                        <FormField
-                            control={form.control}
-                            name="cif"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-muted-foreground text-xs sm:text-sm">CIF Documento</FormLabel>
-                                    <FormControl>
-                                        {isEditing ? (
-                                            <Input
-                                                {...field}
-                                                type="text"
-                                                className="h-8 sm:h-9 text-xs sm:text-sm"
-                                                placeholder="B12345678"
-                                                value={field.value || ''}
-                                            />
-                                        ) : (
-                                            <p className="text-xs sm:text-sm font-medium font-mono">
-                                                {field.value || 'N/A'}
-                                            </p>
-                                        )}
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormItem>
-                            <FormLabel className="text-muted-foreground text-xs sm:text-sm flex items-center gap-1">
-                                <Calendar className="h-3.5 w-3.5" /> Trimestre
-                            </FormLabel>
-                            {isEditing ? (
-                                <Select value={`${formValues.año_trimestre || doc.año_trimestre}-${formValues.num_trimestre || doc.num_trimestre}`}
-                                    onValueChange={handleTrimestreChange} disabled={loadingTrimestres}>
-                                    <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
-                                        <SelectValue placeholder={loadingTrimestres ? "Cargando..." : "Seleccionar trimestre"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {!trimestresDisponibles.length && !loadingTrimestres && <div className="p-2 text-xs text-muted-foreground text-center">No hay trimestres disponibles</div>}
-                                        {trimestresDisponibles.map((t) => (
-                                            <SelectItem key={`${t.año}-${t.trimestre}`} value={`${t.año}-${t.trimestre}`}>
-                                                {t.año} - T{t.trimestre}
-                                                {!t.existe && <Badge variant="outline" className="text-[10px] ml-1 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border-green-300 dark:border-green-800">Crear nuevo</Badge>}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : <p className="text-xs sm:text-sm font-medium">{doc.año_trimestre && doc.num_trimestre ? `${doc.año_trimestre} - T${doc.num_trimestre}` : 'N/A'}</p>}
-                        </FormItem>
-                        <FormItem>
-                            <FormLabel className="text-muted-foreground text-xs sm:text-sm">Estado</FormLabel>
-                            {getStatusBadge()}
-                        </FormItem>
-                    </div>
-                    {/* SECCIÓN DE INCIDENCIAS MÚLTIPLES */}
-                    {doc.incidencias && doc.incidencias.length > 0 ? (
-                        <div className="mt-4 sm:mt-6 space-y-2">
-                            {doc.incidencias.filter(i => !i.validado).map((incidencia) => (
-                                <Alert key={incidencia.id} variant="destructive" className="text-xs sm:text-sm animate-in slide-in-from-top-2 fade-in duration-300">
-                                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                                    <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia #{incidencia.id}</AlertTitle>
-                                    <AlertDescription className="text-xs sm:text-sm">{incidencia.descripcion}</AlertDescription>
-                                </Alert>
-                            ))}
-                        </div>
-                    ) : doc.incidencia && doc.incidencia_razon && (
-                        /* FALLBACK PARA LEGACY SI NO HAY ARRAY DE INCIDENCIAS */
-                        <Alert variant="destructive" className="mt-4 sm:mt-6 text-xs sm:text-sm">
-                            <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                            <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia Detectada</AlertTitle>
-                            <AlertDescription className="text-xs sm:text-sm">{doc.incidencia_razon}</AlertDescription>
-                        </Alert>
-                    )}
-                </CardContent>
-            </Card >
-
-            <AlertDialog open={showTrimestreConfirm} onOpenChange={setShowTrimestreConfirm}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-primary" />
-                            {pendingTrimestre?.existe ? '¿Mover documento a este trimestre?' : '¿Crear y mover a nuevo trimestre?'}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-3">
-                            <p>Estás preparando el documento para moverlo al trimestre <strong className="text-foreground">{pendingTrimestre?.año} - T{pendingTrimestre?.trimestre}</strong>.</p>
-                            {!pendingTrimestre?.existe && (
-                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                                    <Info className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-                                    <div className="text-xs text-green-800 dark:text-green-300">
-                                        <p className="font-semibold">Este trimestre aún no existe</p>
-                                        <p>Se creará automáticamente al guardar el documento.</p>
-                                    </div>
-                                </div>
-                            )}
-                            <p className="text-xs text-muted-foreground"><strong>Importante:</strong> El cambio no se aplicará hasta que presiones el botón verde "Guardar".</p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => { setShowTrimestreConfirm(false); setPendingTrimestre(null); }}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmTrimestreChange}>Preparar cambio</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            <Card className="animate-fade-in">
-                <CardHeader className="px-3 py-3 sm:px-4 lg:px-6 sm:py-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    const lineasContent = (
+        <Card className={cn("animate-fade-in", hideLines && "border-none shadow-none")}>
+            <CardHeader className={cn("px-3 py-3 sm:px-4 lg:px-6 sm:py-4", hideLines && "px-0 sm:px-0 pt-0")}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-primary" />
                             <CardTitle className="text-base sm:text-lg lg:text-xl bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">Líneas del Documento</CardTitle>
@@ -387,7 +241,7 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="px-3 sm:px-4 lg:px-6">
+                <CardContent className={cn("px-3 sm:px-4 lg:px-6", hideLines && "px-0 sm:px-0 pb-0")}>
                     {lineaFilters.length > 0 && (
                         <div className="flex items-center gap-2 flex-wrap mb-3 sm:mb-4">
                             <span className="text-xs sm:text-sm font-medium text-muted-foreground">Filtros:</span>
@@ -473,7 +327,172 @@ export function DocumentView({ doc, isEditing, form }: DocumentViewProps) {
                         </div>
                     )}
                 </CardContent>
+        </Card>
+    );
+
+    return (
+        <>
+            <div className="mb-3 sm:mb-4 animate-fade-in">
+                <Button variant="ghost" size="sm" onClick={() => router.back()} className="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm group">
+                    <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 group-hover:-translate-x-1" /> Volver
+                </Button>
+            </div>
+
+            <Card className="mb-3 sm:mb-4 lg:mb-6 animate-fade-in">
+                {/* Information general content... ya renderizado por lo de arriba */}
+                <CardHeader className="px-3 py-3 sm:px-4 lg:px-6 sm:py-4">
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg lg:text-xl bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                        <Info className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-blue-600 dark:text-blue-400" /> Información General
+                    </CardTitle>
+                    {isEditing ? (
+                        <div className="text-xs sm:text-sm text-muted-foreground mt-2">
+                            <FormField control={form.control} name="tipo_documento" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-xs">Tipo de Documento</FormLabel>
+                                    <FormControl>
+                                        <DocumentTypeSelector
+                                            value={field.value ?? ''}
+                                            onChange={(newType) => {
+                                                convertSignsOnTypeChange(form, field.value ?? '', newType);
+                                                field.onChange(newType);
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                        </div>
+                    ) : <CardDescription className="text-xs sm:text-sm mt-1">{doc.tipo_documento}</CardDescription>}
+                </CardHeader>
+                <CardContent className="px-3 sm:px-4 lg:px-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+                        {renderEditableField("numero_documento", "Nº Documento")}
+                        {renderEditableDate("fecha_emision", "Fecha Emisión")}
+                        {renderEditableDate("fecha_vencimiento", "Fecha Vencimiento")}
+                        <FormItem>
+                            <FormLabel className="text-muted-foreground text-xs sm:text-sm">Fecha Creación</FormLabel>
+                            <p className="text-xs sm:text-sm font-medium">{formatDate(doc.fecha_creacion)}</p>
+                        </FormItem>
+                        {renderEditableField("moneda", "Moneda")}
+
+                        {/* 🆕 Campo CIF del documento (datos_extra) */}
+                        <FormField
+                            control={form.control}
+                            name="cif"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-muted-foreground text-xs sm:text-sm">CIF Documento</FormLabel>
+                                    <FormControl>
+                                        {isEditing ? (
+                                            <Input
+                                                {...field}
+                                                type="text"
+                                                className="h-8 sm:h-9 text-xs sm:text-sm"
+                                                placeholder="B12345678"
+                                                value={field.value || ''}
+                                            />
+                                        ) : (
+                                            <p className="text-xs sm:text-sm font-medium font-mono">
+                                                {field.value || 'N/A'}
+                                            </p>
+                                        )}
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormItem>
+                            <FormLabel className="text-muted-foreground text-xs sm:text-sm flex items-center gap-1">
+                                <Calendar className="h-3.5 w-3.5" /> Trimestre
+                            </FormLabel>
+                            {isEditing ? (
+                                <Select value={`${formValues.año_trimestre || doc.año_trimestre}-${formValues.num_trimestre || doc.num_trimestre}`}
+                                    onValueChange={handleTrimestreChange} disabled={loadingTrimestres}>
+                                    <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+                                        <SelectValue placeholder={loadingTrimestres ? "Cargando..." : "Seleccionar trimestre"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {!trimestresDisponibles.length && !loadingTrimestres && <div className="p-2 text-xs text-muted-foreground text-center">No hay trimestres disponibles</div>}
+                                        {trimestresDisponibles.map((t) => (
+                                            <SelectItem key={`${t.año}-${t.trimestre}`} value={`${t.año}-${t.trimestre}`}>
+                                                {t.año} - T{t.trimestre}
+                                                {!t.existe && <Badge variant="outline" className="text-[10px] ml-1 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border-green-300 dark:border-green-800">Crear nuevo</Badge>}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : <p className="text-xs sm:text-sm font-medium">{doc.año_trimestre && doc.num_trimestre ? `${doc.año_trimestre} - T${doc.num_trimestre}` : 'N/A'}</p>}
+                        </FormItem>
+                        <FormItem>
+                            <FormLabel className="text-muted-foreground text-xs sm:text-sm">Estado</FormLabel>
+                            {getStatusBadge()}
+                        </FormItem>
+                    </div>
+                    {/* SECCIÓN DE INCIDENCIAS MÚLTIPLES */}
+                    {doc.incidencias && doc.incidencias.length > 0 ? (
+                        <div className="mt-4 sm:mt-6 space-y-2">
+                            {doc.incidencias.filter(i => !i.validado).map((incidencia) => (
+                                <Alert key={incidencia.id} variant="destructive" className="text-xs sm:text-sm animate-in slide-in-from-top-2 fade-in duration-300">
+                                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                    <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia #{incidencia.id}</AlertTitle>
+                                    <AlertDescription className="text-xs sm:text-sm">{incidencia.descripcion}</AlertDescription>
+                                </Alert>
+                            ))}
+                        </div>
+                    ) : doc.incidencia && doc.incidencia_razon && (
+                        /* FALLBACK PARA LEGACY SI NO HAY ARRAY DE INCIDENCIAS */
+                        <Alert variant="destructive" className="mt-4 sm:mt-6 text-xs sm:text-sm">
+                            <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                            <AlertTitle className="text-sm sm:text-base font-semibold">Incidencia Detectada</AlertTitle>
+                            <AlertDescription className="text-xs sm:text-sm">{doc.incidencia_razon}</AlertDescription>
+                        </Alert>
+                    )}
+                </CardContent>
             </Card>
+
+            <AlertDialog open={showTrimestreConfirm} onOpenChange={setShowTrimestreConfirm}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Calendar className="h-5 w-5 text-primary" />
+                            {pendingTrimestre?.existe ? '¿Mover documento a este trimestre?' : '¿Crear y mover a nuevo trimestre?'}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                            <p>Estás preparando el documento para moverlo al trimestre <strong className="text-foreground">{pendingTrimestre?.año} - T{pendingTrimestre?.trimestre}</strong>.</p>
+                            {!pendingTrimestre?.existe && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                                    <Info className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                                    <div className="text-xs text-green-800 dark:text-green-300">
+                                        <p className="font-semibold">Este trimestre aún no existe</p>
+                                        <p>Se creará automáticamente al guardar el documento.</p>
+                                    </div>
+                                </div>
+                            )}
+                            <p className="text-xs text-muted-foreground"><strong>Importante:</strong> El cambio no se aplicará hasta que presiones el botón verde "Guardar".</p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => { setShowTrimestreConfirm(false); setPendingTrimestre(null); }}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmTrimestreChange}>Preparar cambio</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {hideLines ? (
+                <Accordion type="single" collapsible className="w-full mt-4">
+                    <AccordionItem value="lineas" className="border-none">
+                        <AccordionTrigger className="flex justify-between items-center text-sm font-medium p-4 bg-muted/20 hover:bg-muted/40 rounded-lg transition-colors border">
+                            <span className="flex items-center gap-2 text-primary"><FileText className="h-4 w-4" /> Mostrar {filteredLineaFields.length} líneas del documento</span>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-4">
+                            {lineasContent}
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            ) : (
+                lineasContent
+            )}
         </>
     );
-}
+}

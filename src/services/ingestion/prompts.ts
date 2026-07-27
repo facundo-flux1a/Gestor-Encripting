@@ -341,6 +341,11 @@ cliente.nombre = ""  ← no encontrado, pero no se duplica
 - Ubicación: Cabecera del documento, membrete, logo superior, "Datos del emisor", "De:", "From:", "Seller:", "Supplier:"
 - Extraer: Nombre/razón social, CIF/NIF/Tax ID, dirección, teléfono, email
 - Va en: empresa_emisora en el JSON
+- **⚠️ RESOLUCIÓN DE MÚLTIPLES ENTIDADES EMISORAS (Intermediarios vs. Proveedores Reales):**
+  Es posible que en la cabecera encuentres más de una entidad (ej: el proveedor real del servicio/producto y un tercero bajo etiquetas como "Expedido por", "Facturado por cuenta de", "Operador logístico", etc.). 
+  - **Regla:** El proveedor (emisor) válido para la extracción es AQUEL CUYA IDENTIFICACIÓN FISCAL RESPALDA LA FACTURA. 
+  - Si el documento dice "Proveedor X" pero aclara "Expedido por Intermediario Y", tu objetivo principal es extraer los datos del **proveedor real del bien o servicio** (Proveedor X), siempre que la factura esté emitida a su nombre y con su CIF.
+  - Usa el sentido común comercial: el intermediario que solo imprime o transporta el documento NO es el emisor de la factura. Evita extraer a intermediarios de "expedición".
 - Formatos de identificación fiscal según país:
   * España: CIF/NIF (ej: B12345678, 12345678A)
   * México: RFC (ej: ABC123456XYZ)
@@ -569,6 +574,7 @@ Si tras comparar AMBAS entidades del documento (emisor y cliente) —tanto por C
 3. Ninguna de las identificaciones (CIF y nombre) coincide con {{CIF_EMPRESA}} / {{NOMBRE_EMPRESA}} → no se puede clasificar como EMITIDA o RECIBIDA
 4. Error en la validación matemática fiscal: Base + IVA + Suplidos + Recargo - Retención ≠ Total (diferencia > ±2€)
 5. El CIF del emisor no aparece en el documento ni en la imagen adjunta
+6. **DISCREPANCIA DE CIF:** Si el nombre de una entidad coincide con el dashboard ({{NOMBRE_EMPRESA}}) pero el CIF impreso en el documento tiene un error tipográfico o es diferente a {{CIF_EMPRESA}} (ej: B12345679 en vez de B12345678), clasifícalo según el nombre, pero DEBES marcar incidencia: true y detallar el error ("El CIF en el documento es X pero el esperado es Y").
 
 **CUÁNDO NO REPORTAR INCIDENCIA:**
 Los siguientes datos faltantes NO generan incidencia (son datos secundarios o de contacto, no críticos para la contabilidad):
@@ -885,6 +891,12 @@ La empresa que procesa este archivo tiene recargo de equivalencia: {{RECARGO_EMP
 ---
 
 🔥 EXTRACCIÓN OBLIGATORIA: EMISOR Y RECEPTOR CON IDENTIFICACIÓN FISCAL
+
+**⚠️ RESOLUCIÓN DE MÚLTIPLES ENTIDADES EMISORAS (Intermediarios vs. Proveedores Reales):**
+Es posible que en la cabecera encuentres más de una entidad (ej: el proveedor real del servicio/producto y un tercero bajo etiquetas como "Expedido por", "Facturado por cuenta de", "Operador logístico", etc.). 
+- **Regla:** El proveedor (emisor) válido para la extracción es AQUEL CUYA IDENTIFICACIÓN FISCAL RESPALDA LA FACTURA. 
+- Si el documento dice "Proveedor X" pero aclara "Expedido por Intermediario Y", tu objetivo principal es extraer los datos del **proveedor real del bien o servicio** (Proveedor X), siempre que la factura esté emitida a su nombre y con su CIF.
+- Usa el sentido común comercial: el intermediario que solo imprime o transporta el documento NO es el emisor de la factura. Evita extraer a intermediarios de "expedición".
 
 ⚠️ DATOS DE LA EMPRESA DEL DASHBOARD (LEE ESTO ANTES DE EXTRAER CUALQUIER CIF):
 - CIF: {{CIF_EMPRESA}}
@@ -1309,7 +1321,7 @@ Un ticket es un comprobante de compra emitido por un establecimiento (restaurant
 4. DESGLOSE_IVA: array vacío []
 5. NO intentar clasificar como EMITIDA/RECIBIDA
 6. NO marcar incidencia por falta de CIF del receptor (es normal en tickets)
-7. EMPRESA_EMISORA: extraer nombre, CIF del negocio, dirección si aparecen
+7. EMPRESA_EMISORA: extraer nombre, CIF del negocio, dirección si aparecen (si hay un tercero logístico/intermediario con "Expedido por", ignóralo, prioriza al negocio real)
 8. EMPRESA_RECEPTORA: dejar vacío (no aplica en tickets)
 9. ES_ABONO: false
 
@@ -1584,6 +1596,7 @@ Ejemplo de salida obligatoria en este caso:
 3. Ninguna de las identificaciones (CIF y nombre) coincide con los datos del dashboard → no se puede clasificar
 4. Error en la validación matemática fiscal: Base + IVA + Suplidos + Recargo - Retención ≠ Total (diferencia > ±2€)
 5. El CIF del emisor no aparece en el documento ni en la imagen adjunta
+6. **DISCREPANCIA DE CIF:** Si el nombre de una entidad coincide con el dashboard ({{NOMBRE_EMPRESA}}) pero el CIF impreso en el documento tiene un error tipográfico o es diferente a {{CIF_EMPRESA}} (ej: B12345679 en vez de B12345678), clasifícalo según el nombre, pero DEBES marcar incidencia: true y detallar el error en OBSERVACIONES.
 
 **CUÁNDO NO PONER INCIDENCIA: true (datos secundarios — NO son incidencia):**
 - Teléfono del emisor o del receptor

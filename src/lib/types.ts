@@ -197,7 +197,9 @@ export const DocumentUpdateSchema = z.object({
   iva_details: z.array(IvaDetailSchema),
   año_trimestre: z.number().optional(),
   num_trimestre: z.number().min(1).max(4).optional(),
-  cif: z.string().optional(), // ⬅️ Campo CIF para guardar en datos_extra
+  cif: z.string().optional(),
+  descuento_global: z.coerce.number().optional(),
+  base_no_sujeta: z.coerce.number().optional(),
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;

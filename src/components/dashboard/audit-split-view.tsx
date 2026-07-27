@@ -51,7 +51,9 @@ export function AuditSplitView({
         name: "entidades"
     });
 
-    const googleDocsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fixMinioUrl(documentUrl || ''))}&embedded=true&t=${Date.now()}`;
+    const rawDocumentUrl = fixMinioUrl(documentUrl || '');
+    // Para el visor del PDF en auditoría usamos embed directo (evita descarga automática de Google Docs Viewer)
+    const pdfViewerUrl = rawDocumentUrl ? `${rawDocumentUrl}#toolbar=1&navpanes=0&scrollbar=1` : '';
 
     const handleToggleContext = async (id: number, current: boolean) => {
         const res = await toggleContextItem(id, !current);
@@ -132,17 +134,189 @@ export function AuditSplitView({
 
             {/* Main Split Layout */}
             <div className="flex-1 flex overflow-hidden">
-                {/* Left Panel: Document Viewer */}
-                <div className="w-1/2 border-r bg-muted/20 relative group">
+                {/* Left Panel: Editor & Suggestions (Formulario) */}
+                <div className="w-5/12 flex flex-col bg-background border-r overflow-hidden shadow-xl z-10">
+                    <ScrollArea className="flex-1">
+                        <div className="p-4 space-y-6 pb-20">
+                            {/* Logic Alert Panel */}
+                            {!isFixed && checkType !== 'MISMATCH_MATEMATICO' && (
+                                <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/20 text-center space-y-2 animate-in zoom-in-95 duration-500">
+                                    <div className="h-10 w-10 bg-orange-500/20 text-orange-600 rounded-full flex items-center justify-center mx-auto">
+                                        <AlertCircle className="h-5 w-5" />
+                                    </div>
+                                    <h4 className="text-sm font-bold text-orange-700 dark:text-orange-400">
+                                        {checkType === 'FECHA_ANOMALA' ? 'Fecha Anómala' : 'Entidad Duplicada'}
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground italic">
+                                        {motivo || 'Revisa la información del documento.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Mensaje de Felicidades si ya está Healthy */}
+                            {isFixed && (
+                                <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20 text-center space-y-2 animate-in zoom-in-95 duration-500">
+                                    <div className="h-10 w-10 bg-green-500/20 text-green-600 rounded-full flex items-center justify-center mx-auto">
+                                        <CheckCircle2 className="h-5 w-5" />
+                                    </div>
+                                    <h4 className="text-sm font-bold text-green-700 dark:text-green-400">Documento Cuadrado</h4>
+                                    <p className="text-xs text-muted-foreground italic">
+                                        Los totales coinciden perfectamente con los impuestos desglosados.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Editor Form */}
+                            <div className="space-y-4">
+                                <Form {...form}>
+                                    <form
+                                        id="audit-form"
+                                        className="contents"
+                                        onSubmit={form.handleSubmit(onSubmit)}
+                                    >
+                                        <div className="space-y-4">
+                                            
+                                            {/* 1. Entidades Compactas */}
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                {entidadFields.map((field, index) => (
+                                                    <EditableEntityCard
+                                                        key={field.id}
+                                                        isEditing={true}
+                                                        form={form}
+                                                        entityIndex={index}
+                                                        removeEntity={() => removeEntidad(index)}
+                                                    />
+                                                ))}
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => appendEntidad({
+                                                    rol: 'Otro',
+                                                    nombre: '',
+                                                    direccion: '',
+                                                    identificador_fiscal: '',
+                                                    telefono: '',
+                                                    email: '',
+                                                    datos_extra: null
+                                                })}
+                                                className="w-full border-dashed text-xs"
+                                            >
+                                                <PlusCircle className="mr-2 h-3.5 w-3.5" />
+                                                Añadir Entidad
+                                            </Button>
+
+                                            {/* 2. Información General (Compacta, sin líneas) */}
+                                            <DocumentView doc={doc} isEditing={true} form={form} hideLines={true} />
+
+                                            {/* 3. Desglose Financiero y Totales */}
+                                            <div className="pt-2">
+                                                <FinancialDetailsCard
+                                                    doc={doc}
+                                                    isEditing={true}
+                                                    form={form}
+                                                />
+                                            </div>
+
+                                        </div>
+                                    </form>
+                                </Form>
+                            </div>
+
+
+                            {/* AI Context & History Manager - SOLO SI NO ESTÁ CUADRADO Y ES DESCUADRE MATEMATICO */}
+                            {!isFixed && checkType === 'MISMATCH_MATEMATICO' && (
+                                <div className="space-y-4 animate-in slide-in-from-right-4 duration-500 mt-8 pt-8 border-t">
+                                    <h3 className="text-sm font-bold flex items-center justify-between text-violet-500 dark:text-violet-400">
+                                        <div className="flex items-center gap-2">
+                                            <History className="h-4 w-4" />
+                                            Historial de Auditoría IA
+                                        </div>
+                                        <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-500">
+                                            {Object.keys(groupedHistory).length} Intentos
+                                        </Badge>
+                                    </h3>
+
+                                    <div className="space-y-4">
+                                        {Object.entries(groupedHistory).sort((a, b) => Number(b[0]) - Number(a[0])).map(([nro, items]) => (
+                                            <div key={nro} className="space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter">Análisis Nº{nro}</span>
+                                                    <div className="h-px flex-1 bg-border/50" />
+                                                </div>
+
+                                                {items.map((s, i) => (
+                                                    <div key={s.id || i} className={cn(
+                                                        "p-4 rounded-xl border transition-all duration-300 relative overflow-hidden group shadow-sm",
+                                                        s.include_in_context ? "bg-violet-500/5 border-violet-500/20" : "bg-muted/30 border-transparent opacity-60 grayscale-[0.5]"
+                                                    )}>
+                                                        <div className={cn(
+                                                            "absolute top-0 left-0 w-1.5 h-full opacity-60",
+                                                            s.include_in_context ? "bg-violet-500" : "bg-muted-foreground"
+                                                        )} />
+
+                                                        <div className="flex justify-between items-start gap-4">
+                                                            <div className="flex-1 space-y-1">
+                                                                <p className="text-xs font-bold text-foreground leading-snug">{s.descripcion}</p>
+                                                            </div>
+
+                                                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                                                    onClick={() => s.id && handleDeleteItem(s.id)}
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className={cn(
+                                                            "mt-2 p-2 rounded-lg border shadow-inner",
+                                                            s.include_in_context ? "bg-violet-500/10 border-violet-500/10" : "bg-muted/50 border-transparent"
+                                                        )}>
+                                                            <p className={cn(
+                                                                "text-[11px] leading-relaxed font-medium italic",
+                                                                s.include_in_context ? "text-violet-700 dark:text-violet-300" : "text-muted-foreground"
+                                                            )}>
+                                                                "{s.sugerencia}"
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </ScrollArea>
+                </div>
+
+                {/* Right Panel: Document Viewer (PDF) */}
+                <div className="w-7/12 bg-muted/10 relative group">
                     {documentUrl ? (
                         <>
-                            <iframe
+                            <object
                                 key={iframeKey}
-                                src={googleDocsViewerUrl}
+                                data={pdfViewerUrl}
+                                type="application/pdf"
                                 className="w-full h-full border-0"
                                 title="Document Preview"
-                            />
-                            {/* Toolbar panel izquierdo */}
+                            >
+                                {/* Fallback si el browser no soporta object embed */}
+                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+                                    <Eye className="h-10 w-10 opacity-20" />
+                                    <p className="text-sm">El visor no pudo cargar el PDF.</p>
+                                    <Button variant="outline" size="sm" onClick={() => window.open(rawDocumentUrl, '_blank')}>
+                                        Abrir en nueva pestaña
+                                    </Button>
+                                </div>
+                            </object>
+                            {/* Toolbar panel derecho */}
                             <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button
                                     variant="secondary"
@@ -170,191 +344,6 @@ export function AuditSplitView({
                             <p>No hay archivo para previsualizar</p>
                         </div>
                     )}
-                </div>
-
-                {/* Right Panel: Editor & Suggestions */}
-                <div className="w-1/2 flex flex-col bg-background overflow-hidden">
-                    <ScrollArea className="flex-1">
-                        <div className="p-6 space-y-8 pb-20">
-                            {/* Logic Alert Panel */}
-                            {!isFixed && checkType !== 'MISMATCH_MATEMATICO' && (
-                                <div className="p-6 rounded-3xl bg-orange-500/5 border border-orange-500/20 text-center space-y-3 animate-in zoom-in-95 duration-500">
-                                    <div className="h-12 w-12 bg-orange-500/20 text-orange-600 rounded-full flex items-center justify-center mx-auto">
-                                        <AlertCircle className="h-6 w-6" />
-                                    </div>
-                                    <h4 className="text-sm font-bold text-orange-700 dark:text-orange-400">
-                                        {checkType === 'FECHA_ANOMALA' ? 'Fecha Anómala' : 'Entidad Duplicada'}
-                                    </h4>
-                                    <p className="text-xs text-muted-foreground italic">
-                                        {motivo || 'Revisa la información del documento.'}
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* AI Context & History Manager - SOLO SI NO ESTÁ CUADRADO Y ES DESCUADRE MATEMATICO */}
-                            {!isFixed && checkType === 'MISMATCH_MATEMATICO' && (
-                                <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
-                                    <h3 className="text-sm font-bold flex items-center justify-between text-violet-500 dark:text-violet-400">
-                                        <div className="flex items-center gap-2">
-                                            <History className="h-4 w-4" />
-                                            Gestor de Contexto e Historial
-                                        </div>
-                                        <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-500">
-                                            {Object.keys(groupedHistory).length} Intentos d'Auditoría
-                                        </Badge>
-                                    </h3>
-
-                                    <div className="space-y-6">
-                                        {Object.entries(groupedHistory).sort((a, b) => Number(b[0]) - Number(a[0])).map(([nro, items]) => (
-                                            <div key={nro} className="space-y-3">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter">Análisis Nº{nro}</span>
-                                                    <div className="h-px flex-1 bg-border/50" />
-                                                </div>
-
-                                                {items.map((s, i) => (
-                                                    <div key={s.id || i} className={cn(
-                                                        "p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group shadow-sm",
-                                                        s.include_in_context ? "bg-violet-500/5 border-violet-500/20" : "bg-muted/30 border-transparent opacity-60 grayscale-[0.5]"
-                                                    )}>
-                                                        <div className={cn(
-                                                            "absolute top-0 left-0 w-1.5 h-full opacity-60",
-                                                            s.include_in_context ? "bg-violet-500" : "bg-muted-foreground"
-                                                        )} />
-
-                                                        <div className="flex justify-between items-start gap-4">
-                                                            <div className="flex-1 space-y-2">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Badge className={cn(
-                                                                        "text-[10px] uppercase font-bold tracking-wider px-2 py-0.5",
-                                                                        s.severidad === 'alta' ? "bg-red-500 text-white" :
-                                                                            s.severidad === 'media' ? "bg-violet-600 text-white" :
-                                                                                "bg-blue-500 text-white"
-                                                                    )}>
-                                                                        {s.tipo}
-                                                                    </Badge>
-                                                                </div>
-                                                                <p className="text-sm font-bold text-foreground leading-snug">{s.descripcion}</p>
-                                                            </div>
-
-                                                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className={cn("h-7 w-7", s.include_in_context ? "text-violet-500" : "text-muted-foreground")}
-                                                                    onClick={() => s.id && handleToggleContext(s.id, !!s.include_in_context)}
-                                                                >
-                                                                    <ShieldCheck className={cn("h-4 w-4", s.include_in_context ? "fill-violet-500/20" : "")} />
-                                                                </Button>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                                                    onClick={() => s.id && handleDeleteItem(s.id)}
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className={cn(
-                                                            "mt-3 p-3 rounded-xl border shadow-inner",
-                                                            s.include_in_context ? "bg-violet-500/10 border-violet-500/10" : "bg-muted/50 border-transparent"
-                                                        )}>
-                                                            <p className={cn(
-                                                                "text-xs leading-relaxed font-medium italic",
-                                                                s.include_in_context ? "text-violet-700 dark:text-violet-300" : "text-muted-foreground"
-                                                            )}>
-                                                                "{s.sugerencia}"
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ))}
-
-                                        {Object.keys(groupedHistory).length === 0 && (
-                                            <div className="text-center py-12 border-2 border-dashed rounded-3xl border-muted/50">
-                                                <SparklesIcon className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
-                                                <p className="text-xs text-muted-foreground italic">No hay historial de auditoría para este documento.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Mensaje de Felicidades si ya está Healthy */}
-                            {isFixed && (
-                                <div className="p-8 rounded-3xl bg-green-500/5 border border-green-500/20 text-center space-y-3 animate-in zoom-in-95 duration-500">
-                                    <div className="h-12 w-12 bg-green-500/20 text-green-600 rounded-full flex items-center justify-center mx-auto">
-                                        <CheckCircle2 className="h-6 w-6" />
-                                    </div>
-                                    <h4 className="text-sm font-bold text-green-700 dark:text-green-400">Documento Cuadrado</h4>
-                                    <p className="text-xs text-muted-foreground italic">
-                                        Los totales coinciden perfectamente con los impuestos desglosados. Hallazgos previos archivados.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Editor Form */}
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-bold flex items-center gap-2 text-primary">
-                                    <RotateCw className="h-4 w-4" />
-                                    Edición de Datos Maestros
-                                </h3>
-                                <Form {...form}>
-                                    <form
-                                        id="audit-form"
-                                        className="contents"
-                                        onSubmit={form.handleSubmit(onSubmit)}
-                                    >
-                                        <div className="space-y-6">
-                                            <DocumentView doc={doc} isEditing={true} form={form} />
-
-                                            <FinancialDetailsCard
-                                                doc={doc}
-                                                isEditing={true}
-                                                form={form}
-                                            />
-
-                                            <div className="space-y-4">
-                                                <h4 className="text-sm font-bold flex items-center gap-2">
-                                                    Entidades Relacionadas
-                                                </h4>
-                                                {entidadFields.map((field, index) => (
-                                                    <EditableEntityCard
-                                                        key={field.id}
-                                                        isEditing={true}
-                                                        form={form}
-                                                        entityIndex={index}
-                                                        removeEntity={() => removeEntidad(index)}
-                                                    />
-                                                ))}
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => appendEntidad({
-                                                        rol: 'Otro',
-                                                        nombre: '',
-                                                        direccion: '',
-                                                        identificador_fiscal: '',
-                                                        telefono: '',
-                                                        email: '',
-                                                        datos_extra: null
-                                                    })}
-                                                    className="w-full border-dashed"
-                                                >
-                                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                                    Añadir Entidad
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </Form>
-                            </div>
-                        </div>
-                    </ScrollArea>
                 </div>
             </div>
 

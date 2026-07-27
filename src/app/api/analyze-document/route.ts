@@ -64,8 +64,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Verificar que el documento pertenece a una empresa del usuario
-    if (document.id_de_usuario !== user.id) {
-      console.warn('⚠️ [API-ANALYZE] Sin permisos - Doc pertenece a otro usuario');
+    // id_de_usuario es un JSON array en la tabla empresas → hay que buscar si el usuario está incluido
+    const usuarioIds: number[] = Array.isArray(document.id_de_usuario)
+      ? document.id_de_usuario
+      : (typeof document.id_de_usuario === 'string'
+          ? JSON.parse(document.id_de_usuario)
+          : [document.id_de_usuario]);
+
+    if (!usuarioIds.includes(user.id)) {
+      console.warn('⚠️ [API-ANALYZE] Sin permisos - Usuario no pertenece a la empresa del documento');
       return NextResponse.json(
         { error: 'No tienes permiso para analizar este documento' },
         { status: 403 }

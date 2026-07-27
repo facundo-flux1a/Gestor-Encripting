@@ -659,11 +659,14 @@ DEBES crear un objeto SEPARADO en totales_por_impuesto para CADA porcentaje de I
 
 Si hay Base 21% → crea objeto con porcentaje: 21 (y así para cada tipo presente).
 NO crees objetos para tipos de IVA que NO aparezcan en el documento.
-En tickets: totales_por_impuesto siempre []
-
 **VALIDACIÓN MATEMÁTICA OBLIGATORIA:**
-importe_sin_iva + suma(IVA) + suma(SUPLIDOS) + suma(RECARGO) - suma(RETENCIONES) = importe_total
+importe_sin_iva + suma(IVA) + base_no_sujeta + suma(RECARGO) - suma(RETENCIONES) = importe_total
 En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
+
+🔥 MANEJO DE BASE NO SUJETA Y DESCUENTO GLOBAL (CRÍTICO)
+
+- **base_no_sujeta**: Importes no sujetos a IVA (suplidos, tasas, timbres notariales, etc.) que forman parte del total de la factura pero NO de la base imponible del IVA. Si no hay, pon 0.
+- **descuento_global**: Descuento aplicado al final de la factura sobre la base imponible (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € (positivo). Si el documento indica un porcentaje (ej: 10%), debes calcular el importe en euros equivalente y poner ese valor numérico. Si no hay descuento global, pon 0.
 
 🔥 MANEJO DE RETENCIONES (CRÍTICO)
 
@@ -750,6 +753,8 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
     "comercial": "",
     "importe_total": 0,
     "importe_sin_iva": 0,
+    "descuento_global": 0,
+    "base_no_sujeta": 0,
     "fecha_vencimiento": ""
   },
   "lineas": [

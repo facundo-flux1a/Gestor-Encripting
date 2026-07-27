@@ -38,9 +38,8 @@ export async function POST(request: NextRequest) {
         d.año_trimestre,
         d.num_trimestre,
         d.trimestre_cerrado,
-        d.incidencia,
-        d.incidencia_razon,
-        d.datos_extra
+        d.datos_extra,
+        EXISTS(SELECT 1 FROM incidencias_documento i WHERE i.documento_id = d.id AND i.validado = 0) AS tiene_incidencia
       FROM documentos d
       WHERE 1=1
         AND (
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest) {
           query += ` AND LOWER(d.tipo_documento) NOT LIKE '%sin confirmar%'`;
           break;
         case 'incidents':
-          query += ` AND d.incidencia = 1`;
+          query += ` AND EXISTS(SELECT 1 FROM incidencias_documento i WHERE i.documento_id = d.id AND i.validado = 0)`;
           break;
       }
     }
@@ -134,7 +133,7 @@ export async function POST(request: NextRequest) {
     // ✅ IVA desde impuestos_documento (nombre correcto de la tabla)
     const [ivaDetails] = documentoIds.length > 0
       ? await db.query<RowDataPacket[]>(
-          `SELECT documento_id, tipo_impuesto, porcentaje, base_imponible, cuota_impuesto
+          `SELECT documento_id, tipo_impuesto, porcentaje, base_imponible, cuota
            FROM impuestos_documento
            WHERE documento_id IN (?)`,
           [documentos.map((d: any) => d.id)]
@@ -186,7 +185,7 @@ export async function POST(request: NextRequest) {
         totales.totalGastos += isAbono ? -Math.abs(total) : total;
       }
 
-      if (doc.incidencia === 1) totales.totalIncidencias++;
+      if (doc.tiene_incidencia === 1) totales.totalIncidencias++;
 
       const tipoDoc = doc.tipo_documento || 'Sin tipo';
       totales.porTipoDocumento[tipoDoc] = (totales.porTipoDocumento[tipoDoc] || 0) + 1;
@@ -257,8 +256,8 @@ export async function POST(request: NextRequest) {
           trimestre: d.num_trimestre,
           año: d.año_trimestre,
           trimestre_cerrado: d.trimestre_cerrado,
-          incidencia: d.incidencia === 1,
-          incidencia_razon: d.incidencia_razon,
+          incidencia: d.tiene_incidencia === 1,
+          incidencia_razon: '',
           emisor: emisor?.nombre || '',
           emisor_cif: emisor?.identificador_fiscal || '',
           cliente: cliente?.nombre || '',

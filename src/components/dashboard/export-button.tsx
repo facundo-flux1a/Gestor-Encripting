@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileText, FileSpreadsheet, FileType } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, FileType, FileJson } from "lucide-react";
 import { type Column, type Row } from '@tanstack/react-table';
 import { generateAdvancedExport } from '@/lib/export-utils';
 
@@ -25,7 +25,7 @@ const getHeaderName = (col: Column<any, unknown>): string => {
 
 export function ExportButton({ columns, data, filename, exportContext, includeSummary }: ExportButtonProps) {
 
-    const handleExport = (format: 'excel' | 'csv' | 'txt') => {
+    const handleExport = (format: 'excel' | 'csv' | 'json') => {
         const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
 
         // Prepare columns for util
@@ -70,11 +70,11 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
                     <span>CSV (.csv)</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                    onClick={() => handleExport('txt')}
+                    onClick={() => handleExport('json')}
                     className="text-xs sm:text-sm gap-2 cursor-pointer"
                 >
-                    <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                    <span>Texto (.txt)</span>
+                    <FileJson className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span>JSON (.json)</span>
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

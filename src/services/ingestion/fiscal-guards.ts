@@ -26,6 +26,7 @@ export type FiscalGuardCode =
   | 'MATH_BALANCE'
   | 'IVA_VS_BASE'
   | 'TIPO_INDETERMINADO'
+  | 'DISCREPANCIA_CIF_DASHBOARD'
   | 'SIN_IMPORTES'
   | 'FECHA_CALENDARIO_INVALIDA'
   | 'FECHA_EMISION_FUTURA'
@@ -60,8 +61,8 @@ export function isRepairableGuardFailure(failures: FiscalGuardFailure[]): boolea
 const CIF_RE = /^[A-Z0-9]\d{7}[A-Z0-9]$|^[XYZ]\d{7}[A-Z]$|^\d{8}[A-Z]$/i;
 
 function looksLikeSpanishTaxId(cif: string): boolean {
-  if (cif.length < 8 || cif.length > 12) return false;
-  return CIF_RE.test(cif) || /^[A-Z]\d{7,8}[A-Z0-9]?$/i.test(cif);
+  if (cif.length !== 9) return false;
+  return CIF_RE.test(cif) || /^[A-Z]\d{7}[A-Z0-9]$/i.test(cif);
 }
 
 function getImpuestos(doc: DocumentoGemini): Impuesto[] {
@@ -69,7 +70,7 @@ function getImpuestos(doc: DocumentoGemini): Impuesto[] {
   return Array.isArray(raw) ? (raw as Impuesto[]) : [];
 }
 
-function getImportes(doc: DocumentoGemini): { total: number; base: number } {
+function getImportes(doc: DocumentoGemini): { total: number; base: number; base_no_sujeta: number } {
   const nested = (doc as any).documento || {};
   const total = Number(nested.importe_total ?? doc.importe_total ?? 0);
   const base = Number(
@@ -79,7 +80,8 @@ function getImportes(doc: DocumentoGemini): { total: number; base: number } {
       doc.importe_sin_impuestos ??
       0
   );
-  return { total, base };
+  const base_no_sujeta = Number(nested.base_no_sujeta ?? doc.base_no_sujeta ?? 0);
+  return { total, base, base_no_sujeta };
 }
 
 function getFechaEmision(doc: DocumentoGemini): string {
@@ -182,7 +184,7 @@ export function runFiscalGuards(
   const receptor = doc.cliente || doc.empresa_receptora || {};
   const cifEmisor = normalizeCIF(emisor.cif);
   const cifReceptor = normalizeCIF(receptor.cif);
-  const { total, base } = getImportes(doc);
+  const { total, base, base_no_sujeta } = getImportes(doc);
   const impuestos = getImpuestos(doc);
   const tipoInfo = detectTipoDocumento(doc.tipo_documento);
 
@@ -225,16 +227,28 @@ export function runFiscalGuards(
     });
   }
 
-  if (opts?.requireClassification !== false && tipoInfo.esIndeterminado && !esTicket) {
-    // Soft-hard: indeterminado sin poder clasificar → revisión
-    const empresaCif = normalizeCIF(opts?.empresaCif);
-    const matchEmpresa =
-      (empresaCif && cifEmisor === empresaCif) || (empresaCif && cifReceptor === empresaCif);
-    if (!matchEmpresa) {
+  if (!esTicket && opts?.empresaCif) {
+    const empresaCif = normalizeCIF(opts.empresaCif);
+    
+    if (tipoInfo.esEmitida && cifEmisor !== empresaCif) {
       failures.push({
-        code: 'TIPO_INDETERMINADO',
-        message: 'No se pudo clasificar emitida/recibida respecto a la empresa',
+        code: 'DISCREPANCIA_CIF_DASHBOARD',
+        message: `Factura Emitida pero CIF Emisor (${cifEmisor || 'vacío'}) no coincide con Dashboard (${empresaCif})`,
       });
+    } else if (tipoInfo.esRecibida && cifReceptor !== empresaCif) {
+      failures.push({
+        code: 'DISCREPANCIA_CIF_DASHBOARD',
+        message: `Factura Recibida pero CIF Receptor (${cifReceptor || 'vacío'}) no coincide con Dashboard (${empresaCif})`,
+      });
+    } else if (opts?.requireClassification !== false && tipoInfo.esIndeterminado) {
+      // Si no fue clasificada ni como emitida ni como recibida, y ninguno de los CIFs coincide
+      const matchEmpresa = (empresaCif && cifEmisor === empresaCif) || (empresaCif && cifReceptor === empresaCif);
+      if (!matchEmpresa) {
+        failures.push({
+          code: 'TIPO_INDETERMINADO',
+          message: 'No se pudo clasificar emitida/recibida respecto a la empresa',
+        });
+      }
     }
   }
 
@@ -246,9 +260,9 @@ export function runFiscalGuards(
   );
 
   if (impuestos.length > 0 || (total !== 0 && base !== 0)) {
-    const math = validateMathBalance(total, base, impuestos, 0.05);
+    const math = validateMathBalance(total, base, impuestos, 0.05, base_no_sujeta);
     // tolerancia un poco más holgada en guard duro global
-    const mathLoose = validateMathBalance(total, base, impuestos, 0.5);
+    const mathLoose = validateMathBalance(total, base, impuestos, 0.5, base_no_sujeta);
     if (!mathLoose.ok) {
       failures.push({
         code: 'MATH_BALANCE',

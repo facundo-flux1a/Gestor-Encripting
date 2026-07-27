@@ -272,6 +272,8 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       base_imponible: Number(doc.importe_sin_impuestos) || 0,
       iva: total_iva,
       total: Number(doc.importe_total) || 0,
+      descuento_global: Number(datosExtra?.descuento_global) || 0,
+      base_no_sujeta: Number(datosExtra?.base_no_sujeta) || 0,
       entidades: entidades,
       lineas: lineas,
       iva_details: iva_details,
@@ -901,23 +903,37 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       await tx.documentos.update({ where: { id: BigInt(id) }, data: updateData });
 
       // ═══════════════════════════════════════════════════════════
-      // PASO 3.5: Actualizar CIF en datos_extra
+      // PASO 3.5: Actualizar datos_extra (CIF, Descuentos, Suplidos)
       // ═══════════════════════════════════════════════════════════
-      if ((data as any).cif !== undefined) {
-        let datosExtra: any = {};
-        try {
-          datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra || {};
-        } catch (e) {
-          datosExtra = {};
-        }
+      let hasDatosExtraUpdates = false;
+      let datosExtra: any = {};
+      try {
+        datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra || {};
+      } catch (e) {
+        datosExtra = {};
+      }
 
+      if ((data as any).cif !== undefined) {
         if (datosExtra.CLIENTE) datosExtra.CLIENTE.CIF = (data as any).cif;
         if (datosExtra.METADATOS) datosExtra.METADATOS.NIF_CIF_RELACIONADO = (data as any).cif;
         if (datosExtra.EMPRESA_EMISORA) datosExtra.EMPRESA_EMISORA.CIF = (data as any).cif;
         if (!datosExtra.CLIENTE && !datosExtra.METADATOS && !datosExtra.EMPRESA_EMISORA) {
           datosExtra.CLIENTE = { CIF: (data as any).cif };
         }
+        hasDatosExtraUpdates = true;
+      }
 
+      if (data.descuento_global !== undefined) {
+        datosExtra.descuento_global = data.descuento_global;
+        hasDatosExtraUpdates = true;
+      }
+      
+      if (data.base_no_sujeta !== undefined) {
+        datosExtra.base_no_sujeta = data.base_no_sujeta;
+        hasDatosExtraUpdates = true;
+      }
+
+      if (hasDatosExtraUpdates) {
         await tx.documentos.update({ where: { id: BigInt(id) }, data: { datos_extra: datosExtra } });
       }
 
@@ -4638,7 +4654,7 @@ export async function createExport(payload: {
       data: {
         id_de_usuario: payload.userId,
         tipo_export: payload.tipoExport,
-        año_filtro: payload.añoFiltro || null,
+        a_o_filtro: payload.añoFiltro || null,
         trimestre_filtro: payload.trimestreFiltro || null,
         empresas_ids: payload.empresasIds ? payload.empresasIds : [],
         documento_ids: payload.documentoIds ? payload.documentoIds : [],

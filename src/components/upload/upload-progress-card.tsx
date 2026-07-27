@@ -346,7 +346,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
               <p className="text-xs text-muted-foreground">
                 {softWarn
                   ? 'Estado lento (DB remota); el procesamiento sigue.'
-                  : 'Una barra para todo el lote. El detalle está en Actividad / Incidencias.'}
+                  : 'Una barra para todo el lote. El detalle está en la cola de subidas.'}
               </p>
             </div>
 

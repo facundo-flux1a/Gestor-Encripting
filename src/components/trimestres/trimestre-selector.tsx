@@ -37,13 +37,8 @@ export function TrimestreSelector({
 }: TrimestreSelectorProps) {
   // Calcular años disponibles
   const años = React.useMemo(() => {
-    const añoActual = new Date().getFullYear();
     const añosBase = [
-      añoActual + 2,
-      añoActual + 1,
-      añoActual,
-      añoActual - 1,
-      añoActual - 2
+      2030, 2029, 2028, 2027, 2026, 2025, 2024, 2023, 2022
     ];
     
     const añosConDatos = Array.from(

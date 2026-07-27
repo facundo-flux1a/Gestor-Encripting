@@ -6,7 +6,7 @@ import { type Row } from '@tanstack/react-table';
 // TIPOS
 // ==========================================
 
-export type ExportFormat = 'excel' | 'csv' | 'txt';
+export type ExportFormat = 'excel' | 'csv' | 'json';
 
 interface ExportOptions {
     filename: string;
@@ -364,8 +364,16 @@ export const generateAdvancedExport = (
         if (format === 'csv') {
             downloadFile(csv, `${filename}.csv`, 'text/csv;charset=utf-8;');
         } else {
-            const txt = csv.split('\n').map(r => r.split(',').join('\t')).join('\n');
-            downloadFile(txt, `${filename}.txt`, 'text/plain;charset=utf-8;');
+            // JSON export: build an array of objects from visible columns
+            const jsonRows = data.map(item => {
+                const obj: Record<string, any> = {};
+                columns.forEach(col => {
+                    obj[col.header] = getValueForExport(item, col.id);
+                });
+                return obj;
+            });
+            const jsonContent = JSON.stringify(jsonRows, null, 2);
+            downloadFile(jsonContent, `${filename}.json`, 'application/json;charset=utf-8;');
         }
     }
 };

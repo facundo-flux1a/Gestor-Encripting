@@ -57,7 +57,7 @@ export function cleanCif(raw: string | null | undefined): string {
 }
 
 function looksLikeSpanishTaxId(cif: string): boolean {
-  if (cif.length < 8 || cif.length > 10) return false;
+  if (cif.length !== 9) return false;
   return (
     /^[A-Z]\d{7}[A-Z0-9]$/.test(cif) ||
     /^[A-Z]\d{8}$/.test(cif) ||
@@ -554,12 +554,16 @@ export function mapAzureDiInvoiceToGeminiShape(
       comercial: '',
       importe_total: importeTotal,
       importe_sin_iva: importeSinIva,
+      descuento_global: 0,
+      base_no_sujeta: 0,
     },
     numero_documento: str(fields.InvoiceId),
     fecha_emision: fechaEmision,
     fecha_vencimiento: fechaVencimiento,
     importe_total: importeTotal,
     importe_sin_iva: importeSinIva,
+    descuento_global: 0,
+    base_no_sujeta: 0,
     moneda: fields.InvoiceTotal?.valueCurrency?.currencyCode || 'EUR',
     lineas: mapLineas(fields),
     totales_por_impuesto: impuestos,

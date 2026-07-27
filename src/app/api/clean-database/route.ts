@@ -33,14 +33,13 @@ export async function POST(request: NextRequest) {
 
     const user = rows[0];
 
-    // Obtener configuración desde variables de entorno, con fallbacks de depuración (6 y 64)
-    const allowedUserId = parseInt(process.env.CLEAN_DB_ALLOWED_USER_ID || '6', 10);
-    const empresaId = parseInt(process.env.CLEAN_DB_TARGET_EMPRESA_ID || '64', 10);
+    // Administradores autorizados a ejecutar esta acción destructiva
+    const allowedAdmins = [5, 6];
 
-    if (user.id !== allowedUserId || !user.has_permits) {
+    if (!allowedAdmins.includes(user.id) || !user.has_permits) {
       console.warn(
         `[CLEAN DB] ❌ Usuario ${userId} (${userEmail}) intentó limpiar la BD sin permisos\n` +
-        `   - ID del usuario: ${user.id} (requiere: ${allowedUserId})\n` +
+        `   - ID del usuario: ${user.id} (autorizados: ${allowedAdmins.join(', ')})\n` +
         `   - has_permits: ${user.has_permits} (requiere: 1)`
       );
       return NextResponse.json(
@@ -49,30 +48,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[CLEAN DB] ✅ Usuario ${userId} (${userEmail}) ejecutando limpieza de BD de la empresa ${empresaId}...`);
+    // Extraer empresaIds del body
+    const body = await request.json();
+    const { empresaIds } = body;
+
+    if (!Array.isArray(empresaIds) || empresaIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Se requiere un array de empresaIds válido' },
+        { status: 400 }
+      );
+    }
+
+    // Filtrar para asegurarnos que sean números válidos
+    const validEmpresaIds = empresaIds.map(Number).filter(id => !isNaN(id) && id > 0);
+    if (validEmpresaIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Ningún ID de empresa válido proporcionado' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[CLEAN DB] ✅ Usuario ${userId} (${userEmail}) ejecutando limpieza de BD para empresas: [${validEmpresaIds.join(', ')}]...`);
 
     // Desactivar foreign keys temporalmente para evitar dependencias
     await connection.query('SET FOREIGN_KEY_CHECKS = 0;');
 
     try {
-      // Borrados directos por id_de_empresa
-      await connection.query('DELETE FROM actividad WHERE id_de_empresa = ?', [empresaId]);
-      await connection.query('DELETE FROM ai_suggestions WHERE empresa_id = ?', [empresaId]);
-      await connection.query('DELETE FROM entidades_config WHERE empresa_id = ?', [empresaId]);
-      await connection.query('DELETE FROM productos_config WHERE id_de_empresa = ?', [empresaId]);
-      await connection.query('DELETE FROM health_check_status WHERE empresa_id = ?', [empresaId]);
+      // Usamos IN (?) para borrar de forma masiva pasándole el array de IDs en un solo query
 
-      // Borrados via subquery a documentos
-      await connection.query('DELETE FROM ai_incidencias_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
-      await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
-      await connection.query('DELETE FROM documentos_auditoria WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
-      await connection.query('DELETE FROM entidades_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
-      await connection.query('DELETE FROM impuestos_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
-      await connection.query('DELETE FROM incidencias_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
+      // 1. Borrados directos por id_de_empresa / empresa_id
+      await connection.query('DELETE FROM actividad WHERE id_de_empresa IN (?)', [validEmpresaIds]);
+      await connection.query('DELETE FROM ai_suggestions WHERE empresa_id IN (?)', [validEmpresaIds]);
+      await connection.query('DELETE FROM entidades_config WHERE empresa_id IN (?)', [validEmpresaIds]);
+      await connection.query('DELETE FROM productos_config WHERE id_de_empresa IN (?)', [validEmpresaIds]);
+      await connection.query('DELETE FROM health_check_status WHERE empresa_id IN (?)', [validEmpresaIds]);
 
-      // Optimización para lineas_documento: borrar trigger primero para que no bloquee por recalculos de docs que van a ser borrados
+      // 2. Borrados via subquery a documentos
+      await connection.query('DELETE FROM ai_incidencias_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+      await connection.query('DELETE FROM archivos_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+      await connection.query('DELETE FROM documentos_auditoria WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+      await connection.query('DELETE FROM entidades_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+      await connection.query('DELETE FROM impuestos_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+      await connection.query('DELETE FROM incidencias_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
+
+      // 3. Optimización para lineas_documento
       await connection.query('DROP TRIGGER IF EXISTS trg_lineas_after_delete;');
-      await connection.query('DELETE FROM lineas_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa = ?)', [empresaId]);
+      await connection.query('DELETE FROM lineas_documento WHERE documento_id IN (SELECT id FROM documentos WHERE id_de_empresa IN (?))', [validEmpresaIds]);
       
       // Recrear trigger
       await connection.query(`
@@ -84,18 +105,18 @@ export async function POST(request: NextRequest) {
         END;
       `);
 
-      // Finalmente, borrar los documentos de la empresa
-      await connection.query('DELETE FROM documentos WHERE id_de_empresa = ?', [empresaId]);
+      // 4. Finalmente, borrar los documentos de las empresas
+      await connection.query('DELETE FROM documentos WHERE id_de_empresa IN (?)', [validEmpresaIds]);
     } finally {
       // Siempre reactivamos las llaves foráneas aunque haya error
       await connection.query('SET FOREIGN_KEY_CHECKS = 1;');
     }
 
-    console.log(`[CLEAN DB] ✅ Base de datos limpiada exitosamente por usuario ${userId} (${userEmail})`);
+    console.log(`[CLEAN DB] ✅ Base de datos limpiada exitosamente por usuario ${userId} (${userEmail}) para empresas: ${validEmpresaIds.join(', ')}`);
 
     return NextResponse.json({
       success: true,
-      message: 'Base de datos de la empresa 11 limpiada correctamente',
+      message: `Base de datos de las empresas ${validEmpresaIds.join(', ')} limpiada correctamente`,
     });
 
   } catch (error) {
