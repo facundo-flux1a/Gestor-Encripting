@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
 import db from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 import type { RowDataPacket } from 'mysql2';
 
 export async function POST(req: NextRequest) {
@@ -36,7 +37,12 @@ export async function POST(req: NextRequest) {
     );
 
     // Detectar duplicados (agrupar según lógica de negocio)
-    const gruposDuplicados = new Map<string, { numero: string, empresa_id: number, ids: number[] }>();
+    const gruposDuplicados = new Map<string, {
+      numero: string;
+      empresa_id: number;
+      ids: number[];
+      docs: { id: number; tipo: string; seccion: string; empresa_nombre: string }[];
+    }>();
 
     docs.forEach(doc => {
       const numero = doc.numero_documento.trim().toLowerCase();
@@ -51,17 +57,10 @@ export async function POST(req: NextRequest) {
         const proveedor = (cif || nombre || 'DESCONOCIDO').trim().toLowerCase();
         console.log(`🔍 [Check-Dup] DOC #${doc.id} (Recibida) | Num: ${numero} | Prov: ${proveedor}`);
 
-        // Si no tenemos proveedor, fallback a lógica estricta (solo número) para evitar falsos negativos groseros,
-        // o podríamos decidir ignorarlo (evitar falsos positivos).
-        // Decisión: Si es "DESCONOCIDO", lo tratamos como un grupo aparte. 
-        // Así si hay 2 facturas con el mismo número y proveedor desconocido, se marcan.
-        // Pero si una tiene proveedor A y otra Desconocido, NO se marcan.
         key = `${numero}|${doc.id_de_empresa}|RECIBIDA|${proveedor}`;
       } else {
         // 🔥 FACTURAS EMITIDAS (y otras): Solo chequear Número
         console.log(`🔍 [Check-Dup] DOC #${doc.id} (Emitida/Otra) | Num: ${numero} | Strict Check`);
-
-        // Mantenemos la lógica histórica estricta
         key = `${numero}|${doc.id_de_empresa}|EMITIDA`;
       }
 
@@ -69,15 +68,55 @@ export async function POST(req: NextRequest) {
         gruposDuplicados.set(key, {
           numero: doc.numero_documento,
           empresa_id: doc.id_de_empresa,
-          ids: []
+          ids: [],
+          docs: []
         });
       }
-      gruposDuplicados.get(key)!.ids.push(doc.id);
+
+      const grupo = gruposDuplicados.get(key)!;
+      grupo.ids.push(doc.id);
+
+      // Sección legible según tipo de documento
+      let seccion = 'Emitidas';
+      if (tipo.includes('recibida') || tipo.includes('recibido') || tipo.includes('gasto')) {
+        seccion = 'Recibidas';
+      } else if (tipo.includes('abono') || tipo.includes('rectificativa')) {
+        seccion = 'Abonos';
+      }
+
+      grupo.docs.push({
+        id: doc.id,
+        tipo: doc.tipo_documento || 'Desconocido',
+        seccion,
+        // Placeholder — se sobreescribe abajo con Prisma (que desencripta nombre_de_empresa)
+        empresa_nombre: `Empresa #${doc.id_de_empresa}`
+      });
     });
 
     // Filtrar solo los que tienen duplicados (2+ docs)
     const duplicadosReales = Array.from(gruposDuplicados.values())
       .filter(grupo => grupo.ids.length > 1);
+
+    // Obtener nombres de empresas via Prisma (desencripta automáticamente nombre_de_empresa)
+    const empresaIdsInvolucradas = [...new Set(duplicadosReales.map(g => g.empresa_id))];
+    const empresasData = await prisma.empresas.findMany({
+      where: { id: { in: empresaIdsInvolucradas } },
+      select: { id: true, nombre_de_empresa: true }
+    });
+    const empresaMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || null]));
+
+    // Enriquecer empresa_nombre en cada doc con el nombre desencriptado
+    duplicadosReales.forEach(grupo => {
+      const nombreEmpresa = empresaMap.get(grupo.empresa_id);
+      if (nombreEmpresa) {
+        grupo.docs.forEach(doc => {
+          // Sólo sobreescribir si el fallback actual es "Empresa #ID"
+          if (doc.empresa_nombre.startsWith('Empresa #')) {
+            doc.empresa_nombre = nombreEmpresa;
+          }
+        });
+      }
+    });
 
     // Obtener todos los IDs duplicados
     const todosLosIdsDuplicados = duplicadosReales.flatMap(grupo => grupo.ids);
@@ -135,7 +174,8 @@ export async function POST(req: NextRequest) {
       duplicates: duplicadosReales.map(grupo => ({
         numero: grupo.numero,
         empresa_id: grupo.empresa_id,
-        ids: grupo.ids
+        ids: grupo.ids,
+        docs: grupo.docs   // ✅ Detalle por documento: tipo, sección y empresa
       })),
       totalDuplicados: todosLosIdsDuplicados.length,
       incidenciasCreadas: creadas

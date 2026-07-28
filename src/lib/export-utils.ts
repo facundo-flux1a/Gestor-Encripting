@@ -391,6 +391,9 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
         const sum: any = {
             retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
             recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+            // ✅ Campos de datos_extra: base no sujeta a IVA y descuentos globales
+            base_no_sujeta: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+            descuento_global: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
             total_real: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 }
         };
         types.forEach(type => {
@@ -511,6 +514,22 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
                 }
             });
         }
+
+        // ✅ Acumular base_no_sujeta y descuento_global desde el documento (ya mapeados en top-level)
+        const bns  = Math.abs(Number((doc as any).base_no_sujeta  || 0));
+        const desc = Math.abs(Number((doc as any).descuento_global || 0));
+        if (bns > 0) {
+            targetSum.base_no_sujeta[q]   += bns * absSign;
+            targetSum.base_no_sujeta.total += bns * absSign;
+            totalNetoSum.base_no_sujeta[q]   += bns * netoSign;
+            totalNetoSum.base_no_sujeta.total += bns * netoSign;
+        }
+        if (desc > 0) {
+            targetSum.descuento_global[q]   += desc * absSign;
+            targetSum.descuento_global.total += desc * absSign;
+            totalNetoSum.descuento_global[q]   += desc * netoSign;
+            totalNetoSum.descuento_global.total += desc * netoSign;
+        }
     });
 
     let activeQuarters: number[] = [];
@@ -554,6 +573,10 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             }
         });
 
+        // ✅ Base no sujeta a IVA (de datos_extra) — se muestra como línea separada en la sección de bases
+        const hasBns = summaryData.base_no_sujeta.total !== 0 || activeQuarters.some(q => summaryData.base_no_sujeta[q] !== 0);
+        if (hasBns) rows.push(buildRow('Base no sujeta a IVA', summaryData.base_no_sujeta));
+
         rows.push([]);
 
         rates.forEach(rate => {
@@ -566,18 +589,22 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
         rows.push([]);
 
-        const totalBasesRow: (string | number)[] = ['Total Bases'];
+        const totalBasesRow: (string | number)[] = ['Total Bases (incl. no sujeta)'];
         activeQuarters.forEach(q => {
             let sumQ = 0;
             rates.forEach(r => { if (summaryData[`base_${r}`]) sumQ += summaryData[`base_${r}`][q]; });
+            // ✅ Incluir base_no_sujeta en el total de bases
+            sumQ += summaryData.base_no_sujeta[q] || 0;
             if (options?.format === 'excel') totalBasesRow.push(sumQ);
             else totalBasesRow.push(formatCurrency(sumQ));
         });
         let sumTotalBases = 0;
         if (options?.trimestre) {
             rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`][options.trimestre!]; });
+            sumTotalBases += summaryData.base_no_sujeta[options.trimestre!] || 0;
         } else {
             rates.forEach(r => { if (summaryData[`base_${r}`]) sumTotalBases += summaryData[`base_${r}`].total; });
+            sumTotalBases += summaryData.base_no_sujeta.total || 0;
         }
         if (options?.format === 'excel') totalBasesRow.push(sumTotalBases);
         else totalBasesRow.push(formatCurrency(sumTotalBases));
@@ -636,8 +663,6 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             let rowSum = 0;
             activeQuarters.forEach(q => {
                 const val = summaryData.retenciones[q];
-                // Las retenciones las mostramos en negativo si restan, pero matemáticamente ya están bien.
-                // Como las pasamos sumadas directamente, las mostramos positivo.
                 if (options?.format === 'excel') rowR.push(val);
                 else rowR.push(formatCurrency(val));
                 if (options?.trimestre) rowSum += val;
@@ -647,6 +672,10 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             else rowR.push(formatCurrency(rowSum));
             rows.push(rowR);
         }
+
+        // ✅ Descuento global (de datos_extra) — se muestra como deducción si existe
+        const hasDescuento = summaryData.descuento_global.total !== 0 || activeQuarters.some(q => summaryData.descuento_global[q] !== 0);
+        if (hasDescuento) rows.push(buildRow('(-) Descuento Global', summaryData.descuento_global));
 
 
         // Espaciador entre tablas si hay varias

@@ -112,7 +112,11 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
 
         // 4. Totales Reales (BD)
         const valReal = Math.abs(docTotalVal);
-        const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0));
+        // ✅ OPCIÓN A: base_no_sujeta (datos_extra) se fusiona con la base fiscal total.
+        // base_no_sujeta = importe no gravado por IVA que sí forma parte del total del documento.
+        // Fórmula: Total = (base_imponible + base_no_sujeta) + IVA + Recargo - Retencion - Descuento
+        const docBaseNoSujeta = Math.abs(Number((doc as any).base_no_sujeta || 0));
+        const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0)) + docBaseNoSujeta;
         const docDescuentoGlobal = Math.abs(Number((doc as any).descuento_global || 0));
         // Si no hay iva explícito, aproximamos por diferencia (se ajustará al final sumando impuestos)
         let ivaRealVal = Math.abs(Number(doc.iva || (doc as any).total_iva || 0));
@@ -273,11 +277,12 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         }
 
         // ✅ DETECCIÓN INTELIGENTE DE SUPLIDOS / EXENTOS (Base 0%)
-        // Si hay una diferencia entre la base de cabecera y la suma de líneas,
-        // pero la cabecera + impuestos cuadra con el total real, entonces la diferencia es Base 0%.
+        // headerBaseVal = solo importe_sin_impuestos (base gravable pura, sin base_no_sujeta).
+        // base_no_sujeta se incorpora por separado en el balance teórico.
         const headerBaseVal = Math.abs(Number((doc as any).importe_sin_impuestos || doc.base_imponible || 0));
         const baseGap = headerBaseVal - docBaseSum;
-        const theoreticalTotalWithHeader = headerBaseVal + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
+        // ✅ base_no_sujeta incluida en el balance para comparar contra el total real del documento
+        const theoreticalTotalWithHeader = headerBaseVal + docBaseNoSujeta + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
 
         if (Math.abs(baseGap) > 0.01 && Math.abs(valReal - theoreticalTotalWithHeader) < 0.02) {
             // Es Base 0% omitida en los desgloses
@@ -294,7 +299,8 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         }
 
         // Auditoría de Total del Documento
-        const docTheoreticalTotal = docBaseSum + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
+        // ✅ base_no_sujeta incluida: Total = base_gravable + base_no_sujeta + IVA + Recargo - Retencion - Descuento
+        const docTheoreticalTotal = docBaseSum + docBaseNoSujeta + docIvaSum + docRecSum - docRetSum - docDescuentoGlobal;
         if (hasValidQ && Math.abs(valReal - docTheoreticalTotal) > 0.01 && ivaDetails.length > 0) {
             const docId = doc.numero_documento || `ID:${doc.id_documento}`;
             target.mismatchDocs.total[q!].push(`${docId} (BD:${valReal.toFixed(2)}€ vs Calc:${docTheoreticalTotal.toFixed(2)}€)`);

@@ -334,7 +334,7 @@ export default function HealthCheckPage() {
                             <TableBody>
                                 {filteredDocs.length > 0 ? (
                                     filteredDocs.map((doc) => {
-                                        const emisor = doc.entidades.find((e: any) => e.rol?.toUpperCase() === 'EMISOR')?.nombre || 'Desconocido';
+                                        const emisor = doc.entidades.find((e: any) => e.rol?.toUpperCase() === 'EMISOR' || e.rol?.toUpperCase() === 'PROVEEDOR')?.nombre || 'Desconocido';
                                         return (
                                             <TableRow
                                                 key={doc.id_documento}
