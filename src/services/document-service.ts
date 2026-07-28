@@ -3082,6 +3082,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 d.tipo_documento,
                 d.importe_total,
                 d.importe_sin_impuestos,
+                COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) as base_no_sujeta,
                 -- ✅ IVA (Con Fallback si no hay desgloses: Total - Base)
                 COALESCE((
                   SELECT CASE 
@@ -3128,8 +3129,11 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 4) < 1), 0) as b4,
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 15) < 1), 0) as b15,
 
-                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€)
-                (CASE WHEN ABS(d.importe_total - (d.importe_sin_impuestos + 
+                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€) — incluye base_no_sujeta y descuento_global
+                (CASE WHEN ABS(d.importe_total - (
+                    d.importe_sin_impuestos +
+                    COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
+                    COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
                     COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
                 )) > 0.05 THEN 1 ELSE 0 END) as doc_mismatch
             FROM documentos d
@@ -3149,14 +3153,14 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
             ELSE 0 
           END), 0) as totalGastos,
           
-          -- ✅ TOTALES SIN IVA
+          -- ✅ TOTALES SIN IVA (Incluyendo base_no_sujeta)
           COALESCE(SUM(CASE 
-            WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND importe_sin_impuestos > 0 THEN -importe_sin_impuestos ELSE importe_sin_impuestos END) 
+            WHEN is_issued = 1 THEN (CASE WHEN is_abono = 1 AND (importe_sin_impuestos + base_no_sujeta) > 0 THEN -(importe_sin_impuestos + base_no_sujeta) ELSE (importe_sin_impuestos + base_no_sujeta) END) 
             ELSE 0 
           END), 0) as totalIngresosSinIva,
           
           COALESCE(SUM(CASE 
-            WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND importe_sin_impuestos > 0 THEN -importe_sin_impuestos ELSE importe_sin_impuestos END) 
+            WHEN is_issued = 0 THEN (CASE WHEN is_abono = 1 AND (importe_sin_impuestos + base_no_sujeta) > 0 THEN -(importe_sin_impuestos + base_no_sujeta) ELSE (importe_sin_impuestos + base_no_sujeta) END) 
             ELSE 0 
           END), 0) as totalGastosSinIva,
           
@@ -3981,6 +3985,7 @@ export async function getTrimestresList(
   d.id_de_empresa,
   d.importe_total, -- ✅ CON IVA
           d.importe_sin_impuestos, -- ✅ SIN IVA(para el breakdown)
+          COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) as base_no_sujeta,
           d.trimestre_cerrado,
   d.fecha_cierre_trimestre,
   -- ✅ Identificar si es abono
@@ -4027,13 +4032,13 @@ SELECT
   -- ✅ TOTALES SIN IVA (Abonos restan)
   COALESCE(SUM(CASE 
           WHEN dt.is_issued = 1 THEN 
-             CASE WHEN dt.is_abono = 1 THEN -ABS(dt.importe_sin_impuestos) ELSE dt.importe_sin_impuestos END
+             CASE WHEN dt.is_abono = 1 THEN -ABS(dt.importe_sin_impuestos + dt.base_no_sujeta) ELSE (dt.importe_sin_impuestos + dt.base_no_sujeta) END
           ELSE 0 
         END), 0) as total_ingresos_sin_iva,
 
   COALESCE(SUM(CASE 
           WHEN dt.is_issued = 0 THEN 
-             CASE WHEN dt.is_abono = 1 THEN -ABS(dt.importe_sin_impuestos) ELSE dt.importe_sin_impuestos END
+             CASE WHEN dt.is_abono = 1 THEN -ABS(dt.importe_sin_impuestos + dt.base_no_sujeta) ELSE (dt.importe_sin_impuestos + dt.base_no_sujeta) END
           ELSE 0 
         END), 0) as total_gastos_sin_iva,
 
@@ -4247,9 +4252,22 @@ export async function getDocumentosByTrimestre(
 
     const whereClause = whereConditions.join(' AND ');
 
+    // ✅ CLASIFICACIÓN DINÁMICA: obtener CIFs para subquery igual que Dashboard
+    const empresasInfo = await prisma.empresas.findMany({
+      where: { id: { in: empresaIds } },
+      select: { CIF: true }
+    });
+    const MY_COMPANY_FISCAL_IDS = empresasInfo.map((e: any) => e.CIF).filter(Boolean) as string[];
+    const MY_COMPANY_FISCAL_COMBINED = MY_COMPANY_FISCAL_IDS.length > 0
+      ? [...MY_COMPANY_FISCAL_IDS.map(cif => require('crypto').createHash('sha256').update(cif.toLowerCase().trim()).digest('hex')), ...MY_COMPANY_FISCAL_IDS]
+      : [];
+    const cifPlaceholders = MY_COMPANY_FISCAL_COMBINED.length > 0
+      ? MY_COMPANY_FISCAL_COMBINED.map(() => '?').join(',')
+      : "'NEVER_MATCH'";
+
     const query = `
 SELECT
-d.id,
+  d.id,
   d.tipo_documento,
   d.numero_documento,
   d.fecha_emision,
@@ -4264,17 +4282,27 @@ d.id,
   d.is_new,
   d.trimestre_cerrado,
   d.año_trimestre,
-  d.num_trimestre
-      FROM documentos d
-      LEFT JOIN empresas e ON d.id_de_empresa = e.id
-      WHERE ${whereClause}
-      ORDER BY d.fecha_emision DESC
+  d.num_trimestre,
+  -- ✅ CLASIFICACIÓN DINÁMICA igual que Dashboard (no usa columna is_issued de BD)
+  (SELECT COALESCE(MAX(CASE
+      WHEN ed2.rol IN('emisor', 'proveedor')
+        AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders})
+      THEN 1
+      ELSE 0
+  END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
+    FROM documentos d
+    LEFT JOIN empresas e ON d.id_de_empresa = e.id
+    WHERE ${whereClause}
+    ORDER BY d.fecha_emision DESC
   `;
 
-    console.log('📝 [getDocumentosByTrimestre] Query:', query);
-    console.log('📝 [getDocumentosByTrimestre] Params:', params);
+    // CIF params van primero (para la subquery), luego los params del WHERE
+    const fullParams = [...MY_COMPANY_FISCAL_COMBINED, ...params];
 
-    const [documentRows] = await db.query<DocumentPacket[]>(query, params);
+    console.log('📝 [getDocumentosByTrimestre] Query:', query);
+    console.log('📝 [getDocumentosByTrimestre] Params:', fullParams);
+
+    const [documentRows] = await db.query<DocumentPacket[]>(query, fullParams);
 
     console.log('✅ [getDocumentosByTrimestre] Documentos encontrados:', documentRows.length);
 
@@ -5080,7 +5108,9 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   const [rows] = await db.query<RowDataPacket[]>(`
     SELECT 
       COUNT(*) as total,
-      SUM(CASE WHEN (ABS(d.importe_total - (d.importe_sin_impuestos + 
+      SUM(CASE WHEN (ABS(d.importe_total - (
+          d.importe_sin_impuestos +
+          COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) +
           COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
       )) > 0.05) THEN 1 ELSE 0 END) as mismatches
     FROM documentos d
@@ -5156,7 +5186,9 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   const [docRows] = await db.query<DocumentPacket[]>(`
     SELECT 
       d.*,
-      (ABS(d.importe_total - (d.importe_sin_impuestos + 
+      (ABS(d.importe_total - (
+          d.importe_sin_impuestos +
+          COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) +
           COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
       ))) as mismatch_amount,
       hcs.verified as hcs_verified,
