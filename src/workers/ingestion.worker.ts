@@ -4,16 +4,16 @@
  * Worker principal de ingesta. Escucha la `ingestionQueue` y enruta cada job:
  *
  *   ZIP/RAR  →  re-encola cada hijo como job individual en ingestionQueue
- *   PDF/IMG  →  encola en geminiQueue con type: 'extract-facturable'
+ *   PDF/IMG  →  encola en extractionQueue con type: 'extract-facturable'
  *               (routing facturable/multi en la misma respuesta; sin hop classify)
  *
  * El archivo físico NO se descarga aquí — solo se enruta.
- * La descarga y llamada a Gemini ocurre en gemini.worker.ts.
+ * La descarga y extracción ocurren en extraction.worker.ts.
  */
 
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
-import { ingestionQueue, geminiQueue, IngestionJobData, INGESTION_QUEUE_NAME } from '@/lib/queue';
+import { ingestionQueue, extractionQueue, IngestionJobData, INGESTION_QUEUE_NAME } from '@/lib/queue';
 import { updateIngestionProgress, PROGRESS, createIngestionRecord } from '@/lib/ingestion-progress';
 import { wLog } from '@/lib/worker-logger';
 
@@ -167,13 +167,13 @@ export function startIngestionWorker() {
 
         // ── Caso 2: Archivo individual (PDF, imagen, Word, Excel...) ──────────
         // Directo a extract-facturable: es_facturable / es_multiple viajan en la
-        // misma respuesta; el gemini worker bifurca a paginate / NF / multi-img.
+        // misma respuesta; el extraction worker bifurca a paginate / NF / multi-img.
         console.log(`[IngestionWorker] 📄 Archivo individual. Encolando extract (sin classify)...`);
 
         await updateIngestionProgress(uploadId, PROGRESS.RECEIVED);
 
         // Pacing también en carga singular (antes solo lotes multi tenían delay).
-        // Evita que N subidas 1-a-1 saturen Vertex al mismo segundo.
+        // Evita que N subidas 1-a-1 saturen el LLM al mismo segundo.
         const singularDelayMs = parseInt(process.env.SINGULAR_CLASSIFY_DELAY_MS || '1500', 10);
         const staggerIndex = typeof data.documentoIndex === 'number' ? Math.max(0, data.documentoIndex - 1) : 0;
         // Si no viene de lote, usar un jitter estable por uploadId para no alinear todos en t=0
@@ -181,7 +181,7 @@ export function startIngestionWorker() {
           ? (Array.from(uploadId).reduce((a, c) => a + c.charCodeAt(0), 0) % 5) * singularDelayMs
           : staggerIndex * singularDelayMs;
 
-        await geminiQueue.add(
+        await extractionQueue.add(
           `extract-facturable-${uploadId}`,
           {
             type: 'extract-facturable',

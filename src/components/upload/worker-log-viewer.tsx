@@ -20,7 +20,7 @@ const LEVEL_COLORS: Record<LogEntry['level'], string> = {
 };
 
 const TAG_COLORS: Record<string, string> = {
-  GeminiWorker:    'text-violet-400',
+  ExtractionWorker:    'text-violet-400',
   DbWriterWorker:  'text-blue-400',
   IngestionWorker: 'text-cyan-400',
 };

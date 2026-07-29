@@ -101,7 +101,7 @@ export function AnalyzeDocumentCard({ documentId, onAnalysisComplete }: AnalyzeD
                         <span className="line-clamp-2">Análisis Inteligente con IA</span>
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                        Utiliza OpenAI/Gemini para detectar inconsistencias, errores de cálculo y duplicados automáticamente.
+                        Utiliza IA para detectar inconsistencias, errores de cálculo y duplicados automáticamente.
                     </CardDescription>
                 </CardHeader>
                 

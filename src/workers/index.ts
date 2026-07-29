@@ -7,10 +7,12 @@
 import 'dotenv/config';
 
 import { startIngestionWorker } from './ingestion.worker';
-import { startGeminiWorker } from './gemini.worker';
+import { startExtractionWorker } from './extraction.worker';
 import { startDbWriterWorker } from './db-writer.worker';
 import { redis } from '@/lib/redis';
 import { reconcileStaleActividad } from '@/services/actividad-reconcile';
+import { Queue } from 'bullmq';
+import { EXTRACTION_QUEUE_NAME, extractionQueue } from '@/lib/queue';
 
 const HEARTBEAT_KEY = 'workers:heartbeat';
 const HEARTBEAT_TTL_SEC = 120;
@@ -46,8 +48,31 @@ async function bootstrap() {
     }
     console.log(`🔒 Lock de worker adquirido (pid=${process.pid})`);
 
+    // Migrar jobs huérfanos de la cola legacy `-gemini-extraction` → `-extraction`
+    try {
+      const prefix = process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}';
+      const legacyName = `${prefix}-gemini-extraction`;
+      if (legacyName !== EXTRACTION_QUEUE_NAME) {
+        const legacy = new Queue(legacyName, { connection: redis });
+        const waiting = await legacy.getJobs(['waiting', 'delayed', 'prioritized'], 0, 200);
+        for (const job of waiting) {
+          await extractionQueue.add(job.name, job.data, {
+            jobId: job.id ? `migrated-${job.id}` : undefined,
+            delay: typeof job.opts?.delay === 'number' ? job.opts.delay : undefined,
+          });
+          await job.remove();
+        }
+        if (waiting.length > 0) {
+          console.log(`♻️ Migrados ${waiting.length} job(s) desde ${legacyName}`);
+        }
+        await legacy.close();
+      }
+    } catch (e) {
+      console.warn('[Workers] No se pudo migrar cola legacy gemini:', e);
+    }
+
     startIngestionWorker();
-    startGeminiWorker();
+    startExtractionWorker();
     startDbWriterWorker();
 
     const beat = async () => {

@@ -15,9 +15,6 @@ interface QueueStats {
 }
 
 interface AllStats {
-  ingestion: QueueStats;
-  gemini: QueueStats;
-  dbWriter: QueueStats;
   total: QueueStats;
 }
 

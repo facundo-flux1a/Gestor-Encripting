@@ -213,9 +213,6 @@ export function AIIncidentsTable({ empresaIds, onRefresh }: AIIncidentsTableProp
                 <SelectItem value="openai" className="hover:bg-accent transition-colors duration-150">
                   OpenAI
                 </SelectItem>
-                <SelectItem value="gemini" className="hover:bg-accent transition-colors duration-150">
-                  Gemini
-                </SelectItem>
               </SelectContent>
             </Select>
           </div>

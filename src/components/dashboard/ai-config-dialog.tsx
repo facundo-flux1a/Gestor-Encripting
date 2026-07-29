@@ -30,11 +30,11 @@ interface AIConfigDialogProps {
 
 interface AIConfig {
   useOwnKey: boolean;
-  ownProvider: 'openai' | 'gemini' | null;
+  ownProvider: 'openai' | 'openai' | null;
   ownApiKey: string;
   customPrompt: string;
   preferredModel: string;
-  sharedProvider: 'gemini' | 'openai';
+  sharedProvider: 'openai' | 'openai';
 }
 
 export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
@@ -44,7 +44,7 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
     ownApiKey: '',
     customPrompt: '',
     preferredModel: 'gpt-4o-mini',
-    sharedProvider: 'gemini',
+    sharedProvider: 'openai',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,7 +71,7 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
         ownApiKey: '',
         customPrompt: data.customPrompt || '',
         preferredModel: data.preferredModel || 'gpt-4o-mini',
-        sharedProvider: data.sharedProvider || 'gemini',
+        sharedProvider: data.sharedProvider || 'openai',
       });
     } catch (err: any) {
       setError(err.message);
@@ -159,25 +159,20 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                   <Select
                     value={config.sharedProvider}
                     onValueChange={(value) =>
-                      setConfig({ ...config, sharedProvider: value as 'gemini' | 'openai' })
+                      setConfig({ ...config, sharedProvider: value as 'openai' })
                     }
                   >
                     <SelectTrigger id="shared-provider" className="h-8 sm:h-9 text-xs sm:text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="gemini" className="text-xs sm:text-sm">
-                        🚀 Gemini (50/día)
-                      </SelectItem>
                       <SelectItem value="openai" className="text-xs sm:text-sm">
                         🤖 OpenAI (5/día)
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">
-                    {config.sharedProvider === 'gemini' 
-                      ? 'Más rápido y mayor límite. Fallback a OpenAI.'
-                      : 'Fallback automático a Gemini si alcanza límite.'}
+                    Análisis con OpenAI (límite diario compartido).
                   </p>
                 </div>
               )}
@@ -214,7 +209,7 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                     <Select
                       value={config.ownProvider || ''}
                       onValueChange={(value) =>
-                        setConfig({ ...config, ownProvider: value as 'openai' | 'gemini' })
+                        setConfig({ ...config, ownProvider: value as 'openai' })
                       }
                     >
                       <SelectTrigger id="provider" className="h-8 sm:h-9 text-xs sm:text-sm">
@@ -223,9 +218,6 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                       <SelectContent>
                         <SelectItem value="openai" className="text-xs sm:text-sm">
                           🤖 OpenAI
-                        </SelectItem>
-                        <SelectItem value="gemini" className="text-xs sm:text-sm">
-                          🚀 Gemini
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -283,16 +275,6 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                             </SelectItem>
                           </>
                         )}
-                        {config.ownProvider === 'gemini' && (
-                          <>
-                            <SelectItem value="gemini-1.5-flash" className="text-xs sm:text-sm">
-                              Gemini Flash (rápido)
-                            </SelectItem>
-                            <SelectItem value="gemini-1.5-pro" className="text-xs sm:text-sm">
-                              Gemini Pro (potente)
-                            </SelectItem>
-                          </>
-                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -340,7 +322,7 @@ export function AIConfigDialog({ isOpen, onClose }: AIConfigDialogProps) {
                 <div className="text-[10px] sm:text-xs p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg space-y-1.5">
                   <p className="font-medium text-blue-900 dark:text-blue-100">ℹ️ Límites de API keys compartidas:</p>
                   <ul className="list-disc list-inside text-blue-700 dark:text-blue-300 space-y-0.5 pl-1">
-                    <li>Gemini Flash: 50 análisis/día (recomendado)</li>
+                    <li>OpenAI: 50 análisis/día (recomendado)</li>
                     <li>OpenAI GPT-4o-mini: 5 análisis/día (fallback)</li>
                     <li>Reinicio automático: todos los días a las 00:00 hs</li>
                   </ul>

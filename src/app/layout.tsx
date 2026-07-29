@@ -7,6 +7,8 @@ import { TutorialProvider } from '@/context/tutorial-context';
 import { PreferencesProvider } from '@/contexts/preferences-context';
 import { UploadProgressManager } from '@/components/upload/upload-progress-card';
 import { RetryMonitor } from '@/components/upload/retry-monitor';
+import { UploadQueueProvider } from '@/context/UploadQueueProvider';
+import { UploadQueuePanel } from '@/components/upload/upload-queue-panel';
 import { cookies } from 'next/headers';
 import { getSession } from '@/services/auth-service';
 
@@ -41,6 +43,7 @@ export default async function RootLayout({
           <CompanyProvider key={userId || 'anonymous'}>
             <PreferencesProvider>
               <TutorialProvider>
+                <UploadQueueProvider>
                 {/* Container con gradiente sutil de fondo */}
                 <div className="relative min-h-screen w-full bg-gradient-to-br from-background via-background to-muted/5">
                   {/* Efecto de grano sutil para textura */}
@@ -61,6 +64,10 @@ export default async function RootLayout({
                   <UploadProgressManager userId={userId} />
                   {/* <RetryMonitor userId={userId} /> - Desactivado: BullMQ ahora maneja los reintentos nativamente */}
                 </div>
+
+                {/* Panel lateral global de cola de subidas */}
+                <UploadQueuePanel />
+                </UploadQueueProvider>
               </TutorialProvider>
             </PreferencesProvider>
           </CompanyProvider>

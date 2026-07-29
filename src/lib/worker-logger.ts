@@ -17,7 +17,7 @@ export type LogLevel = 'info' | 'success' | 'warn' | 'error' | 'rate';
 
 interface WorkerLogEntry {
   ts: number;       // timestamp unix ms
-  tag: string;      // ej: "GeminiWorker", "DbWriterWorker"
+  tag: string;      // ej: "ExtractionWorker", "DbWriterWorker"
   level: LogLevel;
   msg: string;
 }

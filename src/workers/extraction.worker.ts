@@ -1,60 +1,58 @@
 /**
- * src/workers/gemini.worker.ts
+ * src/workers/extraction.worker.ts
  *
- * Worker para procesamiento rate-limited con Gemini (Vertex AI).
+ * Worker de extracción (Azure DI primario + Azure OpenAI para LLM).
  * Maneja clasificación, paginación y extracción de datos fiscales.
  */
 
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
-import { geminiQueue, GeminiJobData, ingestionQueue, dbWriterQueue, GEMINI_QUEUE_NAME } from '@/lib/queue';
+import { extractionQueue, ExtractionJobData, ingestionQueue, dbWriterQueue, EXTRACTION_QUEUE_NAME } from '@/lib/queue';
 import { updateIngestionProgress, createIngestionRecord, updateParentProgress } from '@/lib/ingestion-progress';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { VertexAI, Part } from '@google-cloud/vertexai';
 import * as crypto from 'crypto';
 import {
   PROMPT_PAGINADOR,
   PROMPT_EXTRACTOR_FACTURABLE,
   PROMPT_EXTRACTOR_NO_FACTURABLE
 } from '@/services/ingestion/prompts_v2';
-import { parseGeminiResponse, normalizeDocumentoFromGemini, DocumentoGemini } from '@/services/ingestion/normalize';
+import { parseLlmResponse, normalizeDocumento, DocumentoExtraido } from '@/services/ingestion/normalize';
 import { analyzeInvoiceDocument, isAzureDiConfigured } from '@/services/ingestion/azure-di';
 import {
   azureDiLooksLikeInvoice,
-  mapAzureDiInvoiceToGeminiShape,
+  mapAzureDiInvoiceToDocumentShape,
 } from '@/services/ingestion/azure-di-map';
 import { resolveExtractRoute } from '@/services/ingestion/extract-route';
 import { resolvePreflight } from '@/services/ingestion/pdf-preflight';
 import {
-  recordVertexCall,
+  recordLlmCall,
   callTypeFromJobType,
-  VertexCallType,
-} from '@/services/ingestion/vertex-metrics';
+  LlmCallType,
+} from '@/services/ingestion/llm-metrics';
 import {
   callAzureOpenAiChat,
-  getLlmProvider,
+  assertAzureOpenAiConfigured,
   parseLlmJson,
 } from '@/services/ingestion/azure-openai';
 import { runFiscalGuards, formatGuardFailures, isRepairableGuardFailure } from '@/services/ingestion/fiscal-guards';
 import { FiscalStatus } from '@/lib/document-fiscal-status';
 import { wLog } from '@/lib/worker-logger';
 
-// Concurrency: Azure OpenAI aguanta más; Vertex se queda en 1 por defecto.
-const LLM_PROVIDER = getLlmProvider();
-const GEMINI_CONCURRENCY = parseInt(
-  process.env.GEMINI_CONCURRENCY || (LLM_PROVIDER === 'azure-openai' ? '2' : '1'),
+assertAzureOpenAiConfigured();
+const EXTRACTION_CONCURRENCY = parseInt(
+  process.env.EXTRACTION_CONCURRENCY || process.env.GEMINI_CONCURRENCY || '2',
   10
 );
 const MAX_EXTRACT_REPAIRS = parseInt(process.env.MAX_EXTRACT_REPAIRS || '1', 10);
 
-export function startGeminiWorker() {
-  const worker = new Worker<GeminiJobData>(
-    GEMINI_QUEUE_NAME,
-    async (job: Job<GeminiJobData>) => {
+export function startExtractionWorker() {
+  const worker = new Worker<ExtractionJobData>(
+    EXTRACTION_QUEUE_NAME,
+    async (job: Job<ExtractionJobData>) => {
       const { type, ingestion } = job.data;
       const { uploadId, fileName, text: s3Path } = ingestion;
 
-      wLog('GeminiWorker', `🧠 Job ${job.id} | ${type} | ${fileName}`);
+      wLog('ExtractionWorker', `🧠 Job ${job.id} | ${type} | ${fileName}`);
 
       try {
         await updateIngestionProgress(uploadId, {
@@ -103,10 +101,10 @@ export function startGeminiWorker() {
           if (consecutive === 2) blockSeconds = 120;
           else if (consecutive >= 3) blockSeconds = 300;
 
-          wLog('GeminiWorker', `⏳ Rate limit 429 consecutivo #${consecutive}. Bloqueando ${blockSeconds}s → ${fileName}`, 'rate');
+          wLog('ExtractionWorker', `⏳ Rate limit 429 consecutivo #${consecutive}. Bloqueando ${blockSeconds}s → ${fileName}`, 'rate');
           await redis.setex(RPM_REDIS_KEY, blockSeconds, String(RPM_LIMIT + 1)).catch(() => {});
 
-          await recordVertexCall({
+          await recordLlmCall({
             uploadId,
             callType: callTypeFromJobType(type),
             is429: true,
@@ -137,7 +135,7 @@ export function startGeminiWorker() {
         
         if (isLastAttempt) {
           // Es el último intento, marcar como Fallido definitivamente
-          wLog('GeminiWorker', `❌ Error final en job ${job.id} (${fileName}) tras ${maxAttempts} intentos: ${error.message}`, 'error');
+          wLog('ExtractionWorker', `❌ Error final en job ${job.id} (${fileName}) tras ${maxAttempts} intentos: ${error.message}`, 'error');
           await updateIngestionProgress(uploadId, {
             status: 'Fallido',
             step: `Error IA (${type})`,
@@ -146,7 +144,7 @@ export function startGeminiWorker() {
           }).catch(() => {});
         } else {
           // Aún hay intentos disponibles en BullMQ
-          wLog('GeminiWorker', `⚠️ Error en job ${job.id} (intento ${job.attemptsMade + 1}/${maxAttempts}): ${error.message}`, 'warn');
+          wLog('ExtractionWorker', `⚠️ Error en job ${job.id} (intento ${job.attemptsMade + 1}/${maxAttempts}): ${error.message}`, 'warn');
           await updateIngestionProgress(uploadId, {
             status: 'Reintentando',
             step: `Reintentando (${type})`,
@@ -160,7 +158,7 @@ export function startGeminiWorker() {
     },
     {
       connection: redis,
-      concurrency: GEMINI_CONCURRENCY,
+      concurrency: EXTRACTION_CONCURRENCY,
       // Limitar a nivel de worker (Rate limit interno de BullMQ)
       // NOTA: defaultJobOptions no existe en WorkerOptions, va en la Queue (ver lib/queue.ts)
       limiter: {
@@ -171,21 +169,21 @@ export function startGeminiWorker() {
   );
 
   worker.on('completed', (job) => {
-    console.log(`[GeminiWorker] ✅ Job completado: ${job.id}`);
-    wLog('GeminiWorker', `✅ Job completado: ${job.id}`, 'success');
+    console.log(`[ExtractionWorker] ✅ Job completado: ${job.id}`);
+    wLog('ExtractionWorker', `✅ Job completado: ${job.id}`, 'success');
   });
   worker.on('failed', (job, err) => {
-    console.error(`[GeminiWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
-    wLog('GeminiWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
+    console.error(`[ExtractionWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
+    wLog('ExtractionWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
   });
   
   console.log(
-    `[GeminiWorker] 🚀 Arrancado con concurrency=${GEMINI_CONCURRENCY} | LLM=${LLM_PROVIDER} | TPM=${TPM_LIMIT} | RPM=${RPM_LIMIT}`
+    `[ExtractionWorker] 🚀 Arrancado con concurrency=${EXTRACTION_CONCURRENCY} | LLM=azure-openai | TPM=${TPM_LIMIT} | RPM=${RPM_LIMIT}`
   );
   return worker;
 }
 
-// ─── Helpers Vertex AI ────────────────────────────────────────────────────────
+// ─── Helpers S3 / rate-limit ──────────────────────────────────────────────────
 
 async function getFileBufferFromS3(s3Path: string): Promise<Buffer> {
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
@@ -215,32 +213,19 @@ async function getFileBufferFromS3(s3Path: string): Promise<Buffer> {
 }
 
 // ─── Token Budget Tracker (TPM proactivo) ─────────────────────────────────────
-// Vertex AI Express limita por tokens/minuto (TPM), no solo por requests (RPM).
+// Azure OpenAI limita por tokens/minuto (TPM), no solo por requests (RPM).
 // Como el consumo es completamente dinámico (depende del documento), leemos el
 // usage real de cada respuesta y lo acumulamos en Redis con TTL de 60s.
 // Antes de cada llamada verificamos si hay presupuesto disponible; si no, esperamos.
 
-const TPM_REDIS_KEY = LLM_PROVIDER === 'azure-openai' ? 'openai:tpm:window' : 'vertex:tpm:window';
-const RPM_REDIS_KEY = LLM_PROVIDER === 'azure-openai' ? 'openai:rpm:window' : 'vertex:rpm:window';
-const CONSECUTIVE_429_KEY =
-  LLM_PROVIDER === 'azure-openai' ? 'openai:429:consecutive' : 'vertex:429:consecutive';
-const TPM_LIMIT = parseInt(
-  process.env.OPENAI_TPM_LIMIT ||
-    process.env.GEMINI_TPM_LIMIT ||
-    (LLM_PROVIDER === 'azure-openai' ? '1000000' : '30000'),
-  10
-);
-const RPM_LIMIT = parseInt(
-  process.env.OPENAI_RPM_LIMIT ||
-    process.env.GEMINI_RPM_LIMIT ||
-    (LLM_PROVIDER === 'azure-openai' ? '120' : '30'),
-  10
-);
-const TPM_SAFETY_MARGIN = 0.85; // usar solo el 85% del límite como techo proactivo
-// Tokens estimados por documento (para calcular delays proactivos)
+const TPM_REDIS_KEY = 'openai:tpm:window';
+const RPM_REDIS_KEY = 'openai:rpm:window';
+const CONSECUTIVE_429_KEY = 'openai:429:consecutive';
+const TPM_LIMIT = parseInt(process.env.OPENAI_TPM_LIMIT || process.env.GEMINI_TPM_LIMIT || '1000000', 10);
+const RPM_LIMIT = parseInt(process.env.OPENAI_RPM_LIMIT || process.env.GEMINI_RPM_LIMIT || '120', 10);
+const TPM_SAFETY_MARGIN = 0.85;
 const TOKENS_PER_DOC_ESTIMATE = parseInt(
-  process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE ||
-    (LLM_PROVIDER === 'azure-openai' ? '8000' : '12000'),
+  process.env.LLM_TOKENS_PER_DOC_ESTIMATE || process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE || '8000',
   10
 );
 
@@ -264,7 +249,7 @@ async function recordTokenUsage(tokens: number): Promise<void> {
 
 /**
  * Espera hasta que haya suficiente presupuesto de TPM y RPM disponible.
- * Este es el escudo proactivo: frena el procesamiento ANTES de pegarle a Vertex.
+ * Escudo proactivo: frena el procesamiento ANTES de llamar al LLM.
  */
 async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): Promise<void> {
   const tpmBudget = Math.floor(TPM_LIMIT * TPM_SAFETY_MARGIN);
@@ -325,172 +310,55 @@ async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): P
   }
 }
 
-async function callGemini(
+async function callLlm(
   prompt: string,
   fileBuffer: Buffer,
   mimeType: string,
-  jsonSchema?: any,
+  _jsonSchema?: any,
   uploadId?: string,
   parentUploadId?: string,
-  callType: VertexCallType = 'other'
+  callType: LlmCallType = 'other'
 ): Promise<any> {
   const started = Date.now();
-  const provider = getLlmProvider();
-
-  if (provider === 'azure-openai') {
-    await waitForTokenBudget(uploadId, parentUploadId);
-
-    // json_object no admite array raíz → pedimos { documents: [...] } si el prompt pide array
-    const azurePrompt =
-      /JSON array|array sin texto|ÚNICAMENTE un JSON array/i.test(prompt)
-        ? `${prompt}\n\nIMPORTANTE: envuelve el array en un objeto JSON: {"documents":[...]}`
-        : prompt;
-
-    try {
-      const { text, usage } = await callAzureOpenAiChat({
-        prompt: azurePrompt,
-        fileBuffer,
-        mimeType,
-        json: true,
-        maxCompletionTokens: 16384,
-      });
-
-      const totalTokens = usage?.total_tokens || 0;
-      if (totalTokens > 0) await recordTokenUsage(totalTokens);
-
-      if (uploadId) {
-        await recordVertexCall({
-          uploadId,
-          callType,
-          bytes: fileBuffer.length,
-          durationMs: Date.now() - started,
-        });
-      }
-
-      await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
-
-      console.log(`[AzureOpenAI] 📝 Texto RAW (primeros 500 chars):\n${text.substring(0, 500)}`);
-      const parsed = parseLlmJson(text);
-      console.log(`[AzureOpenAI] ✅ JSON parseado correctamente`);
-      return parsed;
-    } catch (e: any) {
-      const status = e?.status || e?.statusCode;
-      if (status === 429) throw e;
-      throw e;
-    }
-  }
-
-  const projectId = process.env.VERTEX_AI_PROJECT_ID;
-  const location = process.env.VERTEX_AI_LOCATION || 'us-central1';
-  const modelName = process.env.VERTEX_AI_MODEL || 'gemini-2.5-flash';
-
-  console.log(`[Gemini] 🔧 Config → project: ${projectId} | location: ${location} | model: ${modelName}`);
-  console.log(`[Gemini] 📄 Archivo → mimeType: ${mimeType} | buffer: ${fileBuffer.length} bytes | callType: ${callType}`);
-
-  let credentials;
-  try {
-      let rawCreds = process.env.VERTEX_AI_CREDENTIALS?.trim() || '';
-      if (rawCreds && !rawCreds.startsWith('{')) {
-          rawCreds = rawCreds.replace(/^['"]|['"]$/g, '').trim();
-      }
-      credentials = rawCreds ? JSON.parse(rawCreds) : undefined;
-      if (credentials) {
-        console.log(`[Gemini] 🔑 Credenciales → client_email: ${credentials.client_email} | project_id: ${credentials.project_id}`);
-      } else {
-        console.warn(`[Gemini] ⚠️ Sin VERTEX_AI_CREDENTIALS — usando Application Default Credentials`);
-      }
-  } catch (e) {
-      console.error(`[Gemini] ❌ Error parseando VERTEX_AI_CREDENTIALS:`, e);
-      throw new Error('Error parseando VERTEX_AI_CREDENTIALS');
-  }
-
-  const vertexAI = new VertexAI({
-      project: projectId!,
-      location: location,
-      googleAuthOptions: credentials ? { credentials } : undefined,
-      ...(location === 'global' ? { apiEndpoint: 'aiplatform.googleapis.com' } : {})
-  });
-
-  // media_resolution medium en PDF: menos tokens de input (plan Fase 1). Fallback si el SDK ignora el campo.
-  const isPdf = Boolean(mimeType?.includes('pdf'));
-  const mediaResolution =
-    process.env.GEMINI_MEDIA_RESOLUTION ||
-    (isPdf ? 'MEDIA_RESOLUTION_MEDIUM' : undefined);
-
-  const generativeModel = vertexAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-          maxOutputTokens: 65536,
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-          ...(jsonSchema && { responseSchema: jsonSchema }),
-          ...(mediaResolution ? { mediaResolution } : {}),
-      } as any,
-  });
-
-  const parts: Part[] = [{ text: prompt }];
-  if (fileBuffer && fileBuffer.length > 0) {
-    parts.push({
-      inlineData: {
-        data: fileBuffer.toString("base64"),
-        mimeType
-      }
-    });
-  }
-
-  const request = {
-      contents: [{ role: 'user', parts }],
-  };
-
   await waitForTokenBudget(uploadId, parentUploadId);
 
-  console.log(`[Gemini] 🚀 Enviando request a Vertex AI...`);
-  const result = await generativeModel.generateContent(request);
-  
-  const candidate = result.response.candidates?.[0];
-  const finishReason = candidate?.finishReason;
-  console.log(`[Gemini] 📬 Respuesta → finishReason: ${finishReason} | candidatos: ${result.response.candidates?.length ?? 0}`);
-
-  const usage = (result.response as any).usageMetadata;
-  if (usage?.totalTokenCount) {
-    console.log(`[Gemini] 📊 Tokens → input: ${usage.promptTokenCount ?? '?'} | output: ${usage.candidatesTokenCount ?? '?'} | total: ${usage.totalTokenCount}`);
-    await recordTokenUsage(usage.totalTokenCount);
-  }
-
-  if (uploadId) {
-    await recordVertexCall({
-      uploadId,
-      callType,
-      bytes: fileBuffer.length,
-      durationMs: Date.now() - started,
-    });
-  }
-
-  if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
-    console.error(`[Gemini] ⛔ Finish reason inesperado: ${finishReason}`);
-    if (finishReason === 'SAFETY') console.error(`[Gemini] 🔞 El modelo bloqueó la respuesta por políticas de seguridad`);
-    if (finishReason === 'RECITATION') console.error(`[Gemini] 📖 El modelo bloqueó por recitación de contenido protegido`);
-    throw new Error(`Gemini finalizó con razón inesperada: ${finishReason}`);
-  }
-
-  await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
-
-  let text = candidate?.content?.parts?.[0]?.text || '{}';
-  console.log(`[Gemini] 📝 Texto RAW (primeros 500 chars):\n${text.substring(0, 500)}`);
-
-  if (text.includes('```')) {
-      text = text.replace(/```json\n?|```/g, '').trim();
-      console.log(`[Gemini] 🧹 Markdown limpiado. Resultado (primeros 300 chars):\n${text.substring(0, 300)}`);
-  }
+  // json_object no admite array raíz → pedimos { documents: [...] } si el prompt pide array
+  const azurePrompt =
+    /JSON array|array sin texto|ÚNICAMENTE un JSON array/i.test(prompt)
+      ? `${prompt}\n\nIMPORTANTE: envuelve el array en un objeto JSON: {"documents":[...]}`
+      : prompt;
 
   try {
-    const parsed = JSON.parse(text);
-    console.log(`[Gemini] ✅ JSON parseado correctamente`);
+    const { text, usage } = await callAzureOpenAiChat({
+      prompt: azurePrompt,
+      fileBuffer,
+      mimeType,
+      json: true,
+      maxCompletionTokens: 16384,
+    });
+
+    const totalTokens = usage?.total_tokens || 0;
+    if (totalTokens > 0) await recordTokenUsage(totalTokens);
+
+    if (uploadId) {
+      await recordLlmCall({
+        uploadId,
+        callType,
+        bytes: fileBuffer.length,
+        durationMs: Date.now() - started,
+      });
+    }
+
+    await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
+
+    console.log(`[AzureOpenAI] 📝 Texto RAW (primeros 500 chars):\n${text.substring(0, 500)}`);
+    const parsed = parseLlmJson(text);
+    console.log(`[AzureOpenAI] ✅ JSON parseado correctamente`);
     return parsed;
-  } catch (parseErr: any) {
-    console.error(`[Gemini] ❌ ERROR al parsear JSON: ${parseErr.message}`);
-    console.error(`[Gemini] 📋 Texto completo que causó el error:\n${text}`);
-    throw parseErr;
+  } catch (e: any) {
+    const status = e?.status || e?.statusCode;
+    if (status === 429) throw e;
+    throw e;
   }
 }
 
@@ -498,7 +366,7 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
   const pdftoolsUrl = process.env.PDFTOOLS_URL || 'https://pdftools.allbase.com.ar/split';
   const apiKey = process.env.PDFTOOLS_API_KEY || 'pdf_tools_secret';
   
-  console.log(`[GeminiWorker] ✂️  Recortando PDF con pdftools (${pageStart}-${pageEnd}) para ${filename}`);
+  console.log(`[ExtractionWorker] ✂️  Recortando PDF con pdftools (${pageStart}-${pageEnd}) para ${filename}`);
   
   const res = await fetch(pdftoolsUrl, {
     method: 'POST',
@@ -526,7 +394,7 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
   const bucketName = process.env.MINIO_BUCKET_NAME || 'gestor-documental';
   const s3Path = urlObj.pathname.replace(new RegExp(`^/${bucketName}/`), '');
   
-  console.log(`[GeminiWorker] ✅ PDF recortado en MinIO: ${s3Path} → ${croppedUrl}`);
+  console.log(`[ExtractionWorker] ✅ PDF recortado en MinIO: ${s3Path} → ${croppedUrl}`);
   
   const buffer = await getFileBufferFromS3(s3Path);
   return { buffer, croppedUrl };
@@ -534,20 +402,20 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
 
 // ─── Handlers por Tipo ────────────────────────────────────────────────────────
 
-async function handleClassify(job: Job<GeminiJobData>, _fileBuffer: Buffer) {
-  // Compat: jobs `classify-*` aún en cola Redis → reencolar extract sin llamar a Vertex.
+async function handleClassify(job: Job<ExtractionJobData>, _fileBuffer: Buffer) {
+  // Compat: jobs `classify-*` aún en cola Redis → reencolar extract.
   const { ingestion } = job.data;
-  wLog('GeminiWorker', `↪️  classify legacy → extract-facturable (${ingestion.fileName})`);
-  await geminiQueue.add(
+  wLog('ExtractionWorker', `↪️  classify legacy → extract-facturable (${ingestion.fileName})`);
+  await extractionQueue.add(
     `extract-facturable-${ingestion.uploadId}`,
     { type: 'extract-facturable', ingestion },
     { jobId: `extract-facturable-${ingestion.uploadId}` }
   );
 }
 
-async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   const { ingestion } = job.data;
-  console.log(`[GeminiWorker] Paginando ${ingestion.fileName}...`);
+  console.log(`[ExtractionWorker] Paginando ${ingestion.fileName}...`);
 
   await updateIngestionProgress(ingestion.uploadId, {
     status: 'procesando',
@@ -569,7 +437,7 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
     }
   };
 
-  const pagesRaw = await callGemini(
+  const pagesRaw = await callLlm(
     PROMPT_PAGINADOR,
     fileBuffer,
     ingestion.mimeType,
@@ -588,7 +456,7 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
     throw new Error('Paginador no devolvió documentos (array vacío)');
   }
 
-  console.log(`[GeminiWorker] 📑 Paginación completada: ${pages.length} documentos encontrados.`);
+  console.log(`[ExtractionWorker] 📑 Paginación completada: ${pages.length} documentos encontrados.`);
 
   // Calcular delay entre hijos de forma dinámica y segura:
   // - Máximo de documentos que entran en la ventana = floor(TPM / TOKENS_PER_DOC)
@@ -598,10 +466,10 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
   const maxDocsPerMinute = Math.max(1, Math.floor(TPM_LIMIT / TOKENS_PER_DOC_ESTIMATE));
   const calculatedDelay = Math.ceil(62000 / maxDocsPerMinute); 
   const INTER_JOB_DELAY_MS = parseInt(
-    process.env.GEMINI_INTER_JOB_DELAY_MS || String(calculatedDelay),
+    process.env.EXTRACTION_INTER_JOB_DELAY_MS || process.env.GEMINI_INTER_JOB_DELAY_MS || String(calculatedDelay),
     10
   );
-  console.log(`[GeminiWorker] ⏱️ Delay entre hijos: ${INTER_JOB_DELAY_MS}ms (calculado: ${calculatedDelay}ms | tokens/doc: ${TOKENS_PER_DOC_ESTIMATE} | TPM: ${TPM_LIMIT})`);
+  console.log(`[ExtractionWorker] ⏱️ Delay entre hijos: ${INTER_JOB_DELAY_MS}ms (calculado: ${calculatedDelay}ms | tokens/doc: ${TOKENS_PER_DOC_ESTIMATE} | TPM: ${TPM_LIMIT})`);
 
   const childJobs = pages.map((pageData: any, idx: number) => {
     // Generar uploadId individual (hash aleatorio de 8 caracteres)
@@ -638,7 +506,7 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
     };
   });
 
-  console.log(`[GeminiWorker] 📦 Creando registros DB para ${childJobs.length} hijos...`);
+  console.log(`[ExtractionWorker] 📦 Creando registros DB para ${childJobs.length} hijos...`);
   // Crear el registro de base de datos (actividad) para cada hijo ANTES de encolarlos,
   // para que el polling del frontend encuentre sus IDs y puedan recalcular al padre.
   // Optimizado con Promise.all (concurrencia controlada) para no tardar 60s en 200 inserts.
@@ -654,23 +522,23 @@ async function handlePaginate(job: Job<GeminiJobData>, fileBuffer: Buffer) {
         fileHash: job.data.ingestion.fileHash,
         origen: job.data.ingestion.origen as 'dashboard' | 'correo',
       }).catch(err => {
-        console.error(`[GeminiWorker] ❌ Error creando actividad hijo ${job.data.ingestion.uploadId}:`, err);
+        console.error(`[ExtractionWorker] ❌ Error creando actividad hijo ${job.data.ingestion.uploadId}:`, err);
       })
     ));
   }
 
-  console.log(`[GeminiWorker] 📦 Encolando ${childJobs.length} jobs con delay escalonado de ${INTER_JOB_DELAY_MS}ms...`);
-  await geminiQueue.addBulk(childJobs);
+  console.log(`[ExtractionWorker] 📦 Encolando ${childJobs.length} jobs con delay escalonado de ${INTER_JOB_DELAY_MS}ms...`);
+  await extractionQueue.addBulk(childJobs);
 }
 
-async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   const { ingestion, pageStart, pageEnd } = job.data;
-  console.log(`[GeminiWorker] Extrayendo facturable ${ingestion.fileName}...`);
+  console.log(`[ExtractionWorker] Extrayendo facturable ${ingestion.fileName}...`);
 
   // Fase 2: raíz sin recorte → preflight local. Alta confianza multi → paginate sin extract desechable.
   if (pageStart == null && pageEnd == null) {
     const pre = resolvePreflight(fileBuffer, ingestion.mimeType);
-    wLog('GeminiWorker', `🧭 Preflight ${ingestion.fileName}: ${pre.decision} (${pre.reason})`);
+    wLog('ExtractionWorker', `🧭 Preflight ${ingestion.fileName}: ${pre.decision} (${pre.reason})`);
     if (pre.decision === 'paginate') {
       await updateIngestionProgress(ingestion.uploadId, {
         status: 'procesando',
@@ -678,7 +546,7 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
         progress: 40,
         mensaje: 'Alta confianza de multi-doc: paginando sin extract previo...',
       });
-      await geminiQueue.add(`paginate-${ingestion.uploadId}`, {
+      await extractionQueue.add(`paginate-${ingestion.uploadId}`, {
         type: 'paginate',
         ingestion,
       });
@@ -715,19 +583,19 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
       const { buffer, croppedUrl } = await splitPdfWithTools(ingestion.publicUrl, pageStart, pageEnd, `doc_${ingestion.uploadId}`);
       finalBuffer = buffer;
       fileUrlForDb = croppedUrl;
-      console.log(`[GeminiWorker] ✂️  Usando PDF recortado de ${pageStart} a ${pageEnd} → ${croppedUrl}`);
+      console.log(`[ExtractionWorker] ✂️  Usando PDF recortado de ${pageStart} a ${pageEnd} → ${croppedUrl}`);
     } catch (error: any) {
-      console.error(`[GeminiWorker] ❌ Error crítico al recortar PDF con pdftools. Error: ${error.message}`);
+      console.error(`[ExtractionWorker] ❌ Error crítico al recortar PDF con pdftools. Error: ${error.message}`);
       throw new Error(`Fallo en recorte de PDF (${pageStart}-${pageEnd}): ${error.message}`);
     }
   } else if (pageStart && pageEnd && isImage) {
-    console.log(`[GeminiWorker] 🖼️  Imagen con rango de páginas indicado — ignorando recorte (no aplica a imágenes).`);
+    console.log(`[ExtractionWorker] 🖼️  Imagen con rango de páginas indicado — ignorando recorte (no aplica a imágenes).`);
   }
 
-  // Primario: Azure DI (prebuilt-invoice o azure-di-hybrid) para PDF/imagen. Gemini = fallback.
+  // Primario: Azure DI (prebuilt-invoice o azure-di-hybrid). Azure OpenAI = fallback.
   const isHybrid = (process.env.EXTRACT_PRIMARY || '').toLowerCase() === 'azure-di-hybrid';
   const preferAzure =
-    (process.env.EXTRACT_PRIMARY || 'azure-di').toLowerCase() !== 'gemini' &&
+    (process.env.EXTRACT_PRIMARY || 'azure-di').toLowerCase() !== 'llm' &&
     isAzureDiConfigured();
   const canUseAzureDi =
     preferAzure &&
@@ -735,8 +603,8 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
       Boolean(ingestion.mimeType?.startsWith('image/')) ||
       /\.pdf$/i.test(ingestion.fileName || ''));
 
-  let rawParsed: DocumentoGemini | Record<string, unknown>;
-  let usedExtractor: 'azure-di' | 'azure-di-hybrid' | 'gemini' = 'gemini';
+  let rawParsed: DocumentoExtraido | Record<string, unknown>;
+  let usedExtractor: 'azure-di' | 'azure-di-hybrid' | 'azure-openai' = 'azure-openai';
 
   if (canUseAzureDi) {
     try {
@@ -747,11 +615,11 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
         mensaje: isHybrid ? 'Ejecutando OCR avanzado Layout...' : 'Document Intelligence (prebuilt-invoice)...',
       });
       const diResult = await analyzeInvoiceDocument(finalBuffer, ingestion.mimeType);
-      
+
       if (isHybrid) {
-        wLog('GeminiWorker', `✅ Azure DI Layout OK. Enviando OCR a LLM para estructuración (${ingestion.fileName})`);
+        wLog('ExtractionWorker', `✅ Azure DI Layout OK. Enviando OCR a LLM (${ingestion.fileName})`);
         const promptWithOcr = `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
-        
+
         await updateIngestionProgress(ingestion.uploadId, {
           status: 'procesando',
           step: 'Estructurando con LLM',
@@ -759,8 +627,7 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
           mensaje: 'Analizando OCR y estructurando datos fiscales...',
         });
 
-        // Llamamos al LLM con el OCR en el prompt y pasamos buffer vacío para ahorrar tokens de visión
-        const result = await callGemini(
+        const result = await callLlm(
           promptWithOcr,
           Buffer.alloc(0),
           'text/plain',
@@ -769,18 +636,18 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
           ingestion.parentUploadId,
           'extract'
         );
-        rawParsed = parseGeminiResponse(JSON.stringify(result));
+        rawParsed = parseLlmResponse(JSON.stringify(result));
         usedExtractor = 'azure-di-hybrid';
       } else if (azureDiLooksLikeInvoice(diResult)) {
-        rawParsed = mapAzureDiInvoiceToGeminiShape(diResult, { empresaCif: ingestion.cif });
+        rawParsed = mapAzureDiInvoiceToDocumentShape(diResult, { empresaCif: ingestion.cif });
         usedExtractor = 'azure-di';
         wLog(
-          'GeminiWorker',
+          'ExtractionWorker',
           `✅ Azure DI OK ${ingestion.fileName} (conf=${String((rawParsed as any)._azure_di_confidence ?? '?')})`
         );
       } else {
-        wLog('GeminiWorker', `↪️  Azure DI sin factura clara → Gemini (${ingestion.fileName})`, 'warn');
-        const result = await callGemini(
+        wLog('ExtractionWorker', `↪️  Azure DI sin factura clara → Azure OpenAI (${ingestion.fileName})`, 'warn');
+        const result = await callLlm(
           prompt,
           finalBuffer,
           ingestion.mimeType,
@@ -789,15 +656,15 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
           ingestion.parentUploadId,
           'extract'
         );
-        rawParsed = parseGeminiResponse(JSON.stringify(result));
+        rawParsed = parseLlmResponse(JSON.stringify(result));
       }
     } catch (diErr: any) {
       wLog(
-        'GeminiWorker',
-        `↪️  Azure DI falló → Gemini (${ingestion.fileName}): ${diErr?.message || diErr}`,
+        'ExtractionWorker',
+        `↪️  Azure DI falló → Azure OpenAI (${ingestion.fileName}): ${diErr?.message || diErr}`,
         'warn'
       );
-      const result = await callGemini(
+      const result = await callLlm(
         prompt,
         finalBuffer,
         ingestion.mimeType,
@@ -806,10 +673,10 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
         ingestion.parentUploadId,
         'extract'
       );
-      rawParsed = parseGeminiResponse(JSON.stringify(result));
+      rawParsed = parseLlmResponse(JSON.stringify(result));
     }
   } else {
-    const result = await callGemini(
+    const result = await callLlm(
       prompt,
       finalBuffer,
       ingestion.mimeType,
@@ -818,15 +685,15 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
       ingestion.parentUploadId,
       'extract'
     );
-    console.log(`[GeminiWorker] ✅ Respuesta cruda de Gemini recibida para ${ingestion.fileName}`);
-    rawParsed = parseGeminiResponse(JSON.stringify(result));
+    console.log(`[ExtractionWorker] ✅ Respuesta cruda de Gemini recibida para ${ingestion.fileName}`);
+    rawParsed = parseLlmResponse(JSON.stringify(result));
   }
 
   // Si Azure DI ya vio multi-factura, no hace falta persistir el Frankenstein:
   // resolveExtractRoute → paginate (Gemini/partes). Log explícito.
   if (usedExtractor === 'azure-di' && (rawParsed as any)?.es_multiple === true) {
     wLog(
-      'GeminiWorker',
+      'ExtractionWorker',
       `↪️  Azure DI detectó multi-factura → paginate (${ingestion.fileName})`,
       'warn'
     );
@@ -834,7 +701,7 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
 
   // Normalizar los datos
   console.log(
-    `[GeminiWorker] 🔄 Validando y normalizando JSON estructurado (extractor=${usedExtractor})...`
+    `[ExtractionWorker] 🔄 Validando y normalizando JSON estructurado (extractor=${usedExtractor})...`
   );
   const rawObj =
     rawParsed && typeof rawParsed === 'object' && !Array.isArray(rawParsed)
@@ -849,14 +716,14 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
   });
 
   if (route === 'non-facturable') {
-    wLog('GeminiWorker', `↪️  extract → no facturable (${ingestion.fileName})`);
+    wLog('ExtractionWorker', `↪️  extract → no facturable (${ingestion.fileName})`);
     await updateIngestionProgress(ingestion.uploadId, {
       status: 'procesando',
       step: 'Documento no facturable',
       progress: 45,
       mensaje: 'Reencaminando a extractor de archivo / categoría...',
     });
-    await geminiQueue.add(`extract-non-${ingestion.uploadId}`, {
+    await extractionQueue.add(`extract-non-${ingestion.uploadId}`, {
       type: 'extract-non-facturable',
       ingestion,
     });
@@ -864,14 +731,14 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
   }
 
   if (route === 'paginate') {
-    wLog('GeminiWorker', `↪️  extract → paginate multi-PDF (${ingestion.fileName})`);
+    wLog('ExtractionWorker', `↪️  extract → paginate multi-PDF (${ingestion.fileName})`);
     await updateIngestionProgress(ingestion.uploadId, {
       status: 'procesando',
       step: 'Múltiples documentos detectados',
       progress: 40,
       mensaje: 'Identificando rangos de páginas para cada documento...',
     });
-    await geminiQueue.add(`paginate-${ingestion.uploadId}`, {
+    await extractionQueue.add(`paginate-${ingestion.uploadId}`, {
       type: 'paginate',
       ingestion,
     });
@@ -879,16 +746,16 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
   }
 
   if (route === 'multi-image') {
-    wLog('GeminiWorker', `↪️  extract → multi-image (${ingestion.fileName})`);
-    await geminiQueue.add(`extract-multi-img-${ingestion.uploadId}`, {
+    wLog('ExtractionWorker', `↪️  extract → multi-image (${ingestion.fileName})`);
+    await extractionQueue.add(`extract-multi-img-${ingestion.uploadId}`, {
       type: 'extract-multiple-image',
       ingestion,
     });
     return;
   }
 
-  const normalized = normalizeDocumentoFromGemini(rawParsed);
-  console.log(`[GeminiWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
+  const normalized = normalizeDocumento(rawParsed);
+  console.log(`[ExtractionWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
 
   await enqueueAfterFiscalGuards({
     job,
@@ -905,9 +772,9 @@ async function handleExtractFacturable(job: Job<GeminiJobData>, fileBuffer: Buff
  * Si se agotaron repairs → db-writer REVISION (archivo queda, fuera de agregados).
  */
 async function enqueueAfterFiscalGuards(params: {
-  job: Job<GeminiJobData>;
-  ingestion: GeminiJobData['ingestion'];
-  normalized: DocumentoGemini;
+  job: Job<ExtractionJobData>;
+  ingestion: ExtractionJobData['ingestion'];
+  normalized: DocumentoExtraido;
   pageStart?: number;
   pageEnd?: number;
 }) {
@@ -939,7 +806,7 @@ async function enqueueAfterFiscalGuards(params: {
   }
 
   const failureSummary = formatGuardFailures(guard.failures);
-  wLog('GeminiWorker', `⚠️ Guards fallaron (attempt ${repairAttempt}): ${failureSummary}`, 'warn');
+  wLog('ExtractionWorker', `⚠️ Guards fallaron (attempt ${repairAttempt}): ${failureSummary}`, 'warn');
 
   const canRepair =
     repairAttempt < MAX_EXTRACT_REPAIRS && isRepairableGuardFailure(guard.failures);
@@ -953,7 +820,7 @@ async function enqueueAfterFiscalGuards(params: {
       mensaje: `Corrigiendo extracción: ${failureSummary.substring(0, 120)}`,
     });
 
-    await geminiQueue.add(
+    await extractionQueue.add(
       `extract-repair-${ingestion.uploadId}-${nextAttempt}`,
       {
         type: 'extract-repair',
@@ -974,7 +841,7 @@ async function enqueueAfterFiscalGuards(params: {
 
   if (repairAttempt < MAX_EXTRACT_REPAIRS && !isRepairableGuardFailure(guard.failures)) {
     wLog(
-      'GeminiWorker',
+      'ExtractionWorker',
       `↪️  Guards no repairables → REVISION directa (${failureSummary})`,
       'warn'
     );
@@ -1007,9 +874,9 @@ async function enqueueAfterFiscalGuards(params: {
   });
 }
 
-async function handleExtractRepair(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handleExtractRepair(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   const { ingestion, previousFailures, previousAiResult, pageStart, pageEnd } = job.data;
-  console.log(`[GeminiWorker] 🔧 Repair #${job.data.repairAttempt} para ${ingestion.fileName}`);
+  console.log(`[ExtractionWorker] 🔧 Repair #${job.data.repairAttempt} para ${ingestion.fileName}`);
 
   await updateIngestionProgress(ingestion.uploadId, {
     status: 'procesando',
@@ -1059,11 +926,11 @@ Reglas:
       finalBuffer = cropped.buffer;
       fileUrlForDb = cropped.croppedUrl;
     } catch (error: any) {
-      console.warn(`[GeminiWorker] Repair sin recorte pdftools: ${error.message}`);
+      console.warn(`[ExtractionWorker] Repair sin recorte pdftools: ${error.message}`);
     }
   }
 
-  const result = await callGemini(
+  const result = await callLlm(
     repairPrompt,
     finalBuffer,
     ingestion.mimeType,
@@ -1073,8 +940,8 @@ Reglas:
     'repair'
   );
 
-  const rawParsed = parseGeminiResponse(JSON.stringify(result));
-  const normalized = normalizeDocumentoFromGemini(rawParsed);
+  const rawParsed = parseLlmResponse(JSON.stringify(result));
+  const normalized = normalizeDocumento(rawParsed);
 
   await enqueueAfterFiscalGuards({
     job,
@@ -1085,9 +952,9 @@ Reglas:
   });
 }
 
-async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   const { ingestion } = job.data;
-  console.log(`[GeminiWorker] Extrayendo NO facturable ${ingestion.fileName}...`);
+  console.log(`[ExtractionWorker] Extrayendo NO facturable ${ingestion.fileName}...`);
 
   await updateIngestionProgress(ingestion.uploadId, {
     status: 'procesando',
@@ -1101,7 +968,7 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
     .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || 'NO_PROPORCIONADO')
     .replace(/\{\{RECARGO_EMPRESA\}\}/g, 'false');
 
-  const result = await callGemini(
+  const result = await callLlm(
     noFacturablePrompt,
     fileBuffer,
     ingestion.mimeType,
@@ -1111,9 +978,9 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
     'nf'
   );
 
-  console.log(`[GeminiWorker] ✅ Extracción NO facturable completada para ${ingestion.fileName}`);
+  console.log(`[ExtractionWorker] ✅ Extracción NO facturable completada para ${ingestion.fileName}`);
   
-  const rawParsed = parseGeminiResponse<any>(JSON.stringify(result));
+  const rawParsed = parseLlmResponse<any>(JSON.stringify(result));
   const docs = Array.isArray(rawParsed) ? rawParsed : ((rawParsed as any).documentos || [rawParsed]);
 
   if (docs.length === 0) {
@@ -1127,7 +994,7 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
   }
 
   if (docs.length === 1) {
-    const normalized = normalizeDocumentoFromGemini(docs[0]);
+    const normalized = normalizeDocumento(docs[0]);
     await dbWriterQueue.add(`db-writer-${ingestion.uploadId}`, {
       ingestion,
       aiResult: normalized
@@ -1145,12 +1012,12 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
     });
   } else {
     // Si Gemini extrajo múltiples documentos de un solo archivo no-facturable
-    console.log(`[GeminiWorker] 📦 Se extrajeron ${docs.length} documentos internos de ${ingestion.fileName}`);
+    console.log(`[ExtractionWorker] 📦 Se extrajeron ${docs.length} documentos internos de ${ingestion.fileName}`);
     
     const dbJobs = docs.map((doc: any, idx: number) => {
       const randomHash = crypto.randomBytes(4).toString('hex');
       const subUploadId = `${ingestion.uploadId}_doc_${randomHash}`;
-      const normalized = normalizeDocumentoFromGemini(doc);
+      const normalized = normalizeDocumento(doc);
       return {
         name: `db-writer-non-${subUploadId}`,
         data: {
@@ -1179,7 +1046,7 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
           documentoNombre: `${ingestion.fileName} - Doc ${j.data.ingestion.documentoIndex}`,
           fileHash:       j.data.ingestion.fileHash,
           origen:         j.data.ingestion.origen as 'dashboard' | 'correo',
-        }).catch(err => console.error(`[GeminiWorker] ❌ Error creando actividad hijo non-facturable:`, err))
+        }).catch(err => console.error(`[ExtractionWorker] ❌ Error creando actividad hijo non-facturable:`, err))
       ));
     }
 
@@ -1204,9 +1071,9 @@ async function handleExtractNonFacturable(job: Job<GeminiJobData>, fileBuffer: B
  * 3. Repetimos hasta que finishReason === 'STOP' o se supere MAX_ITERATIONS.
  * 4. Mergeamos todos los resultados y creamos un job de DB writer por cada documento.
  */
-async function handleExtractMultipleImage(job: Job<GeminiJobData>, fileBuffer: Buffer) {
+async function handleExtractMultipleImage(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   const { ingestion } = job.data;
-  console.log(`[GeminiWorker] 🖼️  Extrayendo imagen múltiple ${ingestion.fileName}...`);
+  console.log(`[ExtractionWorker] 🖼️  Extrayendo imagen múltiple ${ingestion.fileName}...`);
 
   await updateIngestionProgress(ingestion.uploadId, {
     status: 'procesando',
@@ -1232,7 +1099,7 @@ async function handleExtractMultipleImage(job: Job<GeminiJobData>, fileBuffer: B
   // llamada con el contexto de lo ya extraído para que continúe.
   while (continueExtracting && iteration < MAX_ITERATIONS) {
     iteration++;
-    console.log(`[GeminiWorker] 🔄 Iteración ${iteration}/${MAX_ITERATIONS} — ${allDocumentos.length} documentos extraídos hasta ahora`);
+    console.log(`[ExtractionWorker] 🔄 Iteración ${iteration}/${MAX_ITERATIONS} — ${allDocumentos.length} documentos extraídos hasta ahora`);
 
     let prompt = basePrompt;
     if (allDocumentos.length > 0) {
@@ -1247,8 +1114,8 @@ Ya extrajiste los siguientes documentos en llamadas anteriores: ${numerosYaExtra
 Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no quedan más documentos en la imagen, devuelve un array vacío [].`;
     }
 
-    // Usa callGemini → Azure OpenAI si LLM_PROVIDER=azure-openai
-    const parsed = await callGemini(
+    // Usa callLlm → Azure OpenAI
+    const parsed = await callLlm(
       prompt +
         '\n\nIMPORTANTE: envuelve el resultado en JSON objeto {"documentos":[...]} si hace falta.',
       fileBuffer,
@@ -1268,7 +1135,7 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
     }
 
     console.log(
-      `[GeminiWorker] ✅ Iteración ${iteration}: ${iterDocs.length} documentos extraídos | LLM=${getLlmProvider()}`
+      `[ExtractionWorker] ✅ Iteración ${iteration}: ${iterDocs.length} documentos extraídos | LLM=azure-openai`
     );
     allDocumentos.push(...iterDocs);
 
@@ -1278,7 +1145,7 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
     }
   }
 
-  console.log(`[GeminiWorker] 📊 Total documentos extraídos de imagen: ${allDocumentos.length} en ${iteration} iteración(es)`);
+  console.log(`[ExtractionWorker] 📊 Total documentos extraídos de imagen: ${allDocumentos.length} en ${iteration} iteración(es)`);
 
   if (allDocumentos.length === 0) {
     await updateIngestionProgress(ingestion.uploadId, {
@@ -1295,8 +1162,8 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
     const randomHash = crypto.randomBytes(4).toString('hex');
     const subUploadId = `${ingestion.uploadId}_img_${randomHash}`;
 
-    const rawParsed  = parseGeminiResponse(JSON.stringify(doc));
-    const normalized = normalizeDocumentoFromGemini(rawParsed);
+    const rawParsed  = parseLlmResponse(JSON.stringify(doc));
+    const normalized = normalizeDocumento(rawParsed);
 
     return {
       name: `db-writer-img-${subUploadId}`,
@@ -1326,7 +1193,7 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
         documentoNombre: `${ingestion.fileName} - Doc ${j.data.ingestion.documentoIndex}`,
         fileHash:       j.data.ingestion.fileHash,
         origen:         j.data.ingestion.origen as 'dashboard' | 'correo',
-      }).catch(err => console.error(`[GeminiWorker] ❌ Error creando actividad hijo imagen:`, err))
+      }).catch(err => console.error(`[ExtractionWorker] ❌ Error creando actividad hijo imagen:`, err))
     ));
   }
 

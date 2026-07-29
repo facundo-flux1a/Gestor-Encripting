@@ -10,7 +10,7 @@ export interface UserLimits {
 }
 
 export interface DailyUsage {
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' /* legacy DB */;
   request_count: number;
   tokens_used: number;
   limit: number;
@@ -45,7 +45,7 @@ export async function getUserLimits(userId: number): Promise<UserLimits | null> 
  */
 export async function getDailyUsage(
   userId: number,
-  provider: 'openai' | 'gemini'
+  provider: 'openai' | 'gemini' /* legacy DB */
 ): Promise<DailyUsage> {
   const today = new Date().toISOString().split('T')[0];
 
@@ -79,7 +79,7 @@ export async function getDailyUsage(
  */
 export async function canMakeRequest(
   userId: number,
-  provider: 'openai' | 'gemini'
+  provider: 'openai' | 'gemini' /* legacy DB */
 ): Promise<{ allowed: boolean; reason?: string; usage?: DailyUsage }> {
   const limits = await getUserLimits(userId);
 
@@ -106,7 +106,7 @@ export async function canMakeRequest(
  */
 export async function incrementDailyUsage(
   userId: number,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' /* legacy DB */,
   tokensUsed: number = 0
 ): Promise<void> {
   const today = new Date().toISOString().split('T')[0];

@@ -598,61 +598,161 @@ export function DataTable<TData extends object, TValue>({
     return <StandardTableRow key={row.id} row={row} />;
   }
 
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const topScrollRef = React.useRef<HTMLDivElement>(null);
+  const [scrollContentWidth, setScrollContentWidth] = React.useState(0);
+  const syncingScroll = React.useRef(false);
+
+  React.useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => {
+      const tableEl = el.querySelector('table');
+      setScrollContentWidth(tableEl?.scrollWidth || el.scrollWidth);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const tableEl = el.querySelector('table');
+    if (tableEl) ro.observe(tableEl);
+    return () => ro.disconnect();
+  }, [data, columnVisibility, columnOrder, isMounted]);
+
+  const onMainScroll = () => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current && scrollRef.current) {
+      topScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+    syncingScroll.current = false;
+  };
+
+  const onTopScroll = () => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current && scrollRef.current) {
+      scrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+    syncingScroll.current = false;
+  };
+
+  // Flechas ← → mueven el scroll horizontal del viewport de la tabla
+  React.useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    let dir = 0;
+    let raf: number | null = null;
+    const tick = () => {
+      if (dir !== 0) {
+        container.scrollLeft += dir * 15;
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      if (e.repeat) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        dir = -1;
+        if (raf == null) raf = requestAnimationFrame(tick);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        dir = 1;
+        if (raf == null) raf = requestAnimationFrame(tick);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        dir = 0;
+        if (raf != null) {
+          cancelAnimationFrame(raf);
+          raf = null;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      if (raf != null) cancelAnimationFrame(raf);
+    };
+  }, [isMounted]);
+
   const tableContent = (
     <DndContext
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
       sensors={sensors}
     >
-      <div className="rounded-md border overflow-auto custom-scrollbar">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                <SortableContext
-                  items={columnOrder.map(id => `column-${id}`)}
-                  strategy={horizontalListSortingStrategy}
-                >
-                  {headerGroup.headers.map((header) => (
-                    <DraggableTableHeader key={header.id} header={header} />
-                  ))}
-                </SortableContext>
-              </TableRow>
-            ))}
-            {table.getFooterGroups().map(footerGroup => (
-              <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
-                {footerGroup.headers.map(header => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                        header.column.columnDef.footer,
-                        header.getContext()
-                      )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            <SortableContext
-              items={rowIds.map(id => `row-${id}`)}
-              strategy={verticalListSortingStrategy}
-            >
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  defaultRenderRow(row)
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length + 1} className="h-24 text-center">
-                    No hay resultados.
-                  </TableCell>
+      <div className="rounded-md border overflow-hidden">
+        {/* Scroll horizontal siempre visible arriba — sin bajar al fondo de la tabla */}
+        <div
+          ref={topScrollRef}
+          onScroll={onTopScroll}
+          className="overflow-x-auto overflow-y-hidden custom-scrollbar border-b bg-muted/30"
+          style={{ height: 14 }}
+          aria-hidden
+        >
+          <div style={{ width: scrollContentWidth || '100%', height: 1 }} />
+        </div>
+
+        <div
+          ref={scrollRef}
+          onScroll={onMainScroll}
+          className="overflow-auto custom-scrollbar max-h-[min(70vh,calc(100vh-16rem))]"
+        >
+          <Table noScrollWrapper>
+            <TableHeader className="sticky top-0 z-40 bg-muted shadow-sm">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  <SortableContext
+                    items={columnOrder.map(id => `column-${id}`)}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    {headerGroup.headers.map((header) => (
+                      <DraggableTableHeader key={header.id} header={header} />
+                    ))}
+                  </SortableContext>
                 </TableRow>
-              )}
-            </SortableContext>
-          </TableBody>
-        </Table>
+              ))}
+              {table.getFooterGroups().map(footerGroup => (
+                <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
+                  {footerGroup.headers.map(header => (
+                    <TableHead key={header.id} colSpan={header.colSpan}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                          header.column.columnDef.footer,
+                          header.getContext()
+                        )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              <SortableContext
+                items={rowIds.map(id => `row-${id}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    defaultRenderRow(row)
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length + 1} className="h-24 text-center">
+                      No hay resultados.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </SortableContext>
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </DndContext>
   )

@@ -40,11 +40,8 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: [
-    '@genkit-ai/core',
-    '@genkit-ai/googleai',
     '@opentelemetry/instrumentation',
     '@opentelemetry/sdk-node',
-    'genkit',
     'unrar-js',
     'node-unrar-js',
     'bullmq',

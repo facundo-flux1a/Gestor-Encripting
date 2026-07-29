@@ -1,10 +1,10 @@
 'use server';
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
+import { callAzureOpenAiChat, assertAzureOpenAiConfigured, parseLlmJson } from '@/services/ingestion/azure-openai';
 
 const EvaluateIncidentFixInputSchema = z.object({
-  incidentDescription: z.string().describe('The original description of the incident/error reported.'),
+  incidentDescription: z.string(),
   documentData: z.object({
     id_documento: z.number().optional(),
     numero_documento: z.string().nullable(),
@@ -16,91 +16,51 @@ const EvaluateIncidentFixInputSchema = z.object({
     entidades: z.array(z.any()),
     lineas: z.array(z.any()),
     observaciones: z.string().nullable(),
-  }).describe('The current state of the document after user updates.'),
+  }),
   companyData: z.object({
     id: z.number(),
     name: z.string(),
     cif: z.string().nullable(),
-    nombreFiscal: z.string().nullable().optional()
-  }).optional().describe('The current data of the Company that owns this document.')
+    nombreFiscal: z.string().nullable().optional(),
+  }).optional(),
 });
 
 export type EvaluateIncidentFixInput = z.infer<typeof EvaluateIncidentFixInputSchema>;
 
 const EvaluateIncidentFixOutputSchema = z.object({
-  resolved: z.boolean().describe('True if the incident is logically resolved by the current data.'),
-  reason: z.string().describe('Explanation of why it is considered resolved or not.'),
+  resolved: z.boolean(),
+  reason: z.string(),
 });
 
 export type EvaluateIncidentFixOutput = z.infer<typeof EvaluateIncidentFixOutputSchema>;
 
-export const evaluateIncidentFixPrompt = ai.definePrompt({
-  name: 'evaluateIncidentFixPrompt',
-  input: { schema: EvaluateIncidentFixInputSchema },
-  output: { schema: EvaluateIncidentFixOutputSchema },
-  system: `You are an expert tax auditor and data validator. 
-  Your ONLY goal is to determine if a reported "Incident" (error) in a document has been fixed by the documented changes.
-  
-  CONTEXT:
-  - You will receive an 'Incident Report' describing what was wrong.
-  - You will receive the 'Current Document State' (JSON).
-  - You may receive 'Company Data' (context about the company owning the document).
-  
-  LOGIC:
-  - If the incident was about a mismatch in CIF/NIF, check the 'entidades' in the document AND the 'companyData'. If they now match or are consistent, return resolved: true.
-  - If the incident was about missing fields (e.g. Total = 0), check if the field now has a valid value.
-  - If the incident was about calculation errors (Total != Sum), assume MATH checks are done separately, but if asked, verify logic.
-  - Be strict but fair. If the user fixed the specific complaint, mark it as resolved.
-  
-  EXAMPLE 1:
-  Incident: "Missing Invoice Number"
-  Document: { numero_documento: "INV-2024-001", ... }
-  Result: { resolved: true, reason: "The document now has a valid invoice number." }
-  
-  EXAMPLE 2:
-  Incident: "CIF mismatch between Company and Emisor"
-  Document: { entidades: [{ rol: 'emisor', identificador_fiscal: 'B123' }] }
-  Company: { cif: 'B123' }
-  Result: { resolved: true, reason: "The Company CIF now matches the Emisor CIF." }
-  `,
-  prompt: `
-  INCIDENT REPORT:
-  {{incidentDescription}}
-  
-  CURRENT DOCUMENT STATE:
-  {{json documentData}}
-  
-  {{#if companyData}}
-  COMPANY CONTEXT:
-  {{json companyData}}
-  {{/if}}
-  `
-});
+export async function evaluateIncidentFix(input: EvaluateIncidentFixInput): Promise<EvaluateIncidentFixOutput> {
+  assertAzureOpenAiConfigured();
+  const parsed = EvaluateIncidentFixInputSchema.parse(input);
 
-export const evaluateIncidentFixFlow = ai.defineFlow(
-  {
-    name: 'evaluateIncidentFixFlow',
-    inputSchema: EvaluateIncidentFixInputSchema,
-    outputSchema: EvaluateIncidentFixOutputSchema,
-  },
-  async (input) => {
-    console.log('🧠 [Genkit] Iniciando evaluación de incidencia con Gemini...');
-    console.log('🧠 [Genkit] Input:', JSON.stringify(input, null, 2).substring(0, 500) + '...');
+  const prompt = `You are an expert tax auditor. Determine if the reported incident is fixed by the current document data.
+Respond ONLY JSON: {"resolved":boolean,"reason":"..."}.
 
-    const { output } = await evaluateIncidentFixPrompt(input);
+Incident: ${parsed.incidentDescription}
 
-    console.log('🧠 [Genkit] Respuesta de Gemini recibida:', output);
+Current document:
+${JSON.stringify(parsed.documentData, null, 2)}
 
-    if (!output) {
-      console.error('❌ [Genkit] ERROR: La IA no devolvió un veredicto');
-      throw new Error("AI did not return a verdict.");
-    }
+Company:
+${JSON.stringify(parsed.companyData || null, null, 2)}`;
 
-    console.log('✅ [Genkit] Evaluación completada exitosamente');
-    return output;
-  }
-);
+  const { text } = await callAzureOpenAiChat({
+    prompt,
+    json: true,
+    maxCompletionTokens: 1024,
+  });
 
-export async function checkIncidentResolutionWithAI(input: EvaluateIncidentFixInput): Promise<EvaluateIncidentFixOutput> {
-  return await evaluateIncidentFixFlow(input);
+  const out = parseLlmJson(text) as EvaluateIncidentFixOutput;
+  return EvaluateIncidentFixOutputSchema.parse(out);
+}
+
+export async function checkIncidentResolutionWithAI(
+  input: EvaluateIncidentFixInput
+): Promise<EvaluateIncidentFixOutput> {
+  return evaluateIncidentFix(input);
 }

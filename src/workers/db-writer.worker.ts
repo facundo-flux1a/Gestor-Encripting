@@ -3,7 +3,7 @@
  *
  * Worker responsable de la persistencia atómica en Prisma.
  * Recibe el JSON normalizado (con keys lowercase, valores en MAYÚSCULAS)
- * del GeminiWorker y escribe en la base de datos.
+ * del ExtractionWorker y escribe en la base de datos.
  *
  * Esquema de aiResult esperado (output de PROMPT_EXTRACTOR_FACTURABLE):
  *   aiResult.tipo_documento           → string  ("FACTURA RECIBIDA", "TICKET", "(sin confirmar)", etc.)

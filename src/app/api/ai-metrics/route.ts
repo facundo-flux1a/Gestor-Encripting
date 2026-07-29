@@ -78,7 +78,7 @@ export async function GET() {
     );
 
     const openaiUsedToday = dailyUsageRows.find(r => r.provider === 'openai')?.request_count || 0;
-    const geminiUsedToday = dailyUsageRows.find(r => r.provider === 'gemini')?.request_count || 0;
+    const geminiUsedToday = dailyUsageRows.find(r => r.provider === 'openai')?.request_count || 0;
 
     // Totales generales
     const [totalesRows] = await pool.query<RowDataPacket[]>(

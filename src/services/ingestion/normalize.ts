@@ -25,7 +25,8 @@ export interface EmpresaDoc {
   email?: string;
 }
 
-export interface DocumentoGemini {
+/** Shape del documento extraído por Azure DI / Azure OpenAI */
+export interface DocumentoExtraido {
   tipo_documento?: string;
   numero_documento?: string;
   fecha_emision?: string;
@@ -46,6 +47,9 @@ export interface DocumentoGemini {
   totales_por_impuesto?: Impuesto[];
   [key: string]: unknown;
 }
+
+/** @deprecated usar DocumentoExtraido */
+export type DocumentoGemini = DocumentoExtraido;
 
 export interface ValidationResult {
   ok: boolean;
@@ -70,44 +74,45 @@ export function repairJSON(rawText: string): string {
 }
 
 /**
- * Parsea la respuesta de texto de Gemini con reparación automática.
- * Retorna el objeto parseado o lanza un error tipado.
- *
- * @throws {GeminiParseError} si el JSON no se puede reparar ni parsear
+ * Parsea la respuesta de texto del LLM con reparación automática.
+ * @throws {LlmParseError} si el JSON no se puede reparar ni parsear
  */
-export function parseGeminiResponse<T = DocumentoGemini>(rawText: string): T {
-  // 1. Limpiar wrappers de markdown que Gemini a veces agrega
+export function parseLlmResponse<T = DocumentoExtraido>(rawText: string): T {
   const cleaned = rawText
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
 
-  // 2. Intentar parsear directamente
   try {
     return JSON.parse(cleaned) as T;
   } catch (_) {
-    // 3. Intentar con reparación de JSON roto
     const repaired = repairJSON(cleaned);
     try {
       return JSON.parse(repaired) as T;
     } catch (err) {
-      throw new GeminiParseError(
-        `No se pudo parsear la respuesta de Gemini después de reparación: ${(err as Error).message}`,
+      throw new LlmParseError(
+        `No se pudo parsear la respuesta del LLM después de reparación: ${(err as Error).message}`,
         rawText
       );
     }
   }
 }
 
-export class GeminiParseError extends Error {
+/** @deprecated usar parseLlmResponse */
+export const parseGeminiResponse = parseLlmResponse;
+
+export class LlmParseError extends Error {
   public rawResponse: string;
   constructor(message: string, rawResponse: string) {
     super(message);
-    this.name = 'GeminiParseError';
+    this.name = 'LlmParseError';
     this.rawResponse = rawResponse;
   }
 }
+
+/** @deprecated usar LlmParseError */
+export const GeminiParseError = LlmParseError;
 
 // ─── 2. validarRetenciones ────────────────────────────────────────────────────
 /**
@@ -265,18 +270,11 @@ export function computeProgressForMultiple(
 
 // ─── 8. normalizeDocumentoFromGemini ─────────────────────────────────────────
 /**
- * Orquesta todas las normalizaciones sobre el objeto de Gemini.
- * Aplica en orden:
- *   1. toLowerCaseKeysDeep (todo en minúsculas en las CLAVES para estandarizar)
- *   2. validateRetenciones (forzar negativas)
- *
- * No modifica el objeto original.
+ * Orquesta normalizaciones sobre el documento extraído.
  */
-export function normalizeDocumentoFromGemini(doc: DocumentoGemini): DocumentoGemini {
-  // Primero convertimos todas las CLAVES a minúsculas
+export function normalizeDocumento(doc: DocumentoExtraido): DocumentoExtraido {
   let normalized = toLowerCaseKeysDeep(doc);
 
-  // Normalizar retenciones en DESGLOSE_IVA (legacy) o totales_por_impuesto (nuevo)
   if (normalized.desglose_iva && Array.isArray(normalized.desglose_iva)) {
     normalized.desglose_iva = validateRetenciones(normalized.desglose_iva as Impuesto[]);
   }
@@ -284,8 +282,8 @@ export function normalizeDocumentoFromGemini(doc: DocumentoGemini): DocumentoGem
     normalized.totales_por_impuesto = validateRetenciones(normalized.totales_por_impuesto as Impuesto[]);
   }
 
-  // Soporte para campos de No Facturables (valor_referencia_no_fiscal, concepto_valor_referencia)
-  // Aseguramos que si están presentes a nivel raíz, permanezcan en el objeto para ser mapeados en datos_extra
-  
   return normalized;
 }
+
+/** @deprecated usar normalizeDocumento */
+export const normalizeDocumentoFromGemini = normalizeDocumento;

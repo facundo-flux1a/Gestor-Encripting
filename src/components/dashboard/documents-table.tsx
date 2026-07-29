@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder, Lock } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder, Lock, Rows3, Table2 } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, type IvaDetail } from '@/lib/types';
@@ -9,6 +9,7 @@ import { SummarizeDialog } from './summarize-dialog';
 import { DocumentPreviewDialog } from './document-preview-dialog';
 import { CleanDuplicatesButton } from './clean-duplicates-button';
 import { ClienteFilter, ProveedorFilter } from './column-filters';
+import { DocumentsStackedList } from './documents-stacked-list';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -981,6 +982,9 @@ export function DocumentsTable({
   const [docToPreview, setDocToPreview] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'stacked'>(
+    isIncidentsPage ? 'stacked' : 'table'
+  );
   const router = useRouter();
   const { toast } = useToast();
 
@@ -1356,7 +1360,7 @@ export function DocumentsTable({
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
               {documents.length} documento(s)
@@ -1372,21 +1376,59 @@ export function DocumentsTable({
             )}
           </div>
 
-          <CleanDuplicatesButton
-            empresaId={selectedCompanyIds[0] || null}
-            onComplete={() => {
-              console.log('✅ Limpieza completada, refrescando...');
-              if (onDocumentChanged) {
-                onDocumentChanged();
-              }
-            }}
-            variant="outline"
-            size="sm"
-          />
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center rounded-md border bg-muted/40 p-0.5">
+              <Button
+                type="button"
+                variant={viewMode === 'stacked' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2 gap-1.5"
+                onClick={() => setViewMode('stacked')}
+                title="Vista en 2–3 líneas"
+              >
+                <Rows3 className="h-3.5 w-3.5" />
+                <span className="text-xs hidden sm:inline">Líneas</span>
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2 gap-1.5"
+                onClick={() => setViewMode('table')}
+                title="Vista tabla"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                <span className="text-xs hidden sm:inline">Tabla</span>
+              </Button>
+            </div>
+            <CleanDuplicatesButton
+              empresaId={selectedCompanyIds[0] || null}
+              onComplete={() => {
+                console.log('✅ Limpieza completada, refrescando...');
+                if (onDocumentChanged) {
+                  onDocumentChanged();
+                }
+              }}
+              variant="outline"
+              size="sm"
+            />
+          </div>
         </div>
 
         <div className="relative w-full group" data-tutorial="documents-table">
-          <div className="w-full overflow-x-auto rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border">
+          {viewMode === 'stacked' ? (
+            <DocumentsStackedList
+              documents={documents}
+              isIncidentsPage={isIncidentsPage}
+              showConfirmButton={showConfirmButton}
+              duplicates={duplicates}
+              onValidateIncident={handleValidateIncident}
+              onConfirm={handleConfirmClick}
+              onPreview={handlePreviewClick}
+              onDelete={handleDeleteClick}
+            />
+          ) : (
+          <div className="w-full rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border overflow-hidden">
             <DataTable
               columns={columns}
               data={documents}
@@ -1405,12 +1447,15 @@ export function DocumentsTable({
               includeSummary={true}
             />
           </div>
+          )}
 
-          <div className="lg:hidden text-center text-xs text-muted-foreground mt-3 py-1.5 flex items-center justify-center gap-2 transition-opacity duration-300 opacity-70 hover:opacity-100">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-            <span className="font-medium">Desliza horizontalmente para ver más</span>
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          {viewMode === 'table' && (
+          <div className="text-center text-xs text-muted-foreground mt-2 py-1 flex items-center justify-center gap-2 opacity-70">
+            <span className="font-medium">
+              Scroll horizontal disponible arriba y abajo de la tabla
+            </span>
           </div>
+          )}
         </div>
 
         {/* 🆕 FLOATING BULK ACTIONS BAR */}

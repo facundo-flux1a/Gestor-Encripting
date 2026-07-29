@@ -1,6 +1,6 @@
 'use server';
 
-import { VertexAI } from '@google-cloud/vertexai';
+import { callAzureOpenAiChat, assertAzureOpenAiConfigured } from '@/services/ingestion/azure-openai';
 import db, { dbName } from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from './user-service';
@@ -151,48 +151,8 @@ export async function diagnoseDocument(documentId: number, checkType?: string): 
         const impuestos = Number(doc.total_impuestos || 0);
         const diferencia = Math.abs(total - (base + impuestos));
 
-        // 2. Configurar Vertex AI
-        const projectId = process.env.VERTEX_AI_PROJECT_ID;
-        const location = process.env.VERTEX_AI_LOCATION || 'us-central1';
-        const modelName = process.env.VERTEX_AI_MODEL || 'gemini-1.5-flash';
-
-        let credentials;
-        try {
-            let rawCreds = process.env.VERTEX_AI_CREDENTIALS?.trim() || '';
-
-            // Si el string no empieza con {, intentamos ver si está envuelto en comillas
-            if (rawCreds && !rawCreds.startsWith('{')) {
-                rawCreds = rawCreds.replace(/^['"]|['"]$/g, '').trim();
-            }
-
-            credentials = rawCreds ? JSON.parse(rawCreds) : undefined;
-        } catch (e) {
-            console.error('❌ Error crítico parseando VERTEX_AI_CREDENTIALS:', e);
-            return {
-                success: false,
-                incidents: [],
-                error: 'Error de formato en VERTEX_AI_CREDENTIALS. Asegúrate de que el JSON sea válido.'
-            };
-        }
-
-        if (!projectId) return { success: false, incidents: [], error: 'VERTEX_AI_PROJECT_ID no configurado en .env' };
-
-        const vertexAI = new VertexAI({
-            project: projectId,
-            location: location,
-            googleAuthOptions: credentials ? { credentials } : undefined
-        });
-
-        const generativeModel = vertexAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: {
-                maxOutputTokens: 8192,
-                temperature: 0.1,
-                topP: 0.8,
-                topK: 40,
-                responseMimeType: 'application/json',
-            },
-        });
+        // 2. Llamar a Azure OpenAI
+        assertAzureOpenAiConfigured();
 
         // ── Pre-análisis matemático de dependencias ──────────────────────────
         // Para cada impuesto, calculamos la cuota "esperada" según la base
@@ -301,23 +261,20 @@ ${taxRows.length > 0
             }
         `;
 
-        const request = {
-            contents: [
-                { role: 'user', parts: [{ text: SYSTEM_PROMPT + "\n\n" + promptData }] }
-            ],
-        };
-
         const TIMEOUT_MS = 45_000;
         const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Vertex AI timeout: la llamada tardó más de 45 segundos.')), TIMEOUT_MS)
+            setTimeout(() => reject(new Error('Azure OpenAI timeout: la llamada tardó más de 45 segundos.')), TIMEOUT_MS)
         );
 
-        const result = await Promise.race([
-            generativeModel.generateContent(request),
+        const llmResult = await Promise.race([
+            callAzureOpenAiChat({
+              prompt: SYSTEM_PROMPT + "\n\n" + promptData,
+              json: true,
+              maxCompletionTokens: 8192,
+            }),
             timeoutPromise
         ]);
-        const response = result.response;
-        let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        let text = llmResult.text || '{}';
 
         // Limpiar bloques de código Markdown
         if (text.includes('```')) {
@@ -388,7 +345,7 @@ ${taxRows.length > 0
         }
 
     } catch (error: any) {
-        console.error('❌ Error en Vertex AI:', error);
+        console.error('❌ Error en Azure OpenAI:', error);
         return {
             success: false,
             incidents: [],

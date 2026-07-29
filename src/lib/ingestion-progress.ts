@@ -223,12 +223,16 @@ export function failedProgress(errorCode: string, mensaje: string, detalle?: str
 // ─── Errores nombrados (los que se pasan a failedProgress) ────────────────────
 export const INGESTION_ERRORS = {
   MAX_TOKENS_EXCEEDED: 'La imagen contiene demasiados documentos para un único análisis. Por favor, dividila en partes más pequeñas.',
+  LLM_PARSE_ERROR:  'No se pudo interpretar la respuesta del análisis. Se registró una incidencia automática.',
+  /** @deprecated alias */
   GEMINI_PARSE_ERROR:  'No se pudo interpretar la respuesta del análisis. Se registró una incidencia automática.',
   DUPLICATE_DOCUMENT:  'Documento duplicado: ya existe un archivo idéntico para esta empresa.',
   PDFTOOLS_ERROR:      'Error al dividir el PDF. El sistema reintentará automáticamente.',
   RAR_EXTRACTOR_ERROR: 'No se pudo extraer el archivo RAR. Verificá que no esté corrupto o protegido.',
   UNREADABLE_FILE:     'El archivo no pudo ser leído. Verificá que sea un documento válido.',
-  GEMINI_RATE_LIMIT:   'Límite de análisis alcanzado. El sistema reintentará en unos momentos.', // transparente para el usuario
+  LLM_RATE_LIMIT:   'Límite de análisis alcanzado. El sistema reintentará en unos momentos.',
+  /** @deprecated alias */
+  GEMINI_RATE_LIMIT:   'Límite de análisis alcanzado. El sistema reintentará en unos momentos.',
 } as const;
 
 export type IngestionErrorCode = keyof typeof INGESTION_ERRORS;

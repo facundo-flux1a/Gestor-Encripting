@@ -1,5 +1,5 @@
 /**
- * Mapea resultado prebuilt-invoice de Azure DI → shape DocumentoGemini
+ * Mapea resultado prebuilt-invoice de Azure DI → shape DocumentoExtraido
  * (el mismo que espera normalize + fiscal-guards + db-writer).
  *
  * Complementa campos que Azure suele dejar vacíos en facturas ES:
@@ -9,7 +9,7 @@
 
 import type { AzureDiAnalyzeResult, AzureDiField } from './azure-di';
 import { parseFlexibleDate } from './date-utils';
-import type { DocumentoGemini, EmpresaDoc, Impuesto } from './normalize';
+import type { DocumentoExtraido, EmpresaDoc, Impuesto } from './normalize';
 
 export { parseFlexibleDate } from './date-utils';
 
@@ -505,10 +505,10 @@ export function azureDiLooksLikeInvoice(result: AzureDiAnalyzeResult): boolean {
   return hasId || (hasTotal && hasParty) || (hasTotal && hasCifInText);
 }
 
-export function mapAzureDiInvoiceToGeminiShape(
+export function mapAzureDiInvoiceToDocumentShape(
   result: AzureDiAnalyzeResult,
   opts?: { empresaCif?: string | null }
-): DocumentoGemini {
+): DocumentoExtraido {
   const fields = result.documents?.[0]?.fields || {};
   const content = result.content || '';
   const rawEmisor = party(fields, 'Vendor');
@@ -571,3 +571,6 @@ export function mapAzureDiInvoiceToGeminiShape(
     _azure_di_confidence: confidence ?? null,
   };
 }
+
+/** @deprecated usar mapAzureDiInvoiceToDocumentShape */
+export const mapAzureDiInvoiceToGeminiShape = mapAzureDiInvoiceToDocumentShape;

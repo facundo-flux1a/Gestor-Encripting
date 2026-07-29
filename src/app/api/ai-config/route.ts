@@ -29,7 +29,7 @@ export async function GET() {
       ownProvider: config?.own_provider || null,
       customPrompt: config?.custom_prompt || '',
       preferredModel: config?.preferred_model || 'gpt-4o-mini',
-      sharedProvider: config?.shared_provider || 'gemini', // ✅ NUEVO
+      sharedProvider: config?.shared_provider || 'openai', // ✅ NUEVO
       // NO devolvemos la API key por seguridad
     });
   } catch (error: any) {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     // Validaciones
     if (useOwnKey) {
-      if (!ownProvider || !['openai', 'gemini'].includes(ownProvider)) {
+      if (!ownProvider || !['openai', 'openai'].includes(ownProvider)) {
         console.warn('⚠️ [API-AI-CONFIG] Proveedor inválido');
         return NextResponse.json(
           { error: 'Proveedor inválido' },
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (ownProvider === 'gemini' && !ownApiKey.startsWith('AIza')) {
+      if (ownProvider === 'openai' && !ownApiKey.startsWith('AIza')) {
         console.warn('⚠️ [API-AI-CONFIG] Formato Gemini inválido');
         return NextResponse.json(
           { error: 'API Key de Gemini debe empezar con "AIza"' },
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       own_api_key: useOwnKey ? ownApiKey : null,
       custom_prompt: customPrompt || null,
       preferred_model: preferredModel || 'gpt-4o-mini',
-      shared_provider: sharedProvider || 'gemini', // ✅ NUEVO
+      shared_provider: sharedProvider || 'openai', // ✅ NUEVO
     });
 
     if (!result.success) {

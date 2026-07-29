@@ -8,15 +8,14 @@ import { redis } from './redis';
 
 const connection = redis;
 
-// ─── Cola principal de ingesta ────────────────────────────────────────────────
-// Recibe cada archivo individual (PDF, imagen, archivo extraído de ZIP/RAR)
-// y lo enruta al worker correcto según el tipo.
-// Usamos un prefijo para que si compartimos Redis entre producción y desarrollo
-// no se choquen los jobs.
+// Prefijo hash-tag para Redis Cluster / separar prod vs dev
 const queuePrefix = process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}';
 
 export const INGESTION_QUEUE_NAME = `${queuePrefix}-ingestion`;
-export const GEMINI_QUEUE_NAME = `${queuePrefix}-gemini-extraction`;
+/** Nombre nuevo. Jobs viejos en `-gemini-extraction` hay que drenar/obliterar al migrar. */
+export const EXTRACTION_QUEUE_NAME = `${queuePrefix}-extraction`;
+/** @deprecated alias durante migración — misma cola que EXTRACTION si ya migraste Redis */
+export const GEMINI_QUEUE_NAME = EXTRACTION_QUEUE_NAME;
 export const DB_WRITER_QUEUE_NAME = `${queuePrefix}-db-writer`;
 
 export const ingestionQueue = new Queue(INGESTION_QUEUE_NAME, {
@@ -29,109 +28,89 @@ export const ingestionQueue = new Queue(INGESTION_QUEUE_NAME, {
   },
 });
 
-// ─── Cola de extracción con Gemini (rate-limited) ─────────────────────────────
-// Todos los llamados a Gemini pasan por acá para respetar el rate limit.
-// La concurrencia se controla con GEMINI_CONCURRENCY (env var).
-// Default conservador: 10 jobs simultáneos → ajustar según cuota real.
-export const geminiQueue = new Queue(GEMINI_QUEUE_NAME, {
+// ─── Cola de extracción (Azure DI + Azure OpenAI, rate-limited) ───────────────
+export const extractionQueue = new Queue(EXTRACTION_QUEUE_NAME, {
   connection,
   defaultJobOptions: {
     attempts: 5,
-    backoff: { type: 'exponential', delay: 10000 }, // 10s → 20s → 40s → 80s → 160s
+    backoff: { type: 'exponential', delay: 10000 },
     removeOnComplete: { count: 200 },
     removeOnFail: { count: 500 },
   },
 });
 
-// ─── Queue Events (para monitoreo y logging) ──────────────────────────────────
+/** @deprecated usar extractionQueue */
+export const geminiQueue = extractionQueue;
+
 export const ingestionQueueEvents = new QueueEvents(INGESTION_QUEUE_NAME, { connection });
-export const geminiQueueEvents = new QueueEvents(GEMINI_QUEUE_NAME, { connection });
+export const extractionQueueEvents = new QueueEvents(EXTRACTION_QUEUE_NAME, { connection });
+/** @deprecated */
+export const geminiQueueEvents = extractionQueueEvents;
 export const dbWriterQueueEvents = new QueueEvents(DB_WRITER_QUEUE_NAME, { connection });
 
-// ─── Tipos de jobs de ingesta ─────────────────────────────────────────────────
-// Espeja exactamente el payload que upload-service.ts enviaba al webhook de n8n.
-// Así el corte es un simple swap del fetch() por un queue.add().
 export interface IngestionJobData {
-  // ── Identificadores ──────────────────────────────────────────
-  uploadId: string;          // ID de ESTE archivo (hijo si viene de ZIP/RAR)
-  parentUploadId: string;    // ID del lote padre (igual a uploadId si es archivo único)
-
-  // ── Empresa ──────────────────────────────────────────────────
+  uploadId: string;
+  parentUploadId: string;
   empresaId: string;
   cif: string;
   nombreEmpresa: string;
   recargo: boolean;
-
-  // ── Archivo ──────────────────────────────────────────────────
-  text: string;              // S3 path (ej: "archivos/factura_2026.pdf") — igual que n8n
-  fileName: string;          // Nombre normalizado (sin espacios)
+  text: string;
+  fileName: string;
   originalFileName: string;
-  fileHash: string;          // SHA256 del archivo completo
-  publicUrl: string;         // URL pública en MinIO
+  fileHash: string;
+  publicUrl: string;
   mimeType: string;
   normalizedFileType: 'pdf' | 'zip' | 'rar' | 'jpeg' | 'png' | 'word' | 'excel' | string;
   fileExtension: string;
   fileSize: number;
   isCompressedFile: boolean;
-  fechaSubida: string;       // ISO string
-
-  // ── Hijos de ZIP/RAR (solo si isCompressedFile === true) ──────
-  individualFileHashes?: Record<string, string>;   // fileName → hash
-  individualUploadIds?: Record<string, string>;    // fileName → childUploadId
-  individualFilePaths?: Record<string, string>;    // fileName → S3 path del hijo ya subido a MinIO
-  individualPublicUrls?: Record<string, string>;   // fileName → URL pública del hijo en MinIO
-
-  // ── Origen ──────────────────────────────────────────────────
+  fechaSubida: string;
+  individualFileHashes?: Record<string, string>;
+  individualUploadIds?: Record<string, string>;
+  individualFilePaths?: Record<string, string>;
+  individualPublicUrls?: Record<string, string>;
   origen: 'dashboard' | 'correo';
-
-  // ── Para documentos múltiples (llenado por el worker, no upload-service) ──
-  documentoIndex?: number;    // 1-based: qué doc dentro del PDF múltiple
-  totalDocumentos?: number;   // total de docs en el PDF múltiple
-  pageStart?: number;         // página inicial de este doc en el PDF
-  pageEnd?: number;           // página final de este doc en el PDF
+  documentoIndex?: number;
+  totalDocumentos?: number;
+  pageStart?: number;
+  pageEnd?: number;
 }
 
-// ─── Tipos de jobs de Gemini ──────────────────────────────────────────────────
-// El worker de ingesta pone estos jobs en geminiQueue después de clasificar.
-export type GeminiJobType =
-  | 'classify'                // legacy: reencola extract-facturable (sin Vertex)
-  | 'paginate'                // Analista25/Analista30 — rangos de páginas por doc
-  | 'extract-facturable'      // extractor + routing es_facturable/es_multiple
-  | 'extract-non-facturable'  // Analista32 — extractor no facturable
-  | 'extract-multiple-image'  // Imagen con múltiples facturas (sin paginación PDF)
-  | 'extract-repair';         // Reintento dirigido tras fallo de fiscal-guards
+export type ExtractionJobType =
+  | 'classify'
+  | 'paginate'
+  | 'extract-facturable'
+  | 'extract-non-facturable'
+  | 'extract-multiple-image'
+  | 'extract-repair';
 
-export interface GeminiJobData {
-  type: GeminiJobType;
+/** @deprecated */
+export type GeminiJobType = ExtractionJobType;
 
-  // Contexto completo heredado del job de ingesta
+export interface ExtractionJobData {
+  type: ExtractionJobType;
   ingestion: IngestionJobData;
-
-  // Para extract-facturable de un PDF múltiple ya paginado
   pageStart?: number;
   pageEnd?: number;
   documentoIndex?: number;
   totalDocumentos?: number;
-  numeroDocumento?: string;  // número extraído por el paginador
-
-  /** Intentos de repair ya consumidos (0 = primer extract) */
+  numeroDocumento?: string;
   repairAttempt?: number;
-  /** Fallos de guards del intento anterior (solo extract-repair) */
   previousFailures?: Array<{ code: string; message: string }>;
-  /** JSON normalizado previo para corrección dirigida */
   previousAiResult?: unknown;
 }
 
-// ─── Tipos de jobs del DB Writer ──────────────────────────────────────────────
+/** @deprecated */
+export type GeminiJobData = ExtractionJobData;
+
 export interface DbWriterJobData {
   ingestion: IngestionJobData;
-  aiResult: any; // El JSON final normalizado (DocumentoGemini)
-  /** VALIDADO | REVISION — default VALIDADO si se omite (legacy) */
+  aiResult: any;
   fiscalStatus?: 'VALIDADO' | 'REVISION';
   fiscalRevisionReasons?: Array<{ code: string; message: string }>;
 }
 
-// ─── Cola de escritura en BD (Db Writer) ──────────────────────────────────────
 export const dbWriterQueue = new Queue(DB_WRITER_QUEUE_NAME, {
   connection,
   defaultJobOptions: {

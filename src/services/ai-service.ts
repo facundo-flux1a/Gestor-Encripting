@@ -3,8 +3,7 @@
 import db, { dbName } from '@/lib/db';
 import { getCurrentUser } from './user-service';
 import { encrypt, decrypt } from '@/lib/encryption';
-import { canMakeRequest, incrementDailyUsage } from './ai-limits-service';
-import { GoogleAuth } from 'google-auth-library';
+import { canMakeRequest, incrementDailyUsage } from './ai-limits-service'; // ✅ IMPORTAR
 
 // ============================================
 // PROMPT BASE (ADAPTADO DE MICROSERVICE)
@@ -122,11 +121,11 @@ NO incluyas explicaciones fuera del JSON. NO agregues texto adicional. SOLO devu
 
 export interface UserAIConfig {
   use_own_key: boolean;
-  own_provider: 'openai' | 'gemini' | null;
+  own_provider: 'openai' | null;
   own_api_key: string | null;
   custom_prompt: string | null;
   preferred_model: string;
-  shared_provider: 'gemini' | 'openai';
+  shared_provider: 'openai';
 }
 
 export interface AnalysisResult {
@@ -184,11 +183,11 @@ export async function getUserAIConfig(): Promise<UserAIConfig | null> {
 
 export async function saveUserAIConfig(config: {
   use_own_key: boolean;
-  own_provider?: 'openai' | 'gemini';
+  own_provider?: 'openai';
   own_api_key?: string;
   custom_prompt?: string;
   preferred_model?: string;
-  shared_provider?: 'gemini' | 'openai';
+  shared_provider?: 'openai';
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await getCurrentUser();
@@ -221,7 +220,7 @@ export async function saveUserAIConfig(config: {
           encryptedKey,
           config.custom_prompt || null,
           config.preferred_model || 'gpt-4o-mini',
-          config.shared_provider || 'gemini',
+          config.shared_provider || 'openai',
           user.id
         ]
       );
@@ -237,7 +236,7 @@ export async function saveUserAIConfig(config: {
           encryptedKey,
           config.custom_prompt || null,
           config.preferred_model || 'gpt-4o-mini',
-          config.shared_provider || 'gemini'
+          config.shared_provider || 'openai'
         ]
       );
     }
@@ -293,72 +292,6 @@ async function callOpenAI(
   };
 }
 
-import { VertexAI } from '@google-cloud/vertexai';
-
-async function callGeminiVertex(
-  fullPrompt: string,
-  documentData: string
-): Promise<{ content: string; tokens: number }> {
-  const projectId = process.env.VERTEX_AI_PROJECT_ID;
-  const location = process.env.VERTEX_AI_LOCATION || 'us-central1';
-  // Use 1.5-flash by default as 2.5-flash might not be available and causes HTML 404s
-  const modelName = process.env.VERTEX_AI_MODEL || 'gemini-1.5-flash';
-
-  if (!projectId) {
-    throw new Error('VERTEX_AI_PROJECT_ID no configurado en .env');
-  }
-
-  let credentials: any;
-  try {
-    let rawCreds = process.env.VERTEX_AI_CREDENTIALS?.trim() || '';
-    if (rawCreds && !rawCreds.startsWith('{')) {
-      rawCreds = rawCreds.replace(/^['"]|['"]$/g, '').trim();
-    }
-    credentials = rawCreds ? JSON.parse(rawCreds) : undefined;
-  } catch (e) {
-    throw new Error('Error parseando VERTEX_AI_CREDENTIALS');
-  }
-
-  console.log(`🔍 [Vertex/Gemini] Llamando a modelo: ${modelName} (proyecto: ${projectId})`);
-
-  const vertexAI = new VertexAI({
-    project: projectId,
-    location,
-    googleAuthOptions: credentials ? { credentials } : undefined,
-    ...(location === 'global' ? { apiEndpoint: 'aiplatform.googleapis.com' } : {})
-  });
-
-  const generativeModel = vertexAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      maxOutputTokens: 4096,
-      temperature: 0.2,
-    },
-  });
-
-  const result = await generativeModel.generateContent({
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: fullPrompt + '\n\nDOCUMENTO A ANALIZAR:\n' + documentData }],
-      },
-    ],
-  });
-
-  let text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-  // Limpiar markdown code fences si los hay
-  if (text.includes('```')) {
-    text = text.replace(/```json\n?|```/g, '').trim();
-  }
-
-  const tokens = (result.response.usageMetadata as any)?.totalTokenCount || 0;
-
-  console.log(`✅ [Vertex/Gemini] Respuesta OK, tokens: ${tokens}`);
-
-  return { content: text, tokens };
-}
-
 // ============================================
 // FUNCIÓN PRINCIPAL
 // ============================================
@@ -381,50 +314,51 @@ export async function analyzeDocumentWithAI(documentId: number): Promise<Analysi
     const userConfig = await getUserAIConfig();
 
     let apiKey: string | null = null;
-    let provider: 'openai' | 'gemini' = 'gemini';
-    let model: string = process.env.VERTEX_AI_MODEL || 'gemini-2.5-flash';
+    let provider: 'openai' = 'openai';
+    let model: string = 'gpt-4o-mini';
     let usedOwnKey = false;
-    let useVertex = false;
 
+    // ✅ DECIDIR QUÉ KEY USAR
     if (userConfig?.use_own_key && userConfig.own_api_key) {
-      // Usar key propia del usuario (sin cambios)
+      // Usar key propia del usuario
       apiKey = userConfig.own_api_key;
-      provider = userConfig.own_provider || 'openai';
+      provider = 'openai';
       model = userConfig.preferred_model || 'gpt-4o-mini';
       usedOwnKey = true;
       console.log('🔑 Usando API key propia del usuario');
     } else {
-      // Modo compartido → siempre Vertex AI (Gemini)
-      provider = 'gemini';
-      useVertex = true;
+      // ✅ USAR KEY COMPARTIDA - VALIDAR LÍMITES CON ai-limits-service
+      provider = 'openai';
 
-      // Verificar límite diario (se mantiene la lógica de BD)
-      const limitCheck = await canMakeRequest(user.id, 'gemini');
+      // Verificar si puede hacer la request
+      const limitCheck = await canMakeRequest(user.id, provider);
 
       if (!limitCheck.allowed) {
+          return {
+            success: false,
+            incidents: [],
+            error: limitCheck.reason || 'Límite diario de análisis alcanzado. Por favor, configura tu propia API key para continuar sin límites.',
+            used_own_key: false,
+            provider: '',
+            model: ''
+          };
+      }
+
+      apiKey = process.env.SHARED_OPENAI_KEY || process.env.AZURE_OPENAI_API_KEY || null;
+
+      if (!apiKey) {
         return {
           success: false,
           incidents: [],
-          error: limitCheck.reason || 'Límite diario de análisis alcanzado. Contacta con soporte o configura tu propia API key.',
+          error: 'API key compartida no configurada (SHARED_OPENAI_KEY / AZURE_OPENAI_API_KEY)',
           used_own_key: false,
-          provider: 'gemini',
-          model
+          provider: '',
+          model: ''
         };
       }
 
-      // Verificar que las credenciales de Vertex estén disponibles
-      if (!process.env.VERTEX_AI_PROJECT_ID) {
-        return {
-          success: false,
-          incidents: [],
-          error: 'Vertex AI no configurado (VERTEX_AI_PROJECT_ID faltante)',
-          used_own_key: false,
-          provider: 'gemini',
-          model
-        };
-      }
-
-      console.log(`🔑 Usando Vertex AI (Gemini compartido) — modelo: ${model}`);
+      model = 'gpt-4o-mini';
+      console.log(`🔑 Usando shared key: openai`);
     }
 
     // Obtener datos del documento y configuración de la empresa (Recargo)
@@ -533,39 +467,12 @@ Esta empresa NO aplica recargo de equivalencia. Si encuentras un recargo cobrado
     // Llamar a la IA
     let result: { content: string; tokens: number };
 
-    if (useVertex) {
-      // Modo compartido: Vertex AI (Gemini)
-      result = await callGeminiVertex(fullPrompt, documentData);
-    } else if (provider === 'openai') {
-      // Key propia: OpenAI
-      result = await callOpenAI(apiKey!, model, fullPrompt, documentData);
-    } else {
-      // Key propia: Gemini REST
-      const modelName = model.replace(/^models\//, '').replace(/-latest$/, '');
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt + '\n\nDOCUMENTO A ANALIZAR:\n' + documentData }] }],
-          generationConfig: { temperature: 0.2 }
-        }),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Gemini REST error ${resp.status}: ${errText}`);
-      }
-      const data = await resp.json();
-      result = {
-        content: data.candidates[0].content.parts[0].text,
-        tokens: data.usageMetadata?.totalTokenCount || 0
-      };
-    }
+    result = await callOpenAI(apiKey, model, fullPrompt, documentData);
 
-    // Incrementar contador diario SOLO si usó key compartida (Vertex)
+    // ✅ Incrementar uso SOLO si usó key compartida y análisis exitoso
     if (!usedOwnKey) {
-      await incrementDailyUsage(user.id, 'gemini', result.tokens);
-      console.log(`📊 Uso incrementado: gemini (Vertex) | ${result.tokens} tokens`);
+      await incrementDailyUsage(user.id, provider, result.tokens);
+      console.log(`📊 Uso incrementado: ${provider} | ${result.tokens} tokens`);
     }
 
     // Parsear respuesta

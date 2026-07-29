@@ -1,13 +1,12 @@
 /**
- * Contadores Redis de llamadas Vertex por upload (Fase 0 del plan de eficiencia).
- * Clave: vertex:calls:{uploadId}  → hash { extract, paginate, repair, nf, multi-img, classify, other, bytes, t429 }
- * TTL 24h. Agregable con scripts/vertex-calls-summary.ts
+ * Contadores Redis de llamadas LLM por upload.
+ * Clave: llm:calls:{uploadId}
  */
 
 import { redis } from '@/lib/redis';
 import { wLog } from '@/lib/worker-logger';
 
-export type VertexCallType =
+export type LlmCallType =
   | 'extract'
   | 'paginate'
   | 'repair'
@@ -19,12 +18,12 @@ export type VertexCallType =
 const TTL_SEC = 24 * 60 * 60;
 
 function keyFor(uploadId: string): string {
-  return `vertex:calls:${uploadId}`;
+  return `llm:calls:${uploadId}`;
 }
 
-export async function recordVertexCall(opts: {
+export async function recordLlmCall(opts: {
   uploadId: string;
-  callType: VertexCallType;
+  callType: LlmCallType;
   bytes?: number;
   is429?: boolean;
   durationMs?: number;
@@ -42,29 +41,15 @@ export async function recordVertexCall(opts: {
     pipe.expire(key, TTL_SEC);
     await pipe.exec();
     wLog(
-      'VertexMetrics',
+      'LlmMetrics',
       `call type=${callType} upload=${uploadId} bytes=${bytes}${is429 ? ' 429' : ''}${durationMs != null ? ` ${durationMs}ms` : ''}`
     );
   } catch (e) {
-    console.warn('[VertexMetrics] no se pudo registrar:', e);
+    console.warn('[LlmMetrics] no se pudo registrar:', e);
   }
 }
 
-export async function getVertexCallStats(uploadId: string): Promise<Record<string, number>> {
-  try {
-    const raw = await redis.hgetall(keyFor(uploadId));
-    const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(raw || {})) {
-      out[k] = parseInt(String(v), 10) || 0;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-/** Mapea job Gemini → tipo de métrica */
-export function callTypeFromJobType(jobType: string): VertexCallType {
+export function callTypeFromJobType(jobType: string): LlmCallType {
   switch (jobType) {
     case 'extract-facturable':
       return 'extract';

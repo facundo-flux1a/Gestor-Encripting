@@ -56,6 +56,7 @@ import { usePreferences } from '@/contexts/preferences-context';
 import { SuggestionBox } from '../suggestions/SuggestionBox';
 import { QueueTracker } from './queue-tracker';
 import { GlobalUploadTracker } from '@/components/upload/global-upload-tracker';
+import { useUploadQueueOptional } from '@/context/UploadQueueProvider';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -188,6 +189,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
   const [incidentCount, setIncidentCount] = React.useState(0);
   const [healthCheckCount, setHealthCheckCount] = React.useState(0);
+  const uploadQueue = useUploadQueueOptional();
 
   // ✅ Usar el contexto de compañías
   const { selectedCompanyIds } = useCompanyContext();
@@ -334,7 +336,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     { href: '/dashboard/health-check', label: 'Salud Documental', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
-    { href: '/dashboard/upload-queue', label: 'Cola de Subidas', icon: UploadCloud },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
@@ -412,6 +413,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+
+            {/* Cola de Subidas: panel global (no página) */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Cola de Subidas"
+                isActive={uploadQueue?.isOpen}
+                onClick={() => uploadQueue?.toggleQueue()}
+              >
+                <UploadCloud className="h-4 w-4 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden truncate">
+                  Cola de Subidas
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
           
           <QueueTracker />

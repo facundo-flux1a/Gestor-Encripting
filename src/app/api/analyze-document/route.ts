@@ -64,15 +64,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Verificar que el documento pertenece a una empresa del usuario
-    // id_de_usuario es un JSON array en la tabla empresas → hay que buscar si el usuario está incluido
-    const usuarioIds: number[] = Array.isArray(document.id_de_usuario)
-      ? document.id_de_usuario
-      : (typeof document.id_de_usuario === 'string'
-          ? JSON.parse(document.id_de_usuario)
-          : [document.id_de_usuario]);
-
-    if (!usuarioIds.includes(user.id)) {
-      console.warn('⚠️ [API-ANALYZE] Sin permisos - Usuario no pertenece a la empresa del documento');
+    if (document.id_de_usuario !== user.id) {
+      console.warn('⚠️ [API-ANALYZE] Sin permisos - Doc pertenece a otro usuario');
       return NextResponse.json(
         { error: 'No tienes permiso para analizar este documento' },
         { status: 403 }
@@ -98,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     const config = configRows[0] || { 
       use_own_key: false, 
-      shared_provider: 'gemini',
+      shared_provider: 'openai',
       daily_limit_openai: 5,
       daily_limit_gemini: 50,
       is_unlimited: false
@@ -109,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     if (shouldCheckLimits) {
       // Determinar qué provider se va a usar
-      const provider = config.shared_provider || 'gemini';
+      const provider = config.shared_provider || 'openai';
       
       console.log(`🔍 [API-ANALYZE] Validando límites para ${provider}...`);
 

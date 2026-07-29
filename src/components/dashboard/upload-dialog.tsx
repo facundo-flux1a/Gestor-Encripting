@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, AlertCircle } from 'lucide-react';
 import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface UploadDialogProps {
   isOpen: boolean;
@@ -27,7 +28,9 @@ export function UploadDialog({
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [companyError, setCompanyError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
   const { toast } = useToast();
 
   const validateFileSize = (file: File): boolean => {
@@ -53,23 +56,6 @@ export function UploadDialog({
     }
   };
 
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
   const acceptedTypes = [
     'application/pdf',
     'application/msword',
@@ -92,7 +78,6 @@ export function UploadDialog({
     const ext = file.name.includes('.')
       ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
       : '';
-    // Linux/Windows a menudo dejan file.type vacío en extensiones .PDF (mayúsculas)
     return acceptedTypes.includes(file.type) || acceptedExts.has(ext);
   };
 
@@ -113,7 +98,6 @@ export function UploadDialog({
       if (entry.isDirectory) {
         const reader = (entry as FileSystemDirectoryEntry).createReader();
         const entries: FileSystemEntry[] = [];
-        // readEntries llega en lotes; hay que llamar hasta vaciar
         const readBatch = (): Promise<void> =>
           new Promise((resolve, reject) => {
             reader.readEntries(async (batch) => {
@@ -149,15 +133,13 @@ export function UploadDialog({
       }
     }
 
-    // Fallback si el navegador no expone entries
     if (collected.length === 0) {
       return Array.from(dataTransfer.files);
     }
     return collected;
   };
 
-  const processDroppedFiles = (droppedFiles: File[]) => {
-    // Carpetas sin extensión llegan como "archivo" vacío/sin tipo — no son inválidas, son carpetas mal leídas
+  const processDroppedFiles = useCallback((droppedFiles: File[]) => {
     const candidates = droppedFiles.filter((file) => file.size > 0 || file.name.includes('.'));
 
     const validFiles = candidates.filter(file => {
@@ -186,54 +168,90 @@ export function UploadDialog({
         variant: "destructive",
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
+
+  const resetDragState = () => {
+    dragCounterRef.current = 0;
+    setIsDragging(false);
   };
 
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  const handleZoneDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
-    const files = await collectFilesFromDataTransfer(e.dataTransfer);
-    processDroppedFiles(files);
+    dragCounterRef.current += 1;
+    if (e.dataTransfer?.types?.includes?.('Files') || Array.from(e.dataTransfer?.types || []).includes('Files')) {
+      setIsDragging(true);
+    }
   };
 
-  // Fullscreen drag and drop listeners
-  useEffect(() => {
-    if (!isOpen) return;
+  const handleZoneDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+    }
+  };
 
-    let dragCounter = 0;
+  const handleZoneDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleZoneDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetDragState();
+    const dropped = await collectFilesFromDataTransfer(e.dataTransfer);
+    processDroppedFiles(dropped);
+  };
+
+  // Listeners globales mientras el modal está abierto (cubre todo el viewport / overlay)
+  useEffect(() => {
+    if (!isOpen) {
+      resetDragState();
+      return;
+    }
+
+    let windowDragCounter = 0;
+
+    const hasFiles = (dt: DataTransfer | null) =>
+      !!dt && (dt.types.includes('Files') || Array.from(dt.types).includes('Files'));
 
     const handleWindowDragEnter = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
-      dragCounter++;
-      if (e.dataTransfer?.types.includes('Files')) {
-        setIsDragging(true);
-      }
+      if (!hasFiles(e.dataTransfer)) return;
+      windowDragCounter += 1;
+      setIsDragging(true);
     };
 
     const handleWindowDragLeave = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
-      dragCounter--;
-      if (dragCounter === 0) {
+      windowDragCounter -= 1;
+      if (windowDragCounter <= 0) {
+        windowDragCounter = 0;
         setIsDragging(false);
       }
     };
 
     const handleWindowDragOver = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     };
 
     const handleWindowDrop = async (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      windowDragCounter = 0;
       setIsDragging(false);
-      dragCounter = 0;
-
       if (e.dataTransfer) {
-        const files = await collectFilesFromDataTransfer(e.dataTransfer);
-        processDroppedFiles(files);
+        const dropped = await collectFilesFromDataTransfer(e.dataTransfer);
+        processDroppedFiles(dropped);
       }
     };
 
@@ -248,17 +266,23 @@ export function UploadDialog({
       window.removeEventListener('dragover', handleWindowDragOver);
       window.removeEventListener('drop', handleWindowDrop);
     };
-  }, [isOpen]);
+  }, [isOpen, processDroppedFiles]);
+
+  const handleCompanyChange = (value: string) => {
+    setSelectedCompanyId(value);
+    setCompanyError(false);
+  };
 
   const handleUpload = () => {
-    if (!selectedCompanyId || files.length === 0) {
-      console.warn('⚠️ [UploadDialog] Abortado: empresa o archivos faltantes', {
-        companyId: selectedCompanyId,
-        files: files.length,
-      });
+    if (!selectedCompanyId) {
+      setCompanyError(true);
+      return;
+    }
+
+    if (files.length === 0) {
       toast({
-        title: "⚠️ Datos incompletos",
-        description: "Por favor selecciona una empresa y al menos un archivo",
+        title: "⚠️ Sin archivos",
+        description: "Agregá al menos un archivo para subir",
         variant: "destructive",
       });
       return;
@@ -266,10 +290,6 @@ export function UploadDialog({
 
     const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
-      console.warn('⚠️ [UploadDialog] Abortado: archivos demasiado grandes', {
-        count: oversizedFiles.length,
-        names: oversizedFiles.map(f => f.name),
-      });
       toast({
         title: "❌ Archivos demasiado grandes",
         description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
@@ -281,14 +301,10 @@ export function UploadDialog({
     const filesToUpload = [...files];
     const companyId = selectedCompanyId;
 
-    console.log('🚀 [UploadDialog] Inicio carga persistente (IndexedDB)', {
-      empresaId: companyId,
-      totalArchivos: filesToUpload.length,
-    });
-
     onClose();
     setFiles([]);
     setSelectedCompanyId('');
+    setCompanyError(false);
     setIsUploading(false);
 
     toast({
@@ -338,7 +354,9 @@ export function UploadDialog({
   const handleClose = () => {
     setFiles([]);
     setSelectedCompanyId('');
+    setCompanyError(false);
     setIsUploading(false);
+    resetDragState();
     onClose();
   };
 
@@ -351,13 +369,21 @@ export function UploadDialog({
   };
 
   const hasOversizedFiles = files.some(file => file.size > MAX_FILE_SIZE);
+  const hasCompany = !!selectedCompanyId;
+  const canSubmit = hasCompany && files.length > 0 && !hasOversizedFiles && !isUploading;
 
   return (
     <>
-      {/* Overlay de arrastre a pantalla completa */}
+      {/* Overlay de arrastre: captura drops en toda el área (incluido el modal) */}
       {isDragging && isOpen && (
-        <div className="fixed inset-0 z-[100] bg-violet-500/10 backdrop-blur-sm border-4 border-dashed border-violet-500 flex items-center justify-center pointer-events-none transition-all duration-200">
-          <div className="bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-2xl p-10 flex flex-col items-center transform scale-105 transition-transform duration-200">
+        <div
+          className="fixed inset-0 z-[100] bg-violet-500/10 backdrop-blur-sm border-4 border-dashed border-violet-500 flex items-center justify-center transition-all duration-200"
+          onDragEnter={handleZoneDragEnter}
+          onDragOver={handleZoneDragOver}
+          onDragLeave={handleZoneDragLeave}
+          onDrop={handleZoneDrop}
+        >
+          <div className="bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-2xl p-10 flex flex-col items-center pointer-events-none transform scale-105 transition-transform duration-200">
             <div className="bg-violet-100 dark:bg-violet-900/50 p-6 rounded-full mb-6">
               <Upload className="w-16 h-16 text-violet-600 dark:text-violet-400 animate-bounce" />
             </div>
@@ -372,7 +398,14 @@ export function UploadDialog({
           handleClose();
         }
       }}>
-        <DialogContent data-tutorial="upload-modal" className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          data-tutorial="upload-modal"
+          className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+          onDragEnter={handleZoneDragEnter}
+          onDragOver={handleZoneDragOver}
+          onDragLeave={handleZoneDragLeave}
+          onDrop={handleZoneDrop}
+        >
         <DialogHeader className="px-3 sm:px-6 py-3 sm:py-6">
           <DialogTitle className="text-base sm:text-lg">
             Subir Nuevos Documentos
@@ -385,8 +418,13 @@ export function UploadDialog({
             <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">
               Empresa destino <span className="text-red-500">*</span>
             </label>
-            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-              <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+            <Select value={selectedCompanyId} onValueChange={handleCompanyChange}>
+              <SelectTrigger
+                className={cn(
+                  "h-8 sm:h-9 text-xs sm:text-sm",
+                  companyError && "border-destructive ring-1 ring-destructive/40"
+                )}
+              >
                 <SelectValue placeholder="Selecciona una empresa" />
               </SelectTrigger>
               <SelectContent>
@@ -401,21 +439,31 @@ export function UploadDialog({
                 ))}
               </SelectContent>
             </Select>
+            {companyError && (
+              <p className="mt-1.5 text-xs text-destructive flex items-center gap-1" role="alert">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Debés elegir una empresa para poder subir
+              </p>
+            )}
           </div>
 
-          {/* Drop zone */}
+          {/* Drop zone — toda el área del modal también acepta drops */}
           <div
-            onDragEnter={handleDragEnter}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors ${isDragging
-              ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
-              : 'border-gray-300 dark:border-gray-700'
-              }`}
+            onDragEnter={handleZoneDragEnter}
+            onDragOver={handleZoneDragOver}
+            onDragLeave={handleZoneDragLeave}
+            onDrop={handleZoneDrop}
+            className={cn(
+              'border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors',
+              isDragging
+                ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
+                : 'border-gray-300 dark:border-gray-700'
+            )}
           >
-            <Upload className={`mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors ${isDragging ? 'text-violet-500' : 'text-gray-400'
-              }`} />
+            <Upload className={cn(
+              'mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors',
+              isDragging ? 'text-violet-500' : 'text-gray-400'
+            )} />
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2 px-2">
               {isDragging
                 ? 'Suelta los archivos aquí'
@@ -443,7 +491,6 @@ export function UploadDialog({
             </p>
           </div>
 
-          {/* Alerta de archivos grandes */}
           {hasOversizedFiles && (
             <div className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
               <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -458,7 +505,6 @@ export function UploadDialog({
             </div>
           )}
 
-          {/* Lista de archivos */}
           {files.length > 0 && (
             <div className="space-y-1.5 sm:space-y-2">
               <p className="text-xs sm:text-sm font-medium">
@@ -469,25 +515,31 @@ export function UploadDialog({
                   const isOversized = file.size > MAX_FILE_SIZE;
                   return (
                     <div
-                      key={index}
-                      className={`flex items-center justify-between p-1.5 sm:p-2 rounded ${isOversized
-                        ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
-                        : 'bg-gray-50 dark:bg-gray-800'
-                        }`}
+                      key={`${file.name}-${file.size}-${index}`}
+                      className={cn(
+                        'flex items-center justify-between p-1.5 sm:p-2 rounded',
+                        isOversized
+                          ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                          : 'bg-gray-50 dark:bg-gray-800'
+                      )}
                     >
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
                         {isOversized && (
                           <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs sm:text-sm truncate block ${isOversized ? 'text-red-800 dark:text-red-200 font-medium' : ''
-                            }`} title={file.name}>
+                          <span className={cn(
+                            'text-xs sm:text-sm truncate block',
+                            isOversized && 'text-red-800 dark:text-red-200 font-medium'
+                          )} title={file.name}>
                             {file.name}
                           </span>
-                          <span className={`text-[10px] sm:text-xs ${isOversized
-                            ? 'text-red-600 dark:text-red-400 font-medium'
-                            : 'text-gray-500'
-                            }`}>
+                          <span className={cn(
+                            'text-[10px] sm:text-xs',
+                            isOversized
+                              ? 'text-red-600 dark:text-red-400 font-medium'
+                              : 'text-gray-500'
+                          )}>
                             {(file.size / 1024 / 1024).toFixed(2)} MB
                             {isOversized && ' - Excede 10 MB'}
                           </span>
@@ -509,7 +561,6 @@ export function UploadDialog({
             </div>
           )}
 
-          {/* Botones */}
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
             <Button
               variant="outline"
@@ -519,10 +570,15 @@ export function UploadDialog({
             >
               Cancelar
             </Button>
+            {/* Sin empresa: se ve deshabilitado pero sigue clickeable para mostrar validador */}
             <Button
               onClick={handleUpload}
-              disabled={isUploading || hasOversizedFiles}
-              className="w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm"
+              disabled={isUploading || hasOversizedFiles || (hasCompany && files.length === 0)}
+              aria-disabled={!canSubmit}
+              className={cn(
+                'w-full sm:w-auto h-8 sm:h-9 text-xs sm:text-sm',
+                !hasCompany && 'opacity-50'
+              )}
             >
               {isUploading ? 'Subiendo...' : `Subir ${files.length} archivo(s)`}
             </Button>

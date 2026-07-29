@@ -45,19 +45,17 @@ export function isAzureOpenAiConfigured(): boolean {
   );
 }
 
-export function getLlmProvider(): 'azure-openai' | 'vertex' {
-  const p = (process.env.LLM_PROVIDER || process.env.EXTRACT_LLM || 'azure-openai')
-    .toLowerCase()
-    .trim();
-  if (p === 'vertex' || p === 'gemini') return 'vertex';
-  if (p === 'azure-openai' || p === 'openai' || p === 'azure' || !p) {
-    if (!isAzureOpenAiConfigured()) {
-      console.warn('[AzureOpenAI] LLM_PROVIDER=azure-openai pero faltan credenciales → vertex');
-      return 'vertex';
-    }
-    return 'azure-openai';
+export function getLlmProvider(): 'azure-openai' {
+  if (!isAzureOpenAiConfigured()) {
+    throw new Error(
+      'Azure OpenAI no configurado. Definí AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY y AZURE_OPENAI_DEPLOYMENT.'
+    );
   }
-  return isAzureOpenAiConfigured() ? 'azure-openai' : 'vertex';
+  return 'azure-openai';
+}
+
+export function assertAzureOpenAiConfigured(): void {
+  getLlmProvider();
 }
 
 function chatUrl(): string {

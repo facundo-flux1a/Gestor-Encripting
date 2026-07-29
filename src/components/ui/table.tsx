@@ -7,15 +7,17 @@ import { cn } from "@/lib/utils"
 // 🆕 Interface para exponer la ref del contenedor scrollable
 interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
   scrollContainerRef?: React.RefObject<HTMLDivElement>
+  /** Si true, no crea overflow propio (el padre maneja el scroll — necesario para sticky). */
+  noScrollWrapper?: boolean
 }
 
 const Table = React.forwardRef<HTMLTableElement, TableProps>(
-  ({ className, scrollContainerRef, ...props }, ref) => {
+  ({ className, scrollContainerRef, noScrollWrapper = false, ...props }, ref) => {
     const internalRef = React.useRef<HTMLDivElement>(null)
     const containerRef = scrollContainerRef || internalRef
-
     // 🎯 Effect para scroll continuo con teclado GLOBAL
     React.useEffect(() => {
+      if (noScrollWrapper) return
       const container = containerRef.current
       if (!container) return
 
@@ -111,7 +113,17 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
           cancelAnimationFrame(animationFrameId)
         }
       }
-    }, [containerRef])
+    }, [containerRef, noScrollWrapper])
+
+    if (noScrollWrapper) {
+      return (
+        <table
+          ref={ref}
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      )
+    }
 
     return (
       <div

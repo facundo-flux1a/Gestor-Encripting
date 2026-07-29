@@ -94,7 +94,7 @@ export function AIMetricsModal({ open, onOpenChange, onNavigateToIncidents }: AI
   };
 
   const getProviderLabel = (provider: string) => {
-    return provider === 'openai' ? 'OpenAI' : 'Gemini';
+    return 'OpenAI';
   };
 
   const getSeverityColor = (severity: string) => {
@@ -195,42 +195,10 @@ export function AIMetricsModal({ open, onOpenChange, onNavigateToIncidents }: AI
                       </div>
                     </div>
 
-                    {/* Gemini */}
-                    <div className="p-2.5 sm:p-3 lg:p-4 border border-gray-200 dark:border-gray-800 rounded-lg">
-                      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                        <span className="text-xs sm:text-sm lg:text-base font-semibold text-gray-900 dark:text-gray-100">Gemini</span>
-                        <span className="text-[10px] sm:text-xs font-mono text-gray-500 dark:text-gray-400 tabular-nums">
-                          {metrics.limites.gemini.usado_hoy}/{metrics.limites.gemini.limite}
-                        </span>
-                      </div>
-                      <div className="space-y-1 sm:space-y-1.5 lg:space-y-2">
-                        <div className="flex justify-between text-xs sm:text-sm">
-                          <span className="text-gray-600 dark:text-gray-400">Restantes</span>
-                          <span className={`font-semibold tabular-nums ${
-                            metrics.limites.gemini.restante === 0 
-                              ? 'text-red-600 dark:text-red-400' 
-                              : metrics.limites.gemini.restante <= 10 
-                              ? 'text-yellow-600 dark:text-yellow-400' 
-                              : 'text-green-600 dark:text-green-400'
-                          }`}>
-                            {metrics.limites.gemini.restante}
-                          </span>
-                        </div>
-                        <div className="h-1.5 sm:h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${getUsageColor(metrics.limites.gemini.porcentaje)}`}
-                            style={{ width: `${Math.min(100, metrics.limites.gemini.porcentaje)}%` }}
-                          />
-                        </div>
-                        <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 text-center tabular-nums">
-                          {metrics.limites.gemini.porcentaje.toFixed(0)}% usado
-                        </p>
-                      </div>
-                    </div>
                   </div>
                   
                   {/* 📱 ADVERTENCIAS */}
-                  {(metrics.limites.openai.porcentaje >= 80 || metrics.limites.gemini.porcentaje >= 80) && (
+                  {metrics.limites.openai.porcentaje >= 80 && (
                     <Alert className="mt-2 sm:mt-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-900 text-xs sm:text-sm">
                       <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
                       <AlertDescription className="text-yellow-800 dark:text-yellow-200 leading-snug">

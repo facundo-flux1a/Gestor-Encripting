@@ -235,7 +235,6 @@ export function GroupedAIIncidentsTable({ empresaIds, onRefresh }: GroupedAIInci
                             <SelectContent>
                                 <SelectItem value="all">Todos</SelectItem>
                                 <SelectItem value="openai">OpenAI</SelectItem>
-                                <SelectItem value="gemini">Gemini</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
