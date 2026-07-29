@@ -141,11 +141,15 @@ export async function POST(req: NextRequest) {
           reason: 'El archivo ya fue subido anteriormente a esta empresa.',
           time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
         });
-        // Registrar en fallos
-        await connection.query(
-          `INSERT INTO fallos_de_mails (email, asunt, fecha, error) VALUES (?, ?, NOW(), ?)`,
-          [cleanEmail, emailSubject || 'Sin asunto', `Duplicado: ${filename}`]
-        );
+        // Registrar en fallos (silencioso si falla - tabla opcional)
+        try {
+          await connection.query(
+            `INSERT INTO fallos_de_mails (email, asunto, fecha, error) VALUES (?, ?, NOW(), ?)`,
+            [cleanEmail, emailSubject || 'Sin asunto', `Duplicado: ${filename}`]
+          );
+        } catch (e: any) {
+          console.warn(`[MailParser] ⚠️ No se pudo registrar fallo (ignorado): ${e.message}`);
+        }
         return false; // saltar
       }
 
@@ -174,9 +178,9 @@ export async function POST(req: NextRequest) {
         normalizedFileType = 'unknown';
       }
 
-      // Crear actividad
+      // Crear actividad (INSERT IGNORE para ser idempotente en reintentos del MailParser)
       await connection.query(
-        `INSERT INTO ${dbName}.actividad 
+        `INSERT IGNORE INTO ${dbName}.actividad 
          (upload_id, id_de_empresa, documento_nombre, documento_tipo, status, step, progress, mensaje, file_path, file_hash, cif)
          VALUES (?, ?, ?, ?, 'iniciando', 'Archivo recibido desde correo', 0, 'Preparando para procesamiento', ?, ?, ?)`,
         [fileUploadId, empresaId, cleanFileName, normalizedFileType, filePath, fileHash, cif]
