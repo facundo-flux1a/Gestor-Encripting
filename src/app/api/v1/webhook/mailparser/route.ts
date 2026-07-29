@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/services/email-service';
 import { getUnauthorizedSenderEmailHtml, getRejectedFilesEmailHtml } from '@/services/ingestion/email-templates';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { ingestionQueue, IngestionJobData } from '@/lib/queue';
+import { ingestionQueue, notificationQueue, IngestionJobData } from '@/lib/queue';
 import { hashField } from '@/lib/encryption';
 
 // Configuración S3
@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
     console.log(`[MailParser] ✅ Empresa identificada: ${nombreEmpresa} (ID: ${empresaId})`);
 
     const rejectedFiles: { filename: string; reason: string; time: string }[] = [];
+    const acceptedUploadIds: string[] = [];
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${(now.getMonth() + 1).toString().padStart(2, '0')}_${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}_${now.getMinutes().toString().padStart(2, '0')}_${now.getSeconds().toString().padStart(2, '0')}`;
 
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest) {
       };
 
       await ingestionQueue.add(`ingest-${fileUploadId}`, jobData, { jobId: `ingest-${fileUploadId}` });
+      acceptedUploadIds.push(fileUploadId);
       console.log(`[MailParser] 🚀 Job encolado para: ${filename}`);
       return true;
     };
@@ -221,16 +223,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Notificar rechazados
-    if (rejectedFiles.length > 0) {
-      console.log(`[MailParser] 📧 Enviando resumen de ${rejectedFiles.length} archivos rechazados a ${cleanEmail}`);
-      const dateStr = new Date().toLocaleDateString('es-ES');
-      const html = getRejectedFilesEmailHtml(cleanEmail, dateStr, rejectedFiles);
+    // 4. Encolar notificación diferida (15 mins)
+    if (acceptedUploadIds.length > 0 || rejectedFiles.length > 0) {
+      console.log(`[MailParser] 📧 Encolando job de notificación diferida para ${cleanEmail}`);
       
-      await sendEmail({
-        to: cleanEmail,
-        subject: '⚠️ Archivos Rechazados - Sistema Documental',
-        html
+      const notifData = {
+        parentUploadId,
+        uploadIds: acceptedUploadIds,
+        emailFrom: cleanEmail,
+        empresaId,
+        nombreEmpresa,
+        batchTimestamp: timestamp,
+        earlyRejectedFiles: rejectedFiles.length > 0 ? rejectedFiles : undefined
+      };
+
+      // Guardamos para que el worker de notificación los recoja 15 mins después
+      await notificationQueue.add(`notify-${parentUploadId}`, notifData, { 
+        jobId: `notify-${parentUploadId}`,
+        delay: 15 * 60 * 1000 // 15 minutos en milisegundos
       });
     }
 

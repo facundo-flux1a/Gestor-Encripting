@@ -9,6 +9,7 @@ import 'dotenv/config';
 import { startIngestionWorker } from './ingestion.worker';
 import { startExtractionWorker } from './extraction.worker';
 import { startDbWriterWorker } from './db-writer.worker';
+import { startNotificationWorker } from './notification.worker';
 import { redis } from '@/lib/redis';
 import { reconcileStaleActividad } from '@/services/actividad-reconcile';
 import { Queue } from 'bullmq';
@@ -74,6 +75,7 @@ async function bootstrap() {
     startIngestionWorker();
     startExtractionWorker();
     startDbWriterWorker();
+    startNotificationWorker();
 
     const beat = async () => {
       try {

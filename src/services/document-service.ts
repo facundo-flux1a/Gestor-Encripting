@@ -2646,7 +2646,7 @@ export async function getIncidentsAnalytics(empresaIds?: number[]): Promise<Inci
     const whereDocType = `AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%'`;
 
     // ✅ Filtro de empresas (ahora siempre presente)
-    const whereEmpresa = 'AND e2.JSON_CONTAINS(id_de_usuario, CAST(? AS JSON)) AND d.id_de_empresa IN (?)';
+    const whereEmpresa = 'AND JSON_CONTAINS(e2.id_de_usuario, CAST(? AS JSON)) AND d.id_de_empresa IN (?)';
     const params: any[] = [user.id, empresaIds];
 
     const [summary] = await db.query<RowDataPacket[]>(`

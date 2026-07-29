@@ -345,3 +345,135 @@ export function getRejectedFilesEmailHtml(emailFrom: string, dateStr: string, re
 </body>
 </html>`;
 }
+
+export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: string, dateStr: string, acceptedFiles: { filename: string, status: string }[], rejectedFiles: { filename: string, reason: string }[]): string {
+    const totalFiles = acceptedFiles.length + rejectedFiles.length;
+    const allSuccess = rejectedFiles.length === 0;
+
+    let acceptedHtml = '';
+    if (acceptedFiles.length > 0) {
+        acceptedHtml = `
+        <div style="margin-bottom: 24px;">
+            <p style="color: #16a34a; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; margin: 0 0 14px; font-weight: 800;">
+                ✅ PROCESADOS CON ÉXITO (${acceptedFiles.length})
+            </p>
+            ${acceptedFiles.map(file => `
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+                <p style="color: #1f2937; font-size: 14px; margin: 0; font-weight: 600;">
+                    ${file.filename}
+                </p>
+                <p style="color: #15803d; font-size: 12px; margin: 4px 0 0; font-weight: 500;">
+                    Estado final: ${file.status}
+                </p>
+            </div>
+            `).join('')}
+        </div>`;
+    }
+
+    let rejectedHtml = '';
+    if (rejectedFiles.length > 0) {
+        rejectedHtml = `
+        <div style="margin-bottom: 24px;">
+            <p style="color: #dc2626; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; margin: 0 0 14px; font-weight: 800;">
+                ❌ RECHAZADOS / ERRORES (${rejectedFiles.length})
+            </p>
+            ${rejectedFiles.map(file => `
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+                <p style="color: #1f2937; font-size: 14px; margin: 0; font-weight: 600;">
+                    ${file.filename}
+                </p>
+                <p style="color: #b91c1c; font-size: 12px; margin: 4px 0 0; font-weight: 500;">
+                    Motivo: ${file.reason}
+                </p>
+            </div>
+            `).join('')}
+        </div>`;
+    }
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notificación - Resumen de Ingesta</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%); padding: 50px 20px;">
+        <tr>
+            <td align="center">
+                <table width="650" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 24px; box-shadow: 0 25px 70px rgba(37, 99, 235, 0.4); overflow: hidden;">
+                    
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%); padding: 50px 40px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td>
+                                        <h1 style="color: #ffffff; font-size: 34px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.5px;">
+                                            Sistema Documental
+                                        </h1>
+                                        <p style="color: rgba(255,255,255,0.95); font-size: 16px; margin: 0; font-weight: 500; letter-spacing: 0.3px;">
+                                            Muvail | Gestión Empresarial
+                                        </p>
+                                    </td>
+                                    <td style="text-align: right; vertical-align: middle;">
+                                        <div style="background: linear-gradient(135deg, ${allSuccess ? '#22c55e 0%, #16a34a' : '#f59e0b 0%, #d97706'} 100%); width: 85px; height: 85px; border-radius: 22px; display: inline-block; text-align: center; line-height: 85px; box-shadow: 0 12px 30px rgba(0,0,0, 0.2);">
+                                            <span style="font-size: 44px;">${allSuccess ? '✅' : '⚠️'}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td style="background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%); padding: 22px 40px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="color: #ffffff; font-size: 16px; font-weight: 700; letter-spacing: 0.8px;">
+                                        RESUMEN DE INGESTA
+                                    </td>
+                                    <td style="text-align: right; color: rgba(255,255,255,0.95); font-size: 14px; font-weight: 600;">
+                                        ${dateStr}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td style="padding: 48px 40px;">
+                            <div style="margin-bottom: 38px;">
+                                <p style="color: #2563eb; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 10px; font-weight: 700;">
+                                    EMPRESA DESTINO
+                                </p>
+                                <p style="color: #1f2937; font-size: 19px; margin: 0; font-weight: 700;">
+                                    ${nombreEmpresa}
+                                </p>
+                                <p style="color: #6b7280; font-size: 15px; margin: 8px 0 0; font-weight: 500;">
+                                    Remitente: ${emailFrom}
+                                </p>
+                            </div>
+                            
+                            <p style="color: #374151; font-size: 16px; line-height: 1.7; margin: 0 0 38px; font-weight: 500;">
+                                Hemos concluido el procesamiento de los <strong>${totalFiles} archivos</strong> que enviaste recientemente. A continuación, el reporte detallado:
+                            </p>
+                            
+                            ${acceptedHtml}
+                            ${rejectedHtml}
+                            
+                            <!-- Boton al Dashboard -->
+                            <div style="text-align: center; margin-top: 40px;">
+                                <a href="https://gestor.muvail.com" style="background: #2563eb; color: #ffffff; padding: 14px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">
+                                    Ir al Dashboard
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+}

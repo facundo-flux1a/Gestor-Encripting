@@ -17,6 +17,7 @@ export const EXTRACTION_QUEUE_NAME = `${queuePrefix}-extraction`;
 /** @deprecated alias durante migración — misma cola que EXTRACTION si ya migraste Redis */
 export const GEMINI_QUEUE_NAME = EXTRACTION_QUEUE_NAME;
 export const DB_WRITER_QUEUE_NAME = `${queuePrefix}-db-writer`;
+export const NOTIFICATION_QUEUE_NAME = `${queuePrefix}-notification`;
 
 export const ingestionQueue = new Queue(INGESTION_QUEUE_NAME, {
   connection,
@@ -47,6 +48,18 @@ export const extractionQueueEvents = new QueueEvents(EXTRACTION_QUEUE_NAME, { co
 /** @deprecated */
 export const geminiQueueEvents = extractionQueueEvents;
 export const dbWriterQueueEvents = new QueueEvents(DB_WRITER_QUEUE_NAME, { connection });
+export const notificationQueueEvents = new QueueEvents(NOTIFICATION_QUEUE_NAME, { connection });
+
+// ─── Cola de Notificaciones (Resumen de Ingesta) ──────────────────────────────
+export const notificationQueue = new Queue(NOTIFICATION_QUEUE_NAME, {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 500 },
+  },
+});
 
 export interface IngestionJobData {
   uploadId: string;
@@ -120,3 +133,14 @@ export const dbWriterQueue = new Queue(DB_WRITER_QUEUE_NAME, {
     removeOnFail: { count: 1000 },
   },
 });
+
+// ─── Tipos de jobs de Notificación ───────────────────────────────────────────
+export interface NotificationJobData {
+  parentUploadId: string;    // ID del lote principal
+  uploadIds: string[];       // Array de IDs de todos los archivos válidos subidos
+  emailFrom: string;         // Correo del remitente
+  empresaId: string;
+  nombreEmpresa: string;
+  batchTimestamp: string;    // Fecha de recepción del correo
+  earlyRejectedFiles?: Array<{ filename: string; reason: string }>; // Archivos que fallaron inmediatamente
+}
