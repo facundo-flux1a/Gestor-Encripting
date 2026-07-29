@@ -4,18 +4,18 @@ import { useFormStatus } from 'react-dom';
 import { register } from '@/services/auth-service';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import React, { Suspense, useEffect, useState } from 'react';
+import { AuthBrandPanel, AuthBrandMobile } from '@/components/auth/auth-brand-panel';
 
 function RegisterButton() {
   const { pending } = useFormStatus();
   return (
-    <Button className="w-full" type="submit" disabled={pending}>
+    <Button className="w-full h-11" type="submit" disabled={pending}>
       {pending ? 'Creando cuenta...' : 'Crear Cuenta'}
     </Button>
   );
@@ -74,14 +74,14 @@ function RegisterForm() {
   }, [searchParams]);
 
   return (
-    <form action={register} className="space-y-4">
+    <form action={register} className="space-y-5">
       <Suspense fallback={null}>
         <RegisterError />
       </Suspense>
 
       {companyName && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <AlertDescription className="text-blue-700">
+        <Alert className="border-primary/20 bg-primary/5">
+          <AlertDescription className="text-foreground/80">
             Estás registrándote para colaborar con <strong>{companyName}</strong>.
           </AlertDescription>
         </Alert>
@@ -91,10 +91,10 @@ function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="name">Nombre</Label>
-        <Input id="name" name="name" placeholder="Tu Nombre Full" required />
+        <Input id="name" name="name" placeholder="Tu Nombre Full" className="h-11" required />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="email">Correo Electrónico</Label>
+        <Label htmlFor="email">Correo electrónico</Label>
         <Input
           id="email"
           name="email"
@@ -104,12 +104,12 @@ function RegisterForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           readOnly={!!token}
-          className={token ? "bg-muted cursor-not-allowed" : ""}
+          className={token ? "h-11 bg-muted cursor-not-allowed" : "h-11"}
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Contraseña</Label>
-        <Input id="password" name="password" type="password" required />
+        <Input id="password" name="password" type="password" className="h-11" required />
       </div>
       <RegisterButton />
     </form>
@@ -125,12 +125,12 @@ function RegisterFooter() {
     : '/auth/login';
 
   return (
-    <div className="mt-4 text-center text-sm">
+    <p className="mt-6 text-center text-sm text-muted-foreground">
       ¿Ya tienes una cuenta?{' '}
-      <Link href={loginUrl} className="underline">
+      <Link href={loginUrl} className="font-medium text-primary hover:underline">
         Inicia sesión
       </Link>
-    </div>
+    </p>
   );
 }
 
@@ -156,34 +156,46 @@ export default function RegisterPage() {
     }, [token]);
 
     return (
-      <CardHeader>
-        <CardTitle className="text-2xl">
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight">
           {isInvited ? (companyName ? `Únete a ${companyName}` : 'Completa tu Registro') : 'Crear una Cuenta'}
-        </CardTitle>
-        <CardDescription>
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
           {isInvited
             ? 'Crea tu contraseña para empezar a colaborar en el equipo.'
             : 'Introduce tus datos para registrarte.'}
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
     );
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm shadow-lg border-primary/20">
-        <Suspense fallback={<CardHeader><CardTitle className="text-2xl">Cargando...</CardTitle></CardHeader>}>
-          <InvitationHeader />
-        </Suspense>
-        <CardContent>
+    <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
+      <AuthBrandPanel titular="Sumate y empezá a ordenar la documentación fiscal de tus empresas." />
+
+      <section className="flex min-h-screen flex-col items-center justify-center px-6 py-12 lg:min-h-0">
+        <div className="w-full max-w-[380px]">
+          <AuthBrandMobile />
+
+          <Suspense
+            fallback={
+              <div className="mb-8">
+                <h2 className="text-2xl font-semibold tracking-tight">Cargando...</h2>
+              </div>
+            }
+          >
+            <InvitationHeader />
+          </Suspense>
+
           <Suspense fallback={<div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
             <RegisterForm />
           </Suspense>
+
           <Suspense fallback={null}>
             <RegisterFooter />
           </Suspense>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </section>
+    </main>
   );
 }

@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, Loader2, FileStack, Building2, ScanLine } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { AuthBrandPanel, AuthBrandMobile } from '@/components/auth/auth-brand-panel';
 import React, { Suspense, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { LogoutDetector } from '@/components/auth/LogoutDetector';
@@ -241,26 +242,6 @@ function LoginForm() {
   );
 }
 
-/* Puntos de valor del producto. Reemplazan al bloque de texto gigante:
-   dicen qué hace la herramienta en vez de saludar. */
-const CARACTERISTICAS = [
-  {
-    icon: ScanLine,
-    titulo: 'Carga automática',
-    detalle: 'Subís el archivo y el sistema extrae los datos fiscales solo.',
-  },
-  {
-    icon: Building2,
-    titulo: 'Multiempresa',
-    detalle: 'Administrá varias razones sociales desde una misma cuenta.',
-  },
-  {
-    icon: FileStack,
-    titulo: 'Todo en un lugar',
-    detalle: 'Comprobantes, proveedores y trimestres siempre ordenados.',
-  },
-];
-
 export default function LoginPage() {
   const anio = new Date().getFullYear();
 
@@ -270,72 +251,12 @@ export default function LoginPage() {
         <LogoutDetector />
       </Suspense>
 
-      {/* ---- Mitad izquierda: producto ---- */}
-      <section className="relative hidden overflow-hidden bg-primary p-12 lg:flex lg:flex-col lg:justify-between">
-        {/* Textura de puntos, sutil y sin formas geométricas */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.18]"
-          style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
-            backgroundSize: '22px 22px',
-          }}
-          aria-hidden="true"
-        />
-        {/* Halo suave para dar profundidad al plano */}
-        <div
-          className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)' }}
-          aria-hidden="true"
-        />
-
-        <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/95 shadow-sm">
-            <img src="/gm.png" alt="" className="h-8 w-8 object-contain" />
-          </span>
-          <div className="leading-tight">
-            <p className="text-base font-semibold text-primary-foreground">Gestor Documental</p>
-            <p className="text-xs text-primary-foreground/60">Muvail</p>
-          </div>
-        </div>
-
-        <div className="relative z-10 max-w-md">
-          <h1 className="text-3xl font-semibold leading-snug tracking-tight text-primary-foreground">
-            La gestión fiscal de tus empresas, ordenada y sin trabajo manual.
-          </h1>
-
-          <ul className="mt-10 space-y-6">
-            {CARACTERISTICAS.map(({ icon: Icono, titulo, detalle }) => (
-              <li key={titulo} className="flex gap-4">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
-                  <Icono className="h-[18px] w-[18px] text-primary-foreground" />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-primary-foreground">{titulo}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-primary-foreground/65">{detalle}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="relative z-10 text-xs text-primary-foreground/45">
-          © {anio} Gestor Documental Muvail
-        </p>
-      </section>
+      <AuthBrandPanel titular="La gestión fiscal de tus empresas, ordenada y sin trabajo manual." />
 
       {/* ---- Mitad derecha: formulario ---- */}
       <section className="flex min-h-screen flex-col items-center justify-center px-6 py-12 lg:min-h-0">
         <div className="w-full max-w-[380px]">
-          {/* Marca visible sólo en mobile, donde la mitad izquierda no se muestra */}
-          <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <img src="/gm.png" alt="" className="h-7 w-7 object-contain" />
-            </span>
-            <div className="leading-tight">
-              <p className="text-sm font-semibold">Gestor Documental</p>
-              <p className="text-xs text-muted-foreground">Muvail</p>
-            </div>
-          </div>
+          <AuthBrandMobile />
 
           <div className="mb-8">
             <h2 className="text-2xl font-semibold tracking-tight">Iniciar sesión</h2>
