@@ -4,6 +4,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProvidersTable } from "@/components/dashboard/providers-table";
 import { useCompanyContext } from "@/context/CompanyProvider";
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { useEffect, useState } from "react";
 import type { ProviderWithStats } from "@/lib/types";
 import { Building2 } from "lucide-react";
@@ -13,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 function ProveedoresPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
+    const { refreshKey } = useDataRefresh();
     const [providers, setProviders] = useState<ProviderWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'proveedores' | 'clientes'>('proveedores');
@@ -107,7 +109,7 @@ function ProveedoresPageContent() {
 
     useEffect(() => {
         fetchData(activeTab);
-    }, [selectedCompanyIds, activeTab]);
+    }, [selectedCompanyIds, activeTab, refreshKey]);
 
     const tabSelector = (
         <div

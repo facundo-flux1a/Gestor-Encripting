@@ -48,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from './theme-toggle';
+import { RefreshButton } from './refresh-button';
 import { Separator } from '@/components/ui/separator';
 
 import { CompaniesSelector } from '../companies-selector';
@@ -177,6 +178,7 @@ export function MainLayoutHeader({ children, className, hideSidebarTrigger = fal
       <div className="flex-1 min-w-0">{children}</div>
 
       <div className="flex items-center gap-2">
+        <RefreshButton />
         <ThemeToggle />
       </div>
     </header>

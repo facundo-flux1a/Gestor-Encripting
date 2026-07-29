@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { getSession } from '@/services/auth-service';
 import { MainLayout } from '@/components/layout/main-layout';
 import { PageHeader } from '@/components/layout/page-header';
@@ -95,6 +96,7 @@ import { TopClients } from '@/components/dashboard/top-clients';
 
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
+  const { refreshKey } = useDataRefresh();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +140,7 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyIds, selectedAño, selectedTrimestre]);
+  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey]);
 
   const handleExport = async () => {
     if (!dashboardRef.current) return;

@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useCompanyContext } from '@/context/CompanyProvider'
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { Document } from '@/lib/types'
 import { calculateFinancials } from '@/lib/financial-engine'
 import { MainLayout } from '@/components/layout/main-layout'
@@ -23,6 +24,7 @@ import { Suspense } from 'react'
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
+  const { refreshKey } = useDataRefresh();
   const { isTutorialActive, currentStep } = useTutorial();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -118,7 +120,7 @@ function DocumentsPageContent() {
     }
 
     loadDocuments();
-  }, [selectedCompanyIds, key]);
+  }, [selectedCompanyIds, key, refreshKey]);
 
   // ✅ CLASIFICACIÓN CORREGIDA: Validación de CIF para abonos
   const { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {

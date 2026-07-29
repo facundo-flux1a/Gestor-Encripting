@@ -8,6 +8,7 @@ import { PreferencesProvider } from '@/contexts/preferences-context';
 import { UploadProgressManager } from '@/components/upload/upload-progress-card';
 import { RetryMonitor } from '@/components/upload/retry-monitor';
 import { UploadQueueProvider } from '@/context/UploadQueueProvider';
+import { DataRefreshProvider } from '@/context/DataRefreshProvider';
 import { UploadQueuePanel } from '@/components/upload/upload-queue-panel';
 import { cookies } from 'next/headers';
 import { getSession } from '@/services/auth-service';
@@ -44,6 +45,7 @@ export default async function RootLayout({
             <PreferencesProvider>
               <TutorialProvider>
                 <UploadQueueProvider>
+                <DataRefreshProvider>
                 {/* Container con gradiente sutil de fondo */}
                 <div className="relative min-h-screen w-full bg-gradient-to-br from-background via-background to-muted/5">
                   {/* Efecto de grano sutil para textura */}
@@ -67,6 +69,7 @@ export default async function RootLayout({
 
                 {/* Panel lateral global de cola de subidas */}
                 <UploadQueuePanel />
+                </DataRefreshProvider>
                 </UploadQueueProvider>
               </TutorialProvider>
             </PreferencesProvider>

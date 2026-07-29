@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { TrimestresProvider, useTrimestres } from '@/context/TrimestresProvider';
 import { MainLayout } from '@/components/layout/main-layout';
 import { TrimestreSelector } from '@/components/trimestres/trimestre-selector';
@@ -60,6 +61,7 @@ const EMPTY_FILTERS: TrimestresFilterState = {
 
 function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
+  const { refreshKey } = useDataRefresh();
   const { isTutorialActive, currentStep, mostrarVacios, setMostrarVacios } = useTrimestres();
   const { toast } = useToast();
 
@@ -257,7 +259,7 @@ function TrimestresPageContent() {
     loadTrimestres();
     loadDocumentos();
     loadAnnualDocumentos();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño, selectedTrimestre, isLoadingCompanies]);
+  }, [selectedCompanyIds, mostrarVacios, selectedAño, selectedTrimestre, isLoadingCompanies, refreshKey]);
 
   const loadTrimestres = async () => {
     try {

@@ -7,6 +7,7 @@ import { IncidentsAnalytics } from "@/components/incidents/incidents-analytics";
 import { AnalyzeDocumentsCard } from "@/components/incidents/analyze-documents-card";
 import { GroupedAIIncidentsTable } from "@/components/incidents/grouped-ai-incidents-table";
 import { useCompanyContext } from "@/context/CompanyProvider";
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { useState, useEffect } from "react";
 import type { Document } from "@/lib/types";
 import type { IncidentsAnalyticsData } from "@/components/incidents/incidents-analytics";
@@ -18,6 +19,7 @@ import { IncidenciasTutorialRouter } from "@/components/incidencias/IncidenciasT
 
 function IncidentsPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
+    const { refreshKey } = useDataRefresh();
     const [docs, setDocs] = useState<Document[]>([]);
     const [analyticsData, setAnalyticsData] = useState<IncidentsAnalyticsData>({
         totalOpen: 0,
@@ -64,7 +66,7 @@ function IncidentsPageContent() {
 
     useEffect(() => {
         fetchIncidents();
-    }, [selectedCompanyIds]);
+    }, [selectedCompanyIds, refreshKey]);
 
     const handleAnalysisComplete = async () => {
         console.log('🔄 [IncidentsPage] Análisis completado, recargando...');

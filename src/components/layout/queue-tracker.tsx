@@ -5,6 +5,7 @@ import { useSidebar, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuIt
 import { Activity, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 
 interface QueueStats {
   waiting: number;
@@ -23,9 +24,18 @@ const ACTIVE_POLL_MS = 10_000;
 
 export function QueueTracker() {
   const { state } = useSidebar();
+  const { refresh } = useDataRefresh();
   const [stats, setStats] = React.useState<AllStats | null>(null);
   const [error, setError] = React.useState<boolean>(false);
   const hasActivityRef = React.useRef(false);
+
+  // El refresco se dispara en la transición "había trabajo" -> "no hay nada".
+  // Se guarda en un ref para que el efecto de polling no dependa de `refresh`
+  // y no se reinicie el intervalo en cada render.
+  const refreshRef = React.useRef(refresh);
+  React.useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -50,11 +60,19 @@ export function QueueTracker() {
         if (cancelled) return;
         setStats(data);
         setError(false);
-        hasActivityRef.current =
-          data.total.active > 0 ||
-          data.total.waiting > 0 ||
-          data.total.delayed > 0 ||
-          data.total.failed > 0;
+
+        // Trabajo pendiente = algo corriendo, esperando o demorado.
+        // Los fallidos NO cuentan: quedan acumulados y mantendrían el estado
+        // en "hay actividad" para siempre, impidiendo detectar el final.
+        const hayTrabajo =
+          data.total.active > 0 || data.total.waiting > 0 || data.total.delayed > 0;
+
+        // La cola terminó recién: recargar los datos de la vista actual.
+        if (hasActivityRef.current && !hayTrabajo) {
+          refreshRef.current('cola-terminada');
+        }
+
+        hasActivityRef.current = hayTrabajo;
       } catch (err) {
         console.error('Error fetching queue stats:', err);
         if (!cancelled) setError(true);
