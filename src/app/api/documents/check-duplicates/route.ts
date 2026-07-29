@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
     console.log('🔍 [check-duplicates] Verificando duplicados para empresa:', empresaId);
 
     // Obtener todos los documentos de la empresa con información del proveedor
-    // SOLO traemos info de proveedor si es una factura recibida o similar, pero por simplicidad traemos de todos
     const [docs] = await db.query<RowDataPacket[]>(
       `SELECT 
           d.id, 
@@ -49,18 +48,12 @@ export async function POST(req: NextRequest) {
       const tipo = (doc.tipo_documento || '').toLowerCase();
       let key = '';
 
-      // LÓGICA DIFERENCIADA
       if (tipo.includes('recibida') || tipo.includes('recibido')) {
-        // 🔥 FACTURAS RECIBIDAS: Chequear Número + Proveedor
         const cif = doc.proveedor_cif_hash || doc.proveedor_cif_raw;
         const nombre = doc.proveedor_nombre_hash || doc.proveedor_nombre_raw;
         const proveedor = (cif || nombre || 'DESCONOCIDO').trim().toLowerCase();
-        console.log(`🔍 [Check-Dup] DOC #${doc.id} (Recibida) | Num: ${numero} | Prov: ${proveedor}`);
-
         key = `${numero}|${doc.id_de_empresa}|RECIBIDA|${proveedor}`;
       } else {
-        // 🔥 FACTURAS EMITIDAS (y otras): Solo chequear Número
-        console.log(`🔍 [Check-Dup] DOC #${doc.id} (Emitida/Otra) | Num: ${numero} | Strict Check`);
         key = `${numero}|${doc.id_de_empresa}|EMITIDA`;
       }
 
@@ -76,7 +69,6 @@ export async function POST(req: NextRequest) {
       const grupo = gruposDuplicados.get(key)!;
       grupo.ids.push(doc.id);
 
-      // Sección legible según tipo de documento
       let seccion = 'Emitidas';
       if (tipo.includes('recibida') || tipo.includes('recibido') || tipo.includes('gasto')) {
         seccion = 'Recibidas';
@@ -88,29 +80,29 @@ export async function POST(req: NextRequest) {
         id: doc.id,
         tipo: doc.tipo_documento || 'Desconocido',
         seccion,
-        // Placeholder — se sobreescribe abajo con Prisma (que desencripta nombre_de_empresa)
         empresa_nombre: `Empresa #${doc.id_de_empresa}`
       });
     });
 
-    // Filtrar solo los que tienen duplicados (2+ docs)
     const duplicadosReales = Array.from(gruposDuplicados.values())
       .filter(grupo => grupo.ids.length > 1);
 
-    // Obtener nombres de empresas via Prisma (desencripta automáticamente nombre_de_empresa)
+    // ─── Obtener nombres de empresas via Prisma (desencripta automáticamente) ──────
     const empresaIdsInvolucradas = [...new Set(duplicadosReales.map(g => g.empresa_id))];
-    const empresasData = await prisma.empresas.findMany({
-      where: { id: { in: empresaIdsInvolucradas } },
-      select: { id: true, nombre_de_empresa: true }
-    });
-    const empresaMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || null]));
+    let empresaMap = new Map<number, string | null>();
 
-    // Enriquecer empresa_nombre en cada doc con el nombre desencriptado
+    if (empresaIdsInvolucradas.length > 0) {
+      const empresasData = await prisma.empresas.findMany({
+        where: { id: { in: empresaIdsInvolucradas } },
+        select: { id: true, nombre_de_empresa: true }
+      });
+      empresaMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || null]));
+    }
+
     duplicadosReales.forEach(grupo => {
       const nombreEmpresa = empresaMap.get(grupo.empresa_id);
       if (nombreEmpresa) {
         grupo.docs.forEach(doc => {
-          // Sólo sobreescribir si el fallback actual es "Empresa #ID"
           if (doc.empresa_nombre.startsWith('Empresa #')) {
             doc.empresa_nombre = nombreEmpresa;
           }
@@ -118,53 +110,57 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Obtener todos los IDs duplicados
     const todosLosIdsDuplicados = duplicadosReales.flatMap(grupo => grupo.ids);
 
     console.log('📊 [check-duplicates] Duplicados encontrados:', todosLosIdsDuplicados.length);
     console.log('🔢 [check-duplicates] Grupos de duplicados:', duplicadosReales.length);
 
-    // 1. Limpiar incidencias viejas de duplicados
+    // ─── 1. Limpiar incidencias viejas de duplicados (1 sola query) ──────────────
     await db.query(
       `DELETE FROM incidencias_documento 
        WHERE descripcion LIKE 'Número de factura duplicado%' 
        AND validado = 0`
     );
 
-    // 2. Crear nuevas incidencias
+    // ─── 2. Crear incidencias en BULK (INSERT IGNORE) ─────────────────────────────
     let creadas = 0;
-    for (const grupo of duplicadosReales) {
-      for (const docId of grupo.ids) {
-        const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
+    if (duplicadosReales.length > 0) {
+      const rowsToInsert: [number, number, string][] = [];
 
-        // Verificar existencia antes de insertar (idempotencia)
-        const [existing] = await db.query<RowDataPacket[]>(
-          'SELECT id FROM incidencias_documento WHERE documento_id = ? AND descripcion LIKE ?',
-          [docId, 'Número de factura duplicado%']
-        );
-
-        if (existing.length === 0) {
+      for (const grupo of duplicadosReales) {
+        for (const docId of grupo.ids) {
+          const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
           const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
-          await db.query(
-            `INSERT INTO incidencias_documento 
-             (documento_id, id_de_empresa, descripcion, incidencia, validado) 
-             VALUES (?, ?, ?, 1, 0)`,
-            [
-              docId,
-              grupo.empresa_id,
-              desc
-            ]
-          );
-          creadas++;
-          
-          import('@/services/webhook-service').then(({ fireWebhook }) => {
-            fireWebhook(grupo.empresa_id, 'documento.requiere_atencion', {
-              documento_id: docId,
-              motivo: desc
-            }).catch(console.error);
-          });
+          rowsToInsert.push([docId, grupo.empresa_id, desc]);
         }
       }
+
+      if (rowsToInsert.length > 0) {
+        const placeholders = rowsToInsert.map(() => '(?, ?, ?, 1, 0)').join(', ');
+        const flatValues = rowsToInsert.flatMap(r => r);
+
+        const [result] = await db.query<any>(
+          `INSERT IGNORE INTO incidencias_documento 
+           (documento_id, id_de_empresa, descripcion, incidencia, validado) 
+           VALUES ${placeholders}`,
+          flatValues
+        );
+        creadas = result?.affectedRows ?? rowsToInsert.length;
+      }
+
+      // ─── 3. Disparar webhooks en paralelo (fire-and-forget) ───────────────────
+      const { fireWebhook } = await import('@/services/webhook-service');
+      const webhookPromises = duplicadosReales.flatMap(grupo =>
+        grupo.ids.map(docId => {
+          const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
+          const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
+          return fireWebhook(grupo.empresa_id, 'documento.requiere_atencion', {
+            documento_id: docId,
+            motivo: desc
+          });
+        })
+      );
+      Promise.allSettled(webhookPromises).catch(console.error);
     }
 
     console.log('✅ [check-duplicates] Incidencias creadas:', creadas);
@@ -175,7 +171,7 @@ export async function POST(req: NextRequest) {
         numero: grupo.numero,
         empresa_id: grupo.empresa_id,
         ids: grupo.ids,
-        docs: grupo.docs   // ✅ Detalle por documento: tipo, sección y empresa
+        docs: grupo.docs
       })),
       totalDuplicados: todosLosIdsDuplicados.length,
       incidenciasCreadas: creadas
