@@ -982,9 +982,16 @@ export function DocumentsTable({
   const [docToPreview, setDocToPreview] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [viewMode, setViewMode] = useState<'table' | 'stacked'>(
-    isIncidentsPage ? 'stacked' : 'table'
-  );
+  // ⏸️ VISTA EN LÍNEAS DESACTIVADA (no terminada para producción).
+  // Queda forzada la vista de tabla en todas las páginas, incluida
+  // incidencias, que antes abría en líneas por defecto.
+  // Para reactivarla: restaurar la línea comentada de abajo, descomentar el
+  // selector de vista (buscar "VISTA EN LÍNEAS DESACTIVADA" más abajo) y
+  // volver a habilitar la rama que renderiza <DocumentsStackedList />.
+  const [viewMode, setViewMode] = useState<'table' | 'stacked'>('table');
+  // const [viewMode, setViewMode] = useState<'table' | 'stacked'>(
+  //   isIncidentsPage ? 'stacked' : 'table'
+  // );
   const router = useRouter();
   const { toast } = useToast();
 
@@ -1377,6 +1384,9 @@ export function DocumentsTable({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* ⏸️ VISTA EN LÍNEAS DESACTIVADA (no terminada para producción).
+                Se oculta el selector entero: con una sola vista disponible, el
+                conmutador no tiene sentido. Descomentar para reactivarla.
             <div className="inline-flex items-center rounded-md border bg-muted/40 p-0.5">
               <Button
                 type="button"
@@ -1401,6 +1411,7 @@ export function DocumentsTable({
                 <span className="text-xs hidden sm:inline">Tabla</span>
               </Button>
             </div>
+            */}
             <CleanDuplicatesButton
               empresaId={selectedCompanyIds[0] || null}
               onComplete={() => {
@@ -1416,6 +1427,11 @@ export function DocumentsTable({
         </div>
 
         <div className="relative w-full group" data-tutorial="documents-table">
+          {/* La rama 'stacked' queda inalcanzable mientras la vista en líneas
+              esté desactivada: viewMode arranca en 'table' y ya no hay selector
+              para cambiarlo. Se deja el código intacto para poder reactivarla
+              sin rehacerlo. Los imports Rows3 y Table2 quedan sin uso por el
+              mismo motivo. */}
           {viewMode === 'stacked' ? (
             <DocumentsStackedList
               documents={documents}
