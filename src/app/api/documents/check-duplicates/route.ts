@@ -3,6 +3,7 @@ import { getSession } from '@/services/auth-service';
 import db from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import type { RowDataPacket } from 'mysql2';
+import { createNotification } from '@/services/notification-service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -163,7 +164,31 @@ export async function POST(req: NextRequest) {
       Promise.allSettled(webhookPromises).catch(console.error);
     }
 
-    console.log('✅ [check-duplicates] Incidencias creadas:', creadas);
+    console.log('[check-duplicates] Incidencias creadas:', creadas);
+
+    // Notificacion in-app (fire-and-forget)
+    if (duplicadosReales.length > 0) {
+      createNotification({
+        userIds: [session.userId],
+        empresaId: empresaId ? Number(empresaId) : 0,
+        tipo: 'factura_duplicada',
+        titulo: 'Facturas duplicadas detectadas',
+        mensaje: `Se detectaron ${duplicadosReales.length} grupo(s) de facturas con numero duplicado.`,
+        metadata: { grupos: duplicadosReales.length, totalDocumentos: todosLosIdsDuplicados.length },
+      }).catch(() => {});
+    }
+
+    // Notificacion in-app (fire-and-forget)
+    if (duplicadosReales.length > 0) {
+      createNotification({
+        userIds: [session.userId],
+        empresaId: empresaId ? Number(empresaId) : 0,
+        tipo: 'factura_duplicada',
+        titulo: 'Facturas duplicadas detectadas',
+        mensaje: `Se detectaron ${duplicadosReales.length} grupo(s) de facturas con numero duplicado.`,
+        metadata: { grupos: duplicadosReales.length, totalDocumentos: todosLosIdsDuplicados.length },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

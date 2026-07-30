@@ -58,6 +58,7 @@ import { SuggestionBox } from '../suggestions/SuggestionBox';
 import { QueueTracker } from './queue-tracker';
 import { GlobalUploadTracker } from '@/components/upload/global-upload-tracker';
 import { useUploadQueueOptional } from '@/context/UploadQueueProvider';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 function AppLogo() {
   const { state } = useSidebar();
@@ -179,6 +180,7 @@ export function MainLayoutHeader({ children, className, hideSidebarTrigger = fal
 
       <div className="flex items-center gap-2">
         <RefreshButton />
+        <NotificationBell />
         <ThemeToggle />
       </div>
     </header>

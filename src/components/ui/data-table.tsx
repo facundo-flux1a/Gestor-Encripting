@@ -64,7 +64,8 @@ import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRig
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import { Skeleton } from './skeleton';
-import { useColumnOrder } from '@/hooks/use-column-order'; // 🆕 NUEVO
+import { useColumnOrder } from '@/hooks/use-column-order';
+import { useSearchParams } from 'next/navigation'; // 🆕 NUEVO
 
 
 interface DataTableProps<TData, TValue> {
@@ -213,12 +214,14 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
   rowSelection,
   data,
   onDragStartCallback,
+  isHighlighted,
 }: {
   row: Row<TData>,
   onRowClick?: (row: TData) => void,
   rowSelection?: RowSelectionState,
   data?: TData[],
   onDragStartCallback?: (selectedIds: number[]) => void,
+  isHighlighted?: boolean,
 }) => {
   const {
     attributes,
@@ -344,7 +347,12 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
       ref={setNodeRef}
       style={style}
       data-state={row.getIsSelected() && 'selected'}
-      className="bg-background even:bg-muted/50 hover:bg-muted/75 cursor-pointer relative hover:z-50 transition-all duration-200"
+      className={cn(
+        "bg-background cursor-pointer relative transition-colors duration-1000",
+        isHighlighted 
+          ? "bg-purple-500/30 z-10" 
+          : "even:bg-muted/50 hover:bg-muted/75 hover:z-50"
+      )}
       draggable={true}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -409,6 +417,26 @@ export function DataTable<TData extends object, TValue>({
   exportContext, // 🆕 EXPORTACIÓN CON CONTEXTO
   includeSummary, // 🆕 EXPORTACIÓN CON RESUMEN
 }: DataTableProps<TData, TValue>) {
+  const searchParams = useSearchParams();
+  const highlightIdParam = searchParams?.get('highlight');
+  const [highlightId, setHighlightId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (highlightIdParam) {
+      setHighlightId(highlightIdParam);
+      
+      // Limpiar la URL sin recargar la pagina para que no vuelva a saltar al recargar o usar el historial
+      const url = new URL(window.location.href);
+      url.searchParams.delete('highlight');
+      window.history.replaceState({}, '', url.toString());
+
+      const timer = setTimeout(() => {
+        setHighlightId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightIdParam]);
+  
   const [isMounted, setIsMounted] = React.useState(false);
   const [data, setData] = React.useState(initialData);
 
@@ -586,6 +614,9 @@ export function DataTable<TData extends object, TValue>({
   const defaultRenderRow = (row: Row<TData>) => {
     const hasIdDocumento = 'id_documento' in row.original;
     if (hasIdDocumento) {
+      const docIdStr = String((row.original as any).id_documento);
+      const isHighlighted = highlightId === docIdStr;
+      
       return <DraggableTableRow
         key={(row.original as any).id_documento}
         row={row as Row<TData & { id_documento: number; empresa_id?: number | null; numero_documento: string }>}
@@ -593,6 +624,7 @@ export function DataTable<TData extends object, TValue>({
         rowSelection={rowSelection}
         data={data}
         onDragStartCallback={onDragStart}
+        isHighlighted={isHighlighted}
       />;
     }
     return <StandardTableRow key={row.id} row={row} />;

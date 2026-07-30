@@ -24,9 +24,21 @@ const WORKER_LOCK_TTL_SEC = 60;
 const RECONCILE_EVERY_MS = 2 * 60 * 1000;
 
 async function acquireSingletonLock(): Promise<boolean> {
-  // SET NX: solo un proceso de workers por entorno Redis
-  const ok = await redis.set(WORKER_LOCK_KEY, String(process.pid), 'EX', WORKER_LOCK_TTL_SEC, 'NX');
-  return ok === 'OK';
+  // Reintenta hasta LOCK_TTL+30s para sobrevivir redeploys (el lock anterior expira en 60s)
+  const maxWaitMs = (WORKER_LOCK_TTL_SEC + 30) * 1000;
+  const retryEveryMs = 5000;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWaitMs) {
+    const ok = await redis.set(WORKER_LOCK_KEY, String(process.pid), 'EX', WORKER_LOCK_TTL_SEC, 'NX');
+    if (ok === 'OK') return true;
+
+    const ttl = await redis.ttl(WORKER_LOCK_KEY);
+    console.log(`⏳ [Workers] Lock ocupado (TTL: ${ttl}s). Reintentando en ${retryEveryMs / 1000}s...`);
+    await new Promise(r => setTimeout(r, retryEveryMs));
+  }
+
+  return false;
 }
 
 async function renewSingletonLock(): Promise<boolean> {
@@ -43,7 +55,7 @@ async function bootstrap() {
     const gotLock = await acquireSingletonLock();
     if (!gotLock) {
       console.error(
-        '❌ Ya hay otro proceso de workers activo (lock Redis). Abortando para no pelear locks BullMQ.'
+        '❌ No se pudo adquirir el lock de worker tras 90s de espera. Abortando.'
       );
       process.exit(1);
     }

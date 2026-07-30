@@ -1384,9 +1384,7 @@ export function DocumentsTable({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* ⏸️ VISTA EN LÍNEAS DESACTIVADA (no terminada para producción).
-                Se oculta el selector entero: con una sola vista disponible, el
-                conmutador no tiene sentido. Descomentar para reactivarla.
+          {/* TOGGLE LINEAS/TABLA — disponible si se necesita en el futuro
             <div className="inline-flex items-center rounded-md border bg-muted/40 p-0.5">
               <Button
                 type="button"
@@ -1411,7 +1409,7 @@ export function DocumentsTable({
                 <span className="text-xs hidden sm:inline">Tabla</span>
               </Button>
             </div>
-            */}
+          */}
             <CleanDuplicatesButton
               empresaId={selectedCompanyIds[0] || null}
               onComplete={() => {
@@ -1427,11 +1425,7 @@ export function DocumentsTable({
         </div>
 
         <div className="relative w-full group" data-tutorial="documents-table">
-          {/* La rama 'stacked' queda inalcanzable mientras la vista en líneas
-              esté desactivada: viewMode arranca en 'table' y ya no hay selector
-              para cambiarlo. Se deja el código intacto para poder reactivarla
-              sin rehacerlo. Los imports Rows3 y Table2 quedan sin uso por el
-              mismo motivo. */}
+          {/* VISTA CONDICIONAL LINEAS/TABLA — disponible si se necesita en el futuro
           {viewMode === 'stacked' ? (
             <DocumentsStackedList
               documents={documents}
@@ -1444,6 +1438,7 @@ export function DocumentsTable({
               onDelete={handleDeleteClick}
             />
           ) : (
+          */}
           <div className="w-full rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border overflow-hidden">
             <DataTable
               columns={columns}
@@ -1453,25 +1448,20 @@ export function DocumentsTable({
               onRowClick={handleRowClick}
               viewId={viewId}
               enableColumnPersistence={enableColumnPersistence}
-              // Pasar props de selección
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
-              // Drag entre tabs
               onDragStart={onDragStart}
-              // Exportación con Resumen IVA
               exportContext={exportContext}
               includeSummary={true}
             />
           </div>
-          )}
+          {/* )} FIN VISTA CONDICIONAL */}
 
-          {viewMode === 'table' && (
           <div className="text-center text-xs text-muted-foreground mt-2 py-1 flex items-center justify-center gap-2 opacity-70">
             <span className="font-medium">
               Scroll horizontal disponible arriba y abajo de la tabla
             </span>
           </div>
-          )}
         </div>
 
         {/* 🆕 FLOATING BULK ACTIONS BAR */}

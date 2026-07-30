@@ -4,6 +4,8 @@ import { CheckCircle, Eye, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Document, IvaDetail } from '@/lib/types';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const formatCurrency = (amount: number | string): string => {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -95,6 +97,26 @@ export function DocumentsStackedList({
   onPreview: (doc: Document) => void;
   onDelete: (doc: Document) => void;
 }) {
+  const searchParams = useSearchParams();
+  const highlightIdParam = searchParams?.get('highlight');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (highlightIdParam) {
+      setHighlightId(highlightIdParam);
+      
+      // Limpiar la URL sin recargar la pagina para que no vuelva a saltar al recargar o usar el historial
+      const url = new URL(window.location.href);
+      url.searchParams.delete('highlight');
+      window.history.replaceState({}, '', url.toString());
+
+      const timer = setTimeout(() => {
+        setHighlightId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightIdParam]);
+
   if (documents.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -112,6 +134,7 @@ export function DocumentsStackedList({
         const showValidate = isIncidentsPage && (incidenciasActivas.length > 0 || !!hasLegacyIncident);
         const isDuplicate = duplicates.has(doc.id_documento);
         const isClosed = !!doc.trimestre_cerrado;
+        const isHighlighted = highlightId === String(doc.id_documento);
 
         const iva21 = getIva(doc.iva_details, 21);
         const iva10 = getIva(doc.iva_details, 10);
@@ -128,8 +151,12 @@ export function DocumentsStackedList({
         return (
           <article
             key={doc.id_documento}
-            className={`px-3 py-2.5 space-y-1.5 transition-colors hover:bg-muted/40 ${
-              isDuplicate ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
+            className={`px-3 py-2.5 space-y-1.5 relative transition-colors duration-1000 ${
+              isHighlighted 
+                ? 'bg-purple-500/30 z-10' 
+                : isDuplicate 
+                  ? 'bg-amber-50/60 dark:bg-amber-950/20 hover:bg-muted/40' 
+                  : 'hover:bg-muted/40'
             }`}
           >
             {/* Línea 1 — identidad + acciones */}

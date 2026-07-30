@@ -36,6 +36,7 @@ import {
 } from '@/lib/document-fiscal-status';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
+import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
@@ -388,13 +389,38 @@ export function startDbWriterWorker() {
         });
 
         // Si este job es un hijo de un lote, propagar el progreso al padre.
-        // updateIngestionProgress ya llama a updateParentProgress internamente,
-        // pero lo llamamos explícitamente aquí también para garantizar que el
-        // padre siempre refleje el estado actualizado del lote en la UI.
         if (ingestion.parentUploadId) {
           await updateParentProgress(ingestion.parentUploadId).catch(() => {});
-          console.log(`[DbWriterWorker] 📡 Progreso propagado al padre: ${ingestion.parentUploadId}`);
         }
+
+        // --- Notificaciones in-app (fire-and-forget, nunca interrumpen el flujo) ---
+        getUserIdsForEmpresa(Number(empresaId)).then(async (userIds) => {
+          if (userIds.length === 0) return;
+
+          const proveedorNombre = (aiResult.empresa_emisora?.nombre || aiResult.cliente?.nombre || '').toString();
+          const numDoc = numeroDocumento;
+
+          if (resolvedFiscalStatus === FiscalStatus.REVISION) {
+            await createNotification({
+              userIds,
+              empresaId: Number(empresaId),
+              tipo: 'documento_revision',
+              titulo: `Documento requiere revision`,
+              mensaje: `La factura ${numDoc}${proveedorNombre ? ` de ${proveedorNombre}` : ''} fue guardada en estado REVISION.`,
+              metadata: { uploadId, documentoId: savedDocumentoId?.toString(), numeroDocumento: numDoc },
+            });
+          } else {
+            await createNotification({
+              userIds,
+              empresaId: Number(empresaId),
+              tipo: 'documento_procesado',
+              titulo: `Documento procesado`,
+              mensaje: `La factura ${numDoc}${proveedorNombre ? ` de ${proveedorNombre}` : ''} fue validada correctamente.`,
+              metadata: { uploadId, documentoId: savedDocumentoId?.toString(), numeroDocumento: numDoc },
+            });
+          }
+        }).catch(() => {});
+        // -------------------------------------------------------------------------
 
       } catch (error: any) {
         // ─── Duplicado detectado ────────────────────────────────────────────────
