@@ -187,7 +187,17 @@ export function MainLayoutHeader({ children, className, hideSidebarTrigger = fal
   )
 }
 
-export function MainLayout({ children }: { children: React.ReactNode }) {
+function SidebarAutoCollapser({ noPadding }: { noPadding: boolean }) {
+  const { setOpen, isMobile } = useSidebar();
+  React.useEffect(() => {
+    if (noPadding && !isMobile) {
+      setOpen(false);
+    }
+  }, [noPadding, isMobile, setOpen]);
+  return null;
+}
+
+export function MainLayout({ children, noPadding = false }: { children: React.ReactNode; noPadding?: boolean }) {
   const pathname = usePathname();
   const [user, setUser] = React.useState<User | null>(null);
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
@@ -347,8 +357,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <SidebarProvider>
-      <Sidebar collapsible="icon">
+    <SidebarProvider defaultOpen={!noPadding}>
+      <SidebarAutoCollapser noPadding={noPadding} />
+      <Sidebar collapsible={noPadding ? "offcanvas" : "icon"}>
         <SidebarHeader className="p-3">
           <div className="flex items-center justify-between">
             <AppLogo />
@@ -446,7 +457,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
       {/* 🔥 FIX CRÍTICO: SidebarInset con overflow controlado */}
       <SidebarInset id="main-sidebar-inset" className="overflow-x-hidden">
-        <div className="flex flex-col min-h-screen w-full">
+        <div className={cn("flex flex-col w-full", noPadding ? "h-[calc(100vh-0px)] overflow-hidden" : "min-h-screen")}>
           {children}
         </div>
       </SidebarInset>

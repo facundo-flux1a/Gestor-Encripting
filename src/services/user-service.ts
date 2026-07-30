@@ -71,7 +71,7 @@ export async function getUsersByIds(ids: number[], companyId?: number): Promise<
     }
   }
 
-  return users.map(user => ({
+  return users.map((user: any) => ({
     id: Number(user.id),
     nombre: user.nombre as string,
     email: user.email as string,
@@ -126,6 +126,34 @@ export async function updateUserConfigOtros(tipos: string[]): Promise<boolean> {
     return true;
   } catch (e) {
     console.error('Error updating config_otros_tipos:', e);
+    return false;
+  }
+}
+
+// ============================================================
+// PREFERENCIAS DE NOTIFICACIONES
+// Se almacenan en config_otros_tipos.notif_prefs = { [tipo]: boolean }
+// Si un tipo no existe en las prefs, se asume true (activo por defecto).
+// ============================================================
+
+export type NotifPrefs = Record<string, boolean>;
+
+export async function getNotifPrefs(userId: number): Promise<NotifPrefs> {
+  const config = await getUserConfigRaw(userId);
+  return (config.notif_prefs as NotifPrefs) || {};
+}
+
+export async function updateNotifPrefs(userId: number, prefs: NotifPrefs): Promise<boolean> {
+  try {
+    const currentConfig = await getUserConfigRaw(userId);
+    const newConfig = { ...currentConfig, notif_prefs: prefs };
+    await prisma.usuarios.update({
+      where: { id: BigInt(userId) },
+      data: { config_otros_tipos: newConfig as any }
+    });
+    return true;
+  } catch (e) {
+    console.error('Error updating notif_prefs:', e);
     return false;
   }
 }

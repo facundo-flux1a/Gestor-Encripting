@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     }>();
 
     docs.forEach(doc => {
-      const numero = doc.numero_documento.trim().toLowerCase();
+      // Remover todos los espacios del número de factura con regex para mejorar la coincidencia
+      const numero = doc.numero_documento.trim().toLowerCase().replace(/\s+/g, '');
       const tipo = (doc.tipo_documento || '').toLowerCase();
       let key = '';
 
@@ -116,6 +117,14 @@ export async function POST(req: NextRequest) {
     console.log('📊 [check-duplicates] Duplicados encontrados:', todosLosIdsDuplicados.length);
     console.log('🔢 [check-duplicates] Grupos de duplicados:', duplicadosReales.length);
 
+    // ─── 0. Obtener incidencias previas para saber si hay NUEVOS duplicados ──────
+    const [existingRows] = await db.query<any[]>(
+      `SELECT documento_id FROM incidencias_documento 
+       WHERE descripcion LIKE 'Número de factura duplicado%' 
+       AND validado = 0`
+    );
+    const existingIds = new Set(existingRows.map((r: any) => String(r.documento_id)));
+
     // ─── 1. Limpiar incidencias viejas de duplicados (1 sola query) ──────────────
     await db.query(
       `DELETE FROM incidencias_documento 
@@ -166,29 +175,9 @@ export async function POST(req: NextRequest) {
 
     console.log('[check-duplicates] Incidencias creadas:', creadas);
 
-    // Notificacion in-app (fire-and-forget)
-    if (duplicadosReales.length > 0) {
-      createNotification({
-        userIds: [session.userId],
-        empresaId: empresaId ? Number(empresaId) : 0,
-        tipo: 'factura_duplicada',
-        titulo: 'Facturas duplicadas detectadas',
-        mensaje: `Se detectaron ${duplicadosReales.length} grupo(s) de facturas con numero duplicado.`,
-        metadata: { grupos: duplicadosReales.length, totalDocumentos: todosLosIdsDuplicados.length },
-      }).catch(() => {});
-    }
-
-    // Notificacion in-app (fire-and-forget)
-    if (duplicadosReales.length > 0) {
-      createNotification({
-        userIds: [session.userId],
-        empresaId: empresaId ? Number(empresaId) : 0,
-        tipo: 'factura_duplicada',
-        titulo: 'Facturas duplicadas detectadas',
-        mensaje: `Se detectaron ${duplicadosReales.length} grupo(s) de facturas con numero duplicado.`,
-        metadata: { grupos: duplicadosReales.length, totalDocumentos: todosLosIdsDuplicados.length },
-      }).catch(() => {});
-    }
+    // ─── Las notificaciones de duplicados han sido eliminadas por solicitud del usuario ───
+    // (El frontend hace polling constante de esta API, por lo que disparar notificaciones
+    // desde aquí causaba spam. Se eliminó el bloque de createNotification).
 
     return NextResponse.json({
       success: true,

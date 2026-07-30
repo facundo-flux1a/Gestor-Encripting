@@ -482,6 +482,21 @@ DESPUÉS DE EXTRAER TODAS LAS LÍNEAS:
 6. **Precio neto**: precio_unitario × (1 - descuento_porcentaje/100)
 7. **Importe línea**: precio_neto × cantidad
 
+⚠️ **REGLA CRÍTICA — FACTURAS CON MÚLTIPLES COLUMNAS NUMÉRICAS (ej. facturas notariales):**
+
+Algunas facturas (especialmente de notarías, registros, colegios profesionales) presentan tablas con DOS columnas numéricas separadas: una de referencia del arancel (llamada "ARANCEL", "Nº Arancel", "Art.", "Apartado") y otra con las unidades facturables reales (llamada "UNIDADES", "Uds.", "Cantidad", "Nº Copias", "Nº Folios").
+
+**REGLA ABSOLUTA:**
+- La columna de referencia arancelaria (ARANCEL, Nº Arancel, Art., etc.) es un **código o número de referencia**, NO una cantidad. NUNCA la uses como cantidad.
+- La columna de unidades facturables (UNIDADES, Uds., Cantidad, etc.) es la que debes usar como cantidad.
+- Si solo ves una columna numérica, usa esa como cantidad.
+
+**CÓMO IDENTIFICARLAS:**
+- "ARANCEL" suele ser un número pequeño (1-20) que referencia el apartado de la tabla de aranceles
+- "UNIDADES" puede ser mayor (ej: 16 folios, 7 copias, etc.) y es la cantidad real de lo que se factura
+- La validación matemática te ayuda: precio_unitario × UNIDADES = importe_linea. Si el resultado cuadra con UNIDADES y no con ARANCEL, usa UNIDADES.
+
+
 **MANEJO DE SUPLIDOS — CRÍTICO:**
 
 Los suplidos son gastos que el emisor (notario, gestor, abogado) adelantó en nombre del cliente y luego repercute. NO son un servicio propio del emisor. Aparecen en una sección separada titulada "Suplidos", "Desglose Suplidos", "Gastos suplidos" o simplemente "Gastos".

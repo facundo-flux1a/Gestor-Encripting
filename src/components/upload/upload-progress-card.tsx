@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2, AlertCircle, X, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 
 /**
  * Progreso simple: 1 barra por lote, 1 request cada BATCH_POLL_MS.
@@ -82,10 +83,13 @@ interface UploadProgressManagerProps {
 
 export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
   const { toast } = useToast();
+  const { refresh } = useDataRefresh();
   const [batches, setBatches] = useState<BatchState[]>(() => loadBatches(userId));
   const [panelOpen, setPanelOpen] = useState(true);
   const batchesRef = useRef(batches);
   const pollInFlight = useRef(false);
+  // Track previous allDone to only fire refresh on the false→true transition
+  const prevAllDoneRef = useRef<boolean>(loadBatches(userId).every((b) => b.done));
 
   batchesRef.current = batches;
 
@@ -96,6 +100,15 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
   useEffect(() => {
     saveBatches(userId, batches);
   }, [batches, userId]);
+
+  // Auto-refresh de datos cuando el lote termina (transicion false→true solamente)
+  const allDoneForEffect = batches.length > 0 && batches.every((b) => b.done);
+  useEffect(() => {
+    if (allDoneForEffect && !prevAllDoneRef.current) {
+      refresh('cola-terminada');
+    }
+    prevAllDoneRef.current = allDoneForEffect;
+  }, [allDoneForEffect, refresh]);
 
   const dismissBatch = useCallback((batchId: string) => {
     setBatches((prev) => prev.filter((b) => b.batchId !== batchId));

@@ -610,9 +610,9 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     try {
       await updateIngestionProgress(ingestion.uploadId, {
         status: 'procesando',
-        step: isHybrid ? 'Leyendo layout con Azure' : 'Extrayendo con Azure DI',
+        step: isHybrid ? 'Leyendo layout del documento' : 'Extrayendo datos estructurados',
         progress: 58,
-        mensaje: isHybrid ? 'Ejecutando OCR avanzado Layout...' : 'Document Intelligence (prebuilt-invoice)...',
+        mensaje: isHybrid ? 'Ejecutando OCR avanzado...' : 'Analizando estructura del documento...',
       });
       const diResult = await analyzeInvoiceDocument(finalBuffer, ingestion.mimeType);
 

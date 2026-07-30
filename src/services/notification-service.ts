@@ -15,7 +15,10 @@ export type NotificationType =
   | 'documento_revision'
   | 'variacion_precio'
   | 'factura_duplicada'
-  | 'ingesta_completada';
+  | 'ingesta_completada'
+  | 'trimestre_cerrado'
+  | 'incidencia_resuelta'
+  | 'usuario_unido';
 
 export interface CreateNotificationParams {
   userIds: number[];
@@ -33,17 +36,46 @@ export interface CreateNotificationParams {
  */
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
   const { userIds, empresaId, tipo, titulo, mensaje, metadata } = params;
-
   if (!userIds || userIds.length === 0) return;
 
   try {
+    // 1. Obtener la config de preferencias de cada usuario en la lista
+    const [userRows] = await connection.query<any[]>(
+      `SELECT id, config_otros_tipos FROM ${dbName}.usuarios WHERE id IN (?)`,
+      [userIds]
+    );
+
+    // 2. Filtrar los usuarios que tengan deshabilitado este tipo de notificaciones
+    const filteredUserIds = userIds.filter((userId) => {
+      const row = userRows.find((r) => Number(r.id) === userId);
+      if (!row) return true; // fallback por si no existe
+      let config: any = {};
+      if (row.config_otros_tipos) {
+        try {
+          config = typeof row.config_otros_tipos === 'string'
+            ? JSON.parse(row.config_otros_tipos)
+            : row.config_otros_tipos;
+        } catch {
+          config = {};
+        }
+      }
+      // config.notif_prefs = { [tipo]: boolean }
+      // Si está explícitamente en false, se omite.
+      if (config.notif_prefs && config.notif_prefs[tipo] === false) {
+        return false;
+      }
+      return true;
+    });
+
+    if (filteredUserIds.length === 0) return;
+
     const encryptedTitulo  = encrypt(titulo);
     const encryptedMensaje = mensaje ? encrypt(mensaje) : null;
     const metadataJson     = metadata ? JSON.stringify(metadata) : null;
 
-    const rows = userIds.map(() => '(?, ?, ?, ?, ?, ?)');
+    const rows = filteredUserIds.map(() => '(?, ?, ?, ?, ?, ?)');
     const values: any[] = [];
-    for (const userId of userIds) {
+    for (const userId of filteredUserIds) {
       values.push(userId, empresaId, tipo, encryptedTitulo, encryptedMensaje, metadataJson);
     }
 

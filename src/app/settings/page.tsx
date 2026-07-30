@@ -20,6 +20,7 @@ import { getInvitationsByEmpresa } from "@/services/invitation-service";
 import { TutorialReplaySection } from "@/components/settings/TutorialReplaySection";
 import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
 import { TwoFactorSettingsSection } from "@/components/settings/TwoFactorSettingsSection";
+import { NotificationPrefsSection } from "@/components/settings/NotificationPrefsSection";
 
 
 async function handleLogout() {
@@ -86,6 +87,9 @@ export default async function SettingsPage() {
 
                     {/* Autenticación en Dos Pasos */}
                     <TwoFactorSettingsSection />
+
+                    {/* Preferencias de Notificaciones */}
+                    <NotificationPrefsSection />
 
 
                     {/* Configuración de Alertas */}

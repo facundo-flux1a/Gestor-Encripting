@@ -198,8 +198,10 @@ export const DocumentUpdateSchema = z.object({
   año_trimestre: z.number().optional(),
   num_trimestre: z.number().min(1).max(4).optional(),
   cif: z.string().optional(),
+  proveedor: z.string().optional(),
   descuento_global: z.coerce.number().optional(),
   base_no_sujeta: z.coerce.number().optional(),
+  retencion_irpf: z.coerce.number().optional(),
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/services/auth-service';
 import { cerrarTrimestre } from '@/services/document-service';
 import { CerrarTrimestrePayloadSchema } from '@/lib/types';
+import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,6 +30,23 @@ export async function POST(req: NextRequest) {
         { error: 'No se encontraron documentos para cerrar o ya están cerrados' },
         { status: 404 }
       );
+    }
+
+    if (validation.data.empresa_id) {
+      const empresa = await prisma.empresas.findUnique({
+        where: { id: BigInt(validation.data.empresa_id) },
+        select: { nombre_de_empresa: true }
+      });
+      const userIds = await getUserIdsForEmpresa(validation.data.empresa_id);
+      if (userIds.length > 0) {
+        await createNotification({
+          userIds,
+          empresaId: validation.data.empresa_id,
+          tipo: 'trimestre_cerrado',
+          titulo: 'Trimestre Cerrado',
+          mensaje: `El T${validation.data.trimestre} del ${validation.data.año}${empresa?.nombre_de_empresa ? ` de ${empresa.nombre_de_empresa}` : ''} ha sido cerrado exitosamente.`,
+        });
+      }
     }
 
     return NextResponse.json({

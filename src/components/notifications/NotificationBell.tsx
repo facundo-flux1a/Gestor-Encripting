@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { useDataRefresh } from '@/context/DataRefreshProvider';
 
 interface Notification {
   id: number;
@@ -34,6 +35,7 @@ const TIPO_COLORS: Record<string, string> = {
 
 export function NotificationBell() {
   const router = useRouter();
+  const { refreshKey } = useDataRefresh();
   const [notifications, setNotifications] = React.useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [open, setOpen] = React.useState(false);
@@ -54,7 +56,7 @@ export function NotificationBell() {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, [fetchNotifications]);
+  }, [fetchNotifications, refreshKey]);
 
   const markAllRead = async () => {
     try {
@@ -103,9 +105,22 @@ export function NotificationBell() {
       case 'factura_duplicada':
         router.push(docId ? `/incidents?highlight=${docId}` : '/incidents');
         break;
-      case 'variacion_precio':
-        router.push(docId ? `/documents?highlight=${docId}` : '/documents');
+      case 'variacion_precio': {
+        const cif = notif.metadata?.proveedorCif;
+        const code = notif.metadata?.productoCodigo;
+        const descRaw = notif.metadata?.productoDescripcion;
+        if (cif && (code || descRaw)) {
+          const normDesc = descRaw
+            ? descRaw.toLowerCase().trim().replace(/\s+/g, ' ')
+            : '';
+          const key = code ? `${code}::${normDesc}` : normDesc;
+          
+          router.push(`/proveedores/${encodeURIComponent(cif)}?view=list&tab=products&highlight=${encodeURIComponent(key)}`);
+        } else {
+          router.push(docId ? `/documents?highlight=${docId}` : '/documents');
+        }
         break;
+      }
       case 'ingesta_completada':
         router.push('/dashboard/actividad');
         break;

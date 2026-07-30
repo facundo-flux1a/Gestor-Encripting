@@ -674,6 +674,7 @@ export function ProviderDetailClient({
                                 onAccountUpdate={handleManualAccountSave}
                                 currentEmpresaId={mainEmpresaId}
                                 isClient={isClient}
+                                highlightKey={searchParams.get('highlight') || undefined}
                             />
                         </div>
                     )}

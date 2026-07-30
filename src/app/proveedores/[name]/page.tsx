@@ -3,7 +3,7 @@
 import { MainLayout, MainLayoutHeader } from "@/components/layout/main-layout";
 import { Building, Loader2 } from "lucide-react";
 import { ProviderDetailClient } from "./provider-detail-client";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, Suspense } from "react";
 import { 
     getProviderByFiscalId, getDocumentsByProviderName, getProductsByProviderName, getProviderAnalytics, getAllProductLinesByProviderName,
     getClientByFiscalId, getDocumentsByClientName, getProductsByClientName, getClientAnalytics, getAllProductLinesByClientName
@@ -11,9 +11,7 @@ import {
 import { useCompanyContext } from "@/context/CompanyProvider";
 import { useSearchParams } from "next/navigation";
 
-export default function ProveedorDetailPage({ params }: { params: Promise<{ name: string }> }) {
-    // ✅ Unwrap params usando React.use()
-    const resolvedParams = use(params);
+function ProveedorDetailInner({ name }: { name: string }) {
     const searchParams = useSearchParams();
     const isClient = searchParams.get('type') === 'cliente';
 
@@ -23,18 +21,13 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
 
     useEffect(() => {
         async function loadData() {
-            const fiscalId = decodeURIComponent(resolvedParams.name);
+            const fiscalId = decodeURIComponent(name);
 
-            // 🎯 Usar las empresas seleccionadas del contexto
-            // Si no hay selección, usar TODAS las empresas del usuario
             const empresaIds = selectedCompanyIds.length > 0
                 ? selectedCompanyIds
                 : companies.map(c => c.id);
 
             console.log(`🔍 [ProveedorDetailPage] Fiscal ID: ${fiscalId}, isClient: ${isClient}`);
-            console.log(`🏢 [ProveedorDetailPage] Empresas del contexto:`, companies.map(c => c.id));
-            console.log(`✅ [ProveedorDetailPage] Empresas seleccionadas:`, selectedCompanyIds);
-            console.log(`📊 [ProveedorDetailPage] Empresas a filtrar:`, empresaIds);
 
             const [prov, docs, prods, analytics, allProds] = await Promise.all(
                 isClient ? [
@@ -52,22 +45,14 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
                 ]
             );
 
-            console.log(`✅ [ProveedorDetailPage] Datos cargados:`);
-            console.log(`   - Proveedor: ${prov?.nombre}`);
-            console.log(`   - Documentos: ${docs.length}`);
-            console.log(`   - Productos: ${prods.length}`);
-            console.log(`   - Total gastado: ${analytics.totalGastado} ${analytics.moneda}`);
-            console.log(`   - Datos gráfico:`, analytics.comprasPorMes);
-
             setData({ prov, docs, prods, analytics, allProds });
             setLoading(false);
         }
 
-        // Solo cargar cuando companies esté disponible
         if (companies.length > 0) {
             loadData();
         }
-    }, [resolvedParams.name, selectedCompanyIds, companies]);
+    }, [name, selectedCompanyIds, companies]);
 
     if (loading || companies.length === 0) {
         return (
@@ -117,3 +102,18 @@ export default function ProveedorDetailPage({ params }: { params: Promise<{ name
         </MainLayout>
     );
 }
+
+export default function ProveedorDetailPage({ params }: { params: Promise<{ name: string }> }) {
+    const resolvedParams = use(params);
+    return (
+        <Suspense fallback={
+            <MainLayout>
+                <div className="flex items-center justify-center h-screen">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            </MainLayout>
+        }>
+            <ProveedorDetailInner name={resolvedParams.name} />
+        </Suspense>
+    );
+}

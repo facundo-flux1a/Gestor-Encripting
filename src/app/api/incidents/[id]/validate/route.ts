@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSingleIncident } from '@/services/incidents-service';
 import { getCurrentUser } from '@/services/user-service';
-
+import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
+import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function POST(
@@ -25,6 +26,33 @@ export async function POST(
         if (!result.success) {
             return NextResponse.json({ error: 'Error al validar incidencia' }, { status: 500 });
         }
+
+        // --- Notification ---
+        const incidentInfo = await prisma.incidencias_documento.findUnique({
+            where: { id: BigInt(incidentId) },
+            select: {
+                id_de_empresa: true,
+                documento_id: true,
+                documentos: { select: { numero_documento: true } }
+            }
+        });
+
+        if (incidentInfo?.id_de_empresa) {
+            const empresaIdNum = Number(incidentInfo.id_de_empresa);
+            const userIds = await getUserIdsForEmpresa(empresaIdNum);
+            if (userIds.length > 0) {
+                const docNum = incidentInfo.documentos?.numero_documento || incidentId.toString();
+                await createNotification({
+                    userIds,
+                    empresaId: empresaIdNum,
+                    tipo: 'incidencia_resuelta',
+                    titulo: 'Incidencia Resuelta',
+                    mensaje: `Se ha resuelto la incidencia de la factura #${docNum}.`,
+                    metadata: { documentoId: incidentInfo.documento_id?.toString() }
+                });
+            }
+        }
+        // --------------------
 
         return NextResponse.json({ success: true });
     } catch (error) {

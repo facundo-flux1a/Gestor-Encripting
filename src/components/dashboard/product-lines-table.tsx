@@ -63,6 +63,7 @@ interface ProductLinesTableProps {
     aiSuggestions?: Record<string, { account: string; justification: string }>;
     currentEmpresaId?: number;
     isClient?: boolean;
+    highlightKey?: string;
 }
 
 interface ProductLineGroupProps {
@@ -75,6 +76,7 @@ interface ProductLineGroupProps {
     onAccountUpdate?: (data: { description: string, normalizedDescription: string, code?: string, account: string }) => Promise<void>;
     currentEmpresaId?: number;
     isClient?: boolean;
+    isHighlighted?: boolean;
 }
 
 function ProductLineGroup({
@@ -87,9 +89,17 @@ function ProductLineGroup({
     onAccountUpdate,
     currentEmpresaId,
     isClient = false,
+    isHighlighted = false,
 }: ProductLineGroupProps) {
     const { toast } = useToast();
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(isHighlighted);
+    const rowRef = React.useRef<HTMLTableRowElement>(null);
+
+    React.useEffect(() => {
+        if (isHighlighted && rowRef.current) {
+            rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [isHighlighted]);
     const [isClearing, setIsClearing] = useState(false);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -97,30 +107,42 @@ function ProductLineGroup({
     const [isSavingManual, setIsSavingManual] = useState(false);
 
     const sortedGroup = [...group].sort((a, b) => {
-        const da = a.fecha_emision || '';
-        const db = b.fecha_emision || '';
-        return db.localeCompare(da);
+        // Usar getTime() en vez de localeCompare para manejar correctamente
+        // tanto Date objects (devueltos por MySQL) como strings ISO
+        const da = a.fecha_emision ? new Date(a.fecha_emision).getTime() : 0;
+        const db = b.fecha_emision ? new Date(b.fecha_emision).getTime() : 0;
+        return db - da; // descendente: el más reciente primero
     });
     const line = sortedGroup[0];
     const totalQty = group.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
     const totalLineAmount = group.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
     const numberOfPurchases = group.length;
 
-    let priceVariation = 0;
+    let priceVariationVsAvg = 0;
+    let priceVariationVsPrev: number | null = null;
     const isPriceVariation = sortedGroup.length > 1;
 
     if (isPriceVariation) {
         const newestPrice = Number(sortedGroup[0].precio_unitario) || 0;
-        const validPrices = sortedGroup
+        const prevPrice = Number(sortedGroup[1].precio_unitario) || 0;
+
+        // Variación vs el precio inmediatamente anterior
+        if (prevPrice > 0) {
+            priceVariationVsPrev = ((newestPrice - prevPrice) / prevPrice) * 100;
+        }
+
+        // Variación vs el promedio histórico (excluyendo el precio más reciente)
+        const historicalPrices = sortedGroup
+            .slice(1)
             .map(item => Number(item.precio_unitario))
             .filter(price => !isNaN(price) && price > 0);
 
-        const avgPrice = validPrices.length > 0
-            ? validPrices.reduce((a, b) => a + b, 0) / validPrices.length
+        const avgPrice = historicalPrices.length > 0
+            ? historicalPrices.reduce((a, b) => a + b, 0) / historicalPrices.length
             : 0;
 
         if (avgPrice > 0) {
-            priceVariation = ((newestPrice - avgPrice) / avgPrice) * 100;
+            priceVariationVsAvg = ((newestPrice - avgPrice) / avgPrice) * 100;
         }
     }
 
@@ -435,7 +457,11 @@ function ProductLineGroup({
     return (
         <>
             <TableRow
-                className="bg-muted/5 group/row hover:bg-muted/20 cursor-pointer transition-all border-l-2 border-transparent data-[state=open]:border-primary"
+                ref={rowRef}
+                className={cn(
+                    "bg-muted/5 group/row hover:bg-muted/20 cursor-pointer transition-all border-l-2 border-transparent data-[state=open]:border-primary",
+                    isHighlighted && "bg-primary/5 ring-1 ring-primary/20 ring-inset"
+                )}
                 onClick={() => setIsOpen(!isOpen)}
                 data-state={isOpen ? 'open' : 'closed'}
             >
@@ -462,22 +488,38 @@ function ProductLineGroup({
                 <TableCell className="text-right">
                     <div className="flex flex-col items-end justify-center gap-1">
                         <span className="tabular-nums font-semibold">{formatCurrency(totalQty > 0 ? totalLineAmount / totalQty : 0)}</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-[0.2em] bg-muted/50 px-1.5 py-0.5 rounded-sm">Evolución</span>
-                            {isPriceVariation && (
+                        {isPriceVariation && (
+                            <div className="flex flex-col items-end gap-1 mt-0.5">
+                                {/* Badge vs precio inmediatamente anterior */}
+                                {priceVariationVsPrev !== null && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-bold cursor-help ${priceVariationVsPrev > 0 ? 'bg-red-500/10 text-red-600 dark:text-red-400' : priceVariationVsPrev < 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+                                                    {priceVariationVsPrev > 0 ? <TrendingUp className="w-3 h-3" /> : priceVariationVsPrev < 0 ? <TrendingDown className="w-3 h-3" /> : <div className="w-3 h-0.5 bg-current rounded-full" />}
+                                                    <span>{priceVariationVsPrev > 0 ? '+' : ''}{priceVariationVsPrev.toFixed(1)}%</span>
+                                                    <span className="text-[9px] font-normal opacity-60">vs ant.</span>
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p className="max-w-[200px] text-center">Variación respecto a la compra inmediatamente anterior.</p></TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                {/* Badge vs promedio histórico */}
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <div className={`flex items-center px-2 py-0.5 rounded-sm text-xs font-bold cursor-help ${priceVariation > 0 ? 'bg-red-500/10 text-red-600 dark:text-red-400' : priceVariation < 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
-                                                {priceVariation > 0 ? <TrendingUp className="w-3.5 h-3.5 mr-1" /> : priceVariation < 0 ? <TrendingDown className="w-3.5 h-3.5 mr-1" /> : <div className="w-3.5 h-0.5 bg-current rounded-full mr-1" />}
-                                                <span>{priceVariation > 0 ? '+' : ''}{priceVariation !== 0 ? `${priceVariation.toFixed(1)}%` : '0.0%'}</span>
+                                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-bold cursor-help opacity-70 ${priceVariationVsAvg > 0 ? 'bg-red-500/10 text-red-600 dark:text-red-400' : priceVariationVsAvg < 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+                                                {priceVariationVsAvg > 0 ? <TrendingUp className="w-3 h-3" /> : priceVariationVsAvg < 0 ? <TrendingDown className="w-3 h-3" /> : <div className="w-3 h-0.5 bg-current rounded-full" />}
+                                                <span>{priceVariationVsAvg > 0 ? '+' : ''}{priceVariationVsAvg.toFixed(1)}%</span>
+                                                <span className="text-[9px] font-normal opacity-60">vs prom.</span>
                                             </div>
                                         </TooltipTrigger>
-                                        <TooltipContent><p className="max-w-[200px] text-center">Variación de la última tarifa respecto a la tarifa promedio histórica del proveedor.</p></TooltipContent>
+                                        <TooltipContent><p className="max-w-[200px] text-center">Variación respecto al precio promedio histórico (excluyendo la última compra).</p></TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-black text-primary text-lg">{formatCurrency(totalLineAmount)}</TableCell>
@@ -531,7 +573,8 @@ export function ProductLinesTable({
     onSelectionChange,
     aiSuggestions,
     currentEmpresaId,
-    isClient = false
+    isClient = false,
+    highlightKey
 }: ProductLinesTableProps) {
     const totalCantidad = lines.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
     const totalImporte = lines.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
@@ -611,24 +654,25 @@ export function ProductLinesTable({
                     <TableBody>
                         {groupedLines.map((group, idx) => {
                             const normDesc = normalizeProductDescription(group[0].descripcion || '');
-                            const key = group[0].codigo ? `${group[0].codigo}::${normDesc}` : normDesc;
+                            const groupKey = group[0].codigo ? `${group[0].codigo}::${normDesc}` : (normDesc || 'unknown');
                             return (
                                 <ProductLineGroup
-                                    key={key}
+                                    key={groupKey}
                                     group={group}
                                     providerFiscalId={providerFiscalId}
-                                    isSelected={selectedGroupKeys.includes(key)}
+                                    isSelected={selectedGroupKeys.includes(groupKey)}
                                     onToggleSelect={() => {
-                                        const newKeys = selectedGroupKeys.includes(key)
-                                            ? selectedGroupKeys.filter(k => k !== key)
-                                            : [...selectedGroupKeys, key];
+                                        const newKeys = selectedGroupKeys.includes(groupKey)
+                                            ? selectedGroupKeys.filter(k => k !== groupKey)
+                                            : [...selectedGroupKeys, groupKey];
                                         if (onSelectionChange) onSelectionChange(newKeys);
                                     }}
-                                    aiSuggestion={aiSuggestions?.[normDesc]}
+                                    aiSuggestion={aiSuggestions?.[group[0].codigo || normDesc]}
                                     onClassificationUpdate={onClassificationUpdate}
                                     onAccountUpdate={onAccountUpdate}
                                     currentEmpresaId={currentEmpresaId}
                                     isClient={isClient}
+                                    isHighlighted={highlightKey === groupKey}
                                 />
                             );
                         })}

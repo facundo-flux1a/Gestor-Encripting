@@ -1163,7 +1163,7 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
       }
 
-      const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento'];
+      const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento', 'incidencia', 'incidencia_razon'];
 
       if (directDocumentFields.includes(fieldName)) {
         const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' : fieldName === 'total' ? 'importe_total' : fieldName;

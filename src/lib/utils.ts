@@ -13,7 +13,7 @@ export function normalizeProductDescription(desc: string): string {
   normalized = normalized.replace(/\([^)]*\)/g, "");
   // 2. Eliminar contenido entre corchetes
   normalized = normalized.replace(/\[[^\]]*\]/g, "");
-  // 3. Limpiar espacios múltiples y caracteres de unión raros (incluyendo barras para evitar errores de ruta)
+  // 3. Limpiar espacios múltiples y caracteres de unión raros
   normalized = normalized.replace(/[\s\-_/]+/g, " ");
   // 4. Pasar a mayúsculas para comparación insensible
   return normalized.trim().toUpperCase();
