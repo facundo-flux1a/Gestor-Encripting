@@ -26,7 +26,7 @@ const STORAGE_KEY = 'actividad_tutorial_completed';
 export const ActividadProvider = ({ children }: { children: ReactNode }) => {
   const [shouldShowTutorial, setShouldShowTutorial] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  // 🎯 Iniciamos con filtros VACÍOS por defecto (serán aplicados si NO hay tutorial)
+  // Filtros vacíos por defecto: se muestra todo el historial al entrar.
   const [filters, setFilters] = useState<ActividadFilters>({
     status: [],
     tipoDocumento: '',
@@ -88,18 +88,9 @@ export const ActividadProvider = ({ children }: { children: ReactNode }) => {
 
           setShouldShowTutorial(showTutorial);
 
-          // 🔥 LÓGICA DE FILTROS:
           if (showTutorial) {
-            // Si hay tutorial, mantenemos filtros limpios y activamos modo tutorial
             console.log('✨ [ActividadProvider] Tutorial activo: filtros permanecen limpios');
             setTutorialActive(true);
-          } else {
-            // Si NO hay tutorial, aplicamos los filtros predeterminados de error
-            console.log('🔍 [ActividadProvider] Sin tutorial: aplicando filtros por defecto');
-            setFilters(prev => ({
-              ...prev,
-              status: ['fallido', 'interrumpido', 'error']
-            }));
           }
 
           // Si ya está completado en servidor, guardar en localStorage
