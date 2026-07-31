@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_S,
+  SESSION_RENEW_WHEN_REMAINING_S,
+  sessionCookieOptions,
+} from '@/lib/session-config';
 
 // ✅ AGREGAR las rutas de reset password
 const publicRoutes = [
@@ -18,13 +24,55 @@ const publicRoutes = [
 const rootRoute = '/';
 
 /**
+ * Ventana deslizante: si a la sesión le queda poco, se reemite con la duración
+ * completa sobre la respuesta que ya íbamos a devolver. Mientras el usuario
+ * siga usando la app no lo desloguea nunca; si la deja de usar 30 días, caduca.
+ *
+ * Se conservan todos los claims (userId, flags de tutorial, organization_rol);
+ * sólo se reemplazan iat/exp.
+ */
+async function renovarSesionSiHaceFalta(
+  response: NextResponse,
+  payload: JWTPayload,
+  secretKey: Uint8Array
+): Promise<NextResponse> {
+  const ahoraS = Math.floor(Date.now() / 1000);
+  const exp = typeof payload.exp === 'number' ? payload.exp : 0;
+
+  // Todavía le sobra vida: no tocamos nada (evita un Set-Cookie por request).
+  if (exp - ahoraS > SESSION_RENEW_WHEN_REMAINING_S) return response;
+
+  const { iat, exp: _exp, nbf, ...claims } = payload;
+  const nuevoExp = ahoraS + SESSION_MAX_AGE_S;
+
+  try {
+    const renovada = await new SignJWT(claims)
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime(nuevoExp)
+      .sign(secretKey);
+
+    response.cookies.set(SESSION_COOKIE_NAME, renovada, {
+      ...sessionCookieOptions,
+      expires: new Date(nuevoExp * 1000),
+    });
+  } catch (error) {
+    // Si falla la refirma, seguimos con la cookie vieja: sigue siendo válida
+    // hasta su exp original. Nunca romper la navegación por esto.
+    console.warn('⚠️ [middleware] No se pudo renovar la sesión:', error);
+  }
+
+  return response;
+}
+
+/**
  * Middleware to protect routes by checking for the presence of a session cookie.
  * This middleware is designed to be lightweight and compatible with the Edge runtime.
  * It does not validate the JWT, only checks for its existence. The actual validation
  * happens in Server Components or API routes running in the Node.js environment.
  */
 export async function middleware(request: NextRequest) {
-  const sessionCookie = request.cookies.get('session');
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = publicRoutes.some(route => {
@@ -48,7 +96,7 @@ export async function middleware(request: NextRequest) {
   // 2. Si HAY cookie, VERIFICAR FIRMA
   try {
     const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
-    await jwtVerify(sessionCookie.value, secretKey, {
+    const { payload } = await jwtVerify(sessionCookie.value, secretKey, {
       algorithms: ['HS256'],
     });
 
@@ -58,20 +106,24 @@ export async function middleware(request: NextRequest) {
     if (isPublicRoute) {
       // ✅ Si es login/register y ya tiene sesión -> Dashboard
       if ((pathname.startsWith('/auth/login') || pathname.startsWith('/auth/register')) && !hasToken) {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return renovarSesionSiHaceFalta(
+          NextResponse.redirect(new URL('/dashboard', request.url)),
+          payload,
+          secretKey
+        );
       }
       // ✅ Para cualquier otra ruta pública (como / o /landing), permitir incluso con sesión
-      return NextResponse.next();
+      return renovarSesionSiHaceFalta(NextResponse.next(), payload, secretKey);
     }
 
-    return NextResponse.next();
+    return renovarSesionSiHaceFalta(NextResponse.next(), payload, secretKey);
 
   } catch (error) {
     // ❌ Firma inválida (cookie manipulada, expirada o clave secreta cambiada)
     console.warn('⚠️ [middleware] Cookie de sesión inválida, eliminando y redirigiendo a login.');
 
     const response = NextResponse.redirect(new URL('/auth/login', request.url));
-    response.cookies.delete('session');
+    response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
   }
 }

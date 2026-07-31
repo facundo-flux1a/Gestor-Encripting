@@ -130,7 +130,6 @@ export default function ActivityTable({
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [selectedErrorActivity, setSelectedErrorActivity] = useState<Activity | null>(null);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
-  const [showActiveFilterHint, setShowActiveFilterHint] = useState(false);
 
   // 🆕 Estados para selección múltiple
   const [rowSelection, setRowSelection] = useState<Record<number, boolean>>({});
@@ -249,12 +248,6 @@ export default function ActivityTable({
 
   useEffect(() => {
     checkAuth();
-    // Mostrar hint si inicia con filtros por defecto
-    if (filters.status.length > 0) {
-      setShowActiveFilterHint(true);
-      const timer = setTimeout(() => setShowActiveFilterHint(false), 5000);
-      return () => clearTimeout(timer);
-    }
   }, []);
 
   useEffect(() => {
@@ -657,13 +650,22 @@ export default function ActivityTable({
 
   const clearFilters = () => {
     setFilters({
-      status: ['fallido', 'interrumpido', 'error'],
+      status: [],
       tipoDocumento: '',
       dateFrom: '',
       dateTo: '',
-      searchText: ''
+      searchText: '',
     });
     setPagination(prev => ({ ...prev, offset: 0 }));
+  };
+
+  const applyErrorsOnlyFilter = () => {
+    setFilters(prev => ({
+      ...prev,
+      status: ['fallido', 'interrumpido', 'error'],
+    }));
+    setPagination(prev => ({ ...prev, offset: 0 }));
+    setShowFilters(true);
   };
 
   const handleSort = (key: 'status' | 'documento' | 'empresa' | 'fecha' | 'progreso') => {
@@ -1315,10 +1317,7 @@ export default function ActivityTable({
 
             <div className="relative z-[100]">
               <button
-                onClick={() => {
-                  setShowFilters(!showFilters);
-                  setShowActiveFilterHint(false);
-                }}
+                onClick={() => setShowFilters(!showFilters)}
                 data-tutorial="actividad-filters"
                 title={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
                 className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border hover:scale-105 ${showFilters || activeFiltersCount > 0
@@ -1334,11 +1333,6 @@ export default function ActivityTable({
                   </span>
                 )}
               </button>
-              {showActiveFilterHint && !actividadContext.tutorialActive && (
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-32 bg-primary text-primary-foreground text-[10px] py-1 px-2 rounded-md shadow-lg animate-bounce z-[100] text-center pointer-events-none after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-primary">
-                  Filtros aplicados
-                </div>
-              )}
             </div>
 
             <div className="relative z-[80]" data-tutorial="actividad-autorefresh">
@@ -1362,6 +1356,20 @@ export default function ActivityTable({
             </div>
           </div>
         </div>
+
+        {activeFiltersCount > 0 && !actividadContext.tutorialActive && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:text-sm animate-fade-in">
+            <span className="text-muted-foreground">
+              Hay {activeFiltersCount} filtro{activeFiltersCount !== 1 ? 's' : ''} activo{activeFiltersCount !== 1 ? 's' : ''}. Puede que no veas todo el historial.
+            </span>
+            <button
+              onClick={clearFilters}
+              className="font-medium text-primary hover:underline shrink-0"
+            >
+              Ver todo
+            </button>
+          </div>
+        )}
 
         {showFilters && (
           <div className="bg-muted/50 border rounded-lg p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
@@ -1579,11 +1587,18 @@ export default function ActivityTable({
               <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/50 mx-auto mb-4 shrink-0" />
               <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
               <p className="text-sm text-muted-foreground mt-2">
-                No se encontraron documentos ni actividades para la empresa seleccionada con los filtros actuales.
+                {activeFiltersCount > 0
+                  ? 'No hay resultados con los filtros actuales. Probá ampliar la búsqueda o ver todo el historial.'
+                  : 'No se encontraron subidas ni procesamientos para la empresa seleccionada.'}
               </p>
               {activeFiltersCount > 0 && (
                 <Button variant="link" onClick={clearFilters} className="mt-2 text-primary">
-                  Limpiar filtros
+                  Ver todo el historial
+                </Button>
+              )}
+              {activeFiltersCount === 0 && selectedCompanyIds.length > 0 && (
+                <Button variant="link" onClick={applyErrorsOnlyFilter} className="mt-2 text-primary">
+                  Ver solo errores e interrupciones
                 </Button>
               )}
             </div>

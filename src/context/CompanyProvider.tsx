@@ -72,14 +72,28 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
           validIds.includes(id)
         );
 
+        const initialSelection =
+          restoredIds.length > 0
+            ? restoredIds
+            : data.length === 1
+              ? [data[0].id]
+              : [];
+
         setSelectedCompanyIds((prev) => {
-          // Only update if the length changed or arrays mismatch to prevent constant re-renders
-          if (prev.length !== restoredIds.length || prev.some(id => !restoredIds.includes(id))) {
-            return restoredIds;
+          if (
+            prev.length !== initialSelection.length ||
+            prev.some((id) => !initialSelection.includes(id))
+          ) {
+            return initialSelection;
           }
           return prev;
         });
-        console.log(`⏱️ [PERF:client] CompanyProvider.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=${data.length} selected=${restoredIds.length}`);
+
+        if (restoredIds.length === 0 && initialSelection.length === 1) {
+          saveSelectionToRedis(initialSelection);
+        }
+
+        console.log(`⏱️ [PERF:client] CompanyProvider.TOTAL | ${Math.round(performance.now() - t0)}ms | companies=${data.length} selected=${initialSelection.length}`);
       } catch (error) {
         console.error('❌ [CompanyProvider] Error loading companies:', error);
         console.log(`⏱️ [PERF:client] CompanyProvider.TOTAL | ${Math.round(performance.now() - t0)}ms | error=1`);
