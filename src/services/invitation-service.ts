@@ -1,8 +1,9 @@
 import { sendEmail } from './email-service';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from './notification-service';
 
-export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string) {
+export async function createInvitation(empresaId: string, email: string, rol: string, senderName?: string, senderId?: string | number) {
   try {
     const token = crypto.randomUUID();
     const fechaExpiracion = new Date();
@@ -24,7 +25,7 @@ export async function createInvitation(empresaId: string, email: string, rol: st
         rol: rol as any,
         token,
         fecha_expiracion: fechaExpiracion,
-        metadata: { senderName, empresaNombre },
+        metadata: { senderName, empresaNombre, senderId },
         status: 'PENDING'
       }
     });
@@ -114,6 +115,8 @@ export async function acceptInvitation(token: string, userId: string | number) {
       select: { id_de_usuario: true, config_roles: true }
     });
 
+    let adminIdsToNotify: number[] = [];
+
     if (empresa) {
       let userIds: number[] = [];
       try {
@@ -136,6 +139,25 @@ export async function acceptInvitation(token: string, userId: string | number) {
       }
       configRoles[parsedUserId.toString()] = inv.rol as string;
 
+      // Determinar a quién notificar (los ADMINS actuales)
+      for (const [uid, rol] of Object.entries(configRoles)) {
+        if (rol === 'ADMIN' && uid !== parsedUserId.toString()) {
+          adminIdsToNotify.push(Number(uid));
+        }
+      }
+
+      if (adminIdsToNotify.length === 0) {
+        // Fallback al usuario que envió la invitación, o a todos si no hay
+        const metadata = typeof inv.metadata === 'string' ? JSON.parse(inv.metadata) : (inv.metadata || {});
+        if (metadata.senderId && Number(metadata.senderId) !== parsedUserId) {
+          adminIdsToNotify.push(Number(metadata.senderId));
+          console.log(`[invitation-service] Fallback: Notificando al remitente (ID: ${metadata.senderId})`);
+        } else {
+          adminIdsToNotify = userIds.filter(id => id !== parsedUserId);
+          console.log(`[invitation-service] Fallback: Notificando a todos los miembros (IDs: ${adminIdsToNotify.join(',')})`);
+        }
+      }
+
       console.log('🏢 [invitation-service] Actualizando miembros y roles:', { userIds, userId, rol: inv.rol });
 
       await prisma.empresas.update({
@@ -154,7 +176,27 @@ export async function acceptInvitation(token: string, userId: string | number) {
     });
     console.log('🏁 [invitation-service] Filas actualizadas a ACCEPTED:', updated.count);
 
-    return { success: true };
+    // --- Notificar a los administradores ---
+    try {
+      if (adminIdsToNotify.length > 0) {
+        await createNotification({
+          userIds: adminIdsToNotify,
+          empresaId: empresaId,
+          tipo: 'usuario_unido',
+          titulo: 'Nuevo Usuario',
+          mensaje: `El usuario ${inv.email || 'invitado'} ha aceptado la invitación y se unió al equipo.`,
+          metadata: {}
+        });
+        console.log(`[invitation-service] Notificación enviada a admins: ${adminIdsToNotify.join(',')}`);
+      } else {
+        console.log('[invitation-service] No se encontraron admins a notificar (o no hay empresa).');
+      }
+    } catch (notifErr) {
+      console.error('Error enviando notificacion de usuario_unido:', notifErr);
+    }
+    // ----------------------------------------
+
+    return { success: true, empresaId };
   } catch (error: any) {
     console.error('❌ [acceptInvitation] Error:', error);
     return { success: false, error: error.message };
@@ -232,14 +274,18 @@ export async function resendInvitation(invitationId: string) {
 export async function getInvitationByToken(token: string) {
   try {
     const inv = await prisma.invitaciones_empresa.findFirst({
-      where: { token, status: 'PENDING', fecha_expiracion: { gt: new Date() } },
-      include: { empresas: { select: { nombre_de_empresa: true } } }
+      where: { token, status: 'PENDING', fecha_expiracion: { gt: new Date() } }
     });
     if (!inv) return null;
 
+    const emp = await prisma.empresas.findUnique({
+      where: { id: inv.empresa_id },
+      select: { nombre_de_empresa: true }
+    });
+
     return {
       ...inv,
-      nombre_de_empresa: inv.empresas?.nombre_de_empresa
+      nombre_de_empresa: emp?.nombre_de_empresa
     };
   } catch (e: any) {
     console.error('❌ [getInvitationByToken] Error:', e);

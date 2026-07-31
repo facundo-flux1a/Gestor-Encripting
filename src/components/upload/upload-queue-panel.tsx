@@ -1,15 +1,19 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useUploadQueue } from '@/context/UploadQueueProvider';
+import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   ServerIcon, RefreshCw, FileText, UploadCloud,
   Trash2, CheckCircle2, XCircle, Clock, Loader2,
   ChevronDown, ChevronUp, AlertCircle, Zap, X, CheckCheck,
+  Search, SlidersHorizontal, Building2,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -36,6 +40,7 @@ interface ChildSummary {
   processing: number;
   recentActive: {
     uploadId: string;
+    documentId: number | null;
     nombre: string;
     status: string;
     step: string;
@@ -49,6 +54,7 @@ interface ChildSummary {
 interface ActiveUpload {
   uploadId: string;
   batchId?: string | null;
+  empresaId?: number | null;
   documentId?: number | null;
   nombre: string;
   status: string;
@@ -60,6 +66,9 @@ interface ActiveUpload {
   childrenSummary: ChildSummary | null;
   isNew?: boolean;
 }
+
+type StatusFilter = 'all' | 'active' | 'completed' | 'failed' | 'paused';
+type DateFilter = 'all' | 'today' | '7d' | '30d';
 
 function isRateLimitPaused(job: { status?: string; step?: string; mensaje?: string }) {
   const st = (job.status || '').toLowerCase();
@@ -128,25 +137,79 @@ function cleanText(text?: string) {
   return text.replace(/[🍪🧠📦✅❌⚠️🔄🚀💾📊📝🏢🛒💰⏳🔑📬📄📅🎯🔧💡🌐🎫🎉🔥⛔🚫🚨❗❓✨🏥📋🔍🏆✂🖼🛑⏱️]/gu, '').trim();
 }
 
-function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (id: string) => void; onDismiss: (id: string) => void }) {
+function JobCard({ job, onDelete, onDismiss, onRemoveLocally, onNavigate }: { job: ActiveUpload; onDelete: (id: string) => void; onDismiss: (id: string) => Promise<void>; onRemoveLocally: (id: string) => void; onNavigate: (documentId: number) => void }) {
   const [expanded, setExpanded] = useState(false);
   const paused = isRateLimitPaused(job);
   const cs = job.childrenSummary;
   const isFinished = ['completado', 'completed', 'fallido', 'failed'].includes(job.status?.toLowerCase());
+  const isCompleted = ['completado', 'completed'].includes(job.status?.toLowerCase());
+  const isBatch = cs && cs.total > 0;
   const duration = isFinished ? formatDuration(job.createdAt, job.updatedAt) : null;
   const secondsRematch = job.mensaje?.match(/Retomando en (\d+)s/);
   const secondsLeft = secondsRematch ? parseInt(secondsRematch[1]) : null;
 
+  // Navegación: solo completados; batch expande, suelto navega
+  const handleCardClick = () => {
+    if (!isCompleted || dismissState !== 'idle') return;
+    if (isBatch) {
+      setExpanded(e => !e);
+    } else if (job.documentId) {
+      onNavigate(job.documentId);
+    }
+  };
+
+  const [dismissState, setDismissState] = useState<'idle' | 'loading' | 'success'>('idle');
+
+  const handleDismiss = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (dismissState !== 'idle') return;
+    
+    setDismissState('loading');
+    try {
+      await onDismiss(job.uploadId);
+      setDismissState('success');
+      setTimeout(() => {
+        onRemoveLocally(job.uploadId);
+      }, 500); // Darle tiempo a la animación final de terminar (500ms)
+    } catch (error) {
+      console.error(error);
+      setDismissState('idle'); // Revert
+    }
+  };
+
   return (
-    <Card className={cn('transition-all duration-300', paused ? 'border-amber-500/40 shadow-amber-500/5 shadow-md' : 'border-border/50')}>
+    <div
+      className={cn(
+        "transition-all grid w-full min-w-0",
+        dismissState === 'success' ? "duration-500 ease-in-out" : "duration-300",
+        dismissState === 'idle' ? "grid-rows-[1fr]" : "",
+        dismissState === 'loading' ? "grid-rows-[1fr]" : "",
+        dismissState === 'success' ? "grid-rows-[0fr]" : ""
+      )}
+    >
+      <div 
+        className={cn(
+           "transition-all flex flex-col",
+           dismissState === 'success' ? "overflow-hidden" : "overflow-visible",
+           dismissState === 'idle' ? "translate-x-0 opacity-100 duration-300 ease-in-out" : "",
+           dismissState === 'loading' ? "translate-x-[25%] opacity-80 duration-[1200ms] ease-linear pointer-events-none" : "",
+           dismissState === 'success' ? "translate-x-[50%] opacity-0 duration-500 ease-in-out pointer-events-none" : ""
+        )}
+      >
+        <Card className={cn(
+          'transition-all duration-300 w-full overflow-hidden',
+          paused ? 'border-amber-500/40 shadow-amber-500/5 shadow-md' : 'border-border/50',
+          isCompleted && !isBatch && job.documentId ? 'cursor-pointer hover:border-primary/50 hover:shadow-primary/5 hover:shadow-md' : '',
+          isCompleted && isBatch ? 'cursor-pointer hover:border-primary/30' : ''
+        )} onClick={handleCardClick}>
       <CardContent className="p-0">
         <div className="p-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className={cn('shrink-0 p-2 rounded-lg', paused ? 'bg-amber-500/10' : 'bg-primary/10')}>
                 <FileText className={cn('w-4 h-4', paused ? 'text-amber-400' : 'text-primary')} />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-sm leading-tight line-clamp-1" title={job.nombre}>
                   {job.nombre || 'Documento sin nombre'}
                 </h3>
@@ -161,7 +224,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
                     </>
                   )}
                   <span>•</span>
-                  <span>{new Date(job.updatedAt).toLocaleTimeString('es-AR')}</span>
+                  <span>{new Date(job.createdAt).toLocaleDateString('es-AR')} {new Date(job.createdAt).toLocaleTimeString('es-AR', {hour: '2-digit', minute:'2-digit'})}</span>
                   {duration && (
                     <>
                       <span>•</span>
@@ -182,7 +245,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground/50 hover:text-primary hover:bg-primary/10"
-                  onClick={() => onDismiss(job.uploadId)}
+                  onClick={handleDismiss}
                   title="Marcar como visto"
                 >
                   <X className="h-4 w-4" />
@@ -192,7 +255,10 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => onDelete(job.uploadId)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(job.uploadId);
+                  }}
                   title="Eliminar registro"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -270,26 +336,36 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
 
               {expanded && cs.recentActive.length > 0 && (
                 <div className="mt-2 space-y-1.5">
-                  {cs.recentActive.map((child) => (
-                    <div
-                      key={child.uploadId}
-                      className={cn(
-                        'rounded-md border px-2.5 py-1.5 text-[11px] space-y-1',
-                        isRateLimitPaused(child) ? 'border-amber-500/30 bg-amber-500/5' : 'border-border/40 bg-muted/20'
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium line-clamp-1 flex-1" title={child.nombre}>
-                          {child.nombre}
-                        </span>
-                        <span className={cn('flex items-center gap-1 shrink-0', getStatusColor(child.status, child.step, child.mensaje))}>
-                          <StatusIcon status={child.status} step={child.step} mensaje={child.mensaje} size="w-3 h-3" />
-                          {cleanText(child.step) || child.status}
-                        </span>
+                  {cs.recentActive.map((child) => {
+                    const childCompleted = ['completado', 'completed'].includes(child.status?.toLowerCase());
+                    return (
+                      <div
+                        key={child.uploadId}
+                        className={cn(
+                          'rounded-md border px-2.5 py-1.5 text-[11px] space-y-1',
+                          isRateLimitPaused(child) ? 'border-amber-500/30 bg-amber-500/5' : 'border-border/40 bg-muted/20',
+                          childCompleted && child.documentId ? 'cursor-pointer hover:border-primary/50 hover:bg-primary/5' : ''
+                        )}
+                        onClick={(e) => {
+                          if (childCompleted && child.documentId) {
+                            e.stopPropagation();
+                            onNavigate(child.documentId);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium line-clamp-1 flex-1" title={child.nombre}>
+                            {child.nombre}
+                          </span>
+                          <span className={cn('flex items-center gap-1 shrink-0', getStatusColor(child.status, child.step, child.mensaje))}>
+                            <StatusIcon status={child.status} step={child.step} mensaje={child.mensaje} size="w-3 h-3" />
+                            {cleanText(child.step) || child.status}
+                          </span>
+                        </div>
+                        <Progress value={child.progress ?? 0} className={cn('h-1', getProgressColor(child.status, child.step, child.mensaje))} />
                       </div>
-                      <Progress value={child.progress ?? 0} className={cn('h-1', getProgressColor(child.status, child.step, child.mensaje))} />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -297,7 +373,7 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
         </div>
 
         {paused && (
-          <div className="border-t border-amber-500/20 bg-amber-500/5 px-4 py-2 rounded-b-lg">
+          <div className="border-t border-amber-500/20 bg-amber-500/5 px-4 py-2 rounded-b-lg mt-auto">
             <div className="flex items-center gap-2 text-[11px] text-amber-400">
               <Zap className="w-3.5 h-3.5 shrink-0" />
               <span>Pausado por cuota — retomará automáticamente.</span>
@@ -306,6 +382,8 @@ function JobCard({ job, onDelete, onDismiss }: { job: ActiveUpload; onDelete: (i
         )}
       </CardContent>
     </Card>
+      </div>
+    </div>
   );
 }
 
@@ -314,6 +392,8 @@ const POLL_MS_IDLE = 15000;
 
 export function UploadQueuePanel() {
   const { isOpen, closeQueue, openQueue } = useUploadQueue();
+  const router = useRouter();
+  const { toast } = useToast();
   const [activeUploads, setActiveUploads] = useState<ActiveUpload[]>([]);
   const [etaSeconds, setEtaSeconds] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -322,6 +402,84 @@ export function UploadQueuePanel() {
   const [uploadToDelete, setUploadToDelete] = useState<string | null>(null);
   const { selectedCompanyIds } = useCompanyContext();
   const hasActiveRef = useRef(false);
+
+  // ── Filtros client-side ──────────────────────────────────────────────────
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>('all');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Empresas únicas presentes en los datos
+  const availableEmpresas = Array.from(
+    new Map(
+      activeUploads
+        .filter(u => u.empresaId != null)
+        .map(u => [u.empresaId, u.empresaId])
+    ).values()
+  ) as number[];
+
+  const filteredUploads = activeUploads.filter(job => {
+    // Búsqueda por nombre o uploadId
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchNombre = job.nombre?.toLowerCase().includes(term);
+      const matchId = job.uploadId.toLowerCase().includes(term);
+      if (!matchNombre && !matchId) return false;
+    }
+
+    // Filtro de empresa
+    if (empresaFilter !== 'all' && job.empresaId !== empresaFilter) return false;
+
+    // Filtro de status
+    if (statusFilter !== 'all') {
+      const s = job.status?.toLowerCase() ?? '';
+      if (statusFilter === 'active' && !['processing', 'procesando', 'waiting', 'pending'].includes(s) && !isRateLimitPaused(job) && !['completed','completado','failed','fallido','error','permanent-fail'].includes(s)) {
+        // keep going — not finished, not paused = active
+      } else if (statusFilter === 'active') {
+        const finished = ['completed','completado','failed','fallido','error','permanent-fail'].includes(s);
+        const paused = isRateLimitPaused(job);
+        if (finished || paused) return false;
+      } else if (statusFilter === 'completed' && !['completed','completado'].includes(s)) {
+        return false;
+      } else if (statusFilter === 'failed' && !['failed','fallido','error','permanent-fail'].includes(s)) {
+        return false;
+      } else if (statusFilter === 'paused' && !isRateLimitPaused(job)) {
+        return false;
+      }
+    }
+
+    // Filtro de fecha (sobre createdAt)
+    if (dateFilter !== 'all') {
+      const created = new Date(job.createdAt).getTime();
+      const now = Date.now();
+      if (dateFilter === 'today') {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        if (created < startOfDay.getTime()) return false;
+      } else if (dateFilter === '7d') {
+        if (created < now - 7 * 24 * 60 * 60 * 1000) return false;
+      } else if (dateFilter === '30d') {
+        if (created < now - 30 * 24 * 60 * 60 * 1000) return false;
+      }
+    }
+
+    return true;
+  });
+
+  const activeFilterCount = [
+    statusFilter !== 'all',
+    dateFilter !== 'all',
+    empresaFilter !== 'all',
+    searchTerm !== '',
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setDateFilter('all');
+    setEmpresaFilter('all');
+  };
 
   const fetchQueue = useCallback(async (silent = false) => {
     if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
@@ -403,13 +561,13 @@ export function UploadQueuePanel() {
     }
   };
 
-  const dismissUpload = async (uploadId: string) => {
-    try {
-      const res = await fetch(`/api/activity/upload/${uploadId}/dismiss`, { method: 'PATCH' });
-      if (res.ok) setActiveUploads(prev => prev.filter(u => u.uploadId !== uploadId));
-    } catch (error) {
-      console.error('Error al descartar:', error);
-    }
+  const dismissUpload = async (uploadId: string): Promise<void> => {
+    const res = await fetch(`/api/activity/upload/${uploadId}/dismiss`, { method: 'PATCH' });
+    if (!res.ok) throw new Error('Error al descartar');
+  };
+
+  const removeUploadLocally = (uploadId: string) => {
+    setActiveUploads(prev => prev.filter(u => u.uploadId !== uploadId));
   };
 
   const dismissAll = async () => {
@@ -496,6 +654,127 @@ export function UploadQueuePanel() {
               </div>
             )}
 
+            {/* ── Barra de búsqueda + toggle filtros ── */}
+            {!isLoading && activeUploads.length > 0 && (
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nombre o ID..."
+                      className="pl-8 h-8 text-xs bg-muted/40 border-border/50 focus-visible:ring-primary"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    variant={showFilters ? 'secondary' : 'outline'}
+                    size="icon"
+                    className="h-8 w-8 shrink-0 relative"
+                    onClick={() => setShowFilters(v => !v)}
+                    title="Mostrar filtros"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    {activeFilterCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+
+                {showFilters && (
+                  <div className="space-y-2 pb-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {/* Status */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Estado</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(['all','active','completed','failed','paused'] as StatusFilter[]).map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setStatusFilter(s)}
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
+                              statusFilter === s
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
+                            )}
+                          >
+                            {s === 'all' ? 'Todos' : s === 'active' ? 'En proceso' : s === 'completed' ? 'Completado' : s === 'failed' ? 'Fallido' : 'Pausado'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Fecha */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Fecha</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(['all','today','7d','30d'] as DateFilter[]).map(d => (
+                          <button
+                            key={d}
+                            onClick={() => setDateFilter(d)}
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
+                              dateFilter === d
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
+                            )}
+                          >
+                            {d === 'all' ? 'Todas' : d === 'today' ? 'Hoy' : d === '7d' ? 'Últimos 7 días' : 'Últimos 30 días'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Empresa — solo si hay más de una */}
+                    {availableEmpresas.length > 1 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Empresa</p>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            onClick={() => setEmpresaFilter('all')}
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
+                              empresaFilter === 'all'
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
+                            )}
+                          >
+                            Todas
+                          </button>
+                          {availableEmpresas.map(eid => (
+                            <button
+                              key={eid}
+                              onClick={() => setEmpresaFilter(eid)}
+                              className={cn(
+                                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
+                                empresaFilter === eid
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
+                              )}
+                            >
+                              <Building2 className="w-3 h-3" />
+                              #{eid}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={clearFilters}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        Limpiar filtros
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {hasFinished && (
               <Button
                 variant="outline"
@@ -509,7 +788,7 @@ export function UploadQueuePanel() {
             )}
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3">
             {selectedCompanyIds.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground px-4">
                 <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
@@ -542,13 +821,43 @@ export function UploadQueuePanel() {
                   <p className="text-[11px] mt-2 opacity-60">{totalDocs} sub-docs rastreados</p>
                 )}
               </div>
+            ) : filteredUploads.length === 0 && activeFilterCount > 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground border border-dashed rounded-lg">
+                <Search className="w-8 h-8 mb-3 opacity-30" />
+                <p className="text-sm font-medium">Sin resultados</p>
+                <p className="text-xs mt-1 px-4">Ningún registro coincide con los filtros activos.</p>
+                <button onClick={clearFilters} className="mt-3 text-xs text-primary hover:underline">Limpiar filtros</button>
+              </div>
             ) : (
-              activeUploads.map((job) => (
+              filteredUploads.map((job) => (
                 <JobCard
                   key={job.uploadId}
                   job={job}
                   onDelete={(id) => setUploadToDelete(id)}
                   onDismiss={dismissUpload}
+                  onRemoveLocally={removeUploadLocally}
+                  onNavigate={async (docId) => {
+                    try {
+                      const res = await fetch(`/api/documents/${docId}`);
+                      if (res.ok) {
+                        closeQueue();
+                        router.push(`/documento/${docId}`);
+                      } else {
+                        toast({
+                          title: 'Documento no encontrado',
+                          description: 'El documento puede haber sido eliminado recientemente.',
+                          variant: 'destructive',
+                        });
+                        // Opcionalmente podemos descartarlo de la lista
+                        try {
+                           await dismissUpload(job.uploadId);
+                           removeUploadLocally(job.uploadId);
+                        } catch (err) {}
+                      }
+                    } catch (error) {
+                      console.error('Error verificando documento:', error);
+                    }
+                  }}
                 />
               ))
             )}

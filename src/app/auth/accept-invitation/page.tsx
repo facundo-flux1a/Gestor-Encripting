@@ -271,19 +271,19 @@ function AcceptInvitationContent() {
                             </>
                         ) : (
                             <>
-                                <Button
-                                    className="w-full h-12 text-lg shadow-lg group"
-                                    onClick={() => router.push(`/auth/login?token=${token}&email=${encodeURIComponent(invitation?.email || '')}`)}
-                                >
-                                    Iniciar Sesión <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                                </Button>
-                                {!invitation?.userExists && (
+                                {invitation?.userExists ? (
                                     <Button
-                                        variant="outline"
-                                        className="w-full h-12 mt-2"
+                                        className="w-full h-12 text-lg shadow-lg group"
+                                        onClick={() => router.push(`/auth/login?token=${token}&email=${encodeURIComponent(invitation?.email || '')}`)}
+                                    >
+                                        Iniciar Sesión <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        className="w-full h-12 text-lg shadow-lg group"
                                         onClick={() => router.push(`/auth/register?token=${token}&email=${encodeURIComponent(invitation?.email || '')}`)}
                                     >
-                                        Crear mi Cuenta de Gestor Documental
+                                        Crear mi Cuenta <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                                     </Button>
                                 )}
                             </>

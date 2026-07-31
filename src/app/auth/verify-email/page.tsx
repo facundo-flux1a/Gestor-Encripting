@@ -2,10 +2,10 @@
 
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { verifyEmailCode } from '@/services/auth-service';
+import { verifyEmailCode, resendCode } from '@/services/auth-service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Mail } from 'lucide-react';
+import { Loader2, Mail, RefreshCw } from 'lucide-react';
 
 function VerifyEmailForm() {
   const searchParams = useSearchParams();
@@ -15,7 +15,29 @@ function VerifyEmailForm() {
 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const handleResend = async () => {
+    setResending(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const formData = new FormData();
+      formData.append('email', email);
+      const res = await resendCode(formData);
+      if (res.success) {
+        setSuccessMsg('Código reenviado con éxito. Revisa tu bandeja de entrada o spam.');
+      } else {
+        setError(res.error || 'No se pudo reenviar el código.');
+      }
+    } catch (err) {
+      setError('Error al reenviar el código.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +48,7 @@ function VerifyEmailForm() {
     
     setLoading(true);
     setError('');
+    setSuccessMsg('');
     
     const formData = new FormData();
     formData.append('email', email);
@@ -76,14 +99,32 @@ function VerifyEmailForm() {
             </div>
           )}
 
+          {successMsg && (
+            <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 rounded-lg text-sm font-medium text-center">
+              {successMsg}
+            </div>
+          )}
+
           <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || code.length !== 6}>
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Verificar Cuenta'}
           </Button>
         </form>
 
-        <p className="text-sm text-muted-foreground mt-8 text-center">
-          ¿No recibiste el correo? Revisa tu carpeta de spam o contacta a soporte.
-        </p>
+        <div className="mt-8 text-center space-y-4">
+          <p className="text-sm text-muted-foreground">
+            ¿No recibiste el correo o se expiró el código?
+          </p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleResend} 
+            disabled={resending || loading}
+            className="w-full max-w-[200px]"
+          >
+            {resending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Reenviar Código
+          </Button>
+        </div>
       </div>
     </div>
   );

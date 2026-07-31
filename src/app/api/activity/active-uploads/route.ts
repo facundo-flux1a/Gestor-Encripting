@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       select: {
         upload_id: true,
         batch_id: true,
+        id_de_empresa: true,
         documento_id: true,
         documento_nombre: true,
         status: true,
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest) {
           where: { parent_upload_id: parent.upload_id },
           select: {
             upload_id: true,
+            documento_id: true,
             documento_nombre: true,
             status: true,
             step: true,
@@ -110,6 +112,7 @@ export async function GET(req: NextRequest) {
         return {
           uploadId: parent.upload_id,
           batchId: parent.batch_id,
+          empresaId: parent.id_de_empresa ? Number(parent.id_de_empresa) : null,
           documentId: parent.documento_id ? Number(parent.documento_id) : null,
           nombre: parent.documento_nombre,
           status: parent.status,
@@ -141,6 +144,7 @@ export async function GET(req: NextRequest) {
               })
               .map(c => ({
                 uploadId: c.upload_id,
+                documentId: c.documento_id ? Number(c.documento_id) : null,
                 nombre: c.documento_nombre,
                 status: c.status,
                 step: c.step,

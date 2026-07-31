@@ -414,6 +414,28 @@ export async function send2FAEmail(email: string, nombre: string, code: string, 
   await sendEmail({ to: email, subject, html, fromName: 'Muvail Seguridad' });
 }
 
+export async function resendCode(formData: FormData) {
+  const email = formData.get('email') as string;
+  if (!email) return { success: false, error: 'Email requerido' };
+  
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) return { success: false, error: 'Usuario no encontrado' };
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    await prisma.usuarios.update({ where: { id: BigInt(user.id) }, data: { two_factor_code: code, two_factor_expires_at: expiresAt } });
+    
+    const isVerification = !(typeof user.email_verified === 'boolean' ? user.email_verified : Number(user.email_verified) === 1);
+    await send2FAEmail(email, user.nombre as string, code, isVerification);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error resending code:', error);
+    return { success: false, error: 'Error al reenviar el código' };
+  }
+}
+
 export async function verifyEmailCode(formData: FormData) {
   const email = formData.get('email') as string;
   const code = formData.get('code') as string;

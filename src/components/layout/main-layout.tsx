@@ -339,9 +339,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
   }, [fetchUnreadCount, fetchIncidentCount, fetchHealthCheckCount]);
 
   React.useEffect(() => {
-    if (pathname !== '/dashboard/actividad') {
-      fetchUnreadCount();
-    }
+    fetchUnreadCount();
   }, [pathname, fetchUnreadCount]);
 
   const navItems = [
@@ -349,7 +347,6 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
     { href: '/documents', label: 'Documentos', icon: FileText },
     { href: '/dashboard/health-check', label: 'Salud Documental', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
-    { href: '/dashboard/actividad', label: 'Actividad', icon: Activity },
     { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
@@ -440,6 +437,23 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
                 <span className="group-data-[collapsible=icon]:hidden truncate">
                   Cola de Subidas
                 </span>
+                {unreadActivity.total > 0 && (
+                  <span
+                    className={cn(
+                      "ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium group-data-[collapsible=icon]:hidden",
+                      unreadActivity.hasErrors
+                        ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                        : "bg-violet-500/20 text-violet-400 border border-violet-500/30"
+                    )}
+                  >
+                    {unreadActivity.hasErrors ? (
+                      <AlertCircle className="w-3 h-3" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    {unreadActivity.total}
+                  </span>
+                )}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

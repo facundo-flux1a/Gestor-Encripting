@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateSingleIncident } from '@/services/incidents-service';
 import { getCurrentUser } from '@/services/user-service';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
+import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
 import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,11 @@ export async function POST(
                     mensaje: `Se ha resuelto la incidencia de la factura #${docNum}.`,
                     metadata: { documentoId: incidentInfo.documento_id?.toString() }
                 });
+
+                if (incidentInfo.documento_id) {
+                    // Chequeo de variacion de precios (dedup implementado internamente)
+                    await checkAndNotifyPriceVariation(incidentInfo.documento_id, empresaIdNum);
+                }
             }
         }
         // --------------------

@@ -31,8 +31,8 @@ export async function POST(
             return NextResponse.json({ error: 'Empresa no encontrada o sin acceso' }, { status: 404 });
         }
 
-        // 2. Crear invitación con el email del remitente
-        const result = await createInvitation(empresaId.toString(), email, rol, session.nombre);
+        // 2. Crear invitación con el email del remitente y su ID
+        const result = await createInvitation(empresaId.toString(), email, rol, session.nombre, session.userId);
 
         if (!result.success) {
             return NextResponse.json({ error: result.error }, { status: 500 });

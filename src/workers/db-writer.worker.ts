@@ -37,6 +37,7 @@ import {
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
+import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
 
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
@@ -423,101 +424,8 @@ export function startDbWriterWorker() {
           }
 
           // --- Variación de Precios ---
-          try {
-            const lineas = aiResult.lineas || aiResult.lineas_producto;
-            if (lineas && Array.isArray(lineas) && !isAbono) {
-              const cifProveedor = emisor.cif ? emisor.cif.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
-              // Usamos el hash del CIF porque identificador_fiscal está cifrado en BD
-              const hashCifProveedor = cifProveedor ? getSha256(cifProveedor) : null;
-
-              if (hashCifProveedor) {
-                const articulosList = [];
-                for (const item of lineas) {
-                  if (item.articulos && Array.isArray(item.articulos)) {
-                    articulosList.push(...item.articulos);
-                  } else {
-                    articulosList.push(item);
-                  }
-                }
-
-                for (const art of articulosList) {
-                  if (!art.descripcion || art.precio_unitario === undefined) continue;
-
-                  const desc = art.descripcion.trim();
-                  const codigo = art.codigo_articulo || art.codigo;
-                  const currentPrice = Number(art.precio_unitario);
-                  if (isNaN(currentPrice) || currentPrice <= 0) continue;
-
-                  const baseWhere = {
-                    id_de_empresa: BigInt(empresaId),
-                    documentos: {
-                      entidades_documento: {
-                        some: {
-                          identificador_fiscal_hash: hashCifProveedor,
-                          rol: { in: ['emisor', 'proveedor'] }
-                        }
-                      },
-                      fecha_emision: {
-                        lt: fechaEmision
-                      }
-                    }
-                  };
-
-                  let pastLine = null;
-                  
-                  // Prioridad 1: Buscar por código de artículo
-                  if (codigo) {
-                    pastLine = await prisma.lineas_documento.findFirst({
-                      where: { ...baseWhere, codigo: codigo },
-                      orderBy: { documentos: { fecha_emision: 'desc' } }
-                    });
-                  }
-
-                  // Prioridad 2 (Fallback): Buscar por descripción normalizada (case insensitive via hash)
-                  if (!pastLine) {
-                    // Normalizar desc para tolerar diferencias de capitalización
-                    const descNorm = desc.toUpperCase().replace(/\s+/g, ' ').trim();
-                    const candidateLines = await prisma.lineas_documento.findMany({
-                      where: baseWhere,
-                      orderBy: { documentos: { fecha_emision: 'desc' } },
-                      take: 200,
-                      select: { id: true, descripcion: true, precio_unitario: true }
-                    });
-                    const match = candidateLines.find(l => 
-                      l.descripcion && l.descripcion.toUpperCase().replace(/\s+/g, ' ').trim() === descNorm
-                    );
-                    if (match) {
-                      pastLine = await prisma.lineas_documento.findUnique({ where: { id: match.id } });
-                    }
-                  }
-
-                  if (pastLine && pastLine.precio_unitario !== null) {
-                    const pastPrice = Number(pastLine.precio_unitario);
-                    if (pastPrice > 0 && pastPrice !== currentPrice) {
-                      const isIncrease = currentPrice > pastPrice;
-                      const diffPercent = Math.abs(((currentPrice - pastPrice) / pastPrice) * 100).toFixed(1);
-                      
-                      await createNotification({
-                        userIds,
-                        empresaId: Number(empresaId),
-                        tipo: 'variacion_precio',
-                        titulo: 'Variación de precio',
-                        mensaje: `El producto "${desc}" ${isIncrease ? 'aumentó' : 'bajó'} un ${diffPercent}% (de $${pastPrice} a $${currentPrice}) respecto a la factura anterior.`,
-                        metadata: {
-                          documentoId: savedDocumentoId?.toString(),
-                          numeroDocumento: numDoc,
-                          proveedorCif: cifProveedor,
-                          productoCodigo: codigo || null,
-                          productoDescripcion: desc,
-                        }
-                      });
-                    }
-                  }
-                }
-              }
-            }
-          } catch (precioErr) {
-            console.error('[DbWriterWorker] Error detectando variacion de precio:', precioErr);
+          if (resolvedFiscalStatus !== FiscalStatus.REVISION && !tieneIncidenciaBlanda && savedDocumentoId) {
+            await checkAndNotifyPriceVariation(savedDocumentoId, Number(empresaId));
           }
           // -----------------------------
 
