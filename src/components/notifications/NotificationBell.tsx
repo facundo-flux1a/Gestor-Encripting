@@ -33,6 +33,19 @@ const TIPO_COLORS: Record<string, string> = {
   ingesta_completada:  'bg-blue-500/20 text-blue-400',
 };
 
+function BetaBadge({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center rounded-md border border-[#6600A3]/40 bg-[#6600A3] font-extrabold uppercase tracking-widest text-white shadow-sm',
+        size === 'sm' ? 'px-1.5 py-0.5 text-[9px] leading-none' : 'px-2 py-1 text-[10px] leading-none',
+      )}
+    >
+      Beta
+    </span>
+  );
+}
+
 export function NotificationBell() {
   const router = useRouter();
   const { refreshKey } = useDataRefresh();
@@ -153,21 +166,27 @@ export function NotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 relative"
-          aria-label="Notificaciones"
+          className="relative h-9 w-9 pb-1"
+          aria-label="Notificaciones (beta)"
         >
           <Bell className="h-4 w-4" />
+          <span className="pointer-events-none absolute -bottom-2 left-1/2 z-10 -translate-x-1/2">
+            <BetaBadge size="sm" />
+          </span>
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center h-4 w-4 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+            <span className="absolute -right-0.5 -top-0.5 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80 max-h-[420px] overflow-y-auto">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notificaciones</span>
+      <DropdownMenuContent align="end" className="w-80 max-h-[480px] overflow-y-auto p-0">
+        <DropdownMenuLabel className="flex items-center justify-between px-3 py-2.5">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            Notificaciones
+            <BetaBadge size="md" />
+          </span>
           {notifications.some(n => !n.leida) && (
             <button
               onClick={markAllRead}
@@ -177,7 +196,15 @@ export function NotificationBell() {
             </button>
           )}
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+
+        <div className="mx-3 mb-2 rounded-lg border border-[#6600A3]/25 bg-[#6600A3]/10 px-3 py-2">
+          <p className="text-xs font-medium text-[#6600A3]">Función en versión beta</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            Las alertas están en prueba. Si un enlace no te lleva al lugar esperado, contanos.
+          </p>
+        </div>
+
+        <DropdownMenuSeparator className="mx-0" />
 
         {notifications.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">

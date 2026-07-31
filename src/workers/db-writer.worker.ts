@@ -422,10 +422,16 @@ export function startDbWriterWorker() {
             });
           }
 
-          // --- Variación de Precios ---
-          try {
-            const lineas = aiResult.lineas || aiResult.lineas_producto;
-            if (lineas && Array.isArray(lineas) && !isAbono) {
+          // --- Variación de Precios (solo docs sin incidencia: en entidades no aparecen) ---
+          const tieneIncidenciaDocumento =
+            resolvedFiscalStatus === FiscalStatus.REVISION ||
+            aiResult.incidencia === true ||
+            String(aiResult.incidencia ?? '').toUpperCase() === 'TRUE';
+
+          if (!tieneIncidenciaDocumento) {
+            try {
+              const lineas = aiResult.lineas || aiResult.lineas_producto;
+              if (lineas && Array.isArray(lineas) && !isAbono) {
               const cifProveedor = emisor.cif ? emisor.cif.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
               // Usamos el hash del CIF porque identificador_fiscal está cifrado en BD
               const hashCifProveedor = cifProveedor ? getSha256(cifProveedor) : null;
@@ -516,10 +522,10 @@ export function startDbWriterWorker() {
                 }
               }
             }
-          } catch (precioErr) {
-            console.error('[DbWriterWorker] Error detectando variacion de precio:', precioErr);
+            } catch (precioErr) {
+              console.error('[DbWriterWorker] Error detectando variacion de precio:', precioErr);
+            }
           }
-          // -----------------------------
 
         }).catch(() => {});
         // -------------------------------------------------------------------------
