@@ -15,6 +15,11 @@ import { sendEmail } from './email-service';
 import { prisma } from '@/lib/prisma';
 import { hashField } from '@/lib/encryption';
 import { headers } from 'next/headers';
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_S,
+  sessionCookieOptions,
+} from '@/lib/session-config';
 
 /**
  * Helper para registrar eventos de sesión en eventos_sistema (VeriFactu / Orden HAC/1177/2024)
@@ -40,7 +45,6 @@ async function logAuthEvent(tipo: 'LOGIN' | 'LOGOUT', userEmail: string) {
 
 const secretKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 const key = secretKey;
-const SESSION_COOKIE_NAME = 'session';
 
 // ==========================================
 // HELPERS DE SEGURIDAD (BLIND INDEX)
@@ -88,7 +92,7 @@ export async function encrypt(payload: any) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('1d')
+    .setExpirationTime(Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_S)
     .sign(key);
 }
 
@@ -216,7 +220,7 @@ export async function createSession(
   tutorialHealthCheck: number = 0,
   organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR'
 ) {
-  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const expires = new Date(Date.now() + SESSION_MAX_AGE_S * 1000);
   const session = await encrypt({
     userId, email, nombre, tutorial,
     tutorialDocumentos, tutorialTrimestres, tutorialActividad,
@@ -227,11 +231,8 @@ export async function createSession(
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, session, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    ...sessionCookieOptions,
     expires,
-    sameSite: 'lax',
-    path: '/',
   });
 }
 

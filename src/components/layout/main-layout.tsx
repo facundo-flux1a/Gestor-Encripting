@@ -55,6 +55,7 @@ import { CompaniesSelector } from '../companies-selector';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { usePreferences } from '@/contexts/preferences-context';
 import { SuggestionBox } from '../suggestions/SuggestionBox';
+import { SupportChatWidget } from '../support/support-chat-widget';
 import { QueueTracker } from './queue-tracker';
 import { GlobalUploadTracker } from '@/components/upload/global-upload-tracker';
 import { useUploadQueueOptional } from '@/context/UploadQueueProvider';
@@ -476,8 +477,9 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
         </div>
       </SidebarInset>
 
-      {/* Global Suggestion Box */}
+      {/* Global Suggestion Box (derecha) + Asistente (a su izquierda, no tapa perfil) */}
       <SuggestionBox />
+      <SupportChatWidget />
     </SidebarProvider>
   );
 }

@@ -427,7 +427,6 @@ export function startDbWriterWorker() {
           if (resolvedFiscalStatus !== FiscalStatus.REVISION && !tieneIncidenciaBlanda && savedDocumentoId) {
             await checkAndNotifyPriceVariation(savedDocumentoId, Number(empresaId));
           }
-          // -----------------------------
 
         }).catch(() => {});
         // -------------------------------------------------------------------------

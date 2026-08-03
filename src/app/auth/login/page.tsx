@@ -10,8 +10,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { AuthBrandPanel, AuthBrandMobile } from '@/components/auth/auth-brand-panel';
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { getRecentEmails, rememberEmail, forgetEmails } from '@/lib/recent-emails';
 import { LogoutDetector } from '@/components/auth/LogoutDetector';
 import {
   Dialog,
@@ -164,6 +165,7 @@ function ForgotPasswordDialog() {
             <Input
               id="reset-email"
               type="email"
+              autoComplete="email"
               placeholder="tu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -211,8 +213,32 @@ function LoginForm() {
   const invitedEmail = searchParams.get('email');
   const emailLocked = !!inviteToken && !!invitedEmail;
 
+  const [email, setEmail] = useState(invitedEmail || '');
+  const [recientes, setRecientes] = useState<string[]>([]);
+
+  // Los correos guardados se leen recién en el cliente: si se usaran para el
+  // render inicial no coincidiría con el HTML del servidor (hidratación).
+  useEffect(() => {
+    if (invitedEmail) return;
+    const guardados = getRecentEmails();
+    setRecientes(guardados);
+    if (guardados.length > 0) setEmail(guardados[0]);
+  }, [invitedEmail]);
+
+  // Guardamos el correo al enviar, antes de delegar en la server action.
+  const enviar = (formData: FormData) => {
+    rememberEmail(String(formData.get('email') || ''));
+    return login(formData);
+  };
+
+  const olvidar = () => {
+    forgetEmails();
+    setRecientes([]);
+    setEmail('');
+  };
+
   return (
-    <form action={login} className="space-y-5">
+    <form action={enviar} className="space-y-5">
       {inviteToken && <input type="hidden" name="invite_token" value={inviteToken} />}
 
       <div className="space-y-2">
@@ -222,11 +248,21 @@ function LoginForm() {
           name="email"
           type="email"
           placeholder="tu@email.com"
-          defaultValue={invitedEmail || ''}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           readOnly={emailLocked}
+          autoComplete="username"
+          list={recientes.length > 0 ? 'correos-recientes' : undefined}
           className={emailLocked ? 'h-11 bg-muted cursor-not-allowed' : 'h-11'}
           required
         />
+        {recientes.length > 0 && (
+          <datalist id="correos-recientes">
+            {recientes.map((correo) => (
+              <option key={correo} value={correo} />
+            ))}
+          </datalist>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -234,10 +270,27 @@ function LoginForm() {
           <Label htmlFor="password">Contraseña</Label>
           <ForgotPasswordDialog />
         </div>
-        <Input id="password" name="password" type="password" className="h-11" required />
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          className="h-11"
+          required
+        />
       </div>
 
       <LoginButton />
+
+      {recientes.length > 0 && (
+        <button
+          type="button"
+          onClick={olvidar}
+          className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+        >
+          Olvidar los correos guardados en este equipo
+        </button>
+      )}
     </form>
   );
 }
