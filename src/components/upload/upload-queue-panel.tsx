@@ -210,7 +210,7 @@ function JobCard({ job, onDelete, onDismiss, onRemoveLocally, onNavigate }: { jo
                 <FileText className={cn('w-4 h-4', paused ? 'text-amber-400' : 'text-primary')} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-sm leading-tight line-clamp-1" title={job.nombre}>
+                <h3 className="font-semibold text-sm leading-tight line-clamp-1 break-all" title={job.nombre}>
                   {job.nombre || 'Documento sin nombre'}
                 </h3>
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
@@ -400,15 +400,28 @@ export function UploadQueuePanel() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [uploadToDelete, setUploadToDelete] = useState<string | null>(null);
-  const { selectedCompanyIds } = useCompanyContext();
+  const { selectedCompanyIds, companies } = useCompanyContext();
   const hasActiveRef = useRef(false);
 
   // ── Filtros client-side ──────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>('all');
+  
+  // Guardamos el default basado en la primera carga
+  const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>(
+    selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : 'all'
+  );
   const [showFilters, setShowFilters] = useState(false);
+
+  // Sync empresaFilter with selectedCompanyIds when it changes globally
+  useEffect(() => {
+    if (selectedCompanyIds.length === 1) {
+      setEmpresaFilter(selectedCompanyIds[0]);
+    } else {
+      setEmpresaFilter('all');
+    }
+  }, [selectedCompanyIds]);
 
   // Empresas únicas presentes en los datos
   const availableEmpresas = Array.from(
@@ -420,7 +433,6 @@ export function UploadQueuePanel() {
   ) as number[];
 
   const filteredUploads = activeUploads.filter(job => {
-    // Búsqueda por nombre o uploadId
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const matchNombre = job.nombre?.toLowerCase().includes(term);
@@ -428,14 +440,11 @@ export function UploadQueuePanel() {
       if (!matchNombre && !matchId) return false;
     }
 
-    // Filtro de empresa
     if (empresaFilter !== 'all' && job.empresaId !== empresaFilter) return false;
 
-    // Filtro de status
     if (statusFilter !== 'all') {
       const s = job.status?.toLowerCase() ?? '';
       if (statusFilter === 'active' && !['processing', 'procesando', 'waiting', 'pending'].includes(s) && !isRateLimitPaused(job) && !['completed','completado','failed','fallido','error','permanent-fail'].includes(s)) {
-        // keep going — not finished, not paused = active
       } else if (statusFilter === 'active') {
         const finished = ['completed','completado','failed','fallido','error','permanent-fail'].includes(s);
         const paused = isRateLimitPaused(job);
@@ -449,7 +458,6 @@ export function UploadQueuePanel() {
       }
     }
 
-    // Filtro de fecha (sobre createdAt)
     if (dateFilter !== 'all') {
       const created = new Date(job.createdAt).getTime();
       const now = Date.now();
@@ -470,7 +478,7 @@ export function UploadQueuePanel() {
   const activeFilterCount = [
     statusFilter !== 'all',
     dateFilter !== 'all',
-    empresaFilter !== 'all',
+    empresaFilter !== 'all' && empresaFilter !== selectedCompanyIds[0],
     searchTerm !== '',
   ].filter(Boolean).length;
 
@@ -478,20 +486,14 @@ export function UploadQueuePanel() {
     setSearchTerm('');
     setStatusFilter('all');
     setDateFilter('all');
-    setEmpresaFilter('all');
+    setEmpresaFilter(selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : 'all');
   };
 
   const fetchQueue = useCallback(async (silent = false) => {
-    if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
-      setActiveUploads([]);
-      setFetchError(null);
-      setIsLoading(false);
-      hasActiveRef.current = false;
-      return;
-    }
     if (!silent) setIsRefreshing(true);
     try {
-      const res = await fetch(`/api/activity/active-uploads?empresaId=${selectedCompanyIds.join(',')}`);
+      // Obtenemos TODAS las subidas de todas las empresas del usuario
+      const res = await fetch(`/api/activity/active-uploads`);
       if (res.ok) {
         const data = await res.json();
         const uploads: ActiveUpload[] = data.activeUploads || [];
@@ -512,9 +514,8 @@ export function UploadQueuePanel() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedCompanyIds]);
+  }, []);
 
-  // Poll solo con panel abierto (rápido) o con trabajos activos (lento) — más eficiente
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
@@ -523,7 +524,6 @@ export function UploadQueuePanel() {
       return () => clearInterval(interval);
     }
 
-    // Panel cerrado: intervalo liviano; solo pega a la API si hay trabajos activos
     const softPoll = () => {
       if (hasActiveRef.current && document.visibilityState === 'visible') {
         fetchQueue(true);
@@ -542,7 +542,6 @@ export function UploadQueuePanel() {
     return () => window.removeEventListener('documentUploaded', onUploaded);
   }, [fetchQueue]);
 
-  // Abrir desde URL legacy /dashboard/upload-queue?open=1 o evento global
   useEffect(() => {
     const onOpen = () => openQueue();
     window.addEventListener('openUploadQueue', onOpen);
@@ -574,7 +573,8 @@ export function UploadQueuePanel() {
     if (!selectedCompanyIds.length) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/activity/upload/dismiss-all?empresaId=${selectedCompanyIds[0]}`, { method: 'PATCH' });
+      const targetEmpresa = empresaFilter === 'all' ? selectedCompanyIds[0] : empresaFilter;
+      const res = await fetch(`/api/activity/upload/dismiss-all?empresaId=${targetEmpresa}`, { method: 'PATCH' });
       if (res.ok) fetchQueue();
     } catch (error) {
       console.error('Error al descartar todos:', error);
@@ -583,10 +583,30 @@ export function UploadQueuePanel() {
     }
   };
 
-  const pausedCount = activeUploads.filter(j => isRateLimitPaused(j)).length;
+  let enColaDocs = 0;
+  let completedDocs = 0;
+  let pausedDocs = 0;
+
   const totalDocs = activeUploads.reduce((acc, j) => acc + (j.childrenSummary?.total || 1), 0);
-  const completedDocs = activeUploads.reduce((acc, j) => acc + (j.childrenSummary?.completed || 0), 0);
-  const hasFinished = activeUploads.some(j =>
+
+  // Calculamos los contadores basados en los elementos FILTRADOS
+  filteredUploads.forEach(j => {
+    if (j.childrenSummary && j.childrenSummary.total > 0) {
+       enColaDocs += j.childrenSummary.waiting + j.childrenSummary.processing;
+       completedDocs += j.childrenSummary.completed;
+       pausedDocs += j.childrenSummary.waiting;
+    } else {
+       const isCompleted = ['completado', 'completed'].includes(j.status?.toLowerCase() || '');
+       const isFinished = isCompleted || ['fallido', 'failed', 'error', 'permanent-fail'].includes(j.status?.toLowerCase() || '');
+       const isPaused = isRateLimitPaused(j);
+
+       if (isCompleted) completedDocs++;
+       else if (isPaused) pausedDocs++;
+       else if (!isFinished) enColaDocs++;
+    }
+  });
+
+  const hasFinished = filteredUploads.some(j =>
     ['completado', 'completed', 'fallido', 'failed', 'error', 'permanent-fail'].includes(j.status?.toLowerCase() || '')
   );
 
@@ -638,7 +658,7 @@ export function UploadQueuePanel() {
               <div className="grid grid-cols-3 gap-2 pt-2">
                 <div className="rounded-md border border-border/50 bg-muted/30 px-2.5 py-2">
                   <p className="text-[10px] text-muted-foreground">En cola</p>
-                  <p className="text-lg font-bold leading-none mt-0.5">{activeUploads.length}</p>
+                  <p className="text-lg font-bold leading-none mt-0.5">{enColaDocs}</p>
                 </div>
                 <div className="rounded-md border border-green-500/20 bg-green-500/5 px-2.5 py-2">
                   <p className="text-[10px] text-green-400">Guardados</p>
@@ -646,10 +666,10 @@ export function UploadQueuePanel() {
                 </div>
                 <div className={cn(
                   'rounded-md border px-2.5 py-2',
-                  pausedCount > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-border/50 bg-muted/30'
+                  pausedDocs > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-border/50 bg-muted/30'
                 )}>
-                  <p className={cn('text-[10px]', pausedCount > 0 ? 'text-amber-400' : 'text-muted-foreground')}>Pausados</p>
-                  <p className={cn('text-lg font-bold leading-none mt-0.5', pausedCount > 0 && 'text-amber-400')}>{pausedCount}</p>
+                  <p className={cn('text-[10px]', pausedDocs > 0 ? 'text-amber-400' : 'text-muted-foreground')}>Pausados</p>
+                  <p className={cn('text-lg font-bold leading-none mt-0.5', pausedDocs > 0 && 'text-amber-400')}>{pausedDocs}</p>
                 </div>
               </div>
             )}
@@ -743,21 +763,25 @@ export function UploadQueuePanel() {
                           >
                             Todas
                           </button>
-                          {availableEmpresas.map(eid => (
-                            <button
-                              key={eid}
-                              onClick={() => setEmpresaFilter(eid)}
-                              className={cn(
-                                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
-                                empresaFilter === eid
-                                  ? 'bg-primary text-primary-foreground border-primary'
-                                  : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
-                              )}
-                            >
-                              <Building2 className="w-3 h-3" />
-                              #{eid}
-                            </button>
-                          ))}
+                          {availableEmpresas.map(eid => {
+                            const company = companies.find(c => c.id === eid);
+                            const name = company?.name || `#${eid}`;
+                            return (
+                              <button
+                                key={eid}
+                                onClick={() => setEmpresaFilter(eid)}
+                                className={cn(
+                                  'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors',
+                                  empresaFilter === eid
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-primary/40'
+                                )}
+                              >
+                                <Building2 className="w-3 h-3 shrink-0" />
+                                <span className="line-clamp-1 max-w-[120px]" title={name}>{name}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

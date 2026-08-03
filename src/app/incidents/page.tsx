@@ -28,6 +28,31 @@ function IncidentsPageContent() {
         byType: []
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [activeTypeFilter, setActiveTypeFilter] = useState<string | null>(null);
+
+    // IDs de docs que pertenecen al tipo activo (null = sin filtro)
+    const filteredDocIds = activeTypeFilter && analyticsData.docIdsByType
+        ? new Set<number>(analyticsData.docIdsByType[activeTypeFilter] ?? [])
+        : null;
+
+    const filteredDocs = filteredDocIds
+        ? docs.filter(d => filteredDocIds.has(Number(d.id_documento)))
+        : docs;
+
+    // DEBUG LOGS FOR FILTERING
+    if (activeTypeFilter) {
+        console.log(`[IncidentsFilter] Tipo Activo: "${activeTypeFilter}"`);
+        console.log(`[IncidentsFilter] IDs en docIdsByType:`, analyticsData.docIdsByType?.[activeTypeFilter]);
+        console.log(`[IncidentsFilter] IDs en filteredDocIds (Set):`, filteredDocIds ? Array.from(filteredDocIds) : null);
+        console.log(`[IncidentsFilter] Docs totales: ${docs.length}, Docs filtrados: ${filteredDocs.length}`);
+        
+        if (docs.length > 0 && filteredDocs.length === 0) {
+            console.log(`[IncidentsFilter] ⚠️ CERO COINCIDENCIAS. Ejemplo de doc en la tabla:`, {
+                id_documento: docs[0].id_documento,
+                id_type: typeof docs[0].id_documento
+            });
+        }
+    }
 
     const fetchIncidents = async () => {
         try {
@@ -108,7 +133,11 @@ function IncidentsPageContent() {
                         {/* 🎯 data-tutorial="incidencias-analytics" */}
                         <div className="lg:col-span-2 animate-fade-in" style={{ animationDelay: '0ms' }} data-tutorial="incidencias-analytics">
                             <div className="transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10">
-                                <IncidentsAnalytics data={analyticsData} />
+                            <IncidentsAnalytics 
+                                data={analyticsData} 
+                                onTypeClick={setActiveTypeFilter}
+                                activeType={activeTypeFilter}
+                            />
                             </div>
                         </div>
                         {/* 🎯 data-tutorial="incidencias-analizar" */}
@@ -127,6 +156,7 @@ function IncidentsPageContent() {
                         <GroupedAIIncidentsTable
                             empresaIds={selectedCompanyIds}
                             onRefresh={handleAnalysisComplete}
+                            typeFilter={activeTypeFilter}
                         />
                     </div>
 
@@ -144,9 +174,17 @@ function IncidentsPageContent() {
                                     Incidencias manuales y de validación
                                 </p>
                             </div>
+                            {activeTypeFilter && (
+                                <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm shrink-0">
+                                    <span className="text-muted-foreground">Filtrando:</span>
+                                    <span className="font-semibold text-primary">{activeTypeFilter}</span>
+                                    <span className="text-xs text-muted-foreground">({filteredDocs.length} doc{filteredDocs.length !== 1 ? 's' : ''})</span>
+                                    <button onClick={() => setActiveTypeFilter(null)} className="ml-2 text-xs underline text-muted-foreground hover:text-foreground">limpiar</button>
+                                </div>
+                            )}
                         </div>
                         <DocumentsTable
-                            documents={docs}
+                            documents={filteredDocs}
                             isIncidentsPage={true}
                             filename="incidencias"
                             onDocumentChanged={fetchIncidents}

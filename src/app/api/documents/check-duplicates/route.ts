@@ -3,9 +3,18 @@ import { getSession } from '@/services/auth-service';
 import db from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import type { RowDataPacket } from 'mysql2';
-import { createNotification } from '@/services/notification-service';
+import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
+
+// Candado en memoria para evitar ejecuciones concurrentes en el mismo proceso (sin agotar el connection pool)
+let isProcessing = false;
 
 export async function POST(req: NextRequest) {
+  if (isProcessing) {
+    console.log('⏭️ [check-duplicates] Lock en memoria ocupado. Omitiendo petición concurrente.');
+    return NextResponse.json({ success: true, incidenciasCreadas: 0, skipped: true });
+  }
+
+  isProcessing = true;
   try {
     const session = await getSession();
     if (!session) {
@@ -119,38 +128,91 @@ export async function POST(req: NextRequest) {
 
     // ─── 0. Obtener incidencias previas para saber si hay NUEVOS duplicados ──────
     const [existingRows] = await db.query<any[]>(
-      `SELECT documento_id FROM incidencias_documento 
-       WHERE descripcion LIKE 'Número de factura duplicado%' 
+      `SELECT id, CAST(documento_id AS CHAR) as doc_id FROM incidencias_documento 
+       WHERE descripcion LIKE '%factura duplicado:%' 
        AND validado = 0`
     );
-    const existingIds = new Set(existingRows.map((r: any) => String(r.documento_id)));
+    
+    // Agrupar incidencias existentes por documento
+    const existingByDoc = new Map<string, number[]>();
+    for (const r of existingRows) {
+      const docId = String(r.doc_id);
+      if (!existingByDoc.has(docId)) {
+        existingByDoc.set(docId, []);
+      }
+      existingByDoc.get(docId)!.push(r.id);
+    }
 
-    // ─── 1. Limpiar incidencias viejas de duplicados (1 sola query) ──────────────
-    await db.query(
-      `DELETE FROM incidencias_documento 
-       WHERE descripcion LIKE 'Número de factura duplicado%' 
-       AND validado = 0`
-    );
+    const currentDuplicateIds = new Set(todosLosIdsDuplicados.map(String));
+    const allDocIdsFetched = new Set(docs.map(d => String(d.id)));
 
-    // ─── 2. Crear incidencias en BULK (INSERT IGNORE) ─────────────────────────────
+    // ─── 1. Limpiar incidencias de documentos que YA NO son duplicados ──────────
+    const idsToDelete: number[] = [];
+    
+    for (const r of existingRows) {
+      const docId = String(r.doc_id);
+      // Solo borrar si el documento pertenece a la empresa actual (fue evaluado) y ya no es duplicado.
+      if (allDocIdsFetched.has(docId) && !currentDuplicateIds.has(docId)) {
+        idsToDelete.push(r.id);
+      }
+    }
+
+    // Resolver race conditions: si un mismo doc tiene MÚLTIPLES incidencias de duplicado, dejar solo 1
+    for (const [docId, incIds] of existingByDoc.entries()) {
+      if (incIds.length > 1) {
+        idsToDelete.push(...incIds.slice(1));
+        existingByDoc.set(docId, [incIds[0]]);
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      await db.query(
+        `DELETE FROM incidencias_documento WHERE id IN (?)`,
+        [idsToDelete]
+      );
+    }
+
+    // ─── 2. Actualizar o Crear incidencias ─────────────────────────────────────────
     let creadas = 0;
+    const existingIds = new Set(existingByDoc.keys());
+    
     if (duplicadosReales.length > 0) {
       const rowsToInsert: [number, number, string][] = [];
+      const queriesToUpdate: Promise<any>[] = [];
 
       for (const grupo of duplicadosReales) {
         for (const docId of grupo.ids) {
           const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
           const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
-          rowsToInsert.push([docId, grupo.empresa_id, desc]);
+          
+          const incIds = existingByDoc.get(String(docId));
+          if (incIds && incIds.length > 0) {
+            // Actualizar la descripción silenciosamente
+            queriesToUpdate.push(
+              db.query(
+                `UPDATE incidencias_documento SET descripcion = ? WHERE id = ?`,
+                [desc, incIds[0]]
+              )
+            );
+          } else {
+            // Es uno nuevo, lo preparamos para insertar
+            rowsToInsert.push([docId, grupo.empresa_id, desc]);
+          }
         }
       }
 
+      // Ejecutar updates
+      if (queriesToUpdate.length > 0) {
+        await Promise.all(queriesToUpdate);
+      }
+
+      // Ejecutar inserts (ahora seguro por GET_LOCK)
       if (rowsToInsert.length > 0) {
         const placeholders = rowsToInsert.map(() => '(?, ?, ?, 1, 0)').join(', ');
         const flatValues = rowsToInsert.flatMap(r => r);
 
         const [result] = await db.query<any>(
-          `INSERT IGNORE INTO incidencias_documento 
+          `INSERT INTO incidencias_documento 
            (documento_id, id_de_empresa, descripcion, incidencia, validado) 
            VALUES ${placeholders}`,
           flatValues
@@ -158,26 +220,70 @@ export async function POST(req: NextRequest) {
         creadas = result?.affectedRows ?? rowsToInsert.length;
       }
 
-      // ─── 3. Disparar webhooks en paralelo (fire-and-forget) ───────────────────
+      // ─── 3. Disparar webhooks y notificaciones en paralelo (fire-and-forget) ─────────
       const { fireWebhook } = await import('@/services/webhook-service');
-      const webhookPromises = duplicadosReales.flatMap(grupo =>
-        grupo.ids.map(docId => {
-          const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
-          const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
-          return fireWebhook(grupo.empresa_id, 'documento.requiere_atencion', {
-            documento_id: docId,
-            motivo: desc
-          });
-        })
-      );
-      Promise.allSettled(webhookPromises).catch(console.error);
+      const asyncTasks = [];
+
+      for (const grupo of duplicadosReales) {
+        // Encontrar qué documentos de este grupo son NUEVOS
+        const newDocIds = grupo.ids.filter(id => !existingIds.has(String(id)));
+
+        // Solo disparar si insertamos filas y hay documentos nuevos detectados
+        if (creadas > 0 && newDocIds.length > 0) {
+          // 1. Webhooks (se disparan individualmente por cada documento nuevo detectado)
+          for (const docId of newDocIds) {
+            const otrosIds = grupo.ids.filter(id => id !== docId).join(', ');
+            const desc = `Número de factura duplicado: "${grupo.numero}". También presente en documentos: ${otrosIds}`;
+            
+            asyncTasks.push(
+              fireWebhook(grupo.empresa_id, 'documento.requiere_atencion', {
+                documento_id: docId,
+                motivo: desc
+              })
+            );
+          }
+
+          // 2. Notificación In-App (SE DISPARA UNA SOLA VEZ POR GRUPO, MAX 1 VEZ CADA 24 HS)
+          asyncTasks.push(
+            (async () => {
+              const userIds = await getUserIdsForEmpresa(grupo.empresa_id);
+              if (userIds.length > 0) {
+                // EVITAR SPAM: Verificar si ya notificamos sobre esta factura en las últimas 24 horas
+                const [recentNotifs] = await db.query<any[]>(
+                  `SELECT id FROM notificaciones 
+                   WHERE tipo = 'factura_duplicada' 
+                   AND empresa_id = ? 
+                   AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                   AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.numero')) = ?`,
+                  [grupo.empresa_id, grupo.numero]
+                );
+
+                if (recentNotifs.length > 0) {
+                  console.log(`⏭️ [check-duplicates] Notificación ya enviada recientemente para factura "${grupo.numero}". Omitiendo spam.`);
+                  return;
+                }
+
+                const formatter = new Intl.ListFormat('es', { style: 'long', type: 'conjunction' });
+                const idsTexto = formatter.format(grupo.ids.map(String));
+                const nombreEmpresa = empresaMap.get(grupo.empresa_id) || `Empresa #${grupo.empresa_id}`;
+
+                await createNotification({
+                  userIds,
+                  empresaId: grupo.empresa_id,
+                  tipo: 'factura_duplicada',
+                  titulo: 'Documentos duplicados',
+                  mensaje: `(${nombreEmpresa}) Los documentos ${idsTexto} comparten el mismo número de factura "${grupo.numero}".`,
+                  metadata: { ids_duplicados: grupo.ids, numero: grupo.numero }
+                });
+              }
+            })()
+          );
+        }
+      }
+      Promise.allSettled(asyncTasks).catch(console.error);
     }
 
     console.log('[check-duplicates] Incidencias creadas:', creadas);
-
-    // ─── Las notificaciones de duplicados han sido eliminadas por solicitud del usuario ───
-    // (El frontend hace polling constante de esta API, por lo que disparar notificaciones
-    // desde aquí causaba spam. Se eliminó el bloque de createNotification).
 
     return NextResponse.json({
       success: true,
@@ -197,5 +303,7 @@ export async function POST(req: NextRequest) {
       { error: 'Error al verificar duplicados' },
       { status: 500 }
     );
+  } finally {
+    isProcessing = false;
   }
 }

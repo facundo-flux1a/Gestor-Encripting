@@ -3,6 +3,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Candado global para evitar que dos instancias del hook llamen al backend al mismo tiempo
+let _checkInFlight = false;
+
 export interface DuplicateGroup {
   numero: string;
   ids: number[];
@@ -17,6 +20,12 @@ export function useDuplicateDetection(empresaId?: number) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const checkDuplicates = useCallback(async () => {
+    // Si ya hay una petición en vuelo (de otra instancia del hook), no disparar otra
+    if (_checkInFlight) {
+      console.log('⏭️ [useDuplicateDetection] Petición ya en vuelo, ignorando esta.');
+      return null;
+    }
+    _checkInFlight = true;
     try {
       console.log('🔍 [useDuplicateDetection] Verificando duplicados...', { empresaId });
       setIsChecking(true);
@@ -82,6 +91,7 @@ export function useDuplicateDetection(empresaId?: number) {
       return null;
     } finally {
       setIsChecking(false);
+      _checkInFlight = false;
     }
   }, [empresaId]);
 

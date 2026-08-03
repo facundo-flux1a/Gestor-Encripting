@@ -3,16 +3,48 @@
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { AlertTriangle, CheckCircle, FileText, Building, ListTodo } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell, Legend } from "recharts";
+import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell, Legend, Sector } from "recharts";
+import { useState } from "react";
+
+// Clasificador exportado para que la tabla pueda usarlo
+export function classifyIncident(desc: string): string {
+  const d = (desc || '').toLowerCase();
+  if (/duplic/.test(d)) return 'Duplicado';
+  if (/c[áa]lculo|math_balance|totales no cuadran|suma de (las l[íi]neas|los importes)|importe.*no coincide|inconsistencia.*l[íi]nea/.test(d)) return 'Error de Cálculo';
+  if (/cif (no coincide|del cliente no coincide|de empresa emisora.*no coincide)|no coincide.*cif/.test(d)) return 'CIF No Coincide';
+  if (/cif.*(ausente|no encontrado|faltante)|sin cif|c[óo]digo fiscal.*(ausente|no encontrado)/.test(d)) return 'CIF Ausente';
+  if (/fecha.*posterior|fecha.*vencimiento.*anterior|fecha.*emisi[óo]n.*incorrecta/.test(d)) return 'Error de Fecha';
+  if (/rectificativa.*abono|abono.*positivo|importes.*positivo.*abono/.test(d)) return 'Revisión de Abono';
+  if (/no es una factura|no es un albar[áa]n|no.*documento comercial/.test(d)) return 'Doc. No Válido';
+  if (/incompleto|ausente|faltante|no encontrado|no disponible/.test(d)) return 'Datos Faltantes';
+  return 'Otro';
+}
 
 export type IncidentsAnalyticsData = {
     totalOpen: number;
     totalValidated: number;
     byProvider: { name: string; count: number }[];
     byType: { name: string; count: number }[];
+    docIdsByType?: Record<string, number[]>;
 };
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+
+const renderActiveShape = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+  return (
+    <g style={{ outline: 'none' }}>
+      <text x={cx} y={cy - 8} textAnchor="middle" fill="currentColor" className="fill-foreground text-sm font-semibold">
+        {payload.name}
+      </text>
+      <text x={cx} y={cy + 14} textAnchor="middle" fill="currentColor" className="fill-muted-foreground text-xs">
+        {value} ({(percent * 100).toFixed(0)}%)
+      </text>
+      <Sector style={{ outline: 'none' }} cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 8} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+    </g>
+  );
+};
+
 
 const CustomBarTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -29,9 +61,14 @@ const CustomBarTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function IncidentsAnalytics({ data }: { data: IncidentsAnalyticsData }) {
+export function IncidentsAnalytics({ data, onTypeClick, activeType }: { 
+    data: IncidentsAnalyticsData;
+    onTypeClick?: (type: string | null) => void;
+    activeType?: string | null;
+}) {
     const hasProviderData = data.byProvider && data.byProvider.length > 0;
     const hasTypeData = data.byType && data.byType.length > 0;
+    const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
     
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -106,6 +143,7 @@ export function IncidentsAnalytics({ data }: { data: IncidentsAnalyticsData }) {
                                                 fontSize={11}
                                                 tickLine={false} 
                                                 axisLine={false} 
+                                                tick={false}
                                             />
                                             <YAxis 
                                                 stroke="hsl(var(--muted-foreground))" 
@@ -148,38 +186,84 @@ export function IncidentsAnalytics({ data }: { data: IncidentsAnalyticsData }) {
                                     <CardDescription className="text-xs sm:text-sm">
                                         Distribución de incidencias según su naturaleza
                                     </CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                                 </CardHeader>
+                                 <CardContent>
                                    <ResponsiveContainer width="100%" height={250}>
                                       <PieChart>
+                                        <style>{`
+                                          .recharts-wrapper, 
+                                          .recharts-wrapper *, 
+                                          .recharts-surface, 
+                                          .recharts-surface * {
+                                            outline: none !important;
+                                          }
+                                        `}</style>
                                         <Pie
                                           data={data.byType}
                                           cx="50%"
                                           cy="50%"
                                           labelLine={false}
                                           outerRadius={80}
-                                          innerRadius={60}
-                                          paddingAngle={5}
+                                          innerRadius={55}
+                                          paddingAngle={3}
                                           fill="#8884d8"
                                           dataKey="count"
                                           nameKey="name"
-                                          className="transition-all duration-300"
+                                          activeIndex={activeIndex}
+                                          activeShape={renderActiveShape}
+                                          style={{ cursor: onTypeClick ? 'pointer' : 'default', outline: 'none' }}
+                                          onClick={(entry, index) => {
+                                            if (!onTypeClick) return;
+                                            const clickedType = data.byType[index]?.name;
+                                            if (activeType === clickedType) {
+                                              // toggle off
+                                              setActiveIndex(undefined);
+                                              onTypeClick(null);
+                                            } else {
+                                              setActiveIndex(index);
+                                              onTypeClick(clickedType);
+                                            }
+                                          }}
+                                          onMouseEnter={(_, index) => setActiveIndex(index)}
+                                          onMouseLeave={() => {
+                                            // keep active if selected
+                                            if (activeType == null) setActiveIndex(undefined);
+                                          }}
                                         >
                                           {data.byType.map((entry, index) => (
                                             <Cell 
                                               key={`cell-${index}`} 
                                               fill={COLORS[index % COLORS.length]}
-                                              className="hover:opacity-80 transition-opacity duration-200"
+                                              opacity={activeType && activeType !== entry.name ? 0.35 : 1}
+                                              style={{ transition: 'opacity 0.2s', outline: 'none' }}
                                             />
                                           ))}
                                         </Pie>
-                                        <Tooltip />
+                                        <Tooltip formatter={(value, name) => [value, name]} />
                                         <Legend 
                                             iconType="circle"
-                                            wrapperStyle={{ fontSize: '12px' }}
+                                            wrapperStyle={{ fontSize: '12px', cursor: onTypeClick ? 'pointer' : 'default' }}
+                                            onClick={(legendEntry) => {
+                                              if (!onTypeClick) return;
+                                              const clickedType = legendEntry.value;
+                                              const idx = data.byType.findIndex(t => t.name === clickedType);
+                                              if (activeType === clickedType) {
+                                                setActiveIndex(undefined);
+                                                onTypeClick(null);
+                                              } else {
+                                                setActiveIndex(idx >= 0 ? idx : undefined);
+                                                onTypeClick(clickedType);
+                                              }
+                                            }}
                                         />
                                       </PieChart>
                                     </ResponsiveContainer>
+                                {onTypeClick && activeType && (
+                                  <p className="text-center text-xs text-muted-foreground mt-2">
+                                    Filtrando: <span className="font-semibold text-primary">{activeType}</span>
+                                    {' '}— <button onClick={() => { setActiveIndex(undefined); onTypeClick(null); }} className="underline hover:text-foreground">limpiar</button>
+                                  </p>
+                                )}
                                 </CardContent>
                             </Card>
                         </div>

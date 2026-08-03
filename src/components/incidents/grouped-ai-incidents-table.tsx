@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, Trash2, Loader2, AlertTriangle, Filter, Folder, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { classifyIncident } from '@/components/incidents/incidents-analytics';
 
 interface AIIncident {
     id: number;
@@ -43,6 +44,7 @@ interface AIIncident {
 interface GroupedAIIncidentsTableProps {
     empresaIds: number[];
     onRefresh?: () => void;
+    typeFilter?: string | null;
 }
 
 const severityOrder = {
@@ -69,7 +71,7 @@ const colorClasses = {
     default: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-500', hover: 'hover:bg-blue-500/20', badge: 'bg-blue-500/20 text-blue-600' },
 };
 
-export function GroupedAIIncidentsTable({ empresaIds, onRefresh }: GroupedAIIncidentsTableProps) {
+export function GroupedAIIncidentsTable({ empresaIds, onRefresh, typeFilter }: GroupedAIIncidentsTableProps) {
     const router = useRouter();
     const { toast } = useToast();
     const [incidents, setIncidents] = useState<AIIncident[]>([]);
@@ -176,8 +178,13 @@ export function GroupedAIIncidentsTable({ empresaIds, onRefresh }: GroupedAIInci
             }
             groups.get(inc.documento_id)!.push(inc);
         });
-        return Array.from(groups.entries());
-    }, [incidents]);
+        const allGroups = Array.from(groups.entries());
+        if (!typeFilter) return allGroups;
+        // Filtrar grupos que tengan al menos una incidencia del tipo activo
+        return allGroups.filter(([, docIncidents]) =>
+            docIncidents.some(inc => classifyIncident(inc.descripcion) === typeFilter)
+        );
+    }, [incidents, typeFilter]);
 
     const getSeverityColor = (severity: string) => {
         switch (severity) {
@@ -242,6 +249,13 @@ export function GroupedAIIncidentsTable({ empresaIds, onRefresh }: GroupedAIInci
             </CardHeader>
 
             <CardContent className="px-0 space-y-4">
+                {typeFilter && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+                        <Filter className="h-4 w-4 text-primary shrink-0" />
+                        <span>Filtrando por tipo: <span className="font-semibold text-primary">{typeFilter}</span></span>
+                        <span className="ml-auto text-xs text-muted-foreground">{groupedIncidents.length} resultado(s)</span>
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />

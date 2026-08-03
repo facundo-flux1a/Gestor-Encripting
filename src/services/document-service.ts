@@ -2689,39 +2689,52 @@ AND(e.rol = 'proveedor' OR e.rol = 'emisor')
     }));
 
 
-    const [byType] = await db.query<RowDataPacket[]>(`
-SELECT
-CASE 
-                    WHEN i.descripcion LIKE '%duplicado%' THEN 'Duplicado'
-                    WHEN i.descripcion LIKE '%cálculo%' THEN 'Error de Cálculo'
-                    WHEN i.descripcion LIKE '%incompletos%' THEN 'Datos Incompletos'
-                    ELSE 'Otro'
-END as name,
-  COUNT(i.id) as count
-            FROM incidencias_documento i
-            JOIN documentos d ON i.documento_id = d.id
-            JOIN empresas e2 ON d.id_de_empresa = e2.id
-            WHERE i.validado = 0
-              ${whereDocType}
-              ${whereEmpresa}
-            GROUP BY name
-            ORDER BY count DESC
-        `, params);
+    // Traer todas las descripciones y clasificar en JS con regex (más robusto que SQL LIKE)
+    const [rawDescriptions] = await db.query<RowDataPacket[]>(`
+      SELECT i.documento_id, i.descripcion
+      FROM incidencias_documento i
+      JOIN documentos d ON i.documento_id = d.id
+      JOIN empresas e2 ON d.id_de_empresa = e2.id
+      WHERE i.validado = 0
+        ${whereDocType}
+        ${whereEmpresa}
+    `, params);
 
-    // The instruction's console.log refers to `data.kpis` which is not part of this function's return type or local variables.
-    // Assuming the user intended to add a console.log for the analyticsData being returned by this function,
-    // or that the instruction was for a different part of the codebase (e.g., a frontend component consuming this data).
-    // Since the instruction explicitly provided a code block to insert, and it doesn't fit here syntactically or logically
-    // without significant modification, I will skip inserting the console.log for KPIs here to maintain correctness.
-    // The instruction also mentions "Exclude IRPF/Retention from total_iva", which is a functional change not reflected in the provided code snippet.
-    // As per instructions, I will only apply the provided code edit faithfully.
-    // Since the provided code edit does not fit the current context, no change is made here.
+    // Normalizador de tipo de incidencia: reglas por prioridad con regex
+    function classifyIncident(desc: string): string {
+      const d = (desc || '').toLowerCase();
+      if (/duplic/.test(d)) return 'Duplicado';
+      if (/c[áa]lculo|math_balance|totales no cuadran|suma de (las l[íi]neas|los importes)|importe.*no coincide|inconsistencia.*l[íi]nea/.test(d)) return 'Error de Cálculo';
+      if (/cif (no coincide|del cliente no coincide|de empresa emisora.*no coincide)|no coincide.*cif/.test(d)) return 'CIF No Coincide';
+      if (/cif.*(ausente|no encontrado|faltante)|sin cif|c[óo]digo fiscal.*(ausente|no encontrado)/.test(d)) return 'CIF Ausente';
+      if (/fecha.*posterior|fecha.*vencimiento.*anterior|fecha.*emisi[óo]n.*incorrecta/.test(d)) return 'Error de Fecha';
+      if (/rectificativa.*abono|abono.*positivo|importes.*positivo.*abono/.test(d)) return 'Revisión de Abono';
+      if (/no es una factura|no es un albar[áa]n|no.*documento comercial/.test(d)) return 'Doc. No Válido';
+      if (/incompleto|ausente|faltante|no encontrado|no disponible/.test(d)) return 'Datos Faltantes';
+      return 'Otro';
+    }
+
+    // Agrupar y contar por tipo, y también mapear docIds por tipo
+    const typeCountMap = new Map<string, number>();
+    const docIdsByType = new Map<string, Set<number>>();
+    for (const row of rawDescriptions) {
+      const type = classifyIncident(row.descripcion);
+      typeCountMap.set(type, (typeCountMap.get(type) || 0) + 1);
+      if (!docIdsByType.has(type)) docIdsByType.set(type, new Set());
+      docIdsByType.get(type)!.add(Number(row.documento_id));
+    }
+    const byTypeNormalized = Array.from(typeCountMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
 
     const analyticsData = {
       totalOpen: Number(summary[0]?.totalOpen || 0),
       totalValidated: Number(summary[0]?.totalValidated || 0),
-      byProvider: byProvider.map(p => ({ name: p.nombre, count: p.count })),
-      byType: byType.map(t => ({ name: t.name, count: t.count })),
+      byProvider: byProvider.map(p => ({ name: p.name, count: p.count })),
+      byType: byTypeNormalized,
+      docIdsByType: Object.fromEntries(
+        Array.from(docIdsByType.entries()).map(([k, v]) => [k, Array.from(v)])
+      ) as Record<string, number[]>,
     };
 
     console.log('📊 [getIncidentsAnalytics] Resultado:', analyticsData);
@@ -5135,7 +5148,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   for (const doc of fechaAnomalas as any[]) {
     const motivo = `Fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR.`;
     await prisma.health_check_status.createMany({
-      data: [{ documento_id: BigInt(doc.id), empresa_id: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, verified: false, check_type: 'FECHA_ANOMALA', motivo }] as any[],
+      data: [{ documento_id: Number(doc.id), empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null, verified: false, check_type: 'FECHA_ANOMALA', motivo }] as any[],
       skipDuplicates: true
     });
     console.log(`📅 [HealthCheck] Fecha anómala registrada para doc #${doc.id}`);
