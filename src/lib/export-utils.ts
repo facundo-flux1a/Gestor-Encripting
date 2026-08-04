@@ -29,6 +29,24 @@ export const formatCurrency = (amount: number, minimumFractionDigits = 2) => {
     }).format(amount);
 };
 
+const isRetencionDetail = (detail: any): boolean => {
+    const tipo = (detail.tipo_impuesto || '').toLowerCase();
+    return tipo.includes('retencion') || tipo.includes('irpf');
+};
+
+const getRetencionFromDoc = (doc: any): number => {
+    const detail = doc?.iva_details?.find((i: any) => isRetencionDetail(i));
+    return detail ? Math.abs(Number(detail.cuota) || 0) : 0;
+};
+
+const getRecargoFromDoc = (doc: any): number => {
+    const details = doc?.iva_details?.filter((i: any) => {
+        const tipo = (i.tipo_impuesto || '').toLowerCase();
+        return tipo.includes('recargo') || tipo.includes('equivalencia');
+    }) ?? [];
+    return details.reduce((sum: number, i: any) => sum + (Number(i.cuota) || 0), 0);
+};
+
 // Función auxiliar para obtener valor de una celda o propiedad de documento
 export const getValueForExport = (item: any, columnId: string, format?: ExportFormat): string | number => {
     let value: any;
@@ -40,11 +58,27 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
         if ((columnId.startsWith('base_') || columnId.startsWith('iva_')) && item.original) {
             return getTaxColumnValue(item.original, columnId);
         }
+        if (columnId === 'retencion' && item.original) {
+            const val = getRetencionFromDoc(item.original);
+            return format === 'excel' ? val : formatCurrency(val);
+        }
+        if (columnId === 'recargo' && item.original) {
+            const val = getRecargoFromDoc(item.original);
+            return format === 'excel' ? val : formatCurrency(val);
+        }
     } else {
         // Si es objeto plano (Document)
         value = item[columnId];
         if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
             return getTaxColumnValue(item, columnId, format);
+        }
+        if (columnId === 'retencion') {
+            const val = getRetencionFromDoc(item);
+            return format === 'excel' ? val : formatCurrency(val);
+        }
+        if (columnId === 'recargo') {
+            const val = getRecargoFromDoc(item);
+            return format === 'excel' ? val : formatCurrency(val);
         }
     }
 
@@ -125,6 +159,13 @@ const getNumericValue = (item: any, columnId: string): number => {
         val = item.getValue(columnId);
     } else {
         val = item[columnId];
+    }
+
+    if (columnId === 'retencion') {
+        return getRetencionFromDoc(item.original || item);
+    }
+    if (columnId === 'recargo') {
+        return getRecargoFromDoc(item.original || item);
     }
 
     // Si la celda explícitamente existe en el root del objeto o fila

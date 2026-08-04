@@ -47,7 +47,7 @@ export function cleanCif(raw: string | null | undefined): string {
   if (!raw || !String(raw).trim()) return '';
   let cif = String(raw)
     .toUpperCase()
-    .replace(/[\s\-./]/g, '');
+    .replace(/[\s\-./()]/g, '');
   if (cif.startsWith('ES') && cif.length > 9) {
     cif = cif.slice(2);
   } else if (cif.startsWith('ES') && /^ES[A-Z]\d{7,8}/.test(cif)) {
@@ -148,6 +148,42 @@ function addDaysIso(isoDate: string, days: number): string | null {
   if (Number.isNaN(d.getTime())) return null;
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Emisión: InvoiceDate Azure u OCR ("Fecha factura/emisión/documento").
+ */
+export function resolveFechaEmision(
+  fields: Record<string, AzureDiField>,
+  content: string | undefined
+): string {
+  for (const key of ['InvoiceDate', 'ServiceDate', 'Date', 'BillingDate'] as const) {
+    const parsed = parseFlexibleDate(str(fields[key]));
+    if (parsed) return parsed;
+  }
+
+  const text = content || '';
+
+  const labeled =
+    text.match(
+      /Fecha\s*(?:de\s*)?(?:factura|emisi[oó]n|documento|expedici[oó]n)\s*[^\d]{0,48}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i
+    );
+  if (labeled?.[1]) {
+    const parsed = parseFlexibleDate(labeled[1]);
+    if (parsed) return parsed;
+  }
+
+  // "Fecha:" genérica en líneas que no sean pago/vencimiento
+  for (const line of text.split(/\n/)) {
+    if (/pago|vencim|vto\.?|vencimiento|due/i.test(line)) continue;
+    const m = line.match(/Fecha\s*[^\d]{0,24}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i);
+    if (m?.[1]) {
+      const parsed = parseFlexibleDate(m[1]);
+      if (parsed) return parsed;
+    }
+  }
+
+  return '';
 }
 
 /**
@@ -530,7 +566,7 @@ export function mapAzureDiInvoiceToDocumentShape(
     importeTotal = round2(importeSinIva + cuotas);
   }
 
-  const fechaEmision = parseFlexibleDate(str(fields.InvoiceDate)) || '';
+  const fechaEmision = resolveFechaEmision(fields, content);
   const formaPago = str(fields.PaymentTerm);
   const fechaVencimiento = resolveFechaVencimiento(fields, content, fechaEmision, formaPago);
   const esMultiple = detectMultipleInvoicesInText(content);

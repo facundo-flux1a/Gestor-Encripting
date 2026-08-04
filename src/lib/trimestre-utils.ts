@@ -2,6 +2,22 @@ import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 
 /**
+ * Parsea una fecha evitando desfases UTC en strings ISO (YYYY-MM-DD).
+ */
+export function parseFechaLocal(fecha: Date | string): Date {
+  if (fecha instanceof Date) return fecha;
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha.trim());
+  if (isoMatch) {
+    return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  }
+  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(fecha.trim());
+  if (esMatch) {
+    return new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
+  }
+  return new Date(fecha);
+}
+
+/**
  * Calcula el trimestre considerando las extensiones:
  * - T1 (Ene-Mar): hasta 20 Abril
  * - T2 (Abr-Jun): hasta 20 Julio
@@ -9,7 +25,7 @@ import type { RowDataPacket } from 'mysql2';
  * - T4 (Oct-Dic): hasta 30 Enero (año siguiente)
  */
 export function calcularTrimestreExtendido(fecha: Date | string): { año: number; trimestre: number } {
-  const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  const date = parseFechaLocal(fecha);
   const mes = date.getMonth() + 1; // 1-12
   const dia = date.getDate();
   const año = date.getFullYear();
@@ -84,6 +100,27 @@ export async function estaTrimestreCerrado(
   userId?: number | null
 ): Promise<boolean> {
   try {
+    // 1. Trimestre bloqueado explícitamente (puede no tener documentos)
+    let trimestresQuery = `
+      SELECT COUNT(*) as count
+      FROM trimestres t
+      WHERE t.año = ?
+        AND t.num_trimestre = ?
+        AND t.cerrado = 1
+    `;
+    const trimestresParams: any[] = [año, trimestre];
+
+    if (empresaId !== null && empresaId !== undefined) {
+      trimestresQuery += ' AND t.id_de_empresa = ?';
+      trimestresParams.push(empresaId);
+    }
+
+    const [trimestresRows] = await db.query<RowDataPacket[]>(trimestresQuery, trimestresParams);
+    if (trimestresRows[0].count > 0) {
+      return true;
+    }
+
+    // 2. Documentos marcados como cerrados en ese trimestre
     let query = `
       SELECT COUNT(*) as count
       FROM documentos d
@@ -101,18 +138,79 @@ export async function estaTrimestreCerrado(
     }
 
     if (userId !== null && userId !== undefined) {
-      query += ' AND e.id_de_usuario = ?';
+      query += ' AND JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON))';
       params.push(userId);
     }
 
     const [rows] = await db.query<RowDataPacket[]>(query, params);
     
-    // Si hay al menos un documento cerrado en ese trimestre, el trimestre está cerrado
     return rows[0].count > 0;
   } catch (error) {
     console.error('❌ [estaTrimestreCerrado] Error:', error);
     return false;
   }
+}
+
+/**
+ * Primer trimestre del año fiscal que no está cerrado/bloqueado para la empresa.
+ * Si todo el año está cerrado, avanza al año siguiente.
+ */
+export async function obtenerPrimerTrimestreAbiertoDelAnio(
+  año: number,
+  empresaId: number | null,
+  userId?: number | null,
+  depth = 0
+): Promise<{ año: number; trimestre: number }> {
+  if (depth > 10) {
+    console.warn('⚠️ [obtenerPrimerTrimestreAbiertoDelAnio] Límite de años alcanzado, retornando Q1');
+    return { año, trimestre: 1 };
+  }
+
+  for (let trimestre = 1; trimestre <= 4; trimestre++) {
+    const cerrado = await estaTrimestreCerrado(año, trimestre, empresaId, userId);
+    if (!cerrado) {
+      return { año, trimestre };
+    }
+  }
+
+  return obtenerPrimerTrimestreAbiertoDelAnio(año + 1, empresaId, userId, depth + 1);
+}
+
+/**
+ * Resuelve el trimestre contable OPERATIVO al importar (dónde encajar el documento en el gestor).
+ * No valida la fecha contable — eso es evaluarFechaContable() en fecha-contable-utils.
+ *
+ * - Salta trimestres cerrados/bloqueados hacia el siguiente abierto.
+ * - Si la fecha cae antes del primer trimestre abierto del año, usa el primero abierto.
+ * - Ejercicios anteriores → primer trimestre abierto del ejercicio actual (inyección operativa).
+ */
+export async function resolverTrimestreContableImportacion(
+  fecha: Date | string,
+  empresaId: number | null,
+  userId?: number | null
+): Promise<{ año: number; trimestre: number }> {
+  const calc = calcularTrimestreExtendido(fecha);
+  const ejercicioActual = new Date().getFullYear();
+
+  let añoInicial: number;
+  let trimestreInicial: number;
+
+  if (calc.año < ejercicioActual) {
+    const destino = await obtenerPrimerTrimestreAbiertoDelAnio(ejercicioActual, empresaId, userId);
+    añoInicial = destino.año;
+    trimestreInicial = destino.trimestre;
+  } else {
+    const primerAbierto = await obtenerPrimerTrimestreAbiertoDelAnio(calc.año, empresaId, userId);
+    if (calc.año === primerAbierto.año && calc.trimestre < primerAbierto.trimestre) {
+      añoInicial = primerAbierto.año;
+      trimestreInicial = primerAbierto.trimestre;
+    } else {
+      añoInicial = calc.año;
+      trimestreInicial = calc.trimestre;
+    }
+  }
+
+  return obtenerSiguienteTrimestreAbierto(añoInicial, trimestreInicial, empresaId, userId);
 }
 
 /**

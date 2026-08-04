@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
+import { DatePicker, toIsoDateString } from '@/components/ui/date-picker';
+import { parseFechaLocal } from '@/lib/client-utils';
 import { useToast } from '@/hooks/use-toast';
 import { updateDocumentField } from '@/services/document-service';
 import { cn } from '@/lib/utils';
@@ -91,85 +93,84 @@ export function EditableCell({
   }, [initialValue, docId, fieldName]);
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      console.log('✏️ [EditableCell] Entrando en modo edición:', { docId, fieldName });
+    if (isEditing && inputType !== 'date' && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [isEditing, docId, fieldName]);
+  }, [isEditing, inputType, docId, fieldName]);
 
-  const handleBlur = async (e?: React.FocusEvent) => {
-    console.log('👋 [EditableCell] handleBlur llamado:', {
-      docId,
-      fieldName,
-      relatedTarget: e?.relatedTarget,
-      isBlurring: isBlurring.current
-    });
-
-    // Prevenir múltiples llamadas simultáneas
-    if (isBlurring.current) {
-      console.log('⏸️ [EditableCell] Ya está procesando blur, ignorando');
-      return;
+  const normalizeDateValue = (raw: any) => {
+    if (!raw) return raw;
+    try {
+      return toIsoDateString(parseFechaLocal(String(raw)));
+    } catch {
+      return raw;
     }
+  };
 
-    // Prevenir que se cierre si el blur fue por re-render dentro del wrapper
-    if (e && e.relatedTarget && (e.relatedTarget as HTMLElement).closest('.editable-cell-wrapper')) {
-      console.log('🛑 [EditableCell] Blur interno detectado, ignorando');
-      return;
-    }
+  const saveValue = async (rawValue: any) => {
+    const processedValue =
+      inputType === 'number'
+        ? parseFloat(rawValue)
+        : inputType === 'date'
+          ? normalizeDateValue(rawValue)
+          : rawValue;
 
-    isBlurring.current = true;
-    setIsEditing(false);
+    const baseline =
+      inputType === 'date' ? normalizeDateValue(initialValue) : initialValue;
 
-    const processedValue = inputType === 'number' ? parseFloat(value) : value;
-
-    console.log('💾 [EditableCell] Comparando valores:', {
-      processedValue,
-      initialValue,
-      areEqual: processedValue === initialValue
-    });
-
-    if (processedValue === initialValue) {
-      console.log('⏭️ [EditableCell] Valor sin cambios, saliendo');
-      isBlurring.current = false;
-      return;
+    if (processedValue === baseline) {
+      return true;
     }
 
     setIsLoading(true);
-    console.log('🚀 [EditableCell] Guardando cambios...');
 
     try {
       const result = await updateDocumentField(docId, fieldName, processedValue);
       if (result.success) {
-        console.log('✅ [EditableCell] Campo actualizado exitosamente');
-
-        // ✅ PRIMERO: Actualizar la tabla local
         table.options.meta?.updateData(rowIndex, fieldName, processedValue);
-
-        // ✅ SEGUNDO: Llamar al onUpdate para que refresque la data global
-        console.log('🔄 [EditableCell] Llamando onUpdate para refrescar data...');
         onUpdate(docId, fieldName, processedValue, table, rowIndex);
-
         toast({
           title: 'Campo Actualizado',
-          description: `El campo se ha guardado correctamente.`,
+          description: 'El campo se ha guardado correctamente.',
         });
-      } else {
-        throw new Error('La actualización falló en el servidor.');
+        return true;
       }
+      throw new Error('La actualización falló en el servidor.');
     } catch (error: any) {
-      console.error('❌ [EditableCell] Error al actualizar:', error);
       setValue(initialValue);
       toast({
         title: 'Error al Actualizar',
         description: error.message || 'No se pudo guardar el campo.',
         variant: 'destructive',
       });
+      return false;
     } finally {
       setIsLoading(false);
-      isBlurring.current = false;
-      console.log('🏁 [EditableCell] Proceso de guardado finalizado');
     }
+  };
+
+  const handleBlur = async (e?: React.FocusEvent) => {
+    if (isBlurring.current) return;
+
+    if (e?.relatedTarget && (e.relatedTarget as HTMLElement).closest('.editable-cell-wrapper')) {
+      return;
+    }
+
+    isBlurring.current = true;
+    setIsEditing(false);
+
+    await saveValue(value);
+    isBlurring.current = false;
+  };
+
+  const handleDateChange = async (isoDate: string | null) => {
+    if (!isoDate || isBlurring.current) return;
+    isBlurring.current = true;
+    setIsEditing(false);
+    setValue(isoDate);
+    await saveValue(isoDate);
+    isBlurring.current = false;
   };
 
   const displayValue = () => {
@@ -278,43 +279,39 @@ export function EditableCell({
           </span>
         )}
 
-        {/* Input responsive */}
-        {isEditing && (
+        {/* Editor inline */}
+        {isEditing && inputType === 'date' && (
+          <DatePicker
+            value={value}
+            compact
+            open
+            onOpenChange={(open) => {
+              if (!open && !isBlurring.current) {
+                setValue(initialValue);
+                setIsEditing(false);
+              }
+            }}
+            onChange={handleDateChange}
+          />
+        )}
+
+        {isEditing && inputType !== 'date' && (
           <Input
             ref={inputRef}
             type={inputType}
             value={formattedValueForInput()}
-            onChange={(e) => {
-              console.log('⌨️ [EditableCell] onChange:', {
-                docId,
-                fieldName,
-                newValue: e.target.value
-              });
-              setValue(e.target.value);
-            }}
+            onChange={(e) => setValue(e.target.value)}
             onBlur={handleBlur}
-            onMouseDown={(e) => {
-              console.log('🖱️ [EditableCell] Input mouseDown');
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              console.log('🖱️ [EditableCell] Input click');
-              e.stopPropagation();
-            }}
-            onFocus={(e) => {
-              console.log('🎯 [EditableCell] Input focus');
-            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
-              console.log('⌨️ [EditableCell] keyDown:', { key: e.key });
               e.stopPropagation();
               if (e.key === 'Enter') {
                 e.preventDefault();
-                console.log('↩️ [EditableCell] Enter presionado, guardando...');
                 handleBlur();
               }
               if (e.key === 'Escape') {
                 e.preventDefault();
-                console.log('⎋ [EditableCell] Escape presionado, cancelando edición');
                 setValue(initialValue);
                 setIsEditing(false);
               }

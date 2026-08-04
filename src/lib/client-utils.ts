@@ -4,6 +4,22 @@
  */
 
 /**
+ * Parsea una fecha evitando desfases UTC en strings ISO (YYYY-MM-DD).
+ */
+export function parseFechaLocal(fecha: Date | string): Date {
+  if (fecha instanceof Date) return fecha;
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha.trim());
+  if (isoMatch) {
+    return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  }
+  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(fecha.trim());
+  if (esMatch) {
+    return new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
+  }
+  return new Date(fecha);
+}
+
+/**
  * Calcula el trimestre considerando las extensiones:
  * - T1 (Ene-Mar): hasta 20 Abril
  * - T2 (Abr-Jun): hasta 20 Julio
@@ -11,7 +27,7 @@
  * - T4 (Oct-Dic): hasta 30 Enero (año siguiente)
  */
 export function calcularTrimestreExtendido(fecha: Date | string): { año: number; trimestre: number } {
-  const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  const date = parseFechaLocal(fecha);
   const mes = date.getMonth() + 1; // 1-12
   const dia = date.getDate();
   const año = date.getFullYear();

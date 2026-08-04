@@ -55,6 +55,7 @@ import { AlertCircle, CheckCircle2, ShieldCheck, FileText, Info, Trash2, PlusCir
 import { format } from 'date-fns';
 import { type Document, type DocumentUpdatePayload } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -82,12 +83,6 @@ const formatDate = (date: string | null | undefined) => {
         const d = new Date(date);
         return format(new Date(d.valueOf() + d.getTimezoneOffset() * 60 * 1000), 'dd/MM/yyyy');
     } catch { return 'Fecha inválida'; }
-}
-
-const formatDateForInput = (date: string | null | undefined): string => {
-    if (!date) return '';
-    try { return new Date(date).toISOString().split('T')[0]; }
-    catch { return ''; }
 }
 
 interface DocumentViewProps {
@@ -197,9 +192,11 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
                 <FormLabel className="text-muted-foreground text-xs sm:text-sm">{label}</FormLabel>
                 <FormControl>
                     {isEditing ? (
-                        <Input type="date" className="h-8 sm:h-9 text-xs sm:text-sm"
-                            value={formatDateForInput(field.value ?? doc[fieldName as keyof Document])}
-                            onChange={e => field.onChange(e.target.value || null)}
+                        <DatePicker
+                            value={field.value ?? doc[fieldName as keyof Document] ?? null}
+                            onChange={(iso) => field.onChange(iso || null)}
+                            className="h-8 sm:h-9 text-xs sm:text-sm"
+                            compact
                         />
                     ) : (
                         <p className="text-xs sm:text-sm font-medium">{formatDate(field.value ?? doc[fieldName as keyof Document])}</p>
@@ -495,4 +492,4 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
             )}
         </>
     );
-}
+}

@@ -1,3 +1,30 @@
+export async function confirmDocuments(documentIds: number[]): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+  confirmados?: number;
+}> {
+  try {
+    const response = await fetch('/api/documents-confirm', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentIds }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al confirmar documentos');
+    }
+
+    return await response.json();
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido',
+    };
+  }
+}
+
 export async function confirmDocument(documentId: number): Promise<{
   success: boolean;
   message?: string;

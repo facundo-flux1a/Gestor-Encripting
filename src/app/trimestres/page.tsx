@@ -556,6 +556,7 @@ function TrimestresPageContent() {
         { id: 'iva_21', header: 'IVA 21%' },
         { id: 'base_10', header: 'Base 10%' },
         { id: 'iva_10', header: 'IVA 10%' },
+        { id: 'retencion', header: 'Retención' },
       ];
 
       generateAdvancedExport(processedData, exportColumns, {
@@ -584,48 +585,47 @@ function TrimestresPageContent() {
   const handleCerrarTrimestre = async (empresaId: number | null, enviarAlSII: boolean = false) => {
     if (!trimestreToClose) return;
 
-    try {
-      const response = await fetch('/api/trimestres/cerrar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          año: trimestreToClose.año,
-          trimestre: trimestreToClose.trimestre,
-          empresa_id: empresaId,
-        }),
+    const response = await fetch('/api/trimestres/cerrar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        año: trimestreToClose.año,
+        trimestre: trimestreToClose.trimestre,
+        empresa_id: empresaId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(
+        (errBody as { error?: string }).error || 'No se pudo cerrar el trimestre'
+      );
+    }
+
+    const result = await response.json();
+
+    toast({
+      title: enviarAlSII ? '✅ Trimestre cerrado — redirigiendo al SII' : '✅ Trimestre cerrado',
+      description: result.blocked
+        ? `T${trimestreToClose.trimestre} ${trimestreToClose.año} bloqueado (sin documentos en el periodo)`
+        : enviarAlSII
+          ? `${result.affected} documento(s) cerrado(s). Abriendo panel SII…`
+          : `${result.affected} documento(s) de T${trimestreToClose.trimestre} ${trimestreToClose.año} cerrado(s)`,
+    });
+
+    setDialogOpen(false);
+
+    // Recargar en segundo plano — el cierre ya fue exitoso
+    void loadTrimestres();
+    void loadDocumentos();
+
+    if (enviarAlSII) {
+      const params = new URLSearchParams({
+        año: trimestreToClose.año.toString(),
+        trimestre: trimestreToClose.trimestre.toString(),
+        empresa_id: empresaId?.toString() || 'all',
       });
-
-      if (!response.ok) throw new Error('Error al cerrar trimestre');
-
-      const result = await response.json();
-
-      await loadTrimestres();
-      await loadDocumentos();
-
-      toast({
-        title: '✅ Trimestre cerrado',
-        description: `${result.affected} documento(s) de T${trimestreToClose.trimestre} ${trimestreToClose.año} cerrado(s)`,
-      });
-
-      setDialogOpen(false);
-
-      if (enviarAlSII) {
-        const params = new URLSearchParams({
-          año: trimestreToClose.año.toString(),
-          trimestre: trimestreToClose.trimestre.toString(),
-          empresa_id: empresaId?.toString() || 'all'
-        });
-
-        window.location.href = `/sii?${params.toString()}`;
-      }
-
-    } catch (error) {
-      console.error('❌ Error closing trimestre:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo cerrar el trimestre',
-        variant: 'destructive',
-      });
+      window.location.href = `/sii?${params.toString()}`;
     }
   };
 

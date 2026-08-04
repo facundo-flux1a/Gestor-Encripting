@@ -187,6 +187,11 @@ describe('normalizeCIF', () => {
     expect(normalizeCIF(undefined)).toBeNull();
   });
 
+  it('elimina paréntesis de basura OCR', () => {
+    expect(normalizeCIF('B57303380)')).toBe('B57303380');
+    expect(normalizeCIF('(B57303380)')).toBe('B57303380');
+  });
+
   it('caso real del golden dataset: B46781234', () => {
     // Del mensaje de Insertar documento3 en el pinData
     expect(normalizeCIF('B46781234')).toBe('B46781234');

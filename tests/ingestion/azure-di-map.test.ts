@@ -9,6 +9,7 @@ import {
   normalizeTaxRate,
   parseFlexibleDate,
   reconcileImportes,
+  resolveFechaEmision,
   resolveFechaVencimiento,
   resolveTipoDocumento,
 } from '@/services/ingestion/azure-di-map';
@@ -210,6 +211,22 @@ describe('azure-di-map', () => {
     expect(mapped.empresa_emisora?.cif).toBe('A12012423');
     const guards = runFiscalGuards(mapped, { empresaCif: 'B97376321' });
     expect(guards.ok).toBe(true);
+  });
+
+  it('resolveFechaEmision from OCR when InvoiceDate missing', () => {
+    expect(
+      resolveFechaEmision(
+        {},
+        'Factura 5004806579\nFecha emisión 15/06/2024\nFecha pago 15/12/2024'
+      )
+    ).toBe('2024-06-15');
+
+    expect(
+      resolveFechaEmision(
+        {},
+        'Fecha pago 15/12/2024\nVencimiento 15/12/2024'
+      )
+    ).toBe('');
   });
 
   it('resolveFechaVencimiento from Fecha pago and from N DIAS', () => {

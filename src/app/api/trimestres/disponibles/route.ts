@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ✅ Consultar trimestres existentes en BD
+    // ✅ Consultar trimestres existentes en BD (documentos + bloqueos explícitos)
     const [existentes] = await db.query<RowDataPacket[]>(
       `SELECT DISTINCT 
          año_trimestre as año, 
@@ -41,15 +41,32 @@ export async function GET(req: NextRequest) {
       [empresaId]
     );
 
-    console.log('📊 [disponibles] Trimestres en BD:', existentes.length);
-
-    // ✅ Marcar cuáles existen y si están cerrados
-    const trimestresMap = new Map(
-      existentes.map(ex => [
-        `${ex.año}-${ex.trimestre}`,
-        { existe: true, cerrado: Boolean(ex.cerrado) }
-      ])
+    const [bloqueados] = await db.query<RowDataPacket[]>(
+      `SELECT año as año, num_trimestre as trimestre, cerrado
+       FROM trimestres
+       WHERE id_de_empresa = ? AND cerrado = 1`,
+      [empresaId]
     );
+
+    console.log('📊 [disponibles] Trimestres en BD:', existentes.length, '| Bloqueados:', bloqueados.length);
+
+    const trimestresMap = new Map<string, { existe: boolean; cerrado: boolean }>();
+
+    existentes.forEach(ex => {
+      trimestresMap.set(`${ex.año}-${ex.trimestre}`, {
+        existe: true,
+        cerrado: Boolean(ex.cerrado),
+      });
+    });
+
+    bloqueados.forEach(b => {
+      const key = `${b.año}-${b.trimestre}`;
+      const prev = trimestresMap.get(key);
+      trimestresMap.set(key, {
+        existe: prev?.existe ?? false,
+        cerrado: true,
+      });
+    });
 
     // ✅ FILTRAR: Solo trimestres abiertos (cerrado = false) + nuevos
     const resultado = todasOpciones

@@ -167,7 +167,7 @@ export function toLowerCaseKeysDeep<T>(obj: T): T {
  * Normaliza un CIF/NIF/NIE español a formato estándar (9 chars sin separadores).
  *
  * Origen: queries SQL de n8n (SET @cif_emisor_limpio = ...).
- * Pasos: eliminar espacios/guiones/puntos/barras → quitar prefijo "ES" → UPPERCASE.
+ * Pasos: eliminar espacios/guiones/puntos/barras/paréntesis → quitar prefijo "ES" → UPPERCASE.
  *
  * Ejemplos:
  *   "ES-B 12.345.678"  →  "B12345678"
@@ -180,7 +180,7 @@ export function normalizeCIF(raw: string | null | undefined): string | null {
 
   let cif = raw
     .toUpperCase()
-    .replace(/[\s\-./]/g, ''); // quitar espacios, guiones, puntos, barras
+    .replace(/[\s\-./()]/g, ''); // quitar espacios, guiones, puntos, barras, paréntesis
 
   // Quitar prefijo "ES" (identificadores fiscales europeos)
   if (cif.startsWith('ES')) {

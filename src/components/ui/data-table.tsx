@@ -64,8 +64,20 @@ import {
 import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
+import {
+  TextColumnFilter,
+  TrimestreFilter,
+  ClienteFilter,
+  ProveedorFilter,
+  FilterPlaceholder,
+  TipoDocumentoFilter,
+  CifFilter,
+  EmpresaSistemaFilter,
+  IncidenciasFilter,
+} from '@/components/dashboard/column-filters';
 import { Skeleton } from './skeleton';
 import { useColumnOrder } from '@/hooks/use-column-order';
+import { useColumnVisibility } from '@/hooks/use-column-visibility';
 import { useSearchParams } from 'next/navigation'; // 🆕 NUEVO
 
 
@@ -96,47 +108,69 @@ function Filter<TData, TValue>({
   column: Column<TData, TValue>
   table: TanstackTable<TData>
 }) {
-  const firstValue = table
-    .getPreFilteredRowModel()
-    .flatRows[0]?.getValue(column.id)
+  const meta = column.columnDef.meta as {
+    filterVariant?:
+      | 'trimestre'
+      | 'none'
+      | 'text'
+      | 'faceted-cliente'
+      | 'faceted-proveedor'
+      | 'faceted-tipo-documento'
+      | 'faceted-cif'
+      | 'faceted-empresa'
+      | 'incidencias';
+    filterPlaceholder?: string;
+  } | undefined;
+
+  if (meta?.filterVariant === 'none') {
+    return <FilterPlaceholder />;
+  }
+
+  if (meta?.filterVariant === 'faceted-cliente') {
+    return <ClienteFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'faceted-proveedor') {
+    return <ProveedorFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'faceted-tipo-documento') {
+    return <TipoDocumentoFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'faceted-cif') {
+    return <CifFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'faceted-empresa') {
+    return <EmpresaSistemaFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'incidencias') {
+    return <IncidenciasFilter column={column} />;
+  }
+
+  if (meta?.filterVariant === 'trimestre' || column.id === 'trimestre') {
+    return <TrimestreFilter column={column} table={table} />;
+  }
 
   const columnFilterValue = column.getFilterValue()
 
-  return typeof firstValue === 'number' ? (
-    <div className="flex space-x-2">
-      <Input
-        type="number"
-        value={(columnFilterValue as [number, number])?.[0] ?? ''}
-        onChange={e =>
-          column.setFilterValue((old: [number, number]) => [
-            e.target.value,
-            old?.[1],
-          ])
-        }
-        placeholder={`Min`}
-        className="h-8 border-dashed"
-      />
-      <Input
-        type="number"
-        value={(columnFilterValue as [number, number])?.[1] ?? ''}
-        onChange={e =>
-          column.setFilterValue((old: [number, number]) => [
-            old?.[0],
-            e.target.value,
-          ])
-        }
-        placeholder={`Max`}
-        className="h-8 border-dashed"
-      />
-    </div>
-  ) : (
-    <Input
-      value={Array.isArray(columnFilterValue) ? '' : (columnFilterValue ?? '') as string}
-      onChange={e => column.setFilterValue(e.target.value)}
-      placeholder={Array.isArray(columnFilterValue) ? 'Filtrado por grupo...' : 'Filtrar...'}
-      className="h-8 border-dashed"
+  if (Array.isArray(columnFilterValue)) {
+    return (
+      <div className="h-8 flex items-center text-[10px] text-muted-foreground italic px-1">
+        Filtrado por grupo
+      </div>
+    );
+  }
+
+  return (
+    <TextColumnFilter
+      column={column}
+      table={table}
+      placeholder={meta?.filterPlaceholder ?? 'Filtrar...'}
     />
-  )
+  );
 }
 
 
@@ -164,43 +198,45 @@ const DraggableTableHeader = <TData, TValue>({
       ref={setNodeRef}
       style={style}
       colSpan={header.colSpan}
-      className={cn("p-0 whitespace-nowrap group relative bg-muted z-[100]")}
+      className={cn("p-0 whitespace-nowrap group relative bg-muted z-[100] transition-colors duration-300")}
     >
       {header.isPlaceholder ? null : (
         <div className="flex flex-col h-full">
-          <div className="flex items-center h-full">
+          <div className="flex items-center min-h-10">
             <Button
               variant="ghost"
               size="sm"
               {...attributes}
               {...listeners}
-              className="cursor-grab p-2 h-full touch-none"
+              className="cursor-grab p-2 h-10 shrink-0 touch-none"
             >
               <GripVertical className="h-4 w-4 text-muted-foreground" />
             </Button>
             <div
               className={cn(
-                "flex items-center text-left w-full h-full px-2 py-3",
+                "flex items-center text-left w-full min-h-10 px-2 py-2",
                 isSortable ? 'cursor-pointer select-none' : ''
               )}
               onClick={header.column.getToggleSortingHandler()}
             >
-              <span className="font-bold text-xs">
+              <span className="font-bold text-xs leading-tight">
                 {flexRender(header.column.columnDef.header, header.getContext())}
               </span>
               {isSortable && (
                 <ArrowUpDown className={cn(
-                  "ml-2 h-3 w-3 transition-opacity duration-300",
+                  "ml-2 h-3 w-3 shrink-0 transition-opacity duration-300",
                   header.column.getIsSorted() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                 )} />
               )}
             </div>
           </div>
-          {header.column.getCanFilter() ? (
-            <div className="p-2 pt-0">
+          <div className="min-h-9 px-2 pb-2 flex items-end">
+            {header.column.getCanFilter() ? (
               <Filter column={header.column} table={header.getContext().table} />
-            </div>
-          ) : null}
+            ) : (
+              <FilterPlaceholder />
+            )}
+          </div>
         </div>
       )}
     </TableHead>
@@ -482,6 +518,12 @@ export function DataTable<TData extends object, TValue>({
     defaultColumnOrder
   );
 
+  const {
+    columnVisibility: savedColumnVisibility,
+    setColumnVisibility: saveColumnVisibility,
+    isLoading: isLoadingColumnVisibility,
+  } = useColumnVisibility(viewId || 'default', hiddenColumns);
+
   // 🆕 NUEVO: Estado local de columnOrder
   const [columnOrder, setColumnOrder] = React.useState<string[]>(defaultColumnOrder);
 
@@ -499,12 +541,16 @@ export function DataTable<TData extends object, TValue>({
 
   React.useEffect(() => {
     setIsMounted(true);
-    const initialVisibility: VisibilityState = {};
-    hiddenColumns.forEach(col => {
-      initialVisibility[col] = false;
-    });
-    setColumnVisibility(initialVisibility);
-  }, [hiddenColumns]);
+    if (enableColumnPersistence && !isLoadingColumnVisibility) {
+      setColumnVisibility(savedColumnVisibility);
+    } else {
+      const initialVisibility: VisibilityState = {};
+      hiddenColumns.forEach(col => {
+        initialVisibility[col] = false;
+      });
+      setColumnVisibility(initialVisibility);
+    }
+  }, [hiddenColumns, enableColumnPersistence, isLoadingColumnVisibility, savedColumnVisibility]);
 
 
   const table = useReactTable({
@@ -524,7 +570,13 @@ export function DataTable<TData extends object, TValue>({
     onPaginationChange: setPagination, // 🆕 HANDLER DE PAGINACIÓN
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(columnVisibility) : updater;
+      setColumnVisibility(next);
+      if (enableColumnPersistence) {
+        saveColumnVisibility(next);
+      }
+    },
     onColumnOrderChange: (updater) => {
       // 🆕 NUEVO: Callback mejorado para guardar en Redis
       const newOrder = typeof updater === 'function'
@@ -826,7 +878,7 @@ export function DataTable<TData extends object, TValue>({
               placeholder='Buscar en todas las columnas...'
               value={globalFilter ?? ''}
               onChange={(event) => setGlobalFilter(event.target.value)}
-              className="h-10 pl-10 w-full max-w-sm"
+              className="h-10 pl-10 w-full max-w-sm rounded-xl border-border/50 bg-background/90 shadow-sm transition-all duration-300 ease-out hover:border-primary/30 hover:shadow-md focus:ring-2 focus:ring-primary/15"
             />
           </div>
         </div>
@@ -840,7 +892,7 @@ export function DataTable<TData extends object, TValue>({
                 console.log('🔄 [DataTable] Reseteando columnas...');
                 resetOrder();
               }}
-              className="h-10"
+              className="h-10 rounded-xl transition-all duration-300 ease-out hover:shadow-sm"
               title="Resetear orden de columnas"
             >
               <RotateCcw className="h-4 w-4 mr-2" />

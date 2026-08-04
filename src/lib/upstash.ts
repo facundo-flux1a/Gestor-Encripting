@@ -125,6 +125,70 @@ export async function deleteColumnOrder(
 }
 
 // ========================================
+// Visibilidad de columnas
+// ========================================
+
+export interface ColumnVisibilityData {
+  columnVisibility: Record<string, boolean>;
+  viewId: string;
+  userId: number;
+  updatedAt: string;
+}
+
+export function getColumnVisibilityKey(userId: number, viewId: string): string {
+  return `column-visibility:${userId}:${viewId}`;
+}
+
+export async function saveColumnVisibility(
+  userId: number,
+  viewId: string,
+  columnVisibility: Record<string, boolean>
+): Promise<boolean> {
+  try {
+    const key = getColumnVisibilityKey(userId, viewId);
+    const data: ColumnVisibilityData = {
+      columnVisibility,
+      viewId,
+      userId,
+      updatedAt: new Date().toISOString(),
+    };
+    await upstash.set(key, data);
+    return true;
+  } catch (error) {
+    console.error('❌ [Upstash] Error guardando visibilidad:', error);
+    return false;
+  }
+}
+
+export async function getColumnVisibility(
+  userId: number,
+  viewId: string
+): Promise<Record<string, boolean> | null> {
+  try {
+    const key = getColumnVisibilityKey(userId, viewId);
+    const data = await upstash.get<ColumnVisibilityData>(key);
+    return data?.columnVisibility ?? null;
+  } catch (error) {
+    console.error('❌ [Upstash] Error obteniendo visibilidad:', error);
+    return null;
+  }
+}
+
+export async function deleteColumnVisibility(
+  userId: number,
+  viewId: string
+): Promise<boolean> {
+  try {
+    const key = getColumnVisibilityKey(userId, viewId);
+    await upstash.del(key);
+    return true;
+  } catch (error) {
+    console.error('❌ [Upstash] Error eliminando visibilidad:', error);
+    return false;
+  }
+}
+
+// ========================================
 // Tipos para selección de empresas
 // ========================================
 
