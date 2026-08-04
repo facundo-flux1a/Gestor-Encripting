@@ -3142,12 +3142,17 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 4) < 1), 0) as b4,
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 15) < 1), 0) as b15,
 
-                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€) — incluye base_no_sujeta y descuento_global
+                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€) — incluye base_no_sujeta, descuento_global y corrige retenciones en abonos
                 (CASE WHEN ABS(d.importe_total - (
                     d.importe_sin_impuestos +
                     COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
                     COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-                    COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+                    COALESCE((SELECT SUM(
+                        CASE 
+                            WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
+                            ELSE di2.cuota
+                        END
+                    ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
                 )) > 0.05 THEN 1 ELSE 0 END) as doc_mismatch
             FROM documentos d
             WHERE 1=1 ${whereDocType}
@@ -5121,11 +5126,23 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   const [rows] = await db.query<RowDataPacket[]>(`
     SELECT 
       COUNT(*) as total,
-      SUM(CASE WHEN (ABS(d.importe_total - (
-          d.importe_sin_impuestos +
-          COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) +
-          COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
-      )) > 0.05) THEN 1 ELSE 0 END) as mismatches
+      SUM(CASE WHEN (
+          (LOWER(d.tipo_documento) LIKE '%factura%' OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%ticket%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%')
+          AND LOWER(d.tipo_documento) NOT LIKE '%sin confirmar%'
+          AND LOWER(d.tipo_documento) NOT LIKE '%otros%'
+          AND
+          (ABS(d.importe_total - (
+              d.importe_sin_impuestos +
+              COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
+              COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
+              COALESCE((SELECT SUM(
+                  CASE 
+                      WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
+                      ELSE di2.cuota
+                  END
+              ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+          )) > 0.05)
+      ) THEN 1 ELSE 0 END) as mismatches
     FROM documentos d
     WHERE d.id_de_empresa IN (?)
   `, [companyIds]);
@@ -5189,7 +5206,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
 
     const motivo = `La entidad "${nombreEntidad}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
     await prisma.health_check_status.createMany({
-      data: [{ documento_id: BigInt(doc.documento_id), empresa_id: doc.id_de_empresa ? BigInt(doc.id_de_empresa) : null, verified: false, check_type: 'ENTIDAD_DUPLICADA', motivo }] as any[],
+      data: [{ documento_id: Number(doc.documento_id), empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null, verified: false, check_type: 'ENTIDAD_DUPLICADA', motivo }] as any[],
       skipDuplicates: true
     });
     console.log(`🔁 [HealthCheck] Entidad duplicada registrada para doc #${doc.documento_id}`);
@@ -5199,11 +5216,25 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   const [docRows] = await db.query<DocumentPacket[]>(`
     SELECT 
       d.*,
-      (ABS(d.importe_total - (
-          d.importe_sin_impuestos +
-          COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) +
-          COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
-      ))) as mismatch_amount,
+      (CASE 
+        WHEN (
+          (LOWER(d.tipo_documento) LIKE '%factura%' OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%ticket%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%')
+          AND LOWER(d.tipo_documento) NOT LIKE '%sin confirmar%'
+          AND LOWER(d.tipo_documento) NOT LIKE '%otros%'
+        )
+        THEN (ABS(d.importe_total - (
+            d.importe_sin_impuestos +
+            COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
+            COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
+            COALESCE((SELECT SUM(
+                CASE 
+                    WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
+                    ELSE di2.cuota
+                END
+            ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+        )))
+        ELSE 0
+      END) as mismatch_amount,
       hcs.verified as hcs_verified,
       hcs.check_type as hcs_check_type,
       hcs.motivo as hcs_motivo
@@ -5216,7 +5247,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     LIMIT 50
   `, [companyIds]);
 
-  const documents = await mapDocumentPacketsToDocuments(docRows);
+  let documents = await mapDocumentPacketsToDocuments(docRows);
   const triggeredDiagnoses: number[] = [];
 
   // Auto-register newly detected mismatched documents and trigger first diagnosis
@@ -5274,6 +5305,23 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
         (docRows as any[]).find(r => r.id === doc.id_documento)?.mismatch_amount || 0
       );
     });
+    
+    // Auto-clean mathematically fixed documents (so they disappear without requiring manual validation)
+    const fixedDocIds = documents
+      .filter(d => (d as any).hcs_check_type === 'MISMATCH_MATEMATICO' && (d as any).hcs_mismatch_amount <= 0.05 && (d as any).hcs_verified === 0)
+      .map(d => d.id_documento);
+
+    if (fixedDocIds.length > 0) {
+      prisma.health_check_status.deleteMany({
+        where: { 
+          documento_id: { in: fixedDocIds.map(id => Number(id)) },
+          check_type: 'MISMATCH_MATEMATICO'
+        }
+      }).catch(err => console.error('Error auto-cleaning fixed mismatches:', err));
+      
+      // Remove them from the current response so they disappear instantly from the UI
+      documents = documents.filter(d => !fixedDocIds.includes(d.id_documento));
+    }
   }
 
   // Contar alertas lógicas pendientes (FECHA_ANOMALA + ENTIDAD_DUPLICADA con verified = 0)
@@ -5303,7 +5351,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
  */
 export async function confirmHealthCheckDocument(documentId: number): Promise<void> {
   await prisma.health_check_status.updateMany({
-    where: { documento_id: BigInt(documentId) },
+    where: { documento_id: Number(documentId) },
     data: { verified: true }
   });
 }

@@ -41,6 +41,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -163,7 +164,7 @@ const DraggableTableHeader = <TData, TValue>({
       ref={setNodeRef}
       style={style}
       colSpan={header.colSpan}
-      className={cn("p-0 whitespace-nowrap group relative bg-muted/50")}
+      className={cn("p-0 whitespace-nowrap group relative bg-muted z-[100]")}
     >
       {header.isPlaceholder ? null : (
         <div className="flex flex-col h-full">
@@ -238,8 +239,8 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
     transform: CSS.Translate.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    position: 'relative',
-    zIndex: isDragging ? 1 : undefined, // Dejar que CSS controle el z-index cuando no se arrastra
+    // Only set position/zIndex when actually dragging to avoid stacking context issues with sticky header
+    ...(isDragging ? { position: 'relative' as const, zIndex: 1 } : {}),
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -350,8 +351,8 @@ const DraggableTableRow = <TData extends { id_documento: number; empresa_id?: nu
       className={cn(
         "bg-background cursor-pointer relative transition-colors duration-1000",
         isHighlighted 
-          ? "bg-purple-500/30 z-10" 
-          : "even:bg-muted/50 hover:bg-muted/75 hover:z-50"
+          ? "bg-purple-500/30" 
+          : "even:bg-muted/50 hover:bg-muted/75"
       )}
       draggable={true}
       onDragStart={handleDragStart}
@@ -736,8 +737,8 @@ export function DataTable<TData extends object, TValue>({
           onScroll={onMainScroll}
           className="overflow-auto custom-scrollbar max-h-[min(70vh,calc(100vh-16rem))]"
         >
-          <Table noScrollWrapper>
-            <TableHeader className="sticky top-0 z-40 bg-muted shadow-sm">
+          <Table noScrollWrapper className="border-collapse">
+            <TableHeader className="sticky top-0 z-[100] bg-muted [&_tr:last-child]:border-b-0">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   <SortableContext
@@ -751,7 +752,7 @@ export function DataTable<TData extends object, TValue>({
                 </TableRow>
               ))}
               {table.getFooterGroups().map(footerGroup => (
-                <TableRow key={footerGroup.id} className="bg-secondary/80 font-medium">
+                <TableRow key={footerGroup.id} className="bg-muted font-medium" style={{ borderBottom: 'none' }}>
                   {footerGroup.headers.map(header => (
                     <TableHead key={header.id} colSpan={header.colSpan}>
                       {header.isPlaceholder
@@ -765,7 +766,7 @@ export function DataTable<TData extends object, TValue>({
                 </TableRow>
               ))}
             </TableHeader>
-            <TableBody>
+            <TableBody className="relative z-0">
               <SortableContext
                 items={rowIds.map(id => `row-${id}`)}
                 strategy={verticalListSortingStrategy}
