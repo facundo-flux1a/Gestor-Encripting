@@ -4697,7 +4697,7 @@ cerrado = 1,
       const upsertData = {
         cerrado: true,
         fecha_cierre: new Date(),
-        total_documentos: stats.total_documentos,
+        total_documentos: Number(stats.total_documentos),
         total_ingresos: stats.total_ingresos,
         total_gastos: stats.total_gastos,
         iva_repercutido: stats.iva_repercutido,

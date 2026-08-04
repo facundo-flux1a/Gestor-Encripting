@@ -314,6 +314,12 @@ export async function POST(request: NextRequest) {
       );
       row['Retención'] = retDetail ? Math.abs(Number(retDetail.cuota) || 0) : 0;
 
+      // Recargo de Equivalencia
+      const recargoDetail = (doc.iva_details || []).find(
+        (i: any) => (i.tipo_impuesto || '').toUpperCase().includes('RECARGO')
+      );
+      row['Recargo de Equiv.'] = recargoDetail ? Math.abs(Number(recargoDetail.cuota) || 0) : 0;
+
       // Totales finales
       row['Base Imponible'] = Number(doc.importe_sin_impuestos) || 0;
       row['Total Factura'] = Number(doc.importe_total) || 0;
@@ -325,7 +331,7 @@ export async function POST(request: NextRequest) {
     const numCols = [
       'Base 21%', 'IVA 21%', 'Base 15%', 'IVA 15%',
       'Base 10%', 'IVA 10%', 'Base 4%', 'IVA 4%',
-      'Base 0%', 'Retención', 'Base Imponible', 'Total Factura'
+      'Base 0%', 'Retención', 'Recargo de Equiv.', 'Base Imponible', 'Total Factura'
     ];
     const totalsRow: Record<string, any> = { 'Tipo': 'TOTALES' };
     numCols.forEach(col => {
@@ -338,6 +344,12 @@ export async function POST(request: NextRequest) {
             const t = (i.tipo_impuesto || '').toUpperCase();
             return t.includes('RETENCION') || t.includes('IRPF');
           });
+          return sum + (r ? Math.abs(Number(r.cuota) || 0) : 0);
+        }
+        if (col === 'Recargo de Equiv.') {
+          const r = (doc.iva_details || []).find((i: any) =>
+            (i.tipo_impuesto || '').toUpperCase().includes('RECARGO')
+          );
           return sum + (r ? Math.abs(Number(r.cuota) || 0) : 0);
         }
         const rateMatch = col.match(/\d+/);
@@ -372,6 +384,7 @@ export async function POST(request: NextRequest) {
 
       const accumulators: Record<string, Record<number | string, number>> = {
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
       };
       VAT_RATES.forEach(r => {
         accumulators[`base_${r}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
@@ -392,6 +405,12 @@ export async function POST(request: NextRequest) {
           if (tipo.includes('RETENCION') || tipo.includes('IRPF')) {
             if (q >= 1 && q <= 4) accumulators.retenciones[q] += cuota;
             accumulators.retenciones.total += cuota;
+            return;
+          }
+
+          if (tipo.includes('RECARGO')) {
+            if (q >= 1 && q <= 4) accumulators.recargos[q] += cuota;
+            accumulators.recargos.total += cuota;
             return;
           }
 
@@ -453,9 +472,10 @@ export async function POST(request: NextRequest) {
       summaryRows.push(totalIvaRow);
       summaryRows.push([]);
 
-      // Total facturado y retenciones
+      // Total facturado, retenciones y recargos
       summaryRows.push(buildRow('Total Gral. Facturado', totalFacturado));
       summaryRows.push(buildRow('Total Retenciones', accumulators.retenciones));
+      summaryRows.push(buildRow('Total Recargos de Equiv.', accumulators.recargos));
       summaryRows.push([]);
     };
 
