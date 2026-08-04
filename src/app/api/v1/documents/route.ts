@@ -4,6 +4,7 @@ import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
+import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     // 3. Leer filtros de la URL
     const searchParams = request.nextUrl.searchParams;
     const trimestreParam = searchParams.get('trimestre');
-    const añoParam = searchParams.get('año');
+    const añoParam = searchParams.get('año') ?? searchParams.get('ano');
     const proveedorParam = searchParams.get('proveedor');
     const clienteParam = searchParams.get('cliente');
     const tipoParam = searchParams.get('tipo') || 'todas';
@@ -207,6 +208,9 @@ export async function GET(request: NextRequest) {
         publicUrl = `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${docRutaArchivo}`;
       }
 
+      const impuestos = ivaByDoc[doc.doc_id] || [];
+      const retencion = extractRetencionFromImpuestos(impuestos);
+
       return {
         id: doc.doc_id,
         tipo_documento: doc.tipo_documento,
@@ -219,10 +223,11 @@ export async function GET(request: NextRequest) {
         observaciones: doc.observaciones,
         trimestre: doc.num_trimestre,
         año: doc.año_trimestre,
+        retencion,
         entidades: entidades,
         is_issued: isIssued, // Factura emitida por la empresa
         url_archivo: publicUrl,
-        impuestos: ivaByDoc[doc.doc_id] || [],
+        impuestos,
         lineas_detalle: lineasByDoc[doc.doc_id] || [],
       };
     });

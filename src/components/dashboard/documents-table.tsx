@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder, Lock, Rows3, Table2 } from 'lucide-react';
+import { MoreHorizontal, Trash2, CheckCircle, Eye, Folder, Lock, Rows3, Table2, FileDown, AlertTriangle } from 'lucide-react';
 import type { ColumnDef, Row, Table as TanstackTable } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { type Document, type IvaDetail } from '@/lib/types';
 import { SummarizeDialog } from './summarize-dialog';
 import { DocumentPreviewDialog } from './document-preview-dialog';
 import { CleanDuplicatesButton } from './clean-duplicates-button';
-import { ClienteFilter, ProveedorFilter } from './column-filters';
+import { facetedArrayFilter } from './column-filters';
 import { DocumentsStackedList } from './documents-stacked-list';
 import {
   DropdownMenu,
@@ -46,9 +46,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useRouter } from 'next/navigation';
-import { confirmDocument } from '@/services/document-client-service';
+import { confirmDocument, confirmDocuments } from '@/services/document-client-service';
 import { useDuplicateDetection } from '@/hooks/use-duplicate-detection';
 import { deleteDocument } from '@/services/document-service';
+import { calcularTrimestreExtendido } from '@/lib/client-utils';
 
 const formatNumber = (num: number | string): string => {
   const value = typeof num === 'string' ? parseFloat(num) : num;
@@ -77,6 +78,12 @@ const formatCurrency = (amount: number | string): string => {
 
 const UNCLASSIFIED = 'No clasificado';
 
+function documentHasActiveIncident(doc: Document): boolean {
+  const activas = doc.incidencias?.filter((i) => !i.validado) ?? [];
+  const legacy = !activas.length && doc.incidencia && doc.incidencia_razon;
+  return activas.length > 0 || !!legacy;
+}
+
 const getColumns = (
   onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
   onSummarize: (doc: Document) => void,
@@ -101,6 +108,8 @@ const getColumns = (
     };
   }
 ): ColumnDef<Document>[] => {
+  const noColumnFilter = { enableColumnFilter: false, meta: { filterVariant: 'none' as const } };
+
   const columns: ColumnDef<Document>[] = [
     {
       id: 'actions',
@@ -278,6 +287,7 @@ const getColumns = (
       },
       footer: () => null,
       enableHiding: false,
+      ...noColumnFilter,
     },
 
     {
@@ -321,6 +331,7 @@ const getColumns = (
       },
       enableHiding: false,
       footer: () => <span className="font-bold text-sm">Totales</span>,
+      ...noColumnFilter,
     },
 
     {
@@ -329,12 +340,7 @@ const getColumns = (
         const cliente = row.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         return cliente?.nombre || 'Sin cliente';
       },
-      header: ({ column, table }) => (
-        <div className="flex items-center gap-2">
-          <span>Cliente</span>
-          <ClienteFilter column={column} table={table} />
-        </div>
-      ),
+      header: 'Cliente',
       cell: ({ row }) => {
         const cliente = row.original.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const nombre = cliente?.nombre || 'Sin cliente';
@@ -366,11 +372,13 @@ const getColumns = (
 
         return true;
       },
+      meta: { filterVariant: 'faceted-cliente' as const },
       footer: () => null,
     },
 
     {
       id: 'empresa_sistema',
+      accessorFn: (row) => row.empresa_nombre || 'Sin empresa',
       header: 'Empresa (Sistema)',
       cell: ({ row }) => {
         const nombre = row.original.empresa_nombre || 'Sin empresa';
@@ -380,6 +388,9 @@ const getColumns = (
           </div>
         );
       },
+      filterFn: (row, _id, value) =>
+        facetedArrayFilter(row.original.empresa_nombre || 'Sin empresa', value),
+      meta: { filterVariant: 'faceted-empresa' as const },
       footer: () => null,
     },
 
@@ -475,7 +486,17 @@ const getColumns = (
 
     {
       id: 'trimestre',
+      accessorFn: (row) =>
+        row.año_trimestre && row.num_trimestre
+          ? `Q${row.num_trimestre} ${row.año_trimestre}`
+          : '',
       header: 'Trimestre',
+      filterFn: (row, _id, value) => {
+        if (!value) return true;
+        const key = `${row.original.año_trimestre}-Q${row.original.num_trimestre}`;
+        return key === value;
+      },
+      meta: { filterVariant: 'trimestre' as const },
       cell: ({ row }) => {
         const anio = row.original.año_trimestre;
         const trimestre = row.original.num_trimestre;
@@ -483,6 +504,16 @@ const getColumns = (
         if (!anio || !trimestre) {
           return <span className="text-muted-foreground text-xs">Sin trimestre</span>;
         }
+
+        const fecha = row.original.fecha_emision ? new Date(row.original.fecha_emision) : null;
+        const fechaAnomala = fecha && (
+          fecha.getFullYear() !== anio ||
+          fecha.getFullYear() < 2020
+        );
+        const esperado = fecha ? calcularTrimestreExtendido(fecha) : null;
+        const trimestreDesajustado = esperado && (
+          esperado.año !== anio || esperado.trimestre !== trimestre
+        );
 
         const colorClasses = {
           1: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800',
@@ -494,10 +525,24 @@ const getColumns = (
         const colorClass = colorClasses[trimestre as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800';
 
         return (
-          <div className="text-sm">
+          <div className="text-sm flex items-center gap-1">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-300 hover:scale-105 hover:shadow-md ${colorClass}`}>
               Q{trimestre} {anio}
             </span>
+            {(fechaAnomala || trimestreDesajustado) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={`/dashboard/health-check?highlight=${row.original.id_documento}`}>
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs max-w-[220px]">
+                  {fechaAnomala
+                    ? 'Fecha contable de otro ejercicio — revisar en Salud Documental'
+                    : 'Trimestre no coincide con la fecha contable'}
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
       },
@@ -507,12 +552,7 @@ const getColumns = (
     {
       id: 'proveedor',
       accessorFn: (row) => row.proveedor,
-      header: ({ column, table }) => (
-        <div className="flex items-center gap-2">
-          <span>Proveedor</span>
-          <ProveedorFilter column={column} table={table} />
-        </div>
-      ),
+      header: 'Proveedor',
       cell: ({ row, table }) => {
         return (
           <EditableCell
@@ -548,6 +588,7 @@ const getColumns = (
 
         return true;
       },
+      meta: { filterVariant: 'faceted-proveedor' as const },
     },
 
     {
@@ -565,7 +606,9 @@ const getColumns = (
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
         );
-      }
+      },
+      filterFn: (row, _id, value) => facetedArrayFilter(row.original.cif || '', value),
+      meta: { filterVariant: 'faceted-cif' as const },
     },
 
     {
@@ -588,6 +631,7 @@ const getColumns = (
 
     {
       id: 'incidencia_motivo',
+      accessorFn: (row) => (documentHasActiveIncident(row) ? 'con_incidencias' : 'ok'),
       header: 'Incidencias',
       cell: ({ row }) => {
         const doc = row.original;
@@ -699,6 +743,14 @@ const getColumns = (
           </Tooltip>
         );
       },
+      filterFn: (row, _id, value) => {
+        if (!value || value === '__all__') return true;
+        const has = documentHasActiveIncident(row.original);
+        if (value === 'ok') return !has;
+        if (value === 'con_incidencias') return has;
+        return true;
+      },
+      meta: { filterVariant: 'incidencias' as const },
       footer: () => null,
       size: 250,
       minSize: 200,
@@ -719,11 +771,18 @@ const getColumns = (
             trimestre_cerrado={row.original.trimestre_cerrado}
           />
         );
-      }
+      },
+      filterFn: (row, _id, value) =>
+        facetedArrayFilter(row.original.tipo_documento || '', value),
+      meta: {
+        filterVariant: 'faceted-tipo-documento' as const,
+        filterExtraOptions: customTypes,
+      },
     }, ...[21, 10, 4, 0].flatMap(rate => ([
       {
         id: `base_${rate}`,
         header: `Base ${rate}%`,
+        ...noColumnFilter,
         cell: ({ row }: { row: Row<Document> }) => {
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.base_imponible ?? 0;
@@ -750,6 +809,7 @@ const getColumns = (
       {
         id: `iva_${rate}`,
         header: `IVA ${rate}%`,
+        ...noColumnFilter,
         cell: ({ row }: { row: Row<Document> }) => {
           const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
           const value = ivaDetail?.cuota ?? 0;
@@ -778,8 +838,12 @@ const getColumns = (
     {
       accessorKey: 'retencion',
       header: 'Retención',
+      ...noColumnFilter,
       cell: ({ row }: { row: Row<Document> }) => {
-        const ivaDetail = row.original.iva_details.find(i => i.tipo_impuesto?.toLowerCase() === 'retencion');
+        const ivaDetail = row.original.iva_details.find(i => {
+          const t = (i.tipo_impuesto || '').toLowerCase();
+          return t.includes('retencion') || t.includes('irpf');
+        });
         const value = ivaDetail?.cuota ?? 0;
         const formatted = formatCurrency(value);
         return (
@@ -790,7 +854,10 @@ const getColumns = (
       },
       footer: ({ table }: { table: TanstackTable<Document> }) => {
         const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
-          const detail = row.original.iva_details.find((d: IvaDetail) => d.tipo_impuesto?.toLowerCase() === 'retencion');
+          const detail = row.original.iva_details.find((d: IvaDetail) => {
+            const t = (d.tipo_impuesto || '').toLowerCase();
+            return t.includes('retencion') || t.includes('irpf');
+          });
           return sum + (Number(detail?.cuota) || 0);
         }, 0);
         const formatted = formatCurrency(total);
@@ -805,6 +872,7 @@ const getColumns = (
     {
       accessorKey: 'recargo',
       header: 'R. Equiv.',
+      ...noColumnFilter,
       cell: ({ row }: { row: Row<Document> }) => {
         const recargoDetails = row.original.iva_details.filter(i =>
           i.tipo_impuesto?.toLowerCase().includes('recargo') ||
@@ -847,6 +915,7 @@ const getColumns = (
     {
       accessorKey: 'base_imponible',
       header: 'Total Base',
+      ...noColumnFilter,
       cell: ({ row }) => {
         const value = row.getValue('base_imponible');
         const formatted = formatCurrency(value);
@@ -869,6 +938,7 @@ const getColumns = (
     {
       id: 'iva_only',
       header: 'IVA',
+      ...noColumnFilter,
       cell: ({ row }) => {
         const totalImpuestos = Number(row.original.iva) || 0;
         const recargoSum = row.original.iva_details
@@ -910,6 +980,7 @@ const getColumns = (
     {
       accessorKey: 'total',
       header: 'Total',
+      ...noColumnFilter,
       cell: ({ row }: { row: any }) => {
         const value = Number(row.original.total) || 0;
         const formatted = formatCurrency(value);
@@ -1150,7 +1221,9 @@ export function DocumentsTable({
   // 🆕 ESTADO y LÓGICA PARA SELECCIÓN MÚLTIPLE
   const [rowSelection, setRowSelection] = useState({});
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const [isBulkValidating, setIsBulkValidating] = useState(false); // 🆕 Estado para validación masiva
+  const [isBulkValidating, setIsBulkValidating] = useState(false);
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false);
+  const [isBulkExportingPdf, setIsBulkExportingPdf] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
 
   // Calcular IDs seleccionados - Asumiendo que rowSelection keys son índices de 'documents'
@@ -1304,6 +1377,61 @@ export function DocumentsTable({
       toast({ title: 'Error', description: 'Fallo en validación masiva', variant: 'destructive' });
     } finally {
       setIsBulkValidating(false);
+    }
+  };
+
+  const handleBulkConfirm = async () => {
+    if (selectedIds.length === 0 || !showConfirmButton) return;
+    setIsBulkConfirming(true);
+    try {
+      const result = await confirmDocuments(selectedIds);
+      if (!result.success) throw new Error(result.error || 'Error al confirmar');
+
+      toast({
+        title: '✅ Documentos confirmados',
+        description: `${result.confirmados ?? selectedIds.length} documento(s) confirmado(s)`,
+      });
+      setRowSelection({});
+      if (onDocumentChanged) onDocumentChanged();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudieron confirmar',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkConfirming(false);
+    }
+  };
+
+  const handleBulkExportPdf = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkExportingPdf(true);
+    try {
+      const response = await fetch('/api/export-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentIds: selectedIds,
+          empresaIds: selectedCompanyIds,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Error al exportar PDF');
+      }
+      toast({
+        title: 'Exportación PDF iniciada',
+        description: `Generando PDF de ${selectedIds.length} documento(s). Te avisaremos cuando esté listo.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Error al exportar PDF',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkExportingPdf(false);
     }
   };
 
@@ -1473,12 +1601,44 @@ export function DocumentsTable({
               </span>
               <div className="h-4 w-px bg-border"></div>
 
+              {showConfirmButton && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full h-9 px-5 shadow-sm border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400"
+                  onClick={handleBulkConfirm}
+                  disabled={isBulkConfirming || isBulkDeleting || isBulkValidating || isBulkExportingPdf}
+                >
+                  {isBulkConfirming ? (
+                    <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-2 inline-block" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
+                  Confirmar ({selectedIds.length})
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full h-9 px-4 shadow-sm"
+                onClick={handleBulkExportPdf}
+                disabled={isBulkExportingPdf || isBulkDeleting || isBulkValidating || isBulkConfirming}
+              >
+                {isBulkExportingPdf ? (
+                  <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-2 inline-block" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2" />
+                )}
+                PDF
+              </Button>
+
               <Button
                 variant="outline"
                 size="sm"
                 className="rounded-full h-9 px-5 shadow-sm hover:shadow-md transition-all border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/30"
                 onClick={handleBulkValidate}
-                disabled={isBulkValidating || isBulkDeleting}
+                disabled={isBulkValidating || isBulkDeleting || isBulkConfirming || isBulkExportingPdf}
               >
                 {isBulkValidating ? (
                   <span className="flex items-center gap-2">

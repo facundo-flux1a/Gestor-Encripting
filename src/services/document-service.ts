@@ -17,6 +17,8 @@ const serializeData = (data: any) => JSON.parse(JSON.stringify(data, (k, v) => t
 
 import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
+import { runHealthChecksForDocument } from './health-check-service';
+import { parseFechaLocal, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
 import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
 
 
@@ -763,8 +765,14 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
           }
         } else {
           const trimestreTabla = await tx.trimestres.findUnique({
-            where: { año_num_trimestre_id_de_empresa: { año: data.año_trimestre, num_trimestre: data.num_trimestre, id_de_empresa: BigInt(empresaId) } },
-            select: { cerrado: true }
+            where: {
+              a_o_num_trimestre_id_de_empresa: {
+                a_o: data.año_trimestre,
+                num_trimestre: data.num_trimestre,
+                id_de_empresa: BigInt(empresaId),
+              },
+            },
+            select: { cerrado: true },
           });
 
           if (trimestreTabla && trimestreTabla.cerrado) {
@@ -773,10 +781,16 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
 
           console.log('🆕 [updateDocument] Creando nuevo trimestre en tabla trimestres...');
           await tx.trimestres.upsert({
-            where: { año_num_trimestre_id_de_empresa: { año: data.año_trimestre, num_trimestre: data.num_trimestre, id_de_empresa: BigInt(empresaId) } } as any,
+            where: {
+              a_o_num_trimestre_id_de_empresa: {
+                a_o: data.año_trimestre,
+                num_trimestre: data.num_trimestre,
+                id_de_empresa: BigInt(empresaId),
+              },
+            },
             update: { fecha_actualizacion: new Date() },
             create: {
-              año: data.año_trimestre,
+              a_o: data.año_trimestre,
               num_trimestre: data.num_trimestre,
               id_de_empresa: BigInt(empresaId),
               cerrado: false,
@@ -786,8 +800,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
               iva_repercutido: 0,
               iva_soportado: 0,
               fecha_creacion: new Date(),
-              fecha_actualizacion: new Date()
-            }
+              fecha_actualizacion: new Date(),
+            },
           });
         }
       }
@@ -1067,6 +1081,10 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       console.error('❌ [Background] Error en validación de incidencias:', err);
     });
 
+    runHealthChecksForDocument(id).catch(err => {
+      console.error('❌ [Background] Error en health check:', err);
+    });
+
     // 🔔 WEBHOOKS TRIGGER: Documento Modificado
     if (camposReales.length > 0) {
       const updatedDoc = await prisma.documentos.findUnique({
@@ -1168,6 +1186,19 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       if (directDocumentFields.includes(fieldName)) {
         const dbFieldName = fieldName === 'base_imponible' ? 'importe_sin_impuestos' : fieldName === 'total' ? 'importe_total' : fieldName;
         await tx.documentos.update({ where: { id: BigInt(id) }, data: { [dbFieldName]: value } });
+
+        // Recalcular trimestre al cambiar fecha contable
+        if (fieldName === 'fecha_emision' && doc.id_de_empresa) {
+          const trim = await resolverTrimestreContableImportacion(
+            parseFechaLocal(value),
+            Number(doc.id_de_empresa),
+            null
+          );
+          await tx.documentos.update({
+            where: { id: BigInt(id) },
+            data: { año_trimestre: trim.año, num_trimestre: trim.trimestre },
+          });
+        }
       } else if (fieldName === 'cif') {
         let datosExtra: any = {};
         try {
@@ -1287,6 +1318,10 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
 
     validateIncidentsAsync(id).catch(err => {
       console.error('❌ [Background] Error en validación de incidencias:', err);
+    });
+
+    runHealthChecksForDocument(id).catch(err => {
+      console.error('❌ [Background] Error en health check:', err);
     });
 
     const updatedDoc = await prisma.documentos.findUnique({
@@ -4339,7 +4374,7 @@ SELECT
 export async function cerrarTrimestre(
   userId: number,
   payload: CerrarTrimestrePayload
-): Promise<{ affected: number }> {
+): Promise<{ affected: number; blocked?: boolean }> {
   const conn = await db.getConnection();
 
   try {
@@ -4392,10 +4427,66 @@ d.trimestre_cerrado = 1,
 
     console.log('✅ [cerrarTrimestre] Documentos actualizados:', affectedCount);
 
+    // Si no hay documentos, bloquear el trimestre igualmente (empresa que empieza a mitad de año)
     if (affectedCount === 0) {
-      console.warn('⚠️ [cerrarTrimestre] No se encontraron documentos para cerrar');
-      console.log('═══════════════════════════════════════════════════════════');
-      return { affected: 0 };
+      const empresaIds: number[] = payload.empresa_id !== null
+        ? [payload.empresa_id]
+        : (await conn.query<RowDataPacket[]>(
+            'SELECT id FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+            [userId]
+          ))[0].map((e: RowDataPacket) => Number(e.id));
+
+      if (empresaIds.length === 0) {
+        console.warn('⚠️ [cerrarTrimestre] No hay empresas para bloquear el trimestre');
+        return { affected: 0 };
+      }
+
+      for (const empresaId of empresaIds) {
+        const existing = await prisma.trimestres.findFirst({
+          where: {
+            a_o: payload.año,
+            num_trimestre: payload.trimestre,
+            id_de_empresa: BigInt(empresaId),
+            cerrado: true,
+          },
+        });
+        if (existing) {
+          continue;
+        }
+
+        await prisma.trimestres.upsert({
+          where: {
+            a_o_num_trimestre_id_de_empresa: {
+              a_o: payload.año,
+              num_trimestre: payload.trimestre,
+              id_de_empresa: BigInt(empresaId),
+            },
+          },
+          update: {
+            cerrado: true,
+            fecha_cierre: new Date(),
+            fecha_actualizacion: new Date(),
+          },
+          create: {
+            a_o: payload.año,
+            num_trimestre: payload.trimestre,
+            id_de_empresa: BigInt(empresaId),
+            cerrado: true,
+            fecha_cierre: new Date(),
+            total_documentos: 0,
+            total_ingresos: 0,
+            total_gastos: 0,
+            iva_repercutido: 0,
+            iva_soportado: 0,
+            fecha_creacion: new Date(),
+            fecha_actualizacion: new Date(),
+          },
+        });
+        console.log(`🔒 [cerrarTrimestre] Trimestre ${payload.año}Q${payload.trimestre} bloqueado sin documentos (empresa ${empresaId})`);
+      }
+
+      await conn.commit();
+      return { affected: 0, blocked: true };
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -4609,15 +4700,21 @@ cerrado = 1,
         fecha_actualizacion: new Date()
       };
       await prisma.trimestres.upsert({
-        where: { año_num_trimestre_id_de_empresa: { año: stats.año, num_trimestre: stats.trimestre, id_de_empresa: BigInt(stats.empresa_id) } } as any,
-        update: upsertData as any,
+        where: {
+          a_o_num_trimestre_id_de_empresa: {
+            a_o: stats.año,
+            num_trimestre: stats.trimestre,
+            id_de_empresa: BigInt(stats.empresa_id),
+          },
+        },
+        update: upsertData,
         create: {
-          año: stats.año,
+          a_o: stats.año,
           num_trimestre: stats.trimestre,
           id_de_empresa: BigInt(stats.empresa_id),
           ...upsertData,
-          fecha_creacion: new Date()
-        } as any
+          fecha_creacion: new Date(),
+        },
       });
 
       console.log(`✅[cerrarTrimestre] Registro guardado en trimestres (empresa: ${stats.empresa_id})`);

@@ -725,6 +725,7 @@ function DocumentsPageContent() {
                     documents={sinConfirmar}
                     filename="documentos_sin_confirmar"
                     showConfirmButton={true}
+                    exportContext="documentos"
                     viewId="documentos-sin-confirmar"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
@@ -762,6 +763,7 @@ function DocumentsPageContent() {
                   <DocumentsTable
                     documents={facturasEmitidas}
                     filename="facturas_emitidas"
+                    exportContext="documentos_emitidas"
                     viewId="documentos-facturas-emitidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}
@@ -800,6 +802,7 @@ function DocumentsPageContent() {
                   <DocumentsTable
                     documents={facturasRecibidas}
                     filename="facturas_recibidas"
+                    exportContext="documentos_recibidas"
                     viewId="documentos-facturas-recibidas"
                     enableColumnPersistence={true}
                     onDocumentChanged={handleDocumentChanged}

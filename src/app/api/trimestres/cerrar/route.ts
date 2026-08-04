@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     const result = await cerrarTrimestre(session.userId, validation.data);
 
-    if (result.affected === 0) {
+    if (result.affected === 0 && !result.blocked) {
       return NextResponse.json(
         { error: 'No se encontraron documentos para cerrar o ya están cerrados' },
         { status: 404 }
@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       affected: result.affected,
-      message: `Se cerraron ${result.affected} documento(s)`,
+      blocked: result.blocked ?? false,
+      message: result.blocked
+        ? `Trimestre T${validation.data.trimestre} ${validation.data.año} bloqueado (sin documentos)`
+        : `Se cerraron ${result.affected} documento(s)`,
     });
   } catch (error) {
     console.error('Error en POST /api/trimestres/cerrar:', error);

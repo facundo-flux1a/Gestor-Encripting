@@ -4,6 +4,7 @@ import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
+import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     // 3. Leer filtros de la URL
     const searchParams = request.nextUrl.searchParams;
     const trimestreParam = searchParams.get('trimestre');
-    const añoParam = searchParams.get('año');
+    const añoParam = searchParams.get('año') ?? searchParams.get('ano');
     const proveedorParam = searchParams.get('proveedor');
     const clienteParam = searchParams.get('cliente');
     const tipoParam = searchParams.get('tipo') || 'todas';
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest) {
         entidadesByDoc[r.documento_id] = {};
       }
       entidadesByDoc[r.documento_id][r.rol] = {
-        id: r.id,
+        id: Number(r.id),
         nombre: r.nombre,
         identificador_fiscal: r.identificador_fiscal,
         direccion: r.direccion,
@@ -234,7 +235,7 @@ export async function GET(request: NextRequest) {
       }
 
       archivosByDoc[r.documento_id].push({
-        id: r.id,
+        id: Number(r.id),
         tipo_archivo: r.tipo_archivo,
         nombre_archivo: r.nombre_archivo,
         hash_archivo: r.hash_archivo,
@@ -251,7 +252,7 @@ export async function GET(request: NextRequest) {
         incidenciasByDoc[r.documento_id] = [];
       }
       incidenciasByDoc[r.documento_id].push({
-        id: r.id,
+        id: Number(r.id),
         incidencia: !!r.incidencia,
         fecha_incidencia: r.fecha_incidencia,
         descripcion: r.descripcion,
@@ -287,6 +288,9 @@ export async function GET(request: NextRequest) {
       const docArchivos = archivosByDoc[docId] || [];
       const publicUrl = docArchivos.length > 0 ? docArchivos[0].url_archivo : null;
 
+      const impuestos = impuestosByDoc[docId] || [];
+      const retencion = extractRetencionFromImpuestos(impuestos);
+
       return {
         id: doc.id,
         file_hash: doc.file_hash,
@@ -300,18 +304,19 @@ export async function GET(request: NextRequest) {
         observaciones: doc.observaciones,
         datos_extra: doc.datos_extra,
         fecha_creacion: doc.fecha_creacion,
-        id_de_empresa: doc.id_de_empresa,
+        id_de_empresa: doc.id_de_empresa != null ? Number(doc.id_de_empresa) : null,
         is_new: doc.is_new,
         trimestre_cerrado: !!doc.trimestre_cerrado,
         enviado_sii: !!doc.enviado_sii,
         fecha_cierre_trimestre: doc.fecha_cierre_trimestre,
         año: doc.año_trimestre,
         trimestre: doc.num_trimestre,
+        retencion,
         canal_carga: doc['dashboard-correo'],
         is_issued: isIssued,
         url_archivo: publicUrl,
         entidades: entities,
-        impuestos: impuestosByDoc[docId] || [],
+        impuestos,
         lineas_detalle: lineasByDoc[docId] || [],
         archivos: docArchivos,
         incidencias: incidenciasByDoc[docId] || [],

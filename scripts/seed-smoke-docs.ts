@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { prisma } from '../src/lib/prisma';
-import { calcularTrimestreExtendido, obtenerSiguienteTrimestreAbierto } from '../src/lib/trimestre-utils';
+import { parseFechaLocal, resolverTrimestreContableImportacion } from '../src/lib/trimestre-utils';
 import {
   FiscalStatus,
   FISCAL_GUARD_VERSION,
@@ -92,10 +92,8 @@ async function seedOne(row: SmokeRow) {
     return;
   }
 
-  const trimestreDataRaw = calcularTrimestreExtendido(fechaEmision);
-  const trimestreData = await obtenerSiguienteTrimestreAbierto(
-    trimestreDataRaw.año,
-    trimestreDataRaw.trimestre,
+  const trimestreData = await resolverTrimestreContableImportacion(
+    fechaEmision,
     Number(EMPRESA_ID),
     null
   );

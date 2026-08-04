@@ -17,10 +17,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { empresaIds, año, trimestre, status, search } = body;
+    const { empresaIds, año, trimestre, status, search, documentIds } = body;
 
-    console.log('📤 [export-documents] Iniciando exportación:', { empresaIds, año, trimestre, status, search });
+    console.log('📤 [export-documents] Iniciando exportación:', { empresaIds, año, trimestre, status, search, documentIds: documentIds?.length });
 
+    let documentos: RowDataPacket[] = [];
+
+    // Exportación por IDs seleccionados (bulk bar)
+    if (documentIds && Array.isArray(documentIds) && documentIds.length > 0) {
+      const placeholders = documentIds.map(() => '?').join(',');
+      const [rows] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          d.id, d.id_de_empresa, d.tipo_documento, d.numero_documento,
+          d.fecha_emision, d.fecha_vencimiento, d.fecha_creacion,
+          d.importe_total, d.importe_sin_impuestos, d.moneda, d.observaciones,
+          d.año_trimestre, d.num_trimestre, d.trimestre_cerrado, d.datos_extra,
+          EXISTS(SELECT 1 FROM incidencias_documento i WHERE i.documento_id = d.id AND i.validado = 0) AS tiene_incidencia
+        FROM documentos d
+        WHERE d.id IN (${placeholders})
+        ORDER BY d.fecha_emision DESC`,
+        documentIds
+      );
+      documentos = rows;
+    } else {
     // ✅ Query base — solo columnas de la tabla documentos (sin JOINs a tablas encriptadas)
     let query = `
       SELECT 
@@ -92,7 +111,9 @@ export async function POST(request: NextRequest) {
 
     query += ` ORDER BY d.fecha_emision DESC`;
 
-    const [documentos] = await db.query<RowDataPacket[]>(query, params);
+    const [rows] = await db.query<RowDataPacket[]>(query, params);
+    documentos = rows;
+    }
 
     console.log('📊 [export-documents] Documentos encontrados:', documentos.length);
 

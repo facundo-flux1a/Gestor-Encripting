@@ -53,27 +53,20 @@ export function CloseQuarterDialog({
 
   const handleConfirm = async (enviarAlSII: boolean = false) => {
     if (!trimestre) return;
-    
+
     try {
       setIsSubmitting(true);
-      
+
       const empresaId = scope === 'empresa' ? trimestre.empresa_id : null;
       await onConfirm(empresaId, enviarAlSII);
-
-      toast({
-        title: enviarAlSII ? '✅ Trimestre cerrado y enviando al SII' : '✅ Trimestre cerrado',
-        description: enviarAlSII 
-          ? `T${trimestre.trimestre} ${trimestre.año} cerrado. Redirigiendo al panel SII...`
-          : `T${trimestre.trimestre} ${trimestre.año} ha sido cerrado exitosamente.`,
-        className: "bg-gradient-to-br from-green-500 to-emerald-600 text-white",
-      });
-
-      onOpenChange(false);
     } catch (error) {
       console.error('Error al cerrar trimestre:', error);
       toast({
-        title: '❌ Error',
-        description: 'No se pudo cerrar el trimestre. Intenta nuevamente.',
+        title: 'Error',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo cerrar el trimestre. Intenta nuevamente.',
         variant: 'destructive',
       });
     } finally {

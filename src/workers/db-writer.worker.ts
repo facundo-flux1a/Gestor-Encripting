@@ -25,7 +25,7 @@ import { dbWriterQueue, DbWriterJobData, DB_WRITER_QUEUE_NAME } from '@/lib/queu
 import { updateIngestionProgress, updateParentProgress } from '@/lib/ingestion-progress';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
-import { calcularTrimestreExtendido, obtenerSiguienteTrimestreAbierto } from '@/lib/trimestre-utils';
+import { calcularTrimestreExtendido, obtenerPrimerTrimestreAbiertoDelAnio, parseFechaLocal, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
 import { wLog } from '@/lib/worker-logger';
 import {
   FiscalStatus,
@@ -34,7 +34,9 @@ import {
   FISCAL_REVISION_REASONS_KEY,
   FISCAL_STATUS_KEY,
 } from '@/lib/document-fiscal-status';
+import { evaluarFechaContable } from '@/lib/fecha-contable-utils';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
+import { normalizeCIF } from '@/services/ingestion/normalize';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
@@ -99,17 +101,16 @@ export function startDbWriterWorker() {
         let tipoDocumento = rawTipo.toString().toUpperCase();
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
 
-        // VALIDACIÓN FUERTE POR CIF (Ignorando a la IA si el CIF es exacto)
-        const cleanCif = (c: any) => {
-          let cif = (c || '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-          if (cif.startsWith('ES') && cif.length > 9) {
-            cif = cif.slice(2);
-          }
-          return cif;
-        };
+        // Normalización CIF/NIF/NIE (espacios, ES, paréntesis OCR, etc.)
+        const cleanCif = (c: unknown): string => normalizeCIF(c == null ? null : String(c)) ?? '';
         const cifDashboard = cleanCif(ingestion.cif);
         const cifEmisor = cleanCif(aiResult.empresa_emisora?.cif);
         const cifCliente = cleanCif(aiResult.cliente?.cif || aiResult.empresa_receptora?.cif);
+
+        // Persistir CIFs limpios en el payload (evita basura OCR en BD e incidencias)
+        if (aiResult.empresa_emisora && cifEmisor) aiResult.empresa_emisora.cif = cifEmisor;
+        if (aiResult.cliente && cifCliente) aiResult.cliente.cif = cifCliente;
+        if (aiResult.empresa_receptora && cifCliente) aiResult.empresa_receptora.cif = cifCliente;
 
         if (cifDashboard) {
           if (cifEmisor === cifDashboard) {
@@ -118,6 +119,9 @@ export function startDbWriterWorker() {
           } else if (cifCliente === cifDashboard) {
             tipoDocumento = isAbono ? 'ABONO RECIBIDO' : 'FACTURA RECIBIDA';
             wLog('DbWriterWorker', `🔍 Clasificación forzada por CIF: RECIBIDA (${cifDashboard})`);
+          } else if (!tipoDocumento.includes('SIN CONFIRMAR')) {
+            tipoDocumento = `${tipoDocumento} (SIN CONFIRMAR)`;
+            wLog('DbWriterWorker', `⚠️ CIF no coincide con empresa — marcado sin confirmar`);
           }
         }
 
@@ -132,26 +136,50 @@ export function startDbWriterWorker() {
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
         const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
         const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
-        const fechaEmision    = fechaEmisionRaw ? new Date(fechaEmisionRaw) : new Date();
+        const fechaEmision = fechaEmisionRaw ? parseFechaLocal(String(fechaEmisionRaw)) : null;
         const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
-        const fechaVencimiento = fechaVencimientoRaw ? new Date(fechaVencimientoRaw) : null;
+        const fechaVencimiento = fechaVencimientoRaw ? parseFechaLocal(String(fechaVencimientoRaw)) : null;
+
+        // ── Fecha contable (independiente del trimestre asignado) ──
+        const ejercicioActual = new Date().getFullYear();
+        const evalFecha = evaluarFechaContable(fechaEmisionRaw, {
+          ejercicioActual,
+          fechaVencimientoRaw,
+        });
+        if (evalFecha.requiereConfirmacion && !tipoDocumento.includes('SIN CONFIRMAR')) {
+          tipoDocumento = `${tipoDocumento} (SIN CONFIRMAR)`;
+          const logMotivo = evalFecha.motivosIncidencia[0]
+            ?? (evalFecha.fechaAusente ? 'sin fecha contable' : 'fecha contable a revisar');
+          wLog('DbWriterWorker', `📅 ${logMotivo} — requiere confirmación manual`);
+        }
+
         const formaPago       = docInfo.forma_pago || aiResult.forma_pago || '';
         
         const descuentoGlobal = applySign(Number(docInfo.descuento_global ?? aiResult.descuento_global ?? 0));
         const baseNoSujeta    = applySign(Number(docInfo.base_no_sujeta ?? aiResult.base_no_sujeta ?? 0));
 
-        // 3. Trimestre fiscal
-        const trimestreDataRaw = calcularTrimestreExtendido(fechaEmision);
-        
-        console.log(`[DbWriterWorker] 📊 ${fileName} | Trimestre inicial calculado: ${trimestreDataRaw.trimestre}/${trimestreDataRaw.año} (Fecha emisión: ${fechaEmision.toISOString().split('T')[0]})`);
-        
-        // Buscar el trimestre abierto (hasta 10 años adelante)
-        const trimestreData = await obtenerSiguienteTrimestreAbierto(
-          trimestreDataRaw.año,
-          trimestreDataRaw.trimestre,
-          Number(empresaId), // Convertir a number para la query
-          null // No tenemos userId en el worker, pero empresaId es suficiente
-        );
+        // ── Trimestre operativo (dónde inyectar en el gestor; no sustituye validación de fecha) ──
+        const trimestreNatural = fechaEmision ? calcularTrimestreExtendido(fechaEmision) : null;
+        let trimestreData: { año: number; trimestre: number };
+        if (fechaEmision) {
+          console.log(
+            `[DbWriterWorker] 📊 ${fileName} | Trimestre natural (fecha): ${trimestreNatural!.trimestre}/${trimestreNatural!.año} | Fecha: ${fechaEmision.toISOString().split('T')[0]}`
+          );
+          trimestreData = await resolverTrimestreContableImportacion(
+            fechaEmision,
+            Number(empresaId),
+            null
+          );
+        } else {
+          trimestreData = await obtenerPrimerTrimestreAbiertoDelAnio(ejercicioActual, Number(empresaId), null);
+          console.log(`[DbWriterWorker] 📊 ${fileName} | Sin fecha — trimestre operativo: ${trimestreData.trimestre}/${trimestreData.año}`);
+        }
+
+        if (trimestreNatural && (trimestreNatural.año !== trimestreData.año || trimestreNatural.trimestre !== trimestreData.trimestre)) {
+          console.log(
+            `[DbWriterWorker] ↪️ ${fileName} | Trimestre operativo ${trimestreData.trimestre}/${trimestreData.año} (natural ${trimestreNatural.trimestre}/${trimestreNatural.año} no disponible)`
+          );
+        }
 
         console.log(`[DbWriterWorker] 📊 ${fileName} | Base: ${importeSinIva} | Total: ${importeTotal} | Trimestre Asignado: ${trimestreData.trimestre}/${trimestreData.año}`);
 
@@ -169,7 +197,7 @@ export function startDbWriterWorker() {
         
         // Determinar CIF del documento para mostrar en Dashboard
         // Si es emitida o indeterminada, usamos el del cliente/receptor. Si es recibida, el del emisor/proveedor.
-        const cifDocumento = (esEmitida || isSinConfirmar ? receptor.cif : emisor.cif) || '';
+        const cifDocumento = (esEmitida || isSinConfirmar ? cifCliente : cifEmisor) || '';
 
         // =====================================================================
         // TRANSACCIÓN ATÓMICA DE PRISMA
@@ -206,6 +234,12 @@ export function startDbWriterWorker() {
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
                 descuento_global: descuentoGlobal,
                 base_no_sujeta: baseNoSujeta,
+                ...(trimestreNatural
+                  ? {
+                      trimestre_natural_año: trimestreNatural.año,
+                      trimestre_natural_num: trimestreNatural.trimestre,
+                    }
+                  : {}),
                 [FISCAL_STATUS_KEY]: resolvedFiscalStatus,
                 [FISCAL_GUARD_VERSION_KEY]: FISCAL_GUARD_VERSION,
                 ...(revisionReasons.length > 0
@@ -348,18 +382,21 @@ export function startDbWriterWorker() {
             }
           }
 
-          // 10. Incidencia: guards en REVISION y/o incidencia blanda del extractor
+          // 10. Incidencia: guards en REVISION, extractor blando, fecha ausente o ejercicio anterior
           const rawIncidencia = aiResult.incidencia;
           const tieneIncidenciaBlanda =
             rawIncidencia === true || String(rawIncidencia).toUpperCase() === 'TRUE';
           const descIncidencia = (aiResult.descripcion_incidencia || '').toString().trim();
           const enRevision = resolvedFiscalStatus === FiscalStatus.REVISION;
+          const incidenciasFecha = evalFecha.motivosIncidencia;
 
-          if (enRevision || tieneIncidenciaBlanda) {
+          if (enRevision || tieneIncidenciaBlanda || incidenciasFecha.length > 0) {
             const descripcionFinal = enRevision
               ? `REVISION fiscal: ${formatGuardFailures(revisionReasons as any) || descIncidencia || 'fallo de validación dura'}`
-              : descIncidencia ||
-                `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`;
+              : incidenciasFecha.length > 0
+                ? incidenciasFecha.join(' ')
+                : descIncidencia ||
+                  `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`;
 
             await tx.incidencias_documento.create({
               data: {
@@ -378,6 +415,12 @@ export function startDbWriterWorker() {
           maxWait: 5000,
           timeout: 10000,
         });
+
+        if (savedDocumentoId) {
+          import('@/services/health-check-service').then(({ runHealthChecksForDocument }) =>
+            runHealthChecksForDocument(Number(savedDocumentoId)).catch(() => {})
+          );
+        }
 
         // ÉXITO: marcar el hijo como completado (VALIDADO o REVISION — archivo siempre queda)
         await updateIngestionProgress(uploadId, {
@@ -424,7 +467,17 @@ export function startDbWriterWorker() {
           }
 
           // --- Variación de Precios ---
-          if (resolvedFiscalStatus !== FiscalStatus.REVISION && !tieneIncidenciaBlanda && savedDocumentoId) {
+          const tieneIncidenciaBlandaNotif =
+            aiResult.incidencia === true ||
+            String(aiResult.incidencia ?? '').toUpperCase() === 'TRUE';
+
+          if (
+            resolvedFiscalStatus !== FiscalStatus.REVISION &&
+            !tieneIncidenciaBlandaNotif &&
+            !evalFecha.requiereConfirmacion &&
+            fechaEmision &&
+            savedDocumentoId
+          ) {
             await checkAndNotifyPriceVariation(savedDocumentoId, Number(empresaId));
           }
 
