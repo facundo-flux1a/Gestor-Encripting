@@ -42,7 +42,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
     await prisma.health_check_status.createMany({
       data: [{
         documento_id: Number(documentId),
-        empresa_id: doc.id_de_empresa,
+        empresa_id: empresaId,
         verified: false,
         check_type: 'MISMATCH_MATEMATICO',
         motivo: `Descuadre de ${mismatch.toFixed(2)}€ entre importe total y la suma de base + impuestos.`,
@@ -59,7 +59,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
       await prisma.health_check_status.createMany({
         data: [{
           documento_id: Number(documentId),
-          empresa_id: doc.id_de_empresa,
+          empresa_id: empresaId,
           verified: false,
           check_type: 'FECHA_ANOMALA',
           motivo: `Fecha de emisión (${fechaFmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR o factura de otro ejercicio.`,
@@ -84,7 +84,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
     await prisma.health_check_status.createMany({
       data: [{
         documento_id: Number(documentId),
-        empresa_id: doc.id_de_empresa,
+        empresa_id: empresaId,
         verified: false,
         check_type: 'ENTIDAD_DUPLICADA',
         motivo: 'La misma entidad aparece como emisor/proveedor y receptor/cliente.',

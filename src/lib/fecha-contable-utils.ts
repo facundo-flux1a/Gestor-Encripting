@@ -45,7 +45,11 @@ function evaluarFechaIso(
   motivosIncidencia.push(...guardFailures.map((f) => f.message));
 
   const year = parseIsoDateParts(fechaIso)!.y;
-  const esEjercicioAnterior = year < ejercicioActual;
+  // Una factura es "antigua" si han transcurrido más de 12 meses desde su fecha de emisión
+  const emisionDate = new Date(fechaIso + 'T00:00:00Z');
+  const hace12Meses = new Date(now);
+  hace12Meses.setFullYear(hace12Meses.getFullYear() - 1);
+  const esEjercicioAnterior = emisionDate < hace12Meses;
   if (esEjercicioAnterior && guardFailures.length === 0) {
     motivosIncidencia.push(
       `Fecha de emisión antigua (${fechaIso}): ejercicio anterior al contable actual.`

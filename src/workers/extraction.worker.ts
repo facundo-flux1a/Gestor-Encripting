@@ -20,6 +20,7 @@ import { parseLlmResponse, normalizeDocumento, DocumentoExtraido } from '@/servi
 import { analyzeInvoiceDocument, isAzureDiConfigured } from '@/services/ingestion/azure-di';
 import {
   azureDiLooksLikeInvoice,
+  buildAzureDiContext,
   mapAzureDiInvoiceToDocumentShape,
 } from '@/services/ingestion/azure-di-map';
 import { resolveExtractRoute } from '@/services/ingestion/extract-route';
@@ -618,7 +619,20 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
 
       if (isHybrid) {
         wLog('ExtractionWorker', `✅ Azure DI Layout OK. Enviando OCR a LLM (${ingestion.fileName})`);
-        const promptWithOcr = `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
+
+        // ─── MODO HYBRID: OCR + contexto estructurado ────────────────────────────
+        // AZURE_DI_HYBRID_STRUCTURED_CONTEXT=true (default) → inyecta los campos
+        // estructurados de Azure DI como contexto de apoyo para el LLM.
+        // Para volver al comportamiento anterior (solo OCR), pon =false en .env.
+        // ─── VERSIÓN ANTERIOR (solo OCR crudo): ──────────────────────────────────
+        // const promptWithOcr = `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
+        // ─────────────────────────────────────────────────────────────────────────
+        const useStructuredContext = (process.env.AZURE_DI_HYBRID_STRUCTURED_CONTEXT ?? 'true') !== 'false';
+        const azureDiContextBlock = useStructuredContext ? buildAzureDiContext(diResult) : '';
+        const promptWithOcr = azureDiContextBlock
+          ? `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO (fuente principal - texto completo)]:\n${diResult.content || ''}\n\n${azureDiContextBlock}`
+          : `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
+        // ─────────────────────────────────────────────────────────────────────────
 
         await updateIngestionProgress(ingestion.uploadId, {
           status: 'procesando',
@@ -905,10 +919,12 @@ ${failureText || '(sin detalle)'}
 JSON anterior (corregí SOLO lo necesario para pasar esas validaciones; no inventes importes):
 ${JSON.stringify(previousAiResult || {}, null, 2)}
 
-Reglas:
-- Emisor y receptor NUNCA pueden compartir el mismo CIF.
-- Cada cuota de IVA debe ser base × porcentaje (±0,05€).
-- importe_total ≈ base + sum(cuotas) incluyendo retenciones negativas.
+Reglas de Reparación:
+- Vuelve a leer el documento con MÁXIMA ATENCIÓN. Los errores detectados suelen ser errores tipográficos tuyos en la extracción anterior.
+- Emisor y receptor NUNCA pueden compartir el mismo CIF. Revisa bien las identificaciones.
+- NUNCA inventes números (descuentos, bases, totales) para forzar que las fórmulas matemáticas cuadren.
+- Si las validaciones matemáticas fallaron, busca los valores REALES impresos en el documento y corrígelos. 
+- Si los números impresos en el documento REALMENTE no cuadran, extráelos TAL CUAL están impresos, con el error matemático original de la factura.
 - Devolvé un único objeto JSON completo del documento (mismo schema).
 ═══════════════════════════════════════════════════════════════════`;
 

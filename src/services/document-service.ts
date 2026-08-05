@@ -978,47 +978,25 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       // ═══════════════════════════════════════════════════════════
       const lineasExistentes = await tx.lineas_documento.findMany({ where: { documento_id: BigInt(id) }, orderBy: { id: 'asc' } });
       const lineasNuevas = data.lineas || [];
-      const maxLineas = Math.max(lineasExistentes.length, lineasNuevas.length);
 
-      for (let i = 0; i < maxLineas; i++) {
-        const lineaExistente = lineasExistentes[i];
-        const lineaNueva = lineasNuevas[i];
-
-        if (lineaExistente && lineaNueva) {
-          await tx.lineas_documento.update({
-            where: { id: lineaExistente.id },
-            data: {
-              codigo: lineaNueva.codigo || '',
-              descripcion: lineaNueva.descripcion,
-              cantidad: lineaNueva.cantidad,
-              unidad: lineaNueva.unidad,
-              precio_unitario: lineaNueva.precio_unitario,
-              descuento_porcentaje: lineaNueva.descuento_porcentaje,
-              precio_neto: lineaNueva.precio_neto,
-              importe_linea: lineaNueva.importe_linea,
-              datos_extra: lineaNueva.datos_extra || {},
-              id_de_empresa: empresaId ? BigInt(empresaId) : null
-            }
-          });
-        } else if (!lineaExistente && lineaNueva) {
-          await tx.lineas_documento.create({
-            data: {
-              documento_id: BigInt(id),
-              codigo: lineaNueva.codigo || '',
-              descripcion: lineaNueva.descripcion,
-              cantidad: lineaNueva.cantidad,
-              unidad: lineaNueva.unidad,
-              precio_unitario: lineaNueva.precio_unitario,
-              descuento_porcentaje: lineaNueva.descuento_porcentaje,
-              precio_neto: lineaNueva.precio_neto,
-              importe_linea: lineaNueva.importe_linea,
-              datos_extra: lineaNueva.datos_extra || {},
-              id_de_empresa: empresaId ? BigInt(empresaId) : null
-            }
-          });
-        } else if (lineaExistente && !lineaNueva) {
-          await tx.lineas_documento.delete({ where: { id: lineaExistente.id } });
-        }
+      // Batch strategy: delete all + recreate. Avoids N serial UPDATE queries that blow the tx timeout.
+      await tx.lineas_documento.deleteMany({ where: { documento_id: BigInt(id) } });
+      if (lineasNuevas.length > 0) {
+        await tx.lineas_documento.createMany({
+          data: lineasNuevas.map((lineaNueva: any) => ({
+            documento_id: BigInt(id),
+            codigo: lineaNueva.codigo || '',
+            descripcion: lineaNueva.descripcion,
+            cantidad: lineaNueva.cantidad,
+            unidad: lineaNueva.unidad,
+            precio_unitario: lineaNueva.precio_unitario,
+            descuento_porcentaje: lineaNueva.descuento_porcentaje,
+            precio_neto: lineaNueva.precio_neto,
+            importe_linea: lineaNueva.importe_linea,
+            datos_extra: lineaNueva.datos_extra || {},
+            id_de_empresa: empresaId ? BigInt(empresaId) : null
+          }))
+        });
       }
 
       // ═══════════════════════════════════════════════════════════
@@ -1069,8 +1047,8 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       }
 
     }, {
-      maxWait: 5000,
-      timeout: 15000,
+      maxWait: 10000,
+      timeout: 30000,
     });
 
     console.log('🎉 [updateDocument] Transacción completada exitosamente');

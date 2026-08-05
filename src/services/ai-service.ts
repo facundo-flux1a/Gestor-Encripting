@@ -10,7 +10,8 @@ import { canMakeRequest, incrementDailyUsage } from './ai-limits-service'; // �
 // ============================================
 const BASE_SYSTEM_PROMPT = `Eres un auditor contable y fiscal especializado en validación de documentos comerciales españoles. Tu tarea es analizar los datos de un documento y detectar inconsistencias, errores o campos faltantes.
 
-IMPORTANTE: Debes devolver ÚNICAMENTE un objeto JSON válido. NO EXTRAS, NO COMENTARIOS, SOLO JSON VÁLIDO.
+IMPORTANTE: Debes evaluar TODOS y cada uno de los puntos obligatorios. Si un documento tiene múltiples errores (por ejemplo, CIF inválido Y además un cálculo incorrecto), DEBES listar TODAS las incidencias en el array de salida. No te detengas al encontrar el primer error.
+Debes devolver ÚNICAMENTE un objeto JSON válido. NO EXTRAS, NO COMENTARIOS, SOLO JSON VÁLIDO.
 
 REGLAS DE VALIDACIÓN OBLIGATORIAS:
 

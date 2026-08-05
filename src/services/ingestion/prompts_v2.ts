@@ -252,6 +252,11 @@ Ejemplo: 1000 + 210 + 52 = 1262 ✓
 REGLA CRÍTICA:
 DEBES SIEMPRE intentar extraer la información del PROVEEDOR (quien emite/vende) y del CLIENTE (quien recibe/compra) incluyendo sus identificaciones fiscales. Esta información es fundamental para clasificar correctamente facturas y abonos.
 
+**RAZÓN SOCIAL vs MARCA COMERCIAL Y DISTRIBUIDORES:**
+Cuando extraigas el nombre de una empresa (emisor o cliente):
+1. EXTRAE SIEMPRE LA RAZÓN SOCIAL LEGAL (ej: "Empresa Test, S.A.") y NUNCA el nombre comercial o marca, a menos que sea el único nombre disponible. La razón social es la que suele acompañar al CIF/NIF en la letra pequeña.
+2. Si el documento indica "Expedido por", "Distribuido por" o "Operador logístico" junto a otra empresa, IGNORA esa empresa logística. El emisor real es la empresa principal que está facturando (la dueña de la factura).
+
 ⚠️ ATENCIÓN ESPECIAL - FACTURAS ESPAÑOLAS:
 Las facturas españolas tienen un formato particular donde el EMISOR (proveedor) suele aparecer en la CABECERA/MEMBRETE del documento y el CLIENTE (receptor) aparece en un recuadro o sección específica titulada "Cliente", "Datos de facturación", "Facturar a", "A/Att.". NO confundas al emisor con el cliente. La empresa que tiene su logo, nombre y datos en la parte superior del documento ES EL EMISOR. La empresa en el recuadro de destinatario ES EL CLIENTE.
 
@@ -645,7 +650,6 @@ Ejemplo de descripcion_incidencia obligatoria en este caso:
 - CIF/NIF del emisor ausente o no identificable tras búsqueda exhaustiva
 - CIF/NIF del cliente ausente o no identificable tras búsqueda exhaustiva
 - No se puede determinar si el documento es EMITIDO o RECIBIDO
-- Fallo en la validación matemática de totales fiscales (tolerancia ±2€)
 - Tipo de documento indeterminado o ambiguo
 
 ---
@@ -674,6 +678,16 @@ DEBES crear un objeto SEPARADO en totales_por_impuesto para CADA porcentaje de I
 
 Si hay Base 21% → crea objeto con porcentaje: 21 (y así para cada tipo presente).
 NO crees objetos para tipos de IVA que NO aparezcan en el documento.
+
+**BASES Y CUOTAS NEGATIVAS (DEVOLUCIONES/ABONOS) — REGLA CRÍTICA:**
+
+⚠️ TRAMPA FRECUENTE EN FACTURAS CON DEVOLUCIONES: Algunas facturas tienen una sección al pie titulada "RECIBI - CONFORME", "TOTAL IMPORTE EUROS", "ACUSE DE RECIBO" o similar. Esa sección muestra los importes en POSITIVO para que el cliente firme. NO uses esos valores para extraer la base imponible ni la cuota de IVA.
+
+REGLA: Para `totales_por_impuesto`, usa EXCLUSIVAMENTE los valores de la tabla de resumen de IVA que está dentro del cuerpo principal de la factura (normalmente junto a la línea "TOTAL" o "BASE IMPONIBLE"). Si esa tabla muestra `-23,78` como base, extrae `-23,78`. Si la sección "RECIBI - CONFORME" muestra `23,78`, IGNÓRALA para los campos fiscales.
+
+Adicionalmente: si las CANTIDADES en las líneas de producto son negativas (ej: -12 unidades = devolución), los totales de línea y las bases imponibles del desglose de IVA DEBEN ser también negativos.
+
+Si la base imponible o la cuota de IVA aparece con signo negativo en la tabla de IVA del documento, DEBES mantener ese signo negativo. NUNCA lo conviertas a positivo.
 **VALIDACIÓN MATEMÁTICA OBLIGATORIA:**
 importe_sin_iva + suma(IVA) + base_no_sujeta + suma(RECARGO) - suma(RETENCIONES) = importe_total
 En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
@@ -682,6 +696,9 @@ En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
 
 - **base_no_sujeta**: Importes no sujetos a IVA (suplidos, tasas, timbres notariales, etc.) que forman parte del total de la factura pero NO de la base imponible del IVA. Si no hay, pon 0.
 - **descuento_global**: Descuento aplicado al final de la factura sobre la base imponible (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € (positivo). Si el documento indica un porcentaje (ej: 10%), debes calcular el importe en euros equivalente y poner ese valor numérico. Si no hay descuento global, pon 0.
+
+🚨 REGLA ANTI-ALUCINACIÓN (CRÍTICO)
+NUNCA inventes información. NUNCA inventes un "descuento_global", NUNCA "ajustes" las bases imponibles, NUNCA modifiques las cuotas de IVA ni el importe total para forzar que la fórmula matemática cuadre. Si crees que los números impresos en el documento tienen un descuadre matemático, extráelos EXACTAMENTE como están impresos, con sus errores. NO marques incidencia por descuadres matemáticos; el sistema informático se encargará de hacer la validación exacta a posteriori. Tu único trabajo es extraer lo que ves, no hacer que los números cuadren.
 
 🔥 MANEJO DE RETENCIONES (CRÍTICO)
 

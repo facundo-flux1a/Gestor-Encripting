@@ -391,12 +391,28 @@ export function startDbWriterWorker() {
           const incidenciasFecha = evalFecha.motivosIncidencia;
 
           if (enRevision || tieneIncidenciaBlanda || incidenciasFecha.length > 0) {
-            const descripcionFinal = enRevision
-              ? `REVISION fiscal: ${formatGuardFailures(revisionReasons as any) || descIncidencia || 'fallo de validación dura'}`
-              : incidenciasFecha.length > 0
-                ? incidenciasFecha.join(' ')
-                : descIncidencia ||
-                  `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`;
+            // Combinar TODOS los motivos encontrados en lugar de usar prioridad excluyente
+            const motivosParts: string[] = [];
+
+            if (enRevision) {
+              const guardText = formatGuardFailures(revisionReasons as any) || descIncidencia || 'fallo de validación dura';
+              motivosParts.push(`REVISION fiscal: ${guardText}`);
+            }
+
+            if (incidenciasFecha.length > 0) {
+              motivosParts.push(incidenciasFecha.join(' '));
+            }
+
+            if (!enRevision && tieneIncidenciaBlanda && descIncidencia) {
+              motivosParts.push(descIncidencia);
+            } else if (!enRevision && !incidenciasFecha.length) {
+              motivosParts.push(
+                descIncidencia ||
+                `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`
+              );
+            }
+
+            const descripcionFinal = motivosParts.join(' | ');
 
             await tx.incidencias_documento.create({
               data: {

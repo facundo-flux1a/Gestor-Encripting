@@ -202,8 +202,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
   const pathname = usePathname();
   const [user, setUser] = React.useState<User | null>(null);
   const [unreadActivity, setUnreadActivity] = React.useState({ total: 0, hasErrors: false });
-  const [incidentCount, setIncidentCount] = React.useState(0);
-  const [healthCheckCount, setHealthCheckCount] = React.useState(0);
+  const [auditoriaCount, setAuditoriaCount] = React.useState(0);
   const uploadQueue = useUploadQueueOptional();
 
   // ✅ Usar el contexto de compañías
@@ -265,70 +264,47 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
 
 
 
-  // Fetch de incidencias pendientes
-  const fetchIncidentCount = React.useCallback(async () => {
+  // Fetch unified Auditoria count (Incidents + Health Checks)
+  const fetchAuditoriaCount = React.useCallback(async () => {
     try {
       const params = new URLSearchParams();
 
-      // Lógica de preferencias para Incidencias
       const dinamizar = preferences?.dinamizar_incidencias ?? true;
       const mostrarTodoSinSeleccion = preferences?.sin_seleccion_mostrar_todo ?? false;
 
-      // 1. Manejo de sin selección (Prioritario)
       if (selectedCompanyIds.length === 0) {
         if (!mostrarTodoSinSeleccion) {
-          setIncidentCount(0);
+          setAuditoriaCount(0);
           return;
         }
       } else {
-        // 2. Manejo con selección
         if (dinamizar) {
           params.append('empresaId', selectedCompanyIds.join(','));
         }
       }
 
-      const res = await fetch(`/api/incidents/count?${params}`);
+      const res = await fetch(`/api/auditoria/count?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setIncidentCount(data.count || 0);
+        setAuditoriaCount(data.count || 0);
       }
     } catch (err) {
-      console.error('Error fetching incident count:', err);
+      console.error('Error fetching auditoria count:', err);
     }
   }, [selectedCompanyIds, preferences]);
 
-  // Fetch de Health Check count
-  const fetchHealthCheckCount = React.useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      if (selectedCompanyIds.length > 0) {
-        params.append('empresaId', selectedCompanyIds.join(','));
-      }
-      const res = await fetch(`/api/health-check/count?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHealthCheckCount(data.count || 0);
-      }
-    } catch (err) {
-      console.error('Error fetching health check count:', err);
-    }
-  }, [selectedCompanyIds]);
-
   React.useEffect(() => {
     fetchUnreadCount();
-    fetchIncidentCount();
-    fetchHealthCheckCount();
+    fetchAuditoriaCount();
     const interval = setInterval(() => {
       fetchUnreadCount();
-      fetchIncidentCount();
-      fetchHealthCheckCount();
+      fetchAuditoriaCount();
     }, 30000);
 
     const handleGlobalUpdate = () => {
       console.log('🔄 [MainLayout] Refetching counters due to global event');
       fetchUnreadCount();
-      fetchIncidentCount();
-      fetchHealthCheckCount();
+      fetchAuditoriaCount();
     };
 
     window.addEventListener('documentUploaded', handleGlobalUpdate);
@@ -337,7 +313,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
       clearInterval(interval);
       window.removeEventListener('documentUploaded', handleGlobalUpdate);
     };
-  }, [fetchUnreadCount, fetchIncidentCount, fetchHealthCheckCount]);
+  }, [fetchUnreadCount, fetchAuditoriaCount]);
 
   React.useEffect(() => {
     fetchUnreadCount();
@@ -346,9 +322,8 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
-    { href: '/dashboard/health-check', label: 'Salud Documental', icon: ShieldCheck },
+    { href: '/dashboard/auditoria', label: 'Centro de Seguridad', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
-    { href: '/incidents', label: 'Incidencias', icon: AlertCircle },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
     { href: '/docs', label: 'Docs', icon: BookOpen },
@@ -407,19 +382,11 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
                       </span>
                     )}
 
-                    {/* Badge de incidencias pendientes - SOLO EN INCIDENCIAS */}
-                    {item.href === '/incidents' && incidentCount > 0 && (
-                      <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
-                        <AlertCircle className="w-3 h-3" />
-                        {incidentCount}
-                      </span>
-                    )}
-
-                    {/* Badge de Health Check - SOLO EN SALUD DOCUMENTAL */}
-                    {item.href === '/dashboard/health-check' && healthCheckCount > 0 && (
+                    {/* Badge de incidencias/health check unificado - CENTRO DE SEGURIDAD */}
+                    {item.href === '/dashboard/auditoria' && auditoriaCount > 0 && (
                       <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 border border-emerald-500/30 group-data-[collapsible=icon]:hidden animate-in zoom-in duration-300">
                         <ShieldCheck className="w-3 h-3" />
-                        {healthCheckCount}
+                        {auditoriaCount}
                       </span>
                     )}
                   </Link>

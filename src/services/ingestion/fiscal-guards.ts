@@ -44,9 +44,9 @@ export interface FiscalGuardResult {
 }
 
 /** Fallos que un extract-repair dirigido puede corregir (Fase 3). El resto → REVISION. */
+// MATH_BALANCE e IVA_VS_BASE excluidos: el LLM en modo repair tiende a inventar
+// descuentos/ajustes para cuadrar la ecuación. Directo a REVISION es más seguro.
 const REPAIRABLE_CODES: ReadonlySet<FiscalGuardCode> = new Set([
-  'MATH_BALANCE',
-  'IVA_VS_BASE',
   'EMISOR_IGUAL_RECEPTOR',
 ]);
 

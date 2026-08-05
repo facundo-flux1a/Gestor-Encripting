@@ -608,5 +608,87 @@ export function mapAzureDiInvoiceToDocumentShape(
   };
 }
 
+/**
+ * Serializa los campos estructurados que Azure DI extrajo del documento
+ * en un bloque de texto legible para inyectar al prompt del LLM en modo hybrid.
+ *
+ * NO es "verdad irrefutable" — es contexto de apoyo para que el LLM razone
+ * con más información y no tenga que inferir totales desde el OCR crudo.
+ */
+export function buildAzureDiContext(result: AzureDiAnalyzeResult): string {
+  const fields = result.documents?.[0]?.fields;
+  if (!fields) return '';
+
+  const lines: string[] = [];
+
+  // — Identificación del documento —
+  const invoiceId = str(fields.InvoiceId);
+  if (invoiceId) lines.push(`Número de factura detectado: ${invoiceId}`);
+
+  const invoiceDate = str(fields.InvoiceDate);
+  if (invoiceDate) lines.push(`Fecha de emisión detectada: ${invoiceDate}`);
+
+  const dueDate = str(fields.DueDate);
+  if (dueDate) lines.push(`Fecha de vencimiento detectada: ${dueDate}`);
+
+  // — Importes principales —
+  const invoiceTotal = num(fields.InvoiceTotal) || num(fields.AmountDue);
+  if (invoiceTotal > 0) lines.push(`Total de factura detectado: ${invoiceTotal.toFixed(2)} €`);
+
+  const subTotal = num(fields.SubTotal);
+  if (subTotal > 0) lines.push(`Base imponible (SubTotal) detectada: ${subTotal.toFixed(2)} €`);
+
+  const totalTax = num(fields.TotalTax);
+  if (totalTax > 0) lines.push(`Total de impuestos detectado: ${totalTax.toFixed(2)} €`);
+
+  // — Desglose de IVA por tramos —
+  const taxDetails = fields.TaxDetails?.valueArray;
+  if (Array.isArray(taxDetails) && taxDetails.length > 0) {
+    lines.push('Desglose de impuestos detectado:');
+    taxDetails.forEach((item, i) => {
+      const obj = item.valueObject || {};
+      const rate = normalizeTaxRate(num(obj.Rate));
+      const amount = num(obj.Amount);
+      const base = num(obj.NetAmount);
+      const desc = str(obj.Description);
+      const parts = [`  Tramo ${i + 1}:`];
+      if (rate > 0) parts.push(`Tipo ${rate}%`);
+      if (base !== 0) parts.push(`Base ${base.toFixed(2)} €`);
+      if (amount !== 0) parts.push(`Cuota ${amount.toFixed(2)} €`);
+      if (desc) parts.push(`(${desc})`);
+      lines.push(parts.join(' '));
+    });
+  }
+
+  // — Entidades —
+  const vendorName = str(fields.VendorName);
+  const vendorTaxId = cleanCif(str(fields.VendorTaxId));
+  if (vendorName || vendorTaxId) {
+    lines.push(`Emisor/Proveedor detectado: ${[vendorName, vendorTaxId].filter(Boolean).join(' | CIF: ')}`);
+  }
+
+  const customerName = str(fields.CustomerName);
+  const customerTaxId = cleanCif(str(fields.CustomerTaxId));
+  if (customerName || customerTaxId) {
+    lines.push(`Cliente/Receptor detectado: ${[customerName, customerTaxId].filter(Boolean).join(' | CIF: ')}`);
+  }
+
+  // — Moneda —
+  const currency = fields.InvoiceTotal?.valueCurrency?.currencyCode || fields.AmountDue?.valueCurrency?.currencyCode;
+  if (currency && currency !== 'EUR') lines.push(`Moneda detectada: ${currency}`);
+
+  if (lines.length === 0) return '';
+
+  return [
+    '--- CONTEXTO ESTRUCTURADO (preanálisis de Azure Document Intelligence) ---',
+    'Nota: estos valores son un preanálisis automático. Pueden tener errores.',
+    '⚠️ ADVERTENCIA DE SIGNOS: Azure DI a veces elimina los signos negativos de los importes (bases, cuotas). Si un importe parece positivo aquí, VERIFICA en el texto OCR crudo si originalmente tenía un signo negativo (por ejemplo en abonos o devoluciones).',
+    'Úsalos como punto de referencia para contrastar con el texto OCR, no como verdad absoluta.',
+    '',
+    ...lines,
+    '--- FIN CONTEXTO ESTRUCTURADO ---',
+  ].join('\n');
+}
+
 /** @deprecated usar mapAzureDiInvoiceToDocumentShape */
 export const mapAzureDiInvoiceToGeminiShape = mapAzureDiInvoiceToDocumentShape;
