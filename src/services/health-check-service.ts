@@ -41,7 +41,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
   if (mismatch > MATH_TOLERANCE) {
     await prisma.health_check_status.createMany({
       data: [{
-        documento_id: BigInt(documentId),
+        documento_id: Number(documentId),
         empresa_id: doc.id_de_empresa,
         verified: false,
         check_type: 'MISMATCH_MATEMATICO',
@@ -58,7 +58,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
       const fechaFmt = doc.fecha_emision.toLocaleDateString('es-ES');
       await prisma.health_check_status.createMany({
         data: [{
-          documento_id: BigInt(documentId),
+          documento_id: Number(documentId),
           empresa_id: doc.id_de_empresa,
           verified: false,
           check_type: 'FECHA_ANOMALA',
@@ -83,7 +83,7 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
   if ((dupRows as any[]).length > 0) {
     await prisma.health_check_status.createMany({
       data: [{
-        documento_id: BigInt(documentId),
+        documento_id: Number(documentId),
         empresa_id: doc.id_de_empresa,
         verified: false,
         check_type: 'ENTIDAD_DUPLICADA',
