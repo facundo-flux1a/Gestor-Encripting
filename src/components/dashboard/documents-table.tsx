@@ -106,7 +106,9 @@ const getColumns = (
       ingresos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
       gastos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
     };
-  }
+  },
+  yearCriterion: 'contable' | 'trimestre' = 'contable',
+  onToggleYearCriterion?: () => void
 ): ColumnDef<Document>[] => {
   const noColumnFilter = { enableColumnFilter: false, meta: { filterVariant: 'none' as const } };
 
@@ -478,6 +480,115 @@ const getColumns = (
           <div className="text-sm whitespace-nowrap transition-colors duration-300 hover:text-primary">
             <div className="font-medium">{fechaStr}</div>
             <div className="text-xs text-muted-foreground">{horaStr}</div>
+          </div>
+        );
+      },
+      footer: () => null,
+    },
+
+    {
+      id: 'año',
+      accessorFn: (row) => {
+        const fechaAnio = row.fecha_emision ? new Date(row.fecha_emision).getFullYear() : null;
+        const trimAnio = row.año_trimestre || null;
+
+        if (yearCriterion === 'contable') {
+          return fechaAnio ? String(fechaAnio) : (trimAnio ? String(trimAnio) : '');
+        } else {
+          return trimAnio ? String(trimAnio) : (fechaAnio ? String(fechaAnio) : '');
+        }
+      },
+      header: () => (
+        <div className="flex items-center gap-1.5 py-0.5">
+          <span className="font-semibold text-xs text-foreground/90">Año</span>
+          {onToggleYearCriterion && (
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleYearCriterion();
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/60 transition-all duration-200 shadow-2xs hover:scale-105 active:scale-95 cursor-pointer select-none"
+                >
+                  <span className="opacity-70 font-mono text-[9px]">CRITERIO:</span>
+                  <span>{yearCriterion === 'contable' ? 'CONTABLE' : 'GESTIÓN'}</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="text-xs w-72 p-3 space-y-1.5 z-[99999] bg-slate-950/95 text-slate-100 border border-slate-800 backdrop-blur-md shadow-2xl rounded-xl">
+                <div className="font-bold text-primary flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+                  <span className="text-xs font-bold tracking-wide">Criterio de Año</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 shrink-0">
+                    {yearCriterion === 'contable' ? 'Fecha Contable' : 'Trimestre Asignado'}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-300">
+                  {yearCriterion === 'contable'
+                    ? 'Basado en la Fecha Contable del documento (Realidad empírica de emisión).'
+                    : 'Basado en el Trimestre Asignado en el gestor (Contabilidad interna).'}
+                </p>
+                <div className="text-[10px] text-amber-400 font-medium pt-1 flex items-center gap-1 border-t border-slate-800">
+                  <span>💡</span>
+                  <span>Haz clic en la pastilla para cambiar de criterio.</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      ),
+      filterFn: (row, _id, value) => {
+        if (!value) return true;
+        const fechaAnio = row.original.fecha_emision
+          ? String(new Date(row.original.fecha_emision).getFullYear())
+          : null;
+        const trimAnio = row.original.año_trimestre
+          ? String(row.original.año_trimestre)
+          : null;
+
+        const activeYear = yearCriterion === 'contable'
+          ? (fechaAnio || trimAnio)
+          : (trimAnio || fechaAnio);
+
+        return activeYear === String(value);
+      },
+      meta: { filterVariant: 'anio' as const },
+      cell: ({ row }) => {
+        const fechaAnio = row.original.fecha_emision
+          ? new Date(row.original.fecha_emision).getFullYear()
+          : null;
+        const trimAnio = row.original.año_trimestre || null;
+
+        const displayedYear = yearCriterion === 'contable'
+          ? (fechaAnio || trimAnio)
+          : (trimAnio || fechaAnio);
+
+        const hasMismatch = fechaAnio && trimAnio && fechaAnio !== trimAnio;
+
+        if (!displayedYear) {
+          return <span className="text-muted-foreground text-xs">-</span>;
+        }
+
+        return (
+          <div className="text-sm flex items-center gap-1.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap bg-muted/80 text-foreground border border-border/50">
+              {displayedYear}
+            </span>
+            {hasMismatch && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={`/dashboard/health-check?highlight=${row.original.id_documento}`}>
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 cursor-pointer" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs max-w-[240px] p-2">
+                  <div className="font-semibold text-amber-400 mb-1">Año Desajustado</div>
+                  <div>📅 Fecha Contable: <strong>{fechaAnio}</strong></div>
+                  <div>🏢 Trimestre Asignado: <strong>{trimAnio}</strong></div>
+                  <div className="mt-1 text-[10px] opacity-75">Reasignado a trimestre operativo abierto</div>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
       },
@@ -1461,6 +1572,12 @@ export function DocumentsTable({
 
 
 
+  const [yearCriterion, setYearCriterion] = useState<'contable' | 'trimestre'>('contable');
+
+  const handleToggleYearCriterion = useCallback(() => {
+    setYearCriterion((prev) => (prev === 'contable' ? 'trimestre' : 'contable'));
+  }, []);
+
   const columns = useMemo(() => {
     const cols = getColumns(
       handleUpdate as any,
@@ -1475,7 +1592,9 @@ export function DocumentsTable({
       duplicates,
       customTypes,
       onMove,
-      footerValues
+      footerValues,
+      yearCriterion,
+      handleToggleYearCriterion
     );
     // 🔧 FIX Z-INDEX: Ajustar columna de acciones
     if (cols.length > 0 && cols[0].id === 'actions') {
@@ -1487,7 +1606,7 @@ export function DocumentsTable({
       );
     }
     return cols;
-  }, [handleUpdate, showConfirmButton, duplicates]);
+  }, [handleUpdate, showConfirmButton, duplicates, yearCriterion, handleToggleYearCriterion]);
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
   const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;
@@ -1512,32 +1631,6 @@ export function DocumentsTable({
           </div>
 
           <div className="flex items-center gap-2">
-          {/* TOGGLE LINEAS/TABLA — disponible si se necesita en el futuro
-            <div className="inline-flex items-center rounded-md border bg-muted/40 p-0.5">
-              <Button
-                type="button"
-                variant={viewMode === 'stacked' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 px-2 gap-1.5"
-                onClick={() => setViewMode('stacked')}
-                title="Vista en 2–3 líneas"
-              >
-                <Rows3 className="h-3.5 w-3.5" />
-                <span className="text-xs hidden sm:inline">Líneas</span>
-              </Button>
-              <Button
-                type="button"
-                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 px-2 gap-1.5"
-                onClick={() => setViewMode('table')}
-                title="Vista tabla"
-              >
-                <Table2 className="h-3.5 w-3.5" />
-                <span className="text-xs hidden sm:inline">Tabla</span>
-              </Button>
-            </div>
-          */}
             <CleanDuplicatesButton
               empresaId={selectedCompanyIds[0] || null}
               onComplete={() => {

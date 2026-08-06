@@ -338,6 +338,59 @@ export function TrimestreFilter<TData>({
   );
 }
 
+/** Select de Año */
+export function AnioFilter<TData>({
+  column,
+  table,
+}: {
+  column: Column<TData, unknown>;
+  table: Table<TData>;
+}) {
+  const rowCount = table.getPreFilteredRowModel().rows.length;
+  const current = (column.getFilterValue() as string) ?? '';
+
+  const options = useMemo(() => {
+    const yearsSet = new Set<string>();
+    table.getPreFilteredRowModel().rows.forEach((row: any) => {
+      const fechaAnio = row.original?.fecha_emision ? new Date(row.original.fecha_emision).getFullYear() : null;
+      const trimAnio = row.original?.año_trimestre;
+      if (fechaAnio) yearsSet.add(String(fechaAnio));
+      if (trimAnio) yearsSet.add(String(trimAnio));
+    });
+
+    return Array.from(yearsSet)
+      .sort((a, b) => b.localeCompare(a))
+      .map((y) => ({ value: y, label: y }));
+  }, [table, rowCount]);
+
+  return (
+    <div className="w-full min-w-0">
+      <Select
+        value={current || '__all__'}
+        onValueChange={(v) => column.setFilterValue(v === '__all__' ? undefined : v)}
+      >
+        <SelectTrigger className={filterSelectTriggerClass}>
+          <SelectValue placeholder="Año" />
+        </SelectTrigger>
+        <SelectContent className={filterSelectContentClass}>
+          <SelectItem value="__all__" className="rounded-lg transition-colors duration-200">
+            Todos
+          </SelectItem>
+          {options.map((opt) => (
+            <SelectItem
+              key={opt.value}
+              value={opt.value}
+              className="rounded-lg transition-colors duration-200"
+            >
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function FacetedColumnFilter<TData>({
   column,
   table,

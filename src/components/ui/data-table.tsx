@@ -67,6 +67,7 @@ import { ExportButton } from '@/components/dashboard/export-button';
 import {
   TextColumnFilter,
   TrimestreFilter,
+  AnioFilter,
   ClienteFilter,
   ProveedorFilter,
   FilterPlaceholder,
@@ -111,6 +112,7 @@ function Filter<TData, TValue>({
   const meta = column.columnDef.meta as {
     filterVariant?:
       | 'trimestre'
+      | 'anio'
       | 'none'
       | 'text'
       | 'faceted-cliente'
@@ -152,6 +154,10 @@ function Filter<TData, TValue>({
 
   if (meta?.filterVariant === 'trimestre' || column.id === 'trimestre') {
     return <TrimestreFilter column={column} table={table} />;
+  }
+
+  if (meta?.filterVariant === 'anio' || column.id === 'año') {
+    return <AnioFilter column={column} table={table} />;
   }
 
   const columnFilterValue = column.getFilterValue()

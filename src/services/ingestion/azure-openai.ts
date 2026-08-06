@@ -224,3 +224,69 @@ export function parseLlmJson(text: string): any {
   }
   return parsed;
 }
+
+/**
+ * Llama al LLM con múltiples imágenes PNG como contexto visual.
+ * Usado como fallback de visión cuando el OCR produce resultados poco confiables.
+ * El prompt puede incluir el texto OCR ya extraído como contexto complementario.
+ */
+export async function callAzureOpenAiChatWithImages(opts: {
+  prompt: string;
+  images: Buffer[];
+  json?: boolean;
+  maxCompletionTokens?: number;
+}): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
+  const key = requireEnv('AZURE_OPENAI_API_KEY');
+  const deployment = requireEnv('AZURE_OPENAI_DEPLOYMENT');
+  const url = chatUrl();
+
+  const imageParts = opts.images.map((img) => ({
+    type: 'image_url',
+    image_url: { url: `data:image/png;base64,${img.toString('base64')}` },
+  }));
+
+  const content = [
+    { type: 'text', text: opts.prompt },
+    ...imageParts,
+  ];
+
+  const body: Record<string, unknown> = {
+    model: deployment,
+    messages: [{ role: 'user', content }],
+    max_completion_tokens: opts.maxCompletionTokens ?? 16384,
+  };
+
+  if (opts.json !== false) {
+    body.response_format = { type: 'json_object' };
+  }
+
+  console.log(`[AzureOpenAI] 🖼️  POST vision deployment=${deployment} images=${opts.images.length}`);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'api-key': key },
+    body: JSON.stringify(body),
+  });
+
+  const raw = await res.text();
+  if (!res.ok) {
+    console.error(`[AzureOpenAI] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
+    const err: any = new Error(`Azure OpenAI vision ${res.status}: ${raw.slice(0, 200)}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Azure OpenAI vision: respuesta no JSON: ${raw.slice(0, 200)}`);
+  }
+
+  const text = parsed.choices?.[0]?.message?.content || '';
+  const usage = parsed.usage;
+  console.log(`[AzureOpenAI] 📬 Vision OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`);
+
+  return { text, usage };
+}
+

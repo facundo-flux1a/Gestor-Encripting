@@ -32,6 +32,7 @@ import {
 } from '@/services/ingestion/llm-metrics';
 import {
   callAzureOpenAiChat,
+  callAzureOpenAiChatWithImages,
   assertAzureOpenAiConfigured,
   parseLlmJson,
 } from '@/services/ingestion/azure-openai';
@@ -352,9 +353,20 @@ async function callLlm(
 
     await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
 
-    console.log(`[AzureOpenAI] 📝 Texto RAW (primeros 500 chars):\n${text.substring(0, 500)}`);
+    // LOG COMPLETO para debugging (hasta 8000 chars — ver worker-logs en el frontend)
+    const logChunks = Math.ceil(text.length / 4000);
+    if (logChunks <= 1) {
+      wLog('LLM-RAW', `📝 [${callType}] Respuesta completa (${text.length} chars):\n${text}`, 'info');
+    } else {
+      for (let i = 0; i < Math.min(logChunks, 2); i++) {
+        wLog('LLM-RAW', `📝 [${callType}] Parte ${i + 1}/${logChunks} (${text.length} chars total):\n${text.substring(i * 4000, (i + 1) * 4000)}`, 'info');
+      }
+      if (logChunks > 2) {
+        wLog('LLM-RAW', `📝 [${callType}] ⚠️ Respuesta truncada — solo se muestran 8000 de ${text.length} chars`, 'warn');
+      }
+    }
     const parsed = parseLlmJson(text);
-    console.log(`[AzureOpenAI] ✅ JSON parseado correctamente`);
+    wLog('LLM-RAW', `✅ [${callType}] JSON parseado OK. Tokens usados: ${usage?.total_tokens ?? '?'} (prompt: ${usage?.prompt_tokens ?? '?'}, completion: ${usage?.completion_tokens ?? '?'})`, 'success');
     return parsed;
   } catch (e: any) {
     const status = e?.status || e?.statusCode;
@@ -606,6 +618,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
 
   let rawParsed: DocumentoExtraido | Record<string, unknown>;
   let usedExtractor: 'azure-di' | 'azure-di-hybrid' | 'azure-openai' = 'azure-openai';
+  let ocrText = ''; // disponible para el fallback de visión en todos los paths
 
   if (canUseAzureDi) {
     try {
@@ -629,10 +642,22 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
         // ─────────────────────────────────────────────────────────────────────────
         const useStructuredContext = (process.env.AZURE_DI_HYBRID_STRUCTURED_CONTEXT ?? 'true') !== 'false';
         const azureDiContextBlock = useStructuredContext ? buildAzureDiContext(diResult) : '';
+        ocrText = diResult.content || '';
+
         const promptWithOcr = azureDiContextBlock
-          ? `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO (fuente principal - texto completo)]:\n${diResult.content || ''}\n\n${azureDiContextBlock}`
-          : `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content || ''}`;
-        // ─────────────────────────────────────────────────────────────────────────
+          ? `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO (fuente principal - texto completo)]:\n${ocrText}\n\n${azureDiContextBlock}`
+          : `${prompt}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${ocrText}`;
+
+        // LOG: negativos en el prompt antes de mandarlo al LLM
+        const negativosEnPrompt = (promptWithOcr.match(/-\d[\d.,]*/g) || []);
+        wLog('PreLLM-Negativos', `🔍 Valores negativos detectados en el prompt (${negativosEnPrompt.length} total):\n${[...new Set(negativosEnPrompt)].slice(0, 30).join('  |  ')}`, 'info');
+
+        // LOG: OCR crudo que recibe el LLM
+        wLog('AzureDI-OCR', `📄 OCR crudo (${ocrText.length} chars, ${ingestion.fileName}):\n${ocrText.substring(0, 3000)}${ocrText.length > 3000 ? `\n...[ +${ocrText.length - 3000} chars más ]` : ''}`, 'info');
+        if (azureDiContextBlock) {
+          wLog('AzureDI-Context', `🔢 Contexto estructurado Azure DI que va al LLM:\n${azureDiContextBlock}`, 'info');
+        }
+
 
         await updateIngestionProgress(ingestion.uploadId, {
           status: 'procesando',
@@ -771,30 +796,178 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
   const normalized = normalizeDocumento(rawParsed);
   console.log(`[ExtractionWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
 
+  // LOG: resultado normalizado antes de los guards
+  wLog('Normalize', `🗂️ Resultado normalizado (${ingestion.fileName}):\n` +
+    `  tipo_doc: ${(normalized as any).tipo_documento}\n` +
+    `  importe_total: ${(normalized as any).importe_total ?? (normalized as any).documento?.importe_total}\n` +
+    `  importe_sin_iva: ${(normalized as any).importe_sin_iva ?? (normalized as any).documento?.importe_sin_iva}\n` +
+    `  impuestos: ${JSON.stringify((normalized as any).totales_por_impuesto ?? [])}\n` +
+    `  emisor_cif: ${(normalized as any).empresa_emisora?.cif} | cliente_cif: ${(normalized as any).cliente?.cif}\n` +
+    `  incidencia: ${(normalized as any).incidencia} — ${(normalized as any).descripcion_incidencia ?? ''}`, 'info');
+
   await enqueueAfterFiscalGuards({
     job,
     ingestion: { ...ingestion, publicUrl: fileUrlForDb },
     normalized,
     pageStart,
     pageEnd,
+    fileBuffer: ingestion.mimeType === 'application/pdf' ? fileBuffer : undefined,
+    ocrText: ocrText,
   });
 }
 
+/** Tipos de incidencia que activan el fallback de visión. */
+const VISION_TRIGGER_TYPES = ['datos_fiscales_ilegibles', 'total_no_localizado', 'error_cuadre', 'cif_no_encontrado', 'otros'];
+
 /**
- * Tras normalize: si guards OK → db-writer VALIDADO.
- * Si fallan y quedan repairs → extract-repair.
- * Si se agotaron repairs → db-writer REVISION (archivo queda, fuera de agregados).
+ * Convierte el PDF a imágenes PNG y llama al LLM con visión,
+ * usando el texto OCR previo como contexto complementario.
+ * Retorna DocumentoExtraido normalizado, o null si falla.
  */
+async function doVisionFallback(params: {
+  fileBuffer: Buffer;
+  ocrText: string;
+  firstResult: DocumentoExtraido;
+  prompt: string;
+  uploadId: string;
+  parentUploadId?: string;
+}): Promise<DocumentoExtraido | null> {
+  const { fileBuffer, ocrText, firstResult, prompt, uploadId } = params;
+  try {
+    wLog('VisionFallback', `🖼️  [1/5] Iniciando fallback visual\n  uploadId=${uploadId}\n  PDF size=${fileBuffer.length} bytes\n  OCR length=${ocrText.length} chars\n  Primer resultado → total=${(firstResult as any).importe_total ?? 'N/A'} | base=${(firstResult as any).importe_sin_iva ?? 'N/A'}\n  tipos_incidencia=${JSON.stringify((firstResult as any).tipos_incidencia ?? [])}`, 'info');
+
+    // [2/5] Intentar conversión PDF → imágenes (requiere pdf-img-convert + canvas nativo)
+    let imageBuffers: Buffer[] = [];
+    try {
+      wLog('VisionFallback', '🔄 [2/5] Intentando convertir PDF a imágenes (pdf-img-convert)...', 'info');
+      // @ts-ignore
+      const { convert } = await import('pdf-img-convert');
+      const rawPages = await convert(new Uint8Array(fileBuffer), { width: 1200 });
+      imageBuffers = rawPages.map((p: any) => Buffer.isBuffer(p) ? p : Buffer.from(p as Uint8Array));
+      wLog('VisionFallback', `✅ [2/5] PDF convertido: ${imageBuffers.length} página(s) → ${imageBuffers.map((b, i) => `pág${i+1}:${b.length}b`).join(', ')}`, 'info');
+    } catch (convErr: any) {
+      wLog('VisionFallback', `⚠️  [2/5] pdf-img-convert no disponible (${convErr?.message ?? convErr}) → usando PDF nativo`, 'warn');
+    }
+
+    // [3/5] Construir prompt de visión con contexto OCR
+    const ocrSummary = ocrText.substring(0, 6000) + (ocrText.length > 6000 ? `\n...[+${ocrText.length - 6000} chars truncados]` : '');
+    const visionPrompt = `${prompt}
+
+═══════════════════════════════════════════════════════════════════
+FALLBACK DE VISIÓN — VERIFICACIÓN CON DOCUMENTO ORIGINAL
+El OCR extrajo este documento pero el sistema detectó problemas de legibilidad
+(tabla fiscal ambigua, total no localizado, o cuadre incorrecto).
+
+USÁ EL DOCUMENTO adjunto para verificar y corregir la extracción.
+El OCR es orientativo; si hay contradicción, prevalece lo que VES en el documento.
+
+Lo que extrajo el OCR en el intento anterior:
+- importe_total: ${(firstResult as any).importe_total ?? (firstResult as any).documento?.importe_total ?? 'no extraído'}
+- importe_sin_iva: ${(firstResult as any).importe_sin_iva ?? (firstResult as any).documento?.importe_sin_iva ?? 'no extraído'}
+- tipos_incidencia: ${JSON.stringify((firstResult as any).tipos_incidencia ?? [])}
+
+[TEXTO OCR DEL DOCUMENTO (orientativo)]:
+${ocrSummary}
+═══════════════════════════════════════════════════════════════════`;
+
+    wLog('VisionFallback', `📝 [3/5] Prompt de visión construido (${visionPrompt.length} chars | modo=${imageBuffers.length > 0 ? 'imágenes' : 'PDF nativo'})`, 'info');
+
+    // [4/5] Llamar al LLM con visión
+    await waitForTokenBudget(uploadId, params.parentUploadId);
+
+    let text: string;
+    let usage: any;
+
+    if (imageBuffers.length > 0) {
+      wLog('VisionFallback', `🚀 [4/5] Enviando ${imageBuffers.length} imagen(es) PNG al LLM...`, 'info');
+      ({ text, usage } = await callAzureOpenAiChatWithImages({ prompt: visionPrompt, images: imageBuffers, json: true }));
+    } else {
+      wLog('VisionFallback', `🚀 [4/5] Enviando PDF nativo al LLM (${fileBuffer.length} bytes)...`, 'info');
+      ({ text, usage } = await callAzureOpenAiChat({ prompt: visionPrompt, fileBuffer, mimeType: 'application/pdf', json: true }));
+    }
+
+    const totalTokens = usage?.total_tokens || 0;
+    if (totalTokens > 0) await recordTokenUsage(totalTokens);
+    wLog('VisionFallback', `✅ [4/5] LLM respondió | tokens=${totalTokens} (prompt=${usage?.prompt_tokens ?? '?'} + completion=${usage?.completion_tokens ?? '?'}) | chars=${text.length}\nRespuesta:\n${text.substring(0, 6000)}${text.length > 6000 ? `\n...[+${text.length - 6000} chars]` : ''}`, 'info');
+
+    // [5/5] Parsear y normalizar resultado visual
+    const rawParsed = parseLlmResponse(text);
+    const visionNormalized = normalizeDocumento(rawParsed);
+    wLog('VisionFallback', `🏁 [5/5] Resultado visual normalizado:\n  importe_total=${(visionNormalized as any).importe_total ?? 'N/A'}\n  importe_sin_iva=${(visionNormalized as any).importe_sin_iva ?? 'N/A'}\n  impuestos=${JSON.stringify((visionNormalized as any).totales_por_impuesto ?? [])}\n  incidencia=${(visionNormalized as any).incidencia} | tipos=${JSON.stringify((visionNormalized as any).tipos_incidencia ?? [])}`, 'info');
+
+    return visionNormalized;
+  } catch (err: any) {
+    wLog('VisionFallback', `❌ Error en fallback visual: ${err?.message ?? err}`, 'error');
+    return null;
+  }
+}
+
+
+
+
 async function enqueueAfterFiscalGuards(params: {
   job: Job<ExtractionJobData>;
   ingestion: ExtractionJobData['ingestion'];
   normalized: DocumentoExtraido;
   pageStart?: number;
   pageEnd?: number;
+  fileBuffer?: Buffer;
+  ocrText?: string;
+  visionDone?: boolean;
 }) {
-  const { job, ingestion, normalized, pageStart, pageEnd } = params;
+  const { job, ingestion, normalized, pageStart, pageEnd, fileBuffer, ocrText, visionDone } = params;
   const repairAttempt = job.data.repairAttempt || 0;
   const guard = runFiscalGuards(normalized, { empresaCif: ingestion.cif });
+
+  // LOG: resultado de fiscal guards siempre (tanto OK como fallo)
+  if (guard.ok) {
+    wLog('FiscalGuard', `✅ Guards OK (${ingestion.fileName}) — extractor: ${(normalized as any)._extractor ?? 'llm'} | total: ${(normalized as any).importe_total ?? (normalized as any).documento?.importe_total} | base: ${(normalized as any).importe_sin_iva ?? (normalized as any).documento?.importe_sin_iva}`, 'success');
+  } else {
+    wLog('FiscalGuard', `⚠️ Guards FALLARON (${ingestion.fileName}) [intento ${repairAttempt}]:\n${guard.failures.map(f => `  [${f.code}] ${f.message}${f.details ? ' → ' + JSON.stringify(f.details) : ''}`).join('\n')}`, 'warn');
+  }
+
+  // ── Verificar si se necesita fallback de visión ──────────────────────────────
+  const tiposIncidencia = ((normalized as any).tipos_incidencia as string[]) || [];
+  const visionTriggeredByIncidencia = tiposIncidencia.some((t) => VISION_TRIGGER_TYPES.includes(t));
+  const needsVision = !visionDone && fileBuffer && ocrText && (visionTriggeredByIncidencia || !guard.ok);
+
+  if (needsVision) {
+    wLog('VisionFallback', `🔀 Trigger visión: guard=${guard.ok ? 'OK' : 'FAIL'} | tipos=[${tiposIncidencia.join(',')}]`, 'info');
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: 'Verificando con imagen del documento',
+      progress: 72,
+      mensaje: 'Enviando captura para aumentar fiabilidad...',
+    });
+
+    const recargo = ingestion.recargo === true ? 'true' : 'false';
+    const basePrompt = PROMPT_EXTRACTOR_FACTURABLE
+      .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || '')
+      .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || '')
+      .replace(/\{\{RECARGO_EMPRESA\}\}/g, recargo);
+
+    const visionResult = await doVisionFallback({
+      fileBuffer,
+      ocrText,
+      firstResult: normalized,
+      prompt: basePrompt,
+      uploadId: ingestion.uploadId,
+      parentUploadId: ingestion.parentUploadId,
+    });
+
+    if (visionResult) {
+      await updateIngestionProgress(ingestion.uploadId, {
+        status: 'procesando',
+        step: 'Validación visual completada',
+        progress: 85,
+        mensaje: 'Extracción verificada con imagen. Validando...',
+      });
+      // Re-ejecutar guards con el resultado de visión (visionDone=true previene recursión)
+      return enqueueAfterFiscalGuards({ job, ingestion, normalized: visionResult, pageStart, pageEnd, visionDone: true });
+    }
+    // Si el fallback visual falló, continuar con el resultado original
+    wLog('VisionFallback', '⚠️  Fallback visual falló, continuando con resultado OCR original', 'warn');
+  }
 
   if (guard.ok) {
     await dbWriterQueue.add(
@@ -814,7 +987,7 @@ async function enqueueAfterFiscalGuards(params: {
       status: 'procesando',
       step: 'Normalizado y validado',
       progress: 80,
-      mensaje: 'Guards fiscales OK. Guardando en base de datos...',
+      mensaje: visionDone ? 'Extracción verificada con imagen. Guardando...' : 'Guards fiscales OK. Guardando en base de datos...',
     });
     return;
   }

@@ -652,6 +652,20 @@ Ejemplo de descripcion_incidencia obligatoria en este caso:
 - No se puede determinar si el documento es EMITIDO o RECIBIDO
 - Tipo de documento indeterminado o ambiguo
 
+CAMPO tipos_incidencia — OBLIGATORIO cuando incidencia: true:
+Devuelve un array con los códigos que apliquen (pueden ser varios a la vez):
+  "fecha_anomala"              → la fecha de emisión es anterior a 2023 o futura
+  "cif_no_encontrado"          → no se pudo identificar el CIF del emisor o del cliente
+  "datos_fiscales_ilegibles"   → la tabla de IVA/totales es ambigua o ilegible en el OCR
+  "total_no_localizado"        → el importe_total no se pudo leer directamente del documento; se estimó desde las líneas
+  "entidad_no_reconocida"      → el emisor o cliente no coincide con las entidades registradas en el sistema
+  "error_cuadre"               → los valores extraídos no cuadran matemáticamente (base + IVA ≠ total)
+  "otros"                      → cualquier otra incidencia no cubierta por los anteriores
+
+Si incidencia: false → tipos_incidencia: []
+Si hay varios problemas → incluye todos los códigos que apliquen.
+Ejemplo: ["fecha_anomala", "datos_fiscales_ilegibles"]
+
 ---
 
 REGLAS GENERALES DE EXTRACCIÓN
@@ -681,13 +695,33 @@ NO crees objetos para tipos de IVA que NO aparezcan en el documento.
 
 **BASES Y CUOTAS NEGATIVAS (DEVOLUCIONES/ABONOS) — REGLA CRÍTICA:**
 
-⚠️ TRAMPA FRECUENTE EN FACTURAS CON DEVOLUCIONES: Algunas facturas tienen una sección al pie titulada "RECIBI - CONFORME", "TOTAL IMPORTE EUROS", "ACUSE DE RECIBO" o similar. Esa sección muestra los importes en POSITIVO para que el cliente firme. NO uses esos valores para extraer la base imponible ni la cuota de IVA.
+⚠️ TRAMPA FRECUENTE EN FACTURAS CON DEVOLUCIONES: Algunas facturas tienen una sección al pie titulada "RECIBI - CONFORME", "TOTAL IMPORTE EUROS", "ACUSE DE RECIBO" o similar. DEBES distinguir entre dos casos:
 
-REGLA: Para `totales_por_impuesto`, usa EXCLUSIVAMENTE los valores de la tabla de resumen de IVA que está dentro del cuerpo principal de la factura (normalmente junto a la línea "TOTAL" o "BASE IMPONIBLE"). Si esa tabla muestra `-23,78` como base, extrae `-23,78`. Si la sección "RECIBI - CONFORME" muestra `23,78`, IGNÓRALA para los campos fiscales.
+CASO A — Página intermedia (hay "SUMA Y SIGUE", "CONTINÚA", "SIGUE" o similar en esa sección):
+  Esa sección muestra sub-totales parciales de ESA página, NO el total de la factura completa.
+  IGNORA esos valores para importe_total, importe_sin_iva y totales_por_impuesto.
+  Continúa buscando en las demás páginas el resumen fiscal definitivo.
+
+CASO B — Página de cierre/resumen (hay "TOTAL IMPORTE EUROS", "TOTAL FACTURA" o similar con un único importe final):
+  Esa sección SÍ contiene el total definitivo de la factura. ÚSALA para importe_total.
+  La tabla de IVA más cercana a ese total (con columnas BASE IMP., I.V.A., IMPORTE) es la tabla fiscal definitiva. USA esos valores para importe_sin_iva y totales_por_impuesto.
+  IMPORTANTE: en facturas multipágina con páginas en orden invertido, la página 1 del PDF puede ser la página de resumen final. No descartes los totales de página 1 por aparecer primero.
+
+REGLA para \`totales_por_impuesto\`: usa la tabla de desglose fiscal de la página de cierre. Si esa tabla muestra \`-23,78\` como base, extrae \`-23,78\`. Si una sección "SUMA Y SIGUE" muestra \`23,78\`, IGNÓRALA para los campos fiscales.
 
 Adicionalmente: si las CANTIDADES en las líneas de producto son negativas (ej: -12 unidades = devolución), los totales de línea y las bases imponibles del desglose de IVA DEBEN ser también negativos.
 
 Si la base imponible o la cuota de IVA aparece con signo negativo en la tabla de IVA del documento, DEBES mantener ese signo negativo. NUNCA lo conviertas a positivo.
+
+⚠️ DEDUCCIÓN MATEMÁTICA DE SIGNOS NEGATIVOS EN TABLAS DE IVA (CRÍTICO):
+1. Si la suma de las bases + cuotas de IVA en positivo NO coincide con \`importe_total\`, pero al aplicar signo NEGATIVO a la base/cuota de un tramo de devolución el resultado coincide EXACTAMENTE con \`importe_total\` (ej: 1288,28 - 28,75 = 1259,53), DEBES extraer ese tramo de IVA con valores NEGATIVOS (ej: \`base_imponible: -23.76\`, \`cuota_iva: -4.99\`, \`total_con_iva: -28.75\`).
+2. El \`importe_sin_iva\` debe ser la SUMA ALGEBRAICA de todas las bases exponiendo el valor neto real (ej: 1171,16 - 23,76 = 1147,40).
+3. 🚨 REGISTRO DE INCIDENCIA OBLIGATORIO: Cuando apliques esta auto-deducción matemática de signo negativo, DEBES establecer \`incidencia: true\`, agregar \`"error_cuadre"\` en el array \`tipos_incidencia\`, y detallar en \`descripcion_incidencia\`: "Se ha deducido matemáticamente el signo negativo en el desglose de IVA de devoluciones ya que de esa forma cuadraba exactamente con el importe presentado en el documento. Verificar manualmente."
+
+⚠️ REGLA ALGEBRAICA DE TRAMOS DE IVA (CRÍTICO):
+Cuando los totales_por_impuesto no son legibles directamente del documento y los calculas a partir de las líneas de detalle, la base_imponible de cada tramo es la SUMA ALGEBRAICA de los importe_linea de todas las líneas con ese % de IVA — respetando signos positivos y negativos.
+Ejemplo: si tienes líneas con IVA 21% con importes [+47,00, +27,00, -23,78, -23,78, -23,78], la base_imponible al 21% = 47,00 + 27,00 - 23,78 - 23,78 - 23,78 = 2,66 (NO 168,34).
+Las líneas de devolución (importe_linea negativo) RESTAN de la base de su tramo. Nunca las conviertas a positivo para agregarlas.
 **VALIDACIÓN MATEMÁTICA OBLIGATORIA:**
 importe_sin_iva + suma(IVA) + base_no_sujeta + suma(RECARGO) - suma(RETENCIONES) = importe_total
 En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
@@ -698,7 +732,7 @@ En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
 - **descuento_global**: Descuento aplicado al final de la factura sobre la base imponible (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € (positivo). Si el documento indica un porcentaje (ej: 10%), debes calcular el importe en euros equivalente y poner ese valor numérico. Si no hay descuento global, pon 0.
 
 🚨 REGLA ANTI-ALUCINACIÓN (CRÍTICO)
-NUNCA inventes información. NUNCA inventes un "descuento_global", NUNCA "ajustes" las bases imponibles, NUNCA modifiques las cuotas de IVA ni el importe total para forzar que la fórmula matemática cuadre. Si crees que los números impresos en el documento tienen un descuadre matemático, extráelos EXACTAMENTE como están impresos, con sus errores. NO marques incidencia por descuadres matemáticos; el sistema informático se encargará de hacer la validación exacta a posteriori. Tu único trabajo es extraer lo que ves, no hacer que los números cuadren.
+NUNCA inventes información. NUNCA inventes un "descuento_global". Salvo por la deducción matemática de signos negativos en devoluciones (marcando siempre la correspondiente incidencia), extrae respetando lo impreso en el documento. Tu trabajo es extraer fielmente y registrar la incidencia si aplicaste deducción de signo.
 
 🔥 MANEJO DE RETENCIONES (CRÍTICO)
 
@@ -763,6 +797,7 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
   "subcategoria": "",
   "incidencia": false,
   "descripcion_incidencia": "",
+  "tipos_incidencia": [],
   "empresa_emisora": {
     "nombre": "",
     "direccion": "",
@@ -847,6 +882,7 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
 □ ¿Si ninguna entidad coincidió con el dashboard (ni por CIF ni por nombre), marqué incidencia: true Y rellené descripcion_incidencia con el motivo?
 □ ¿Me aseguré de NO marcar incidencia: true por datos secundarios faltantes (teléfono, email, forma de pago, metadatos, comercial, CIF de cliente en tickets, etc.)?
 □ ¿Escribí TODAS las incidencias en ESPAÑOL?
+□ ¿Si incidencia: true, puse tipos_incidencia con los códigos correctos? (ver lista de valores permitidos)
 □ ¿Verifiqué que el CIF {{CIF_EMPRESA}} y el nombre {{NOMBRE_EMPRESA}} NO están asignados a la empresa externa del documento?
 □ ¿Si solo encontré un CIF, usé el nombre para determinar a quién pertenece antes de asignarlo?
 □ ¿Me aseguré de NO reportar incidencia por diferencias entre la suma de líneas y el importe_sin_iva?
