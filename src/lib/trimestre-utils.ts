@@ -106,7 +106,7 @@ export async function estaTrimestreCerrado(
       FROM trimestres t
       WHERE t.año = ?
         AND t.num_trimestre = ?
-        AND t.cerrado = 1
+        AND t.cerrado IN (1, 2)
     `;
     const trimestresParams: any[] = [año, trimestre];
 

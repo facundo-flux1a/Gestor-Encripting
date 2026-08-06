@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     const [bloqueados] = await db.query<RowDataPacket[]>(
       `SELECT año as año, num_trimestre as trimestre, cerrado
        FROM trimestres
-       WHERE id_de_empresa = ? AND cerrado = 1`,
+       WHERE id_de_empresa = ? AND cerrado IN (1, 2)`,
       [empresaId]
     );
 

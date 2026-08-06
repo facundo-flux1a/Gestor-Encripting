@@ -15,7 +15,7 @@ import { hashField, normalizeEntityName } from '@/lib/encryption';
 
 const serializeData = (data: any) => JSON.parse(JSON.stringify(data, (k, v) => typeof v === 'bigint' ? Number(v) : v));
 
-import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload } from '@/lib/types';
+import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload, PausarTrimestrePayload } from '@/lib/types';
 import { validateIncidentsAsync } from './incidents-service';
 import { runHealthChecksForDocument } from './health-check-service';
 import { parseFechaLocal, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
@@ -4169,42 +4169,98 @@ SELECT
       });
     }
 
-    // ✅ Hidratar nombres de empresa con Prisma (desencripta automáticamente)
-    const uniqueEmpresaIds = [...new Set(rows.map(r => BigInt(r.empresa_id)).filter(Boolean))];
+    // ✅ Consultar bloqueos/pausas explícitas en tabla trimestres
+    const [trimestresTablaRows] = await conn.query<RowDataPacket[]>(
+      `SELECT año, num_trimestre, id_de_empresa, cerrado FROM trimestres WHERE cerrado IN (1, 2)`
+    );
+    const trimestresTablaMap = new Map<string, number>();
+    trimestresTablaRows.forEach(t => {
+      trimestresTablaMap.set(`${t.año}-${t.num_trimestre}-${t.id_de_empresa}`, Number(t.cerrado));
+    });
+
+    // ✅ Hidratar nombres de empresa con Prisma (incluyendo las que solo están en tabla trimestres)
+    const uniqueEmpresaIds = [...new Set([
+      ...rows.map(r => BigInt(r.empresa_id)),
+      ...trimestresTablaRows.map(t => BigInt(t.id_de_empresa))
+    ].filter(Boolean))];
+
     const empresasData = uniqueEmpresaIds.length > 0
       ? await prisma.empresas.findMany({
           where: { id: { in: uniqueEmpresaIds } },
           select: { id: true, nombre_de_empresa: true }
         })
       : [];
-    const empresaMap = new Map(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || 'Sin empresa']));
+    const empresaMap = new Map<number, string>(empresasData.map(e => [Number(e.id), e.nombre_de_empresa || 'Sin empresa']));
 
-    let trimestres = rows.map(row => ({
-      año: row.año,
-      trimestre: row.trimestre,
-      empresa_id: row.empresa_id,
-      empresa_nombre: empresaMap.get(row.empresa_id) || 'Sin empresa',
-      total_documentos: Number(row.total_documentos),
+    let trimestres = rows.map(row => {
+      const docCerrado = Boolean(row.cerrado);
+      const key = `${row.año}-${row.trimestre}-${row.empresa_id}`;
+      const tablaCerradoVal = trimestresTablaMap.get(key) || 0;
+      const estadoFinal = docCerrado ? 1 : (tablaCerradoVal === 2 ? 2 : (tablaCerradoVal === 1 ? 1 : 0));
 
-      // ✅ TOTALES CON IVA (principal)
-      total_ingresos: Number(row.total_ingresos || 0),
-      total_gastos: Number(row.total_gastos || 0),
+      return {
+        año: Number(row.año),
+        trimestre: Number(row.trimestre),
+        empresa_id: row.empresa_id ? Number(row.empresa_id) : null,
+        empresa_nombre: empresaMap.get(Number(row.empresa_id)) || 'Sin empresa',
+        total_documentos: Number(row.total_documentos),
 
-      // ✅ NUEVOS: TOTALES SIN IVA (para breakdown)
-      total_ingresos_sin_iva: Number(row.total_ingresos_sin_iva || 0),
-      total_gastos_sin_iva: Number(row.total_gastos_sin_iva || 0),
+        // ✅ TOTALES CON IVA (principal)
+        total_ingresos: Number(row.total_ingresos || 0),
+        total_gastos: Number(row.total_gastos || 0),
 
-      iva_repercutido: Number(row.iva_repercutido || 0),
-      iva_soportado: Number(row.iva_soportado || 0),
-      recargo_repercutido: Number(row.recargo_repercutido || 0), // ✅ NUEVO
-      recargo_soportado: Number(row.recargo_soportado || 0),     // ✅ NUEVO
-      cerrado: Boolean(row.cerrado),
-      fecha_cierre: row.fecha_cierre || null,
-    }));
+        // ✅ NUEVOS: TOTALES SIN IVA (para breakdown)
+        total_ingresos_sin_iva: Number(row.total_ingresos_sin_iva || 0),
+        total_gastos_sin_iva: Number(row.total_gastos_sin_iva || 0),
 
-    // Si no se pidió mostrar vacíos, filtrar
+        iva_repercutido: Number(row.iva_repercutido || 0),
+        iva_soportado: Number(row.iva_soportado || 0),
+        recargo_repercutido: Number(row.recargo_repercutido || 0), // ✅ NUEVO
+        recargo_soportado: Number(row.recargo_soportado || 0),     // ✅ NUEVO
+        cerrado: estadoFinal > 0,
+        cerrado_estado: estadoFinal, // ✅ 0 = Abierto, 1 = Cerrado Fiscal, 2 = Pausado Ingesta
+        fecha_cierre: row.fecha_cierre || null,
+      };
+    });
+
+    // ✅ Añadir trimestres explícitos (bloqueados o pausados) que tengan 0 documentos
+    const keysEncontradas = new Set(trimestres.map(t => `${t.año}-${t.trimestre}-${t.empresa_id}`));
+
+    for (const tRow of trimestresTablaRows) {
+      const key = `${tRow.año}-${tRow.num_trimestre}-${tRow.id_de_empresa}`;
+      if (!keysEncontradas.has(key)) {
+        const empId = Number(tRow.id_de_empresa);
+
+        if (filters?.empresa_id) {
+          const idsFiltro = Array.isArray(filters.empresa_id) ? filters.empresa_id : [filters.empresa_id];
+          if (!idsFiltro.includes(empId)) continue;
+        }
+        if (filters?.año && Number(tRow.año) !== filters.año) continue;
+
+        trimestres.push({
+          año: Number(tRow.año),
+          trimestre: Number(tRow.num_trimestre),
+          empresa_id: empId,
+          empresa_nombre: empresaMap.get(empId) || 'Sin empresa',
+          total_documentos: 0,
+          total_ingresos: 0,
+          total_gastos: 0,
+          total_ingresos_sin_iva: 0,
+          total_gastos_sin_iva: 0,
+          iva_repercutido: 0,
+          iva_soportado: 0,
+          recargo_repercutido: 0,
+          recargo_soportado: 0,
+          cerrado: true,
+          cerrado_estado: Number(tRow.cerrado),
+          fecha_cierre: null,
+        });
+      }
+    }
+
+    // Si no se pidió mostrar vacíos, conservar también los vacíos que estén Pausados o Cerrados
     if (!filters?.mostrar_vacios) {
-      trimestres = trimestres.filter(t => t.total_documentos > 0);
+      trimestres = trimestres.filter(t => t.total_documentos > 0 || (t.cerrado_estado && t.cerrado_estado > 0));
     }
 
     // ✅ ORDENAR EN MEMORIA: año DESC, trimestre DESC, empresa_nombre ASC (sobre texto ya desencriptado)
@@ -4732,6 +4788,78 @@ cerrado = 1,
     console.error('═══════════════════════════════════════════════════════════');
     console.error('❌ Error:', error);
     console.error('═══════════════════════════════════════════════════════════');
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Alterna la pausa de ingesta para un trimestre (cerrado = 2).
+ * No modifica los documentos existentes ni sus banderas trimestre_cerrado.
+ */
+export async function pausarTrimestre(
+  userId: number,
+  payload: PausarTrimestrePayload
+): Promise<{ success: boolean; pausado: boolean }> {
+  const conn = await db.getConnection();
+  try {
+    const { año, trimestre, empresa_id, pausado } = payload;
+    let empresaIds: number[] = [];
+
+    if (empresa_id !== null) {
+      empresaIds = [empresa_id];
+    } else {
+      const [rows] = await conn.query<RowDataPacket[]>(
+        'SELECT id FROM empresas WHERE JSON_CONTAINS(id_de_usuario, CAST(? AS JSON))',
+        [userId]
+      );
+      empresaIds = rows.map(r => Number(r.id));
+    }
+
+    if (empresaIds.length === 0) {
+      return { success: false, pausado: false };
+    }
+
+    for (const empId of empresaIds) {
+      if (pausado) {
+        // Establecer cerrado = 2 (pausado para ingesta)
+        await conn.query(
+          `INSERT INTO trimestres (año, num_trimestre, id_de_empresa, cerrado, fecha_creacion, fecha_actualizacion)
+           VALUES (?, ?, ?, 2, NOW(), NOW())
+           ON DUPLICATE KEY UPDATE cerrado = IF(cerrado = 1, 1, 2), fecha_actualizacion = NOW()`,
+          [año, trimestre, empId]
+        );
+      } else {
+        // Despausar: si cerrado = 2, restaurar a 0
+        await conn.query(
+          `UPDATE trimestres SET cerrado = 0, fecha_actualizacion = NOW()
+           WHERE año = ? AND num_trimestre = ? AND id_de_empresa = ? AND cerrado = 2`,
+          [año, trimestre, empId]
+        );
+      }
+    }
+
+    try {
+      const { logAuditAction } = await import('./audit-service');
+      const { getCurrentUser } = await import('./user-service');
+      const user = await getCurrentUser();
+      if (user) {
+        await logAuditAction({
+          empresaId: payload.empresa_id,
+          accion: 'PAUSAR_TRIMESTRE' as any,
+          usuarioEmail: user.email,
+          userId: user.id,
+          detalle: { año, trimestre, pausado },
+        });
+      }
+    } catch (auditErr) {
+      console.warn('⚠️ Error registrando auditoría PAUSAR_TRIMESTRE:', auditErr);
+    }
+
+    return { success: true, pausado };
+  } catch (error) {
+    console.error('❌ [pausarTrimestre] Error:', error);
     throw error;
   } finally {
     conn.release();

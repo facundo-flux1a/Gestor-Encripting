@@ -365,6 +365,7 @@ export const TrimestreSchema = z.object({
   recargo_repercutido: z.number().optional().default(0), // ✅ NUEVO
   recargo_soportado: z.number().optional().default(0),   // ✅ NUEVO
   cerrado: z.boolean(),
+  cerrado_estado: z.number().optional().default(0), // ✅ 0: Abierto, 1: Cerrado Fiscal, 2: Pausado Ingesta
   fecha_cierre: z.string().nullable().optional(),
 });
 export type Trimestre = z.infer<typeof TrimestreSchema>;
@@ -375,6 +376,14 @@ export const CerrarTrimestrePayloadSchema = z.object({
   empresa_id: z.number().nullable(),
 });
 export type CerrarTrimestrePayload = z.infer<typeof CerrarTrimestrePayloadSchema>;
+
+export const PausarTrimestrePayloadSchema = z.object({
+  año: z.number(),
+  trimestre: z.number().min(1).max(4),
+  empresa_id: z.number().nullable(),
+  pausado: z.boolean(),
+});
+export type PausarTrimestrePayload = z.infer<typeof PausarTrimestrePayloadSchema>;
 
 export const TrimestreFiltersSchema = z.object({
   empresa_id: z.union([z.number(), z.array(z.number())]).nullable().optional(),

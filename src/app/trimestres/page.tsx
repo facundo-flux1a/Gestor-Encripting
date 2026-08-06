@@ -35,6 +35,8 @@ import {
   ArrowDownCircle,
   Calendar,
   Download,
+  PauseCircle,
+  Play,
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 import { generateAdvancedExport } from '@/lib/export-utils';
@@ -320,6 +322,7 @@ function TrimestresPageContent() {
               recargo_repercutido: 0,
               recargo_soportado: 0,
               cerrado: false,
+              cerrado_estado: 0,
               fecha_cierre: null,
             });
           }
@@ -629,6 +632,51 @@ function TrimestresPageContent() {
     }
   };
 
+  const [isPausando, setIsPausando] = React.useState(false);
+
+  const handlePausarTrimestre = async (pausar: boolean) => {
+    if (!selectedAño || !selectedTrimestre) return;
+
+    try {
+      setIsPausando(true);
+      const empresaId = selectedCompanyIds.length === 1 ? selectedCompanyIds[0] : null;
+
+      const response = await fetch('/api/trimestres/pausar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          año: selectedAño,
+          trimestre: selectedTrimestre,
+          empresa_id: empresaId,
+          pausado: pausar,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo cambiar el estado de pausa del trimestre');
+      }
+
+      toast({
+        title: pausar ? '⏸️ Ingesta Pausada' : '▶️ Ingesta Reanudada',
+        description: pausar
+          ? `Nuevas facturas para T${selectedTrimestre} ${selectedAño} se desviarán al siguiente trimestre abierto.`
+          : `T${selectedTrimestre} ${selectedAño} vuelve a recibir facturas normalmente.`,
+      });
+
+      void loadTrimestres();
+      void loadDocumentos();
+    } catch (error) {
+      console.error('Error al pausar trimestre:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo cambiar el estado de pausa.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPausando(false);
+    }
+  };
+
   const trimestreAgregado = React.useMemo(() => {
     const trimestresDelPeriodo = trimestres.filter(
       t => t.año === selectedAño && t.trimestre === selectedTrimestre
@@ -660,6 +708,7 @@ function TrimestresPageContent() {
       recargo_soportado: trimestresDelPeriodo.reduce((sum, t) => sum + (t.recargo_soportado || 0), 0),
 
       cerrado: trimestresDelPeriodo.every(t => t.cerrado),
+      cerrado_estado: trimestresDelPeriodo.some(t => t.cerrado_estado === 1) ? 1 : (trimestresDelPeriodo.some(t => t.cerrado_estado === 2) ? 2 : 0),
       fecha_cierre: null,
     };
   }, [trimestres, selectedAño, selectedTrimestre]);
@@ -679,6 +728,7 @@ function TrimestresPageContent() {
         const existing = unique.get(key)!;
         if (t.cerrado) {
           existing.cerrado = true;
+          existing.cerrado_estado = Math.max(existing.cerrado_estado || 0, t.cerrado_estado || 0);
         }
       }
     });
@@ -796,8 +846,8 @@ function TrimestresPageContent() {
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;
 
-  const puedeCerrarse = trimestreAgregado && !trimestreAgregado.cerrado;
-  const puedeEnviarAlSII = trimestreAgregado && trimestreAgregado.cerrado;
+  const puedeCerrarse = trimestreAgregado && (trimestreAgregado.cerrado_estado !== 1);
+  const puedeEnviarAlSII = trimestreAgregado && (trimestreAgregado.cerrado_estado === 1);
 
   return (
     <>
@@ -862,7 +912,35 @@ function TrimestresPageContent() {
 
               {trimestreAgregado && (
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  <QuarterBadge cerrado={trimestreAgregado.cerrado} />
+                  <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
+
+                  {(trimestreAgregado.cerrado_estado === 2 || !trimestreAgregado.cerrado) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isPausando}
+                      onClick={() => handlePausarTrimestre(trimestreAgregado.cerrado_estado !== 2)}
+                      className={
+                        trimestreAgregado.cerrado_estado === 2
+                          ? "gap-2 text-xs sm:text-sm h-8 sm:h-9 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                          : "gap-2 text-xs sm:text-sm h-8 sm:h-9 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400"
+                      }
+                    >
+                      {trimestreAgregado.cerrado_estado === 2 ? (
+                        <>
+                          <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" />
+                          <span className="hidden xs:inline">Reanudar Ingesta</span>
+                          <span className="xs:hidden">Reanudar</span>
+                        </>
+                      ) : (
+                        <>
+                          <PauseCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" />
+                          <span className="hidden xs:inline">Pausar Ingesta</span>
+                          <span className="xs:hidden">Pausar</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
 
                   {puedeCerrarse && (
                     <Button

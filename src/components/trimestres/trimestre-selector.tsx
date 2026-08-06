@@ -113,7 +113,7 @@ export function TrimestreSelector({
                   T{t.trimestre} {t.año}
                 </span>
                 {t.cerrado && (
-                  <QuarterBadge cerrado={true} className="ml-1" />
+                  <QuarterBadge cerrado={t.cerrado_estado ?? t.cerrado} className="ml-1" />
                 )}
               </Button>
             ))}
