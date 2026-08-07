@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/services/user-service';
 import { analyzeDocumentWithAI } from '@/services/ai-service';
 import { canMakeRequest } from '@/services/ai-limits-service';
+import { userHasEmpresaAccess } from '@/lib/empresa-access';
 import pool, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
@@ -64,8 +65,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Verificar que el documento pertenece a una empresa del usuario
-    if (document.id_de_usuario !== user.id) {
-      console.warn('⚠️ [API-ANALYZE] Sin permisos - Doc pertenece a otro usuario');
+    if (!userHasEmpresaAccess(user.id, document.id_de_usuario)) {
+      console.warn('⚠️ [API-ANALYZE] Sin permisos - Doc pertenece a otra empresa/usuario');
       return NextResponse.json(
         { error: 'No tienes permiso para analizar este documento' },
         { status: 403 }

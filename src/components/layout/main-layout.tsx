@@ -363,24 +363,6 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
                     <span className="group-data-[collapsible=icon]:hidden truncate">
                       {item.label}
                     </span>
-                    {/* Badge de actividades no leídas */}
-                    {item.href === '/dashboard/actividad' && unreadActivity.total > 0 && (
-                      <span
-                        className={cn(
-                          "ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium group-data-[collapsible=icon]:hidden",
-                          unreadActivity.hasErrors
-                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                            : "bg-violet-500/20 text-violet-400 border border-violet-500/30"
-                        )}
-                      >
-                        {unreadActivity.hasErrors ? (
-                          <AlertCircle className="w-3 h-3" />
-                        ) : (
-                          <Sparkles className="w-3 h-3" />
-                        )}
-                        {unreadActivity.total}
-                      </span>
-                    )}
 
                     {/* Badge de incidencias/health check unificado - CENTRO DE SEGURIDAD */}
                     {item.href === '/dashboard/auditoria' && auditoriaCount > 0 && (

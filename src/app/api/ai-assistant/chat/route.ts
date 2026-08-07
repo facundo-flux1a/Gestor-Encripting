@@ -3,30 +3,30 @@ import { getSession } from '@/services/auth-service';
 import {
   isAssistantAvailable,
   runAssistantChat,
+  MAX_CONVERSATION_SESSIONS,
 } from '@/services/ai-assistant-service';
 import { validateConversationAccess } from '@/lib/ai-assistant-session';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+const UNAVAILABLE =
+  'El asistente no está disponible en este momento. Prueba más tarde.';
 const CONNECTION_ERROR =
-  'No pudimos conectar con el asistente. Verificá tu conexión e intentá de nuevo.';
+  'No pudimos procesar tu consulta. Intentá de nuevo.';
 
-/** @deprecated Usar /api/ai-assistant/chat — redirige al asistente unificado. */
+/** Chat unificado: FAQ + documentos del usuario (mismo endpoint para todo). */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.userId) {
     return NextResponse.json(
-      { error: 'Tenés que iniciar sesión para usar el asistente.' },
+      { error: 'Tienes que iniciar sesión para usar el asistente.' },
       { status: 401 },
     );
   }
 
   if (!isAssistantAvailable()) {
-    return NextResponse.json(
-      { error: 'El asistente no está disponible en este momento. Probá más tarde.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: UNAVAILABLE }, { status: 503 });
   }
 
   let body: { message?: string; conversationId?: string };
@@ -58,13 +58,17 @@ export async function POST(req: NextRequest) {
       session.nombre,
       body.conversationId,
     );
+
     return NextResponse.json({
       response: result.response,
       conversationId: result.conversationId,
       toolsUsed: result.toolsUsed,
+      maxSessions: MAX_CONVERSATION_SESSIONS,
     });
   } catch (error) {
-    console.error('[support-chat]', error);
-    return NextResponse.json({ error: CONNECTION_ERROR }, { status: 502 });
+    console.error('[ai-assistant/chat]', error);
+    const msg = error instanceof Error ? error.message : CONNECTION_ERROR;
+    const status = msg.includes('no está disponible') ? 503 : 502;
+    return NextResponse.json({ error: msg || CONNECTION_ERROR }, { status });
   }
 }
