@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Loc
 import { useRouter } from 'next/navigation';
 import { DocumentTypeSelector } from './document-type-selector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSidebar } from '@/components/ui/sidebar';
 
 const fmtNum = (v: number | string | null | undefined) => {
@@ -83,6 +84,41 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const client   = useMemo(() => doc.entidades.find(e => e.rol === 'cliente' || e.rol === 'receptor'), [doc.entidades]);
   const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
   const docName = doc?.archivos?.[0]?.nombre_archivo || `doc_${doc.id_documento}`;
+
+  const [disponibles, setDisponibles] = React.useState<{ año: number; trimestre: number; label: string }[]>([]);
+  const empresaId = doc.empresa_id || (doc as any).id_de_empresa;
+
+  React.useEffect(() => {
+    if (!empresaId) return;
+    fetch(`/api/trimestres/disponibles?empresa_id=${empresaId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setDisponibles(data.map((d: any) => ({
+            año: d.año,
+            trimestre: d.trimestre,
+            label: `${d.año} – T${d.trimestre}`
+          })));
+        }
+      })
+      .catch(console.error);
+  }, [empresaId]);
+
+  const fallbackOptions = React.useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const opts: { año: number; trimestre: number; label: string }[] = [];
+    for (let y = currentYear + 1; y >= currentYear - 2; y--) {
+      for (let q = 4; q >= 1; q--) {
+        opts.push({ año: y, trimestre: q, label: `${y} – T${q}` });
+      }
+    }
+    return opts;
+  }, []);
+
+  const trimesterOptions = disponibles.length > 0 ? disponibles : fallbackOptions;
+  const currentAño = fv.año_trimestre ?? doc.año_trimestre;
+  const currentNum = fv.num_trimestre ?? doc.num_trimestre;
+  const currentKey = currentAño && currentNum ? `${currentAño}-${currentNum}` : '';
 
   const liveIva    = isEditing ? ivaFields : (doc.iva_details || []);
   const liveBase   = Number(isEditing ? (fv.base_imponible ?? doc.base_imponible) : doc.base_imponible) || 0;
@@ -345,10 +381,43 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             </table>
           </div>
 
-          {/* Meta */}
-          <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 text-xs text-muted-foreground">
-            {doc.año_trimestre && <span><span className="font-medium text-foreground/70">Trimestre:</span> {doc.año_trimestre} – T{doc.num_trimestre}</span>}
-            {(doc.cif || provider?.identificador_fiscal) && <span><span className="font-medium text-foreground/70">CIF doc:</span> <span className="font-mono">{doc.cif || provider?.identificador_fiscal}</span></span>}
+          {/* Meta: Trimestre + CIF */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-6 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-foreground/70">Trimestre:</span>
+              {isEditing ? (
+                <Select
+                  value={currentKey}
+                  onValueChange={(val) => {
+                    const [a, q] = val.split('-').map(Number);
+                    form.setValue('año_trimestre', a, { shouldDirty: true });
+                    form.setValue('num_trimestre', q, { shouldDirty: true });
+                  }}
+                >
+                  <SelectTrigger className="h-7 w-[140px] text-xs bg-background">
+                    <SelectValue placeholder="Seleccionar trimestre" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[100]">
+                    {trimesterOptions.map((opt) => (
+                      <SelectItem key={`${opt.año}-${opt.trimestre}`} value={`${opt.año}-${opt.trimestre}`}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <span className="font-semibold text-foreground">
+                  {doc.año_trimestre ? `${doc.año_trimestre} – T${doc.num_trimestre}` : 'Sin trimestre'}
+                </span>
+              )}
+            </div>
+
+            {(doc.cif || provider?.identificador_fiscal) && (
+              <span>
+                <span className="font-medium text-foreground/70">CIF doc:</span>{' '}
+                <span className="font-mono">{doc.cif || provider?.identificador_fiscal}</span>
+              </span>
+            )}
           </div>
 
           {/* Incidencia */}

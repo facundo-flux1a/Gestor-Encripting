@@ -100,18 +100,89 @@ function TrimestresPageContent() {
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
   const [isLoadingAnnualDocs, setIsLoadingAnnualDocs] = React.useState(false);
 
-  // Trimestre seleccionado
+  // Trimestres y Años seleccionados
+  const [selectedAños, setSelectedAños] = React.useState<number[]>(() => [new Date().getFullYear()]);
   const [selectedAño, setSelectedAño] = React.useState<number>(new Date().getFullYear());
   const [selectedTrimestre, setSelectedTrimestre] = React.useState<number>(1);
+  const [selectedPeriodos, setSelectedPeriodos] = React.useState<Set<string>>(
+    () => new Set([`${new Date().getFullYear()}-1`])
+  );
   const [isTableExpanded, setIsTableExpanded] = React.useState(false);
 
   // ─── FILTROS DE LA TABLA DE DOCUMENTOS ─────────────────────────────────────
   const [filters, setFilters] = React.useState<TrimestresFilterState>(EMPTY_FILTERS);
 
-  // ── Resetear filtros al cambiar de trimestre o año ──
+  // ── Resetear filtros al cambiar de periodo ──
   React.useEffect(() => {
     setFilters(EMPTY_FILTERS);
-  }, [selectedAño, selectedTrimestre]);
+  }, [selectedAños, selectedPeriodos]);
+
+  const handleToggleAño = (año: number) => {
+    setSelectedAños(prev => {
+      let next: number[];
+      if (prev.includes(año)) {
+        if (prev.length === 1) return prev; // Mantener al menos 1 año seleccionado
+        next = prev.filter(a => a !== año);
+        // Quitar trimestres de ese año en selectedPeriodos
+        setSelectedPeriodos(current => {
+          const newSet = new Set(current);
+          for (let q = 1; q <= 4; q++) {
+            newSet.delete(`${año}-${q}`);
+          }
+          return newSet;
+        });
+      } else {
+        next = [...prev, año];
+        // Seleccionar por defecto T1 del nuevo año añadido
+        setSelectedPeriodos(current => new Set(current).add(`${año}-1`));
+      }
+      return next;
+    });
+    setSelectedAño(año);
+  };
+
+  const handleTogglePeriodo = (año: number, trimestre: number) => {
+    const key = `${año}-${trimestre}`;
+    setSelectedPeriodos(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        if (next.size === 0) {
+          next.add(key); // Mantener al menos uno seleccionado
+        }
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    setSelectedAño(año);
+    setSelectedTrimestre(trimestre);
+  };
+
+  const handleSelectAñoPreset = (año: number, preset: 'todo' | 'semestre1' | 'semestre2' | 'limpiar') => {
+    setSelectedPeriodos(prev => {
+      const next = new Set(prev);
+      const keys = [`${año}-1`, `${año}-2`, `${año}-3`, `${año}-4`];
+
+      if (preset === 'todo') {
+        keys.forEach(k => next.add(k));
+      } else if (preset === 'semestre1') {
+        next.add(`${año}-1`);
+        next.add(`${año}-2`);
+        next.delete(`${año}-3`);
+        next.delete(`${año}-4`);
+      } else if (preset === 'semestre2') {
+        next.delete(`${año}-1`);
+        next.delete(`${año}-2`);
+        next.add(`${año}-3`);
+        next.add(`${año}-4`);
+      } else if (preset === 'limpiar') {
+        keys.forEach(k => next.delete(k));
+        if (next.size === 0) next.add(`${año}-1`);
+      }
+      return next;
+    });
+  };
 
   // ── Documentos visibles en la tabla (con filtros aplicados) ─────────────────
   // NOTA: `footerValues` usa siempre `documentos` (trimestre completo, sin filtrar).
@@ -219,9 +290,17 @@ function TrimestresPageContent() {
     });
   };
 
+  const documentosDelPeriodo = React.useMemo(() => {
+    if (selectedPeriodos.size === 0) return documentos;
+    return documentos.filter(doc => {
+      const key = `${doc.año_trimestre}-${doc.num_trimestre}`;
+      return selectedPeriodos.has(key);
+    });
+  }, [documentos, selectedPeriodos]);
+
   const documentosFiltrados = React.useMemo(() => {
-    return applySidebarFilters(documentos, filters);
-  }, [documentos, filters]);
+    return applySidebarFilters(documentosDelPeriodo, filters);
+  }, [documentosDelPeriodo, filters]);
 
   // ✅ NUEVO: Documentos anuales con filtros de barra lateral
   const annualDocumentosFiltrados = React.useMemo(() => {
@@ -251,64 +330,52 @@ function TrimestresPageContent() {
   React.useEffect(() => {
     if (isLoadingCompanies) return;
 
-    const fetchKey = `${JSON.stringify(selectedCompanyIds)}-${selectedAño}-${selectedTrimestre}-${mostrarVacios}`;
+    const fetchKey = `${JSON.stringify(selectedCompanyIds)}-${[...selectedAños].sort().join(',')}-${mostrarVacios}`;
     if (lastFetchRef.current === fetchKey) return;
     lastFetchRef.current = fetchKey;
 
     console.log('🔄 [Trimestres] Iniciando carga de datos unificada:', fetchKey);
 
-    // Ejecutar cargas
     loadTrimestres();
     loadDocumentos();
-    loadAnnualDocumentos();
-  }, [selectedCompanyIds, mostrarVacios, selectedAño, selectedTrimestre, isLoadingCompanies, refreshKey]);
+  }, [selectedCompanyIds, mostrarVacios, selectedAños, isLoadingCompanies, refreshKey]);
 
   const loadTrimestres = async () => {
     try {
       setIsLoading(true);
 
-      console.log('🔍 [loadTrimestres] Empresas seleccionadas:', selectedCompanyIds);
+      if (selectedCompanyIds.length === 0) {
+        setTrimestres([]);
+        return;
+      }
 
-      const params = new URLSearchParams({
-        año: selectedAño.toString(),
-        mostrar_vacios: mostrarVacios.toString()
-      });
+      const allTrimestres: Trimestre[] = [];
 
-      if (selectedCompanyIds.length > 0) {
+      for (const año of selectedAños) {
+        const params = new URLSearchParams({
+          año: año.toString(),
+          mostrar_vacios: mostrarVacios.toString()
+        });
+
         selectedCompanyIds.forEach(id => {
           params.append('empresa_id', id.toString());
         });
-      }
 
-      console.log('📡 [loadTrimestres] Fetching con params:', params.toString());
+        const response = await fetch(`/api/trimestres?${params}`);
+        if (!response.ok) continue;
 
-      const response = await fetch(`/api/trimestres?${params}`);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Error response:', errorData);
-        throw new Error(errorData.error || 'Error al cargar trimestres');
-      }
-
-      const dataFromDB = await response.json();
-      console.log('✅ Trimestres de BD:', dataFromDB);
-
-      let trimestresFinales = dataFromDB;
-
-      if (mostrarVacios) {
-        const añoParaGenerar = selectedAño;
-        const trimestresCompletos: Trimestre[] = [];
+        const dataFromDB: Trimestre[] = await response.json();
 
         for (let trimestre = 1; trimestre <= 4; trimestre++) {
           const existeEnBD = dataFromDB.find(
-            (t: Trimestre) => t.año === añoParaGenerar && t.trimestre === trimestre
+            (t: Trimestre) => t.año === año && t.trimestre === trimestre
           );
 
           if (existeEnBD) {
-            trimestresCompletos.push(existeEnBD);
+            allTrimestres.push(existeEnBD);
           } else {
-            trimestresCompletos.push({
-              año: añoParaGenerar,
+            allTrimestres.push({
+              año,
               trimestre,
               empresa_id: null,
               empresa_nombre: null,
@@ -327,26 +394,9 @@ function TrimestresPageContent() {
             });
           }
         }
-
-        trimestresFinales = trimestresCompletos;
       }
 
-      setTrimestres(trimestresFinales);
-
-      if (trimestresFinales.length > 0) {
-        const tieneAñoActual = trimestresFinales.some((t: Trimestre) => t.año === selectedAño);
-
-        // ✅ MEJORA: Solo auto-seleccionar si NO hay un año seleccionado o si el actual no existe Y no estamos mostrando vacíos
-        if (!tieneAñoActual && !mostrarVacios) {
-          const reciente = trimestresFinales[0];
-          console.log('🔄 [loadTrimestres] Año seleccionado sin datos, seleccionando el más reciente con contenido:', reciente);
-          setSelectedAño(reciente.año);
-          setSelectedTrimestre(reciente.trimestre);
-        }
-      } else {
-        // Solo resetear si realmente no hay nada de nada
-        console.log('⚠️ [loadTrimestres] No se encontraron trimestres');
-      }
+      setTrimestres(allTrimestres);
     } catch (error) {
       console.error('❌ Error loading trimestres:', error);
       toast({
@@ -362,33 +412,32 @@ function TrimestresPageContent() {
   const loadDocumentos = async () => {
     try {
       setIsLoadingDocs(true);
-      setDocumentos([]); // 🔄 RESET INMEDIATO PARA EVITAR DATOS STALE
-
-      console.log('🔍 [loadDocumentos] Empresas seleccionadas:', selectedCompanyIds);
+      setDocumentos([]);
 
       if (selectedCompanyIds.length === 0) {
-        console.log('⚠️ [loadDocumentos] No hay empresas seleccionadas, limpiando documentos');
-        // setDocumentos([]) ya se hizo arriba
         return;
       }
 
-      const params = new URLSearchParams({
-        año: selectedAño.toString(),
-        trimestre: selectedTrimestre.toString(),
-      });
+      const allDocs: Document[] = [];
 
-      selectedCompanyIds.forEach(id => {
-        params.append('empresa_id', id.toString());
-      });
+      for (const año of selectedAños) {
+        const params = new URLSearchParams({
+          año: año.toString(),
+        });
 
-      console.log('📡 [loadDocumentos] Fetching con params:', params.toString());
+        selectedCompanyIds.forEach(id => {
+          params.append('empresa_id', id.toString());
+        });
 
-      const response = await fetch(`/api/trimestres/documentos?${params}`);
-      if (!response.ok) throw new Error('Error al cargar documentos');
+        const response = await fetch(`/api/trimestres/documentos?${params}`);
+        if (response.ok) {
+          const data = await response.json();
+          allDocs.push(...data);
+        }
+      }
 
-      const data = await response.json();
-      console.log('✅ Documentos cargados:', data.length);
-      setDocumentos(data);
+      console.log('✅ Total documentos cargados (multiaño):', allDocs.length);
+      setDocumentos(allDocs);
     } catch (error) {
       console.error('❌ Error loading documentos:', error);
       toast({
@@ -678,9 +727,10 @@ function TrimestresPageContent() {
   };
 
   const trimestreAgregado = React.useMemo(() => {
-    const trimestresDelPeriodo = trimestres.filter(
-      t => t.año === selectedAño && t.trimestre === selectedTrimestre
-    );
+    const trimestresDelPeriodo = trimestres.filter(t => {
+      const key = `${t.año}-${t.trimestre}`;
+      return selectedPeriodos.size === 0 ? (t.año === selectedAño && t.trimestre === selectedTrimestre) : selectedPeriodos.has(key);
+    });
 
     if (trimestresDelPeriodo.length === 0) return null;
 
@@ -692,7 +742,7 @@ function TrimestresPageContent() {
       año: selectedAño,
       trimestre: selectedTrimestre,
       empresa_id: null,
-      empresa_nombre: `${trimestresDelPeriodo.length} empresas`,
+      empresa_nombre: `${trimestresDelPeriodo.length} períodos`,
       total_documentos: trimestresDelPeriodo.reduce((sum, t) => sum + t.total_documentos, 0),
 
       // ✅ TOTALES CON IVA (principal)
@@ -711,7 +761,7 @@ function TrimestresPageContent() {
       cerrado_estado: trimestresDelPeriodo.some(t => t.cerrado_estado === 1) ? 1 : (trimestresDelPeriodo.some(t => t.cerrado_estado === 2) ? 2 : 0),
       fecha_cierre: null,
     };
-  }, [trimestres, selectedAño, selectedTrimestre]);
+  }, [trimestres, selectedAño, selectedTrimestre, selectedPeriodos]);
 
   const trimestresParaSelector = React.useMemo(() => {
     const unique = new Map<string, Trimestre>();
@@ -737,12 +787,12 @@ function TrimestresPageContent() {
   }, [trimestres]);
 
   // ── NUEVO: CÁLCULO UNIFICADO USANDO EL MOTOR FINANCIERO ────────────────────
+  // ✅ auditedResults: calcula SOLO los documentos del período seleccionado (no todos los cargados)
   const auditedResults = React.useMemo(() => {
-    // Usamos el CIF de la primera empresa seleccionada como referencia principal
-    // (Opcional: el motor ya usa d.empresa_cif si lo detecta en el documento)
-    return calculateFinancials(documentos, null);
-  }, [documentos]);
+    return calculateFinancials(documentosDelPeriodo, null);
+  }, [documentosDelPeriodo]);
 
+  // ✅ auditedFiltrado: agrega también los filtros de la barra lateral
   const auditedFiltrado = React.useMemo(() => {
     return calculateFinancials(documentosFiltrados, null);
   }, [documentosFiltrados]);
@@ -818,30 +868,26 @@ function TrimestresPageContent() {
     };
   }, [auditedFiltrado, selectedTrimestre]);
 
-  // ── Toggle: las cards reflejan los documentos filtrados ───────────────────
+  // ── Toggle: las cards reflejan los documentos filtrados por barra lateral ──
   const [dinamizarCards, setDinamizarCards] = React.useState(false);
 
-  // Elegir qué breakdown y totales usar en las cards
+  // ✅ Las cards SIEMPRE parten de documentosDelPeriodo (período seleccionado).
+  // dinamizarCards=true añade encima los filtros de la barra lateral.
   const cardsIngresos = dinamizarCards ? ingresosFiltrado : ingresosBreakdown;
   const cardsGastos = dinamizarCards ? gastosFiltrado : gastosBreakdown;
   const mismatchDocsIng = dinamizarCards ? mismatchFiltradoIngresos : mismatchDocsIngresos;
   const mismatchDocsGas = dinamizarCards ? mismatchFiltradoGastos : mismatchDocsGastos;
 
-  // Totales calculados desde los docs filtrados (para modo dinámico)
-  const totalIngresosDinamico = ingresosFiltrado.total;
-  const totalGastosDinamico = gastosFiltrado.total;
-  const ivaRepercutidoDinamico = ingresosFiltrado.totalIVA;
-  const ivaSoportadoDinamico = gastosFiltrado.totalIVA;
-  const totalIngresosSinIvaDinamico = ingresosFiltrado.totalBase;
-  const totalGastosSinIvaDinamico = gastosFiltrado.totalBase;
+  // Documentos base según modo
+  const docsBase = dinamizarCards ? documentosFiltrados : documentosDelPeriodo;
 
-  const numDocsCard = dinamizarCards ? documentosFiltrados.length : (trimestreAgregado?.total_documentos || 0);
-  const totIngresosCard = dinamizarCards ? totalIngresosDinamico : ingresosBreakdown.total;
-  const totGastosCard = dinamizarCards ? totalGastosDinamico : gastosBreakdown.total;
-  const totIngresosBaseCard = dinamizarCards ? totalIngresosSinIvaDinamico : ingresosBreakdown.totalBase;
-  const totGastosBaseCard = dinamizarCards ? totalGastosSinIvaDinamico : gastosBreakdown.totalBase;
-  const ivaRepCard = dinamizarCards ? ivaRepercutidoDinamico : ingresosBreakdown.totalIVA;
-  const ivaSopCard = dinamizarCards ? ivaSoportadoDinamico : gastosBreakdown.totalIVA;
+  const numDocsCard = docsBase.length;
+  const totIngresosCard = cardsIngresos.total;
+  const totGastosCard = cardsGastos.total;
+  const totIngresosBaseCard = cardsIngresos.totalBase;
+  const totGastosBaseCard = cardsGastos.totalBase;
+  const ivaRepCard = cardsIngresos.totalIVA;
+  const ivaSopCard = cardsGastos.totalIVA;
   const beneficioBrutoCard = totIngresosCard - totGastosCard;
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;
@@ -898,13 +944,11 @@ function TrimestresPageContent() {
               <div className="w-full sm:flex-1 sm:min-w-0" data-tutorial="trimestres-selector">
                 <TrimestreSelector
                   trimestres={trimestresParaSelector}
-                  selectedAño={selectedAño}
-                  selectedTrimestre={selectedTrimestre}
-                  onSelectTrimestre={(año, trimestre) => {
-                    setSelectedAño(año);
-                    setSelectedTrimestre(trimestre);
-                  }}
-                  onSelectAño={handleSelectAño}
+                  selectedAños={selectedAños}
+                  selectedPeriodos={selectedPeriodos}
+                  onToggleAño={handleToggleAño}
+                  onTogglePeriodo={handleTogglePeriodo}
+                  onSelectAñoPreset={handleSelectAñoPreset}
                   mostrarVacios={mostrarVacios}
                   onToggleMostrarVacios={setMostrarVacios}
                 />
@@ -1254,6 +1298,7 @@ function TrimestresPageContent() {
                 isLoading={isLoadingAnnualDocs}
                 año={selectedAño}
                 selectedTrimestre={selectedTrimestre}
+                selectedPeriodos={selectedPeriodos}
               />
 
               <div className="rounded-lg border bg-card overflow-hidden" data-tutorial="trimestres-table">

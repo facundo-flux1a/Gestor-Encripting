@@ -33,6 +33,7 @@ interface TrimestreExcelViewProps {
     isLoading: boolean;
     año: number;
     selectedTrimestre?: number | null;
+    selectedPeriodos?: Set<string>; // claves "año-trimestre"
 }
 
 // --- INTERNAL HELPERS ---
@@ -63,16 +64,17 @@ const createEmptySummary = () => {
     return sum;
 };
 
-const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
+const calculateAnnualSummary = (data: Document[], selectedPeriodos?: Set<string>) => {
     const foundRatesSet = new Set<number>([21, 15, 10, 4, 0]);
     const ingresosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
     const gastosSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
     const totalNetoSum = { ...createEmptySummary(), traces: [] as any[], deduced_docs: [] as any[], base_mismatches: [] as any[], lastCheck: new Date().toISOString() };
 
     data.forEach((doc) => {
-        // ✅ FILTRO DE SEGURIDAD: Evitar que documentos de otros años se sumen si se colaron en el array
-        if (targetYear && doc.año_trimestre && doc.año_trimestre !== targetYear) {
-            return;
+        // ✅ FILTRO DE SEGURIDAD: si hay selectedPeriodos, solo incluir docs cuyo año+trimestre esté activo
+        if (selectedPeriodos && selectedPeriodos.size > 0 && doc.año_trimestre && doc.num_trimestre) {
+            const key = `${doc.año_trimestre}-${doc.num_trimestre}`;
+            if (!selectedPeriodos.has(key)) return;
         }
 
         let q = doc.num_trimestre;
@@ -380,7 +382,7 @@ const calculateAnnualSummary = (data: Document[], targetYear?: number) => {
     };
 };
 
-export function TrimestreExcelView({ documents, isLoading, año, selectedTrimestre }: TrimestreExcelViewProps) {
+export function TrimestreExcelView({ documents, isLoading, año, selectedTrimestre, selectedPeriodos }: TrimestreExcelViewProps) {
     const { toast } = useToast();
     const [isExpanded, setIsExpanded] = useState(true);
     const [viewType, setViewType] = useState<'separate' | 'unified'>('separate');
@@ -587,7 +589,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
     const gridData = useMemo(() => {
         if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [], rowDataUnified: [], auditData: null };
 
-        const { ingresosSum, gastosSum, totalNetoSum, foundRates } = calculateAnnualSummary(documents, año);
+        const { ingresosSum, gastosSum, totalNetoSum, foundRates } = calculateAnnualSummary(documents, selectedPeriodos);
 
         const calcHealth = (sum: any) => {
             const totalDocs = sum.doc_count;
@@ -775,7 +777,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 ...buildRows(totalNetoSum, '#3b82f6')
             ]
         };
-    }, [documents, isLoading]);
+    }, [documents, isLoading, selectedPeriodos]);
 
     const handleDebugLog = useCallback(() => {
         console.group('%c 🕵️ AG Grid Deep Debug Trace ', 'background: #0f172a; color: #10b981; font-weight: bold; padding: 6px; border-radius: 4px; border: 1px solid #10b981;');
