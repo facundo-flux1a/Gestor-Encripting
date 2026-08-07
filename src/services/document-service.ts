@@ -604,30 +604,25 @@ export async function getDocuments(empresaIds?: number[], excludeIncidents: bool
   }
 }
 /**
- * Obtiene un documento por su ID
+ * Obtiene un documento por su ID validando membership explícita (para agente IA / server-side).
  */
-export async function getDocumentById(id: number): Promise<Document | null> {
+export async function getDocumentByIdForUser(id: number, userId: number): Promise<Document | null> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      console.warn('⚠️ [document-service] No hay usuario autenticado');
-      return null;
-    }
-
-    console.log('📝 [document-service] getDocumentById:', { id, userId: user.id });
+    console.log('📝 [document-service] getDocumentByIdForUser:', { id, userId });
 
     const d = await prisma.documentos.findFirst({
       where: {
         id: BigInt(id),
-        empresas: { id_de_usuario: { array_contains: user.id } }
+        id_de_empresa: { not: null },
+        empresas: { id_de_usuario: { array_contains: userId } },
       },
       include: {
-        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } }
-      }
+        empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
+      },
     });
 
     if (!d) {
-      console.log('⚠️ [document-service] Documento no encontrado:', id);
+      console.log('⚠️ [document-service] Documento no encontrado o sin acceso:', id);
       return null;
     }
 
@@ -649,17 +644,29 @@ export async function getDocumentById(id: number): Promise<Document | null> {
       año_trimestre: d.año_trimestre,
       num_trimestre: d.num_trimestre,
       empresa_nombre: d.empresas?.nombre_de_empresa || null,
-      empresa_cif: d.empresas?.CIF || null
-    }] as any[];
-
-    console.log('✅ [document-service] Documento encontrado:', {
-      id: documentRows[0].id,
-      trimestre_cerrado: documentRows[0].trimestre_cerrado
-    });
+      empresa_cif: d.empresas?.CIF || null,
+    }] as DocumentPacket[];
 
     const documents = await mapDocumentPacketsToDocuments(documentRows);
-
     return documents[0] || null;
+  } catch (error) {
+    console.error('❌ [document-service] Error getDocumentByIdForUser:', error);
+    return null;
+  }
+}
+
+/**
+ * Obtiene un documento por su ID
+ */
+export async function getDocumentById(id: number): Promise<Document | null> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.warn('⚠️ [document-service] No hay usuario autenticado');
+      return null;
+    }
+
+    return getDocumentByIdForUser(id, user.id);
   } catch (error) {
     console.error("❌ [document-service] Error al obtener documento por ID:", error);
     return null;

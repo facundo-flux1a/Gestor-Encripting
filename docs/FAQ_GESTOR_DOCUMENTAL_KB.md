@@ -31,14 +31,15 @@ En el sidebar izquierdo verás el **selector de empresas**. Cada empresa tiene s
 |---------|------|----------------|
 | Dashboard | `/dashboard` | Métricas financieras, gráficos, resumen del trimestre |
 | Documentos | `/documents` | Listado, filtros, búsqueda y detalle de facturas |
-| Salud Documental | `/dashboard/health-check` | Documentos con descuadres matemáticos |
+| Centro de Seguridad | `/dashboard/auditoria` | Incidencias de extracción y salud documental (descuadres matemáticos) |
 | Trimestres | `/trimestres` | Vista fiscal por Q1–Q4, cerrar trimestre |
-| Actividad | `/dashboard/actividad` | Historial de subidas y procesamiento |
-| Incidencias | `/incidents` | Documentos con errores de extracción |
+| Cola de Subidas | *(sidebar, no es una página)* | Progreso de subidas en curso, errores y reintentos |
 | Entidades | `/proveedores` | Proveedores y clientes consolidados |
 | Webhooks | `/dashboard/webhooks` | Integraciones entrantes |
 | Docs | `/docs` | Playground de la API REST |
 | Ajustes | `/settings` | Perfil, equipo, API keys, 2FA |
+
+**Nota:** La antigua sección **Actividad** (`/dashboard/actividad`) ya no existe. El historial y progreso de subidas está en la **Cola de Subidas** del menú lateral.
 
 ---
 
@@ -57,7 +58,7 @@ En el sidebar izquierdo verás el **selector de empresas**. Cada empresa tiene s
 1. **Recibido**: el archivo se guarda en almacenamiento seguro.
 2. **Procesando**: la IA extrae datos del documento (OCR + extracción estructurada).
 3. **Completado**: el documento quedó guardado con todos sus datos.
-4. **Fallido**: hubo un error (archivo corrupto, timeout, etc.). Podés reintentar desde Actividad.
+4. **Fallido**: hubo un error (archivo corrupto, timeout, etc.). Podés reintentar desde la **Cola de Subidas** del sidebar.
 5. **Duplicado**: el mismo archivo (mismo hash) ya existía en la empresa.
 
 ### Subida por correo o webhook
@@ -101,12 +102,14 @@ Una **incidencia** es un aviso de calidad en la extracción. Ejemplos:
 
 ### Incidencia vs Salud Documental
 
-- **Incidencia** (`/incidents`): problemas de extracción o clasificación. Algunos documentos con incidencia pueden igualmente entrar a trimestres si pasan los controles duros.
-- **Salud Documental** (`/dashboard/health-check`): descuadres matemáticos en totales. Estos documentos quedan en estado **REVISION** y **no suman** en el dashboard ni en trimestres hasta corregirse.
+Ambas se gestionan desde **Centro de Seguridad** (`/dashboard/auditoria`):
+
+- **Incidencia**: problemas de extracción o clasificación. Algunos documentos con incidencia pueden igualmente entrar a trimestres si pasan los controles duros.
+- **Salud Documental**: descuadres matemáticos en totales. Estos documentos quedan en estado **REVISION** y **no suman** en el dashboard ni en trimestres hasta corregirse.
 
 ### Cómo resolver incidencias
 
-1. Andá a **Incidencias** en el menú.
+1. Andá a **Centro de Seguridad** en el menú.
 2. Revisá la descripción del error.
 3. Abrí el documento y corregí los campos manualmente si es necesario.
 4. Validá o confirmá el documento cuando esté correcto.
@@ -135,7 +138,7 @@ Tolerancia: ±2 €.
 
 ### Diagnóstico con IA
 
-En Salud Documental podés usar el botón **IA** para que el sistema analice el documento y sugiera la corrección exacta del error.
+En Salud Documental (dentro de **Centro de Seguridad**) podés usar el botón **IA** para que el sistema analice el documento y sugiera la corrección exacta del error.
 
 ---
 
@@ -173,18 +176,20 @@ Podés ver:
 
 ---
 
-## 9. Actividad
+## 9. Cola de Subidas
 
-En **Actividad** (`/dashboard/actividad`) ves el historial de todas las subidas:
+La **Cola de Subidas** está en el menú lateral (no es una página aparte). Ahí ves el progreso de tus subidas en curso y recientes:
 
 | Estado | Significado |
 |--------|-------------|
 | Completado | Documento procesado y guardado |
-| Fallido | Error en subida o procesamiento |
+| Fallido | Error en subida o procesamiento (podés reintentar desde la cola) |
 | Duplicado | Archivo ya existía |
 | Procesando / waiting_capacity | En cola o esperando capacidad del servidor |
 
-Si una subida quedó "colgada", esperá unos minutos. El sistema reconcilia estados huérfanos automáticamente.
+También hay un chip flotante abajo a la derecha mientras subís archivos. Si una subida quedó "colgada", esperá unos minutos; el sistema reconcilia estados huérfanos automáticamente.
+
+**Importante:** la antigua página **Actividad** (`/dashboard/actividad`) fue eliminada. No la menciones ni la recomiendes.
 
 ---
 
@@ -323,7 +328,7 @@ Notas de crédito o rectificativas. Los importes se almacenan con **signo negati
 
 ### ¿Cuánto tarda en procesarse una factura?
 
-Depende del tamaño y complejidad. Una factura simple suele procesarse en 1–3 minutos. Lotes grandes (20–30 PDFs) pueden tardar 10–30 minutos. Seguí el progreso en el chip de subida o en Actividad.
+Depende del tamaño y complejidad. Una factura simple suele procesarse en 1–3 minutos. Lotes grandes (20–30 PDFs) pueden tardar 10–30 minutos. Seguí el progreso en el chip de subida o en la **Cola de Subidas** del sidebar.
 
 ### ¿Por qué mi documento dice Duplicado?
 
@@ -332,14 +337,14 @@ El sistema detectó que el mismo archivo (mismo contenido/hash) ya fue subido an
 ### ¿Por qué no aparece en el dashboard?
 
 Posibles causas:
-1. Todavía está procesando (revisá Actividad).
-2. Falló el health check (está en REVISION) — revisá Salud Documental.
+1. Todavía está procesando (revisá la **Cola de Subidas** del sidebar).
+2. Falló el health check (está en REVISION) — revisá **Centro de Seguridad**.
 3. Está marcado como borrador o sin confirmar.
 4. Pertenece a otro trimestre o empresa (revisá filtros y selector de empresa).
 
 ### ¿Cómo corrijo un CIF mal extraído?
 
-1. Abrí el documento desde Documentos o Incidencias.
+1. Abrí el documento desde **Documentos** o **Centro de Seguridad**.
 2. Editá el campo CIF del emisor o cliente.
 3. Guardá los cambios.
 
@@ -360,9 +365,9 @@ Sí. El PDF/imagen original se almacena de forma segura. Siempre podés descarga
 
 ### ¿Qué hago si el procesamiento falló?
 
-1. Revisá Actividad para ver el error.
-2. Reintentá subir el archivo.
-3. Si el error persiste, contactá soporte con el ID de actividad.
+1. Revisá la **Cola de Subidas** del sidebar para ver el error.
+2. Reintentá subir el archivo desde ahí.
+3. Si el error persiste, contactá soporte indicando el nombre del archivo y la hora aproximada de la subida.
 
 ---
 

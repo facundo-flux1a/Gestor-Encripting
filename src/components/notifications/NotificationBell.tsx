@@ -135,7 +135,7 @@ export function NotificationBell() {
         break;
       }
       case 'ingesta_completada':
-        router.push('/dashboard/actividad');
+        router.push(docId ? `/documents?highlight=${docId}` : '/documents');
         break;
       default:
         break;
