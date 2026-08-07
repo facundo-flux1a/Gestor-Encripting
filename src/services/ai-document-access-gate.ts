@@ -53,10 +53,18 @@ function computeIsIssued(
 ): boolean {
   const cifNorm = (empresaCif || '').trim().toLowerCase();
   const hashNorm = empresaCifHash || '';
-  return entidades.some((ed) => {
-    const fiscal = (ed.identificador_fiscal || '').trim().toLowerCase();
+  // IMPORTANTE: solo mirar rol 'emisor' o 'proveedor', igual que el SQL:
+  // WHEN ed2.rol IN('emisor', 'proveedor') AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(?,?)
+  // Si se incluye el receptor (= la propia empresa en facturas recibidas), todas aparecerían como emitidas.
+  const emisores = entidades.filter((ed) => ed.rol === 'emisor' || ed.rol === 'proveedor');
+  return emisores.some((ed) => {
     const fiscalHash = ed.identificador_fiscal_hash || '';
-    return (cifNorm && fiscal === cifNorm) || (hashNorm && fiscalHash === hashNorm);
+    const fiscal = (ed.identificador_fiscal || '').trim().toLowerCase();
+    // El hash de la entidad coincide con el hash de la empresa
+    if (hashNorm && fiscalHash && fiscalHash === hashNorm) return true;
+    // El CIF en texto plano de la entidad coincide con el CIF de la empresa
+    if (cifNorm && fiscal && fiscal === cifNorm) return true;
+    return false;
   });
 }
 
@@ -139,7 +147,7 @@ export async function resolveAgentScope(userId: number): Promise<AgentDocumentSc
 
   if (empresas.length === 0) return null;
 
-  const allowedEmpresaIds = empresas.map((e) => Number(e.id));
+  const allowedEmpresaIds = empresas.map((e: any) => Number(e.id));
   const selected = await getSelectedCompanies(userId);
   const effectiveEmpresaIds = resolveEffectiveEmpresaIds(allowedEmpresaIds, selected);
 
@@ -147,7 +155,7 @@ export async function resolveAgentScope(userId: number): Promise<AgentDocumentSc
     userId,
     allowedEmpresaIds,
     effectiveEmpresaIds,
-    empresas: empresas.map((e) => ({
+    empresas: empresas.map((e: any) => ({
       id: Number(e.id),
       nombre: e.nombre_de_empresa,
       cif: e.CIF,
@@ -158,6 +166,8 @@ export async function resolveAgentScope(userId: number): Promise<AgentDocumentSc
 function buildDocumentWhere(scope: AgentDocumentScope, filters: ListDocumentsFilters) {
   const limit = Math.min(filters.limit ?? MAX_LIST_RESULTS, MAX_LIST_RESULTS);
 
+  // NOTA: tipo_documento y health_check_status se filtran post-query en JS (case-insensitive).
+  // incidencias_documento: el include los trae para filtrar post-query.
   const where: Record<string, unknown> = {
     id_de_empresa: { in: scope.effectiveEmpresaIds.map((id) => BigInt(id)) },
     empresas: { id_de_usuario: { array_contains: scope.userId } },
@@ -169,20 +179,23 @@ function buildDocumentWhere(scope: AgentDocumentScope, filters: ListDocumentsFil
     where.numero_documento = { contains: filters.numero.trim() };
   }
 
-  if (filters.solo_incidencias_pendientes) {
-    where.incidencias_documento = { some: { validado: false } };
-  }
-
-  return { where, limit };
+  return { where, limit, soloIncidencias: filters.solo_incidencias_pendientes ?? false };
 }
 
 async function fetchDocumentRows(scope: AgentDocumentScope, filters: ListDocumentsFilters) {
-  const { where, limit } = buildDocumentWhere(scope, filters);
+  const { where, limit, soloIncidencias } = buildDocumentWhere(scope, filters);
+
+  // IDs bloqueados por health_check fallido — no hay @relation en el schema de Prisma.
+  const blockedByHealthCheck = await prisma.health_check_status.findMany({
+    where: { verified: false },
+    select: { documento_id: true },
+  });
+  const blockedIds = new Set(blockedByHealthCheck.map((r: any) => r.documento_id));
 
   let docs = await prisma.documentos.findMany({
     where: where as any,
     orderBy: { fecha_emision: 'desc' },
-    take: limit * 3,
+    take: limit * 5, // traemos más para compensar los filtros post-query
     include: {
       empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
       entidades_documento: {
@@ -194,22 +207,56 @@ async function fetchDocumentRows(scope: AgentDocumentScope, filters: ListDocumen
     },
   });
 
+  // ── Filtros post-query ──
+
+  // 1. tipo_documento: solo facturas/abonos/créditos confirmados (case-insensitive con toLowerCase,
+  //    equivalente al LOWER(tipo_documento) LIKE del SQL).
+  const afterTipo0 = docs.length;
+  docs = docs.filter((d: any) => {
+    const tipo = (d.tipo_documento || '').toLowerCase();
+    if (tipo.includes('(sin confirmar)')) return false;
+    return tipo.includes('factura') || tipo.includes('abono') ||
+           tipo.includes('crédito') || tipo.includes('credito');
+  });
+
+  // 2. Health_check fallido: excluir si verified=false en health_check_status.
+  const afterTipo = docs.length;
+  if (blockedIds.size > 0) {
+    docs = docs.filter((d: any) => !blockedIds.has(Number(d.id)));
+  }
+
+  // 3. Incidencias: SOLO filtrar si el usuario pidió explícitamente soloIncidencias=true.
+  //    En el flujo normal, el agente VE todos los docs (incluyendo con incidencias)
+  //    para poder informar al usuario. La propiedad incidencia:true ya se setea en listDocumentsSummary.
+  const afterHealth = docs.length;
+  if (soloIncidencias) {
+    docs = docs.filter((d: any) => d.incidencias_documento?.length > 0);
+  }
+
+  // 4. Filtro de proveedor (nombre de entidad)
   if (filters.proveedor?.trim()) {
     const q = filters.proveedor.trim().toLowerCase();
-    docs = docs.filter((d) =>
-      d.entidades_documento.some((e) => (e.nombre || '').toLowerCase().includes(q)),
+    docs = docs.filter((d: any) =>
+      d.entidades_documento.some((e: any) => (e.nombre || '').toLowerCase().includes(q)),
     );
   }
 
+  // 5. Filtro de tipo emitidas/recibidas
   if (filters.tipo === 'emitidas') {
-    docs = docs.filter((d) =>
+    docs = docs.filter((d: any) =>
       computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
     );
   } else if (filters.tipo === 'recibidas') {
     docs = docs.filter(
-      (d) => !computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
+      (d: any) => !computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
     );
   }
+
+  console.log('[ai-access-gate] fetchDocumentRows pipeline:', {
+    empresaIds: scope.effectiveEmpresaIds,
+    raw: afterTipo0, afterTipo, afterHealth, final: docs.length,
+    filters: { trimestre: filters.trimestre, año: filters.año, tipo: filters.tipo },
+  });
 
   return docs.slice(0, limit);
 }
@@ -221,7 +268,7 @@ export async function listDocumentsSummary(
   if (scope.effectiveEmpresaIds.length === 0) return [];
 
   const rows = await fetchDocumentRows(scope, filters);
-  return rows.map((d) => {
+  return rows.map((d: any) => {
     const { doc, enviado_sii } = mapRowToDocumentLike(d);
     const pending = d.incidencias_documento?.[0];
     if (pending) {
@@ -267,12 +314,12 @@ export async function getDocumentFull(
 
   return documentToFull(doc, {
     enviado_sii: rawDoc?.enviado_sii ?? undefined,
-    ai_incidencias: aiInc.map((i) => ({
+    ai_incidencias: aiInc.map((i: any) => ({
       tipo: i.tipo,
       descripcion: i.descripcion,
       severidad: String(i.severidad),
     })),
-    ai_suggestions: aiSug.map((s) => ({
+    ai_suggestions: aiSug.map((s: any) => ({
       tipo: s.tipo,
       descripcion: s.descripcion,
       severidad: s.severidad ? String(s.severidad) : null,
@@ -346,7 +393,7 @@ export async function getQuarterSummary(
     }
   }
 
-  const cerrado = trimestreRows.some((t) => t.cerrado);
+  const cerrado = trimestreRows.some((t: any) => t.cerrado);
 
   return {
     año,

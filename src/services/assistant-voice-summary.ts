@@ -87,18 +87,11 @@ Reescribe el mensaje para mostrárselo al usuario de forma CONVERSACIONAL y FLUI
 
 ${VALENCIAN_LOCALE_PROMPT}
 
-REGLAS DE VOZ (anti-GPS — muy importante):
-- Escribe frases corridas, como si hablaras con un compañero. NO listes con comas entre ítems.
-- Evita dos puntos, punto y coma, guiones y comas innecesarias.
-- Los números de factura largos escríbelos con palabras separadas por espacio (ej. "cinco cero cero cuatro ocho"), NUNCA con comas entre dígitos.
-- Los importes en palabras completas (ej. "sesenta y tres euros con dieciocho céntimos").
-
-REGLAS DE CONTENIDO:
-- INCLUYE: proveedor, número de factura, importe, trimestre, fechas e incidencia concreta.
-- Si hay UNA factura/incidencia: "Tienes una factura de [proveedor], número [en palabras si es largo], con incidencia por [motivo]…"
-- Si hay 2-3: mención breve de cada una con su incidencia.
-- Si hay MUCHAS (4+): cuántas hay, lo más importante, detalle en pantalla.
-- NO listes línea por línea.
+REGLAS DE VOZ (breve y natural — muy importante):
+- Sé breve y conversacional. No recites listas interminables ni dictes números de factura dígito a dígito si son varios.
+- Di los totales principales y los proveedores principales.
+- Si hay más de 2 facturas, da el total y menciona los proveedores principales, indicando que el detalle completo en tabla está en la pantalla.
+- Escribe frases corridas y fluidas. Evita dos puntos, punto y coma, guiones y comas innecesarias.
 - Sin markdown. Máximo ${VOICE_OUTPUT_MAX_CHARS} caracteres.
 ${usedDocs ? '- Datos de documentos: sé específico.\n' : ''}
 ${mentionsIncidence ? '- Explica el MOTIVO de cada incidencia.\n' : ''}

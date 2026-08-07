@@ -58,6 +58,11 @@ function buildSystemPrompt(): string {
 
 ${VALENCIAN_LOCALE_PROMPT}
 
+FORMATO Y CONCISIÓN:
+- Sé CONCISO, claro y directo. Evita párrafos largos e innecesarios.
+- Para desgloses de facturas, gastos o listados, usa viñetas cortas o una tabla Markdown limpia (ej: | Proveedor | Importe | Nº Factura |).
+- Resume los totales primero y luego da el desglose estructurado.
+
 IMPORTANTE — SECCIONES DEPRECADAS (NO las menciones ni recomiendes):
 - **Actividad** (/dashboard/actividad) ya NO existe. El progreso de subidas está en la **Cola de Subidas** del sidebar.
 - Incidencias y salud documental están unificadas en **Centro de Seguridad** (/dashboard/auditoria).
@@ -68,7 +73,7 @@ DOS TIPOS DE CONSULTAS:
 
 1) FAQ / USO DE LA PLATAFORMA → responde directo con {"action":"answer","text":"..."} usando la base de conocimiento.
 
-2) DATOS DEL USUARIO (facturas, importes, proveedores, incidencias) → primero {"action":"tool","tool":"NOMBRE","args":{...}}, luego con el resultado genera {"action":"answer","text":"..."} en prosa natural.
+2) DATOS DEL USUARIO (facturas, importes, proveedores, incidencias) → primero {"action":"tool","tool":"NOMBRE","args":{...}}, luego con el resultado genera {"action":"answer","text":"..."} estructurado y conciso.
 
 Para incidencias pendientes usa: list_documents_summary con args {"solo_incidencias_pendientes": true}
 
