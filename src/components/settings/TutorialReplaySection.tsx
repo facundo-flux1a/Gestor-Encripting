@@ -7,10 +7,9 @@ import { useRouter, usePathname } from "next/navigation";
 
 const TUTORIALS = [
     { id: 'dashboard', name: 'Dashboard General', path: '/dashboard', storageKey: 'force_tutorial_dashboard' },
-    { id: 'documentos', name: 'Gestión de Documentos', path: '/dashboard', storageKey: 'force_tutorial_documentos' },
-    { id: 'trimestres', name: 'Resumen Trimestral', path: '/dashboard/trimestres', storageKey: 'force_tutorial_trimestres' },
-    { id: 'actividad', name: 'Historial de Actividad', path: '/dashboard/actividad', storageKey: 'force_tutorial_actividad' },
-    { id: 'incidencias', name: 'Gestión de Incidencias', path: '/dashboard/incidencias', storageKey: 'force_tutorial_incidencias' },
+    { id: 'documentos', name: 'Gestión de Documentos', path: '/documents', storageKey: 'force_tutorial_documentos' },
+    { id: 'trimestres', name: 'Resumen Trimestral', path: '/trimestres', storageKey: 'force_tutorial_trimestres' },
+    { id: 'incidencias', name: 'Gestión de Incidencias', path: '/incidents', storageKey: 'force_tutorial_incidencias' },
     { id: 'proveedores', name: 'Directorio de Entidades', path: '/proveedores', storageKey: 'force_tutorial_proveedores' },
     { id: 'health-check', name: 'Salud Documental', path: '/dashboard/health-check', storageKey: 'force_tutorial_health_check' },
 ];
