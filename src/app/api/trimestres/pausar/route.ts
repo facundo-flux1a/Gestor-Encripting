@@ -21,12 +21,17 @@ export async function POST(req: NextRequest) {
 
     const result = await pausarTrimestre(session.userId, validation.data);
 
+    const estadoMsg = result.estado === 1
+      ? `Trimestre T${validation.data.trimestre} ${validation.data.año} cerrado`
+      : result.estado === 2
+        ? `Ingesta pausada para T${validation.data.trimestre} ${validation.data.año}`
+        : `Trimestre T${validation.data.trimestre} ${validation.data.año} activo`;
+
     return NextResponse.json({
       success: true,
       pausado: result.pausado,
-      message: result.pausado
-        ? `Ingesta pausada para T${validation.data.trimestre} ${validation.data.año}`
-        : `Ingesta reanudada para T${validation.data.trimestre} ${validation.data.año}`,
+      estado: result.estado,
+      message: estadoMsg,
     });
   } catch (error) {
     console.error('Error en POST /api/trimestres/pausar:', error);

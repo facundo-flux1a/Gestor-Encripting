@@ -17,6 +17,8 @@ import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
 import { TrimestreExcelView } from '@/components/trimestres/trimestre-excel-view';
 import { TrimestresTutorialRouter } from '@/components/trimestres/TrimestresTutorialRouter';
+import { PauseQuartersDialog } from '@/components/trimestres/pause-quarters-dialog';
+import { ExportQuartersDialog } from '@/components/trimestres/export-quarters-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -37,6 +39,7 @@ import {
   Download,
   PauseCircle,
   Play,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { Document, Trimestre } from '@/lib/types';
 import { generateAdvancedExport } from '@/lib/export-utils';
@@ -99,6 +102,8 @@ function TrimestresPageContent() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoadingDocs, setIsLoadingDocs] = React.useState(false);
   const [isLoadingAnnualDocs, setIsLoadingAnnualDocs] = React.useState(false);
+
+  const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
 
   // Trimestres y Años seleccionados
   const [selectedAños, setSelectedAños] = React.useState<number[]>(() => [new Date().getFullYear()]);
@@ -682,6 +687,7 @@ function TrimestresPageContent() {
   };
 
   const [isPausando, setIsPausando] = React.useState(false);
+  const [isPauseDialogOpen, setIsPauseDialogOpen] = React.useState(false);
 
   const handlePausarTrimestre = async (pausar: boolean) => {
     if (!selectedAño || !selectedTrimestre) return;
@@ -958,33 +964,17 @@ function TrimestresPageContent() {
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
 
-                  {(trimestreAgregado.cerrado_estado === 2 || !trimestreAgregado.cerrado) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isPausando}
-                      onClick={() => handlePausarTrimestre(trimestreAgregado.cerrado_estado !== 2)}
-                      className={
-                        trimestreAgregado.cerrado_estado === 2
-                          ? "gap-2 text-xs sm:text-sm h-8 sm:h-9 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                          : "gap-2 text-xs sm:text-sm h-8 sm:h-9 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400"
-                      }
-                    >
-                      {trimestreAgregado.cerrado_estado === 2 ? (
-                        <>
-                          <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" />
-                          <span className="hidden xs:inline">Reanudar Ingesta</span>
-                          <span className="xs:hidden">Reanudar</span>
-                        </>
-                      ) : (
-                        <>
-                          <PauseCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" />
-                          <span className="hidden xs:inline">Pausar Ingesta</span>
-                          <span className="xs:hidden">Pausar</span>
-                        </>
-                      )}
-                    </Button>
-                  )}
+                  {/* ✅ NUEVO: Botón que abre el modal de gestión de estados de trimestres */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsPauseDialogOpen(true)}
+                    className="gap-2 text-xs sm:text-sm h-8 sm:h-9 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" />
+                    <span className="hidden xs:inline">Gestionar Estados</span>
+                    <span className="xs:hidden">Estados</span>
+                  </Button>
 
                   {puedeCerrarse && (
                     <Button
@@ -1010,33 +1000,16 @@ function TrimestresPageContent() {
                     </Button>
                   )}
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
-                      >
-                        <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                        <span className="hidden xs:inline">Exportar</span>
-                        <span className="xs:hidden">Export</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleExportar(selectedAño, selectedTrimestre)}
-                        className="cursor-pointer"
-                      >
-                        Exportar Trimestre Actual (T{selectedTrimestre})
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleExportar(selectedAño, null)}
-                        className="cursor-pointer"
-                      >
-                        Exportar Año Completo ({selectedAño})
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+                    onClick={() => setIsExportDialogOpen(true)}
+                  >
+                    <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span className="hidden xs:inline">Exportar</span>
+                    <span className="xs:hidden">Export</span>
+                  </Button>
 
                   {puedeEnviarAlSII && (
                     <Button
@@ -1398,6 +1371,27 @@ function TrimestresPageContent() {
           onOpenChange={setDialogOpen}
           trimestre={trimestreToClose}
           onConfirm={handleCerrarTrimestre}
+        />
+
+        {/* ✅ Modal de gestión de estados de trimestres */}
+        <PauseQuartersDialog
+          open={isPauseDialogOpen}
+          onOpenChange={setIsPauseDialogOpen}
+          selectedCompanyIds={selectedCompanyIds}
+          onSuccess={() => {
+            void loadTrimestres();
+            void loadDocumentos();
+          }}
+        />
+
+        {/* ✅ Modal de exportación personalizada */}
+        <ExportQuartersDialog
+          open={isExportDialogOpen}
+          onOpenChange={setIsExportDialogOpen}
+          selectedCompanyIds={selectedCompanyIds}
+          selectedPeriodosCurrent={selectedPeriodos}
+          currentAño={selectedAño}
+          currentTrimestre={selectedTrimestre}
         />
       </MainLayout>
     </>

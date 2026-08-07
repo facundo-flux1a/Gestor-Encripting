@@ -4801,10 +4801,12 @@ cerrado = 1,
 export async function pausarTrimestre(
   userId: number,
   payload: PausarTrimestrePayload
-): Promise<{ success: boolean; pausado: boolean }> {
+): Promise<{ success: boolean; pausado: boolean; estado: number }> {
   const conn = await db.getConnection();
   try {
-    const { año, trimestre, empresa_id, pausado } = payload;
+    const { año, trimestre, empresa_id, pausado, estado } = payload;
+    const targetEstado = estado !== undefined ? estado : (pausado ? 2 : 0);
+
     let empresaIds: number[] = [];
 
     if (empresa_id !== null) {
@@ -4818,25 +4820,41 @@ export async function pausarTrimestre(
     }
 
     if (empresaIds.length === 0) {
-      return { success: false, pausado: false };
+      return { success: false, pausado: false, estado: targetEstado };
     }
 
-    for (const empId of empresaIds) {
-      if (pausado) {
-        // Establecer cerrado = 2 (pausado para ingesta)
-        await conn.query(
-          `INSERT INTO trimestres (año, num_trimestre, id_de_empresa, cerrado, fecha_creacion, fecha_actualizacion)
-           VALUES (?, ?, ?, 2, NOW(), NOW())
-           ON DUPLICATE KEY UPDATE cerrado = IF(cerrado = 1, 1, 2), fecha_actualizacion = NOW()`,
-          [año, trimestre, empId]
-        );
-      } else {
-        // Despausar: si cerrado = 2, restaurar a 0
-        await conn.query(
-          `UPDATE trimestres SET cerrado = 0, fecha_actualizacion = NOW()
-           WHERE año = ? AND num_trimestre = ? AND id_de_empresa = ? AND cerrado = 2`,
-          [año, trimestre, empId]
-        );
+    if (targetEstado === 1) {
+      // Estado 1: Cerrar fiscalmente (calcula KPIs y bloquea)
+      await cerrarTrimestre(userId, { año, trimestre, empresa_id });
+    } else {
+      for (const empId of empresaIds) {
+        if (targetEstado === 2) {
+          // Estado 2: Pausar ingesta
+          await conn.query(
+            `INSERT INTO trimestres (año, num_trimestre, id_de_empresa, cerrado, fecha_creacion, fecha_actualizacion)
+             VALUES (?, ?, ?, 2, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE cerrado = 2, fecha_actualizacion = NOW()`,
+            [año, trimestre, empId]
+          );
+          // Desbloquear documentos si estuviesen cerrados
+          await conn.query(
+            `UPDATE documentos SET trimestre_cerrado = 0 WHERE año_trimestre = ? AND num_trimestre = ? AND id_de_empresa = ?`,
+            [año, trimestre, empId]
+          );
+        } else {
+          // Estado 0: Activo / Reabierto
+          await conn.query(
+            `INSERT INTO trimestres (año, num_trimestre, id_de_empresa, cerrado, fecha_creacion, fecha_actualizacion)
+             VALUES (?, ?, ?, 0, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE cerrado = 0, fecha_cierre = NULL, fecha_actualizacion = NOW()`,
+            [año, trimestre, empId]
+          );
+          // Reabrir documentos asociados para permitir modificaciones
+          await conn.query(
+            `UPDATE documentos SET trimestre_cerrado = 0 WHERE año_trimestre = ? AND num_trimestre = ? AND id_de_empresa = ?`,
+            [año, trimestre, empId]
+          );
+        }
       }
     }
 
@@ -4847,17 +4865,17 @@ export async function pausarTrimestre(
       if (user) {
         await logAuditAction({
           empresaId: payload.empresa_id,
-          accion: 'PAUSAR_TRIMESTRE' as any,
+          accion: (targetEstado === 1 ? 'CIERRE_TRIMESTRE' : targetEstado === 2 ? 'PAUSAR_TRIMESTRE' : 'REABRIR_TRIMESTRE') as any,
           usuarioEmail: user.email,
           userId: user.id,
-          detalle: { año, trimestre, pausado },
+          detalle: { año, trimestre, estado: targetEstado },
         });
       }
     } catch (auditErr) {
-      console.warn('⚠️ Error registrando auditoría PAUSAR_TRIMESTRE:', auditErr);
+      console.warn('⚠️ Error registrando auditoría CAMBIO_ESTADO_TRIMESTRE:', auditErr);
     }
 
-    return { success: true, pausado };
+    return { success: true, pausado: targetEstado === 2, estado: targetEstado };
   } catch (error) {
     console.error('❌ [pausarTrimestre] Error:', error);
     throw error;

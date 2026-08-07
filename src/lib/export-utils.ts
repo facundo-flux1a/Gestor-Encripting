@@ -332,6 +332,21 @@ export const generateAdvancedExport = (
     if (isExcel) {
         const workbook = XLSX.utils.book_new();
 
+        // Helper para extraer año de cada documento
+        const getDocYear = (item: any): number => {
+            const doc = item.original || item;
+            if (doc.año) return Number(doc.año);
+            if (doc.año_trimestre) return Number(doc.año_trimestre);
+            if (doc.fecha_emision) {
+                const d = new Date(doc.fecha_emision);
+                if (!isNaN(d.getTime())) return d.getFullYear();
+            }
+            return 0;
+        };
+
+        const yearsPresent = Array.from(new Set(data.map(getDocYear).filter(y => y > 0))).sort((a, b) => a - b);
+        const hasMultipleYears = yearsPresent.length > 1;
+
         // 1. HOJA RESUMEN IVA
         if (options.includeSummary) {
             const summarySheet = generateIvaSummarySheet(data, options);
@@ -340,64 +355,92 @@ export const generateAdvancedExport = (
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen IVA');
         }
 
-        // 2. HOJAS POR TRIMESTRE (1T, 2T, 3T, 4T)
-        // Agrupar datos por trimestre
-        const quarters: Record<number, any[]> = { 1: [], 2: [], 3: [], 4: [] };
-        const unknownQuarter: any[] = [];
+        // 2. HOJAS POR TRIMESTRE Y AÑO
+        if (hasMultipleYears) {
+            // Generar pestañas desglosadas por cada año
+            yearsPresent.forEach(year => {
+                const yearData = data.filter(item => getDocYear(item) === year);
+                const quarters: Record<number, any[]> = { 1: [], 2: [], 3: [], 4: [] };
 
-        data.forEach(item => {
-            const doc = item.original || item;
-            let q = doc.num_trimestre;
+                yearData.forEach(item => {
+                    const doc = item.original || item;
+                    let q = doc.num_trimestre;
+                    if (!q && doc.fecha_emision) {
+                        const month = new Date(doc.fecha_emision).getMonth() + 1;
+                        q = Math.ceil(month / 3);
+                    }
+                    if (q >= 1 && q <= 4) {
+                        quarters[q].push(item);
+                    }
+                });
 
-            // Intentar inferir trimestre si falta
-            if (!q && doc.fecha_emision) {
-                const month = new Date(doc.fecha_emision).getMonth() + 1;
-                q = Math.ceil(month / 3);
-            }
+                [1, 2, 3, 4].forEach(q => {
+                    if (quarters[q].length > 0) {
+                        const sheet = generateDataSheet(quarters[q]);
+                        applyExcelNumberFormat(sheet);
+                        adjustColumnWidths(sheet);
+                        XLSX.utils.book_append_sheet(workbook, sheet, `${q}T ${year}`);
+                    }
+                });
+            });
 
-            if (q >= 1 && q <= 4) {
-                quarters[q].push(item);
-            } else {
-                unknownQuarter.push(item);
-            }
-        });
+            // Pestaña unificada al final con todos los datos combinados independientemente del año
+            const consolidadoSheet = generateDataSheet(data);
+            applyExcelNumberFormat(consolidadoSheet);
+            adjustColumnWidths(consolidadoSheet);
+            XLSX.utils.book_append_sheet(workbook, consolidadoSheet, 'Consolidado Global');
+        } else {
+            // Agrupar datos por trimestre (un solo año)
+            const quarters: Record<number, any[]> = { 1: [], 2: [], 3: [], 4: [] };
+            const unknownQuarter: any[] = [];
 
-        // Agregar hojas para trimestres con datos
-        [1, 2, 3, 4].forEach(q => {
-            if (quarters[q].length > 0) {
-                const sheet = generateDataSheet(quarters[q]);
-                applyExcelNumberFormat(sheet); // ✅ Aplicar formato
-                adjustColumnWidths(sheet); // ✅ Ajustar anchos
-                XLSX.utils.book_append_sheet(workbook, sheet, `${q}T`);
-            }
-        });
+            data.forEach(item => {
+                const doc = item.original || item;
+                let q = doc.num_trimestre;
 
-        // Si hay documentos sin trimestre o si no se generó ninguna hoja de trimestre, poner todo en "General"
-        // O si explicitamente se pide "exportar todo" y no hay data por trimestre separada
-        if (unknownQuarter.length > 0 || (quarters[1].length === 0 && quarters[2].length === 0 && quarters[3].length === 0 && quarters[4].length === 0)) {
-            // Si no hay datos trimestrales, usar todos los datos en una hoja general
-            const dataToUse = unknownQuarter.length > 0 ? unknownQuarter : data;
-            if (dataToUse.length > 0) {
-                const sheet = generateDataSheet(dataToUse);
-                applyExcelNumberFormat(sheet); // ✅ Aplicar formato
-                adjustColumnWidths(sheet); // ✅ Ajustar anchos
-                XLSX.utils.book_append_sheet(workbook, sheet, 'General');
+                if (!q && doc.fecha_emision) {
+                    const month = new Date(doc.fecha_emision).getMonth() + 1;
+                    q = Math.ceil(month / 3);
+                }
+
+                if (q >= 1 && q <= 4) {
+                    quarters[q].push(item);
+                } else {
+                    unknownQuarter.push(item);
+                }
+            });
+
+            // Agregar hojas para trimestres con datos
+            [1, 2, 3, 4].forEach(q => {
+                if (quarters[q].length > 0) {
+                    const sheet = generateDataSheet(quarters[q]);
+                    applyExcelNumberFormat(sheet); // ✅ Aplicar formato
+                    adjustColumnWidths(sheet); // ✅ Ajustar anchos
+                    XLSX.utils.book_append_sheet(workbook, sheet, `${q}T`);
+                }
+            });
+
+            if (unknownQuarter.length > 0 || (quarters[1].length === 0 && quarters[2].length === 0 && quarters[3].length === 0 && quarters[4].length === 0)) {
+                const dataToUse = unknownQuarter.length > 0 ? unknownQuarter : data;
+                if (dataToUse.length > 0) {
+                    const sheet = generateDataSheet(dataToUse);
+                    applyExcelNumberFormat(sheet); // ✅ Aplicar formato
+                    adjustColumnWidths(sheet); // ✅ Ajustar anchos
+                    XLSX.utils.book_append_sheet(workbook, sheet, 'General');
+                }
             }
         }
 
         XLSX.writeFile(workbook, `${filename}.xlsx`);
     } else {
         // Para CSV/TXT, exportar todo junto (no soporta pestañas)
-        // Usamos la logica simple de una hoja
         const sheet = generateDataSheet(data);
         let csv = XLSX.utils.sheet_to_csv(sheet);
 
-        // ✅ Si se pide resumen, AGREGARLO al final del mismo archivo
         if (options.includeSummary) {
             const summarySheet = generateIvaSummarySheet(data, options);
             const summaryCsv = XLSX.utils.sheet_to_csv(summarySheet);
 
-            // Agregar separador visual (líneas vacías + título)
             csv += "\n\n\n--- RESUMEN IVA ---\n\n";
             csv += summaryCsv;
         }
@@ -405,7 +448,6 @@ export const generateAdvancedExport = (
         if (format === 'csv') {
             downloadFile(csv, `${filename}.csv`, 'text/csv;charset=utf-8;');
         } else {
-            // JSON export: build an array of objects from visible columns
             const jsonRows = data.map(item => {
                 const obj: Record<string, any> = {};
                 columns.forEach(col => {

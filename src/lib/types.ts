@@ -381,7 +381,8 @@ export const PausarTrimestrePayloadSchema = z.object({
   año: z.number(),
   trimestre: z.number().min(1).max(4),
   empresa_id: z.number().nullable(),
-  pausado: z.boolean(),
+  pausado: z.boolean().optional(),
+  estado: z.number().optional(), // 0: Activo (Abierto), 1: Cerrado, 2: Pausado
 });
 export type PausarTrimestrePayload = z.infer<typeof PausarTrimestrePayloadSchema>;
 
