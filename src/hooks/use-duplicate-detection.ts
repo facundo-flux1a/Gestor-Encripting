@@ -20,6 +20,9 @@ export function useDuplicateDetection(empresaId?: number) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const checkDuplicates = useCallback(async () => {
+    if (!empresaId) {
+      return null;
+    }
     // Si ya hay una petición en vuelo (de otra instancia del hook), no disparar otra
     if (_checkInFlight) {
       console.log('⏭️ [useDuplicateDetection] Petición ya en vuelo, ignorando esta.');
@@ -30,11 +33,16 @@ export function useDuplicateDetection(empresaId?: number) {
       console.log('🔍 [useDuplicateDetection] Verificando duplicados...', { empresaId });
       setIsChecking(true);
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 50_000);
+
       const response = await fetch('/api/documents/check-duplicates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId: empresaId || null }),
+        body: JSON.stringify({ empresaId }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         let bodyText = '';
@@ -95,23 +103,30 @@ export function useDuplicateDetection(empresaId?: number) {
     }
   }, [empresaId]);
 
-  // Polling automático cada 30 segundos
+  // Polling automático cada 60 segundos (solo con empresa seleccionada y pestaña visible)
   useEffect(() => {
-    // Verificar inmediatamente al montar
-    checkDuplicates();
-    
-    // Configurar polling cada 30 segundos
-    intervalRef.current = setInterval(() => {
-      checkDuplicates();
-    }, 30000);
+    if (!empresaId) return;
 
-    // Limpiar al desmontar
+    const runIfVisible = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      checkDuplicates();
+    };
+
+    runIfVisible();
+    intervalRef.current = setInterval(runIfVisible, 60_000);
+
+    const onVisibility = () => {
+      if (!document.hidden) runIfVisible();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [checkDuplicates]);
+  }, [checkDuplicates, empresaId]);
 
   return { 
     checkDuplicates, 

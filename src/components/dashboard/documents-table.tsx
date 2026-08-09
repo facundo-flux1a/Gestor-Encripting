@@ -1179,7 +1179,10 @@ export function DocumentsTable({
 
   const { selectedCompanyIds } = useCompanyContext();
 
-  const { checkDuplicates, duplicates, duplicateGroups } = useDuplicateDetection();
+  const duplicateCheckEmpresaId =
+    selectedCompanyIds?.length === 1 ? selectedCompanyIds[0] : undefined;
+
+  const { checkDuplicates, duplicates, duplicateGroups } = useDuplicateDetection(duplicateCheckEmpresaId);
   const [isDuplicateDetailsOpen, setIsDuplicateDetailsOpen] = useState(false);
 
   console.log('🎯 [DocumentsTable] Duplicados actuales:', Array.from(duplicates));

@@ -90,7 +90,7 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
     const results = rows as any[];
     return results.length > 0 ? results[0] : null;
   } catch (error) {
-    console.error('Error al verificar duplicados:', error);
+    console.error(`[checkDuplicate] Error al verificar hash (empresa ${empresaId}):`, error);
     return null;
   }
 }
