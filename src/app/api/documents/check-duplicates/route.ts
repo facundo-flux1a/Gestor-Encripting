@@ -4,17 +4,19 @@ import db from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 import type { RowDataPacket } from 'mysql2';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
-
-// Candado en memoria para evitar ejecuciones concurrentes en el mismo proceso (sin agotar el connection pool)
-let isProcessing = false;
+import {
+  acquireCheckDuplicatesLock,
+  releaseCheckDuplicatesLock,
+  CHECK_DUPLICATES_MAX_RUN_MS,
+} from '@/lib/check-duplicates-lock';
 
 export async function POST(req: NextRequest) {
-  if (isProcessing) {
+  if (!acquireCheckDuplicatesLock()) {
     console.log('⏭️ [check-duplicates] Lock en memoria ocupado. Omitiendo petición concurrente.');
     return NextResponse.json({ success: true, incidenciasCreadas: 0, skipped: true });
   }
 
-  isProcessing = true;
+  const startedAt = Date.now();
   try {
     const session = await getSession();
     if (!session) {
@@ -23,8 +25,14 @@ export async function POST(req: NextRequest) {
 
     const { empresaId } = await req.json();
 
+    if (!empresaId) {
+      console.log('⏭️ [check-duplicates] Sin empresaId — omitiendo scan global (evita bloquear uploads)');
+      return NextResponse.json({ success: true, incidenciasCreadas: 0, skipped: true, reason: 'missing_empresa_id' });
+    }
+
     console.log('🔍 [check-duplicates] Verificando duplicados para empresa:', empresaId);
 
+    const runCheck = async () => {
     // Obtener todos los documentos de la empresa con información del proveedor
     const [docs] = await db.query<RowDataPacket[]>(
       `SELECT 
@@ -39,10 +47,10 @@ export async function POST(req: NextRequest) {
        FROM documentos d
        JOIN empresas emp ON d.id_de_empresa = emp.id
        LEFT JOIN entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
-       WHERE JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON)) ${empresaId ? 'AND d.id_de_empresa = ?' : ''}
+       WHERE JSON_CONTAINS(emp.id_de_usuario, CAST(? AS JSON)) AND d.id_de_empresa = ?
        AND d.numero_documento IS NOT NULL 
        AND d.numero_documento != ''`,
-      empresaId ? [session.userId, empresaId] : [session.userId]
+      [session.userId, empresaId]
     );
 
     // Detectar duplicados (agrupar según lógica de negocio)
@@ -285,7 +293,7 @@ export async function POST(req: NextRequest) {
 
     console.log('[check-duplicates] Incidencias creadas:', creadas);
 
-    return NextResponse.json({
+    return {
       success: true,
       duplicates: duplicadosReales.map(grupo => ({
         numero: grupo.numero,
@@ -295,15 +303,25 @@ export async function POST(req: NextRequest) {
       })),
       totalDuplicados: todosLosIdsDuplicados.length,
       incidenciasCreadas: creadas
+    };
+    };
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('check-duplicates timeout')), CHECK_DUPLICATES_MAX_RUN_MS);
     });
 
+    const result = await Promise.race([runCheck(), timeoutPromise]);
+    console.log(`⏱️ [check-duplicates] Completado en ${Date.now() - startedAt}ms`);
+    return NextResponse.json(result);
+
   } catch (error) {
-    console.error('❌ [check-duplicates] Error:', error);
+    const isTimeout = error instanceof Error && error.message === 'check-duplicates timeout';
+    console.error(isTimeout ? '⏱️ [check-duplicates] Timeout (>45s)' : '❌ [check-duplicates] Error:', error);
     return NextResponse.json(
-      { error: 'Error al verificar duplicados' },
-      { status: 500 }
+      { error: isTimeout ? 'Verificación de duplicados expiró' : 'Error al verificar duplicados', skipped: isTimeout },
+      { status: isTimeout ? 408 : 500 }
     );
   } finally {
-    isProcessing = false;
+    releaseCheckDuplicatesLock();
   }
 }
