@@ -17,6 +17,7 @@ import { QuarterBadge } from '@/components/trimestres/quarter-badge';
 import { CompaniesHeaderSelector } from '@/components/companies-header-selector';
 import { TrimestreExcelView } from '@/components/trimestres/trimestre-excel-view';
 import { TrimestresTutorialRouter } from '@/components/trimestres/TrimestresTutorialRouter';
+import { TRIMESTRES_CLOSE_STEP_INDEX } from '@/components/trimestres/trimestres-tutorial-steps';
 import { PauseQuartersDialog } from '@/components/trimestres/pause-quarters-dialog';
 import { ExportQuartersDialog } from '@/components/trimestres/export-quarters-dialog';
 import { Button } from '@/components/ui/button';
@@ -898,6 +899,15 @@ function TrimestresPageContent() {
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;
 
+  const trimestreParaVista = React.useMemo(() => {
+    if (trimestreAgregado) return trimestreAgregado;
+    if (!isTutorialActive) return null;
+    return {
+      trimestre: selectedTrimestre,
+      año: selectedAño,
+    } as Trimestre;
+  }, [trimestreAgregado, isTutorialActive, selectedTrimestre, selectedAño]);
+
   const puedeCerrarse = trimestreAgregado && (trimestreAgregado.cerrado_estado !== 1);
   const puedeEnviarAlSII = trimestreAgregado && (trimestreAgregado.cerrado_estado === 1);
 
@@ -909,7 +919,8 @@ function TrimestresPageContent() {
         <PageHeader
           title="Gestión de Trimestres"
           icon={Calendar}
-          badgeCount={0} // Opcional, o null si no se necesita
+          badgeCount={0}
+          data-tutorial="trimestres-welcome"
         >
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
@@ -924,7 +935,7 @@ function TrimestresPageContent() {
             </div>
 
             {/* Toggle: Cards dinámicas por filtro */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2" data-tutorial="trimestres-dynamic-cards">
               <Switch
                 id="dinamizar-cards"
                 checked={dinamizarCards}
@@ -960,14 +971,16 @@ function TrimestresPageContent() {
                 />
               </div>
 
-              {trimestreAgregado && (
+              {selectedCompanyIds.length > 0 && (
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
+                  {trimestreAgregado && (
+                    <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
+                  )}
 
-                  {/* ✅ NUEVO: Botón que abre el modal de gestión de estados de trimestres */}
                   <Button
                     variant="outline"
                     size="sm"
+                    data-tutorial="trimestres-states"
                     onClick={() => setIsPauseDialogOpen(true)}
                     className="gap-2 text-xs sm:text-sm h-8 sm:h-9 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400"
                   >
@@ -983,7 +996,7 @@ function TrimestresPageContent() {
                       className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
                       data-tutorial="trimestres-close-button"
                       onClick={() => {
-                        if (isTutorialActive && currentStep === 6) {
+                        if (isTutorialActive && currentStep === TRIMESTRES_CLOSE_STEP_INDEX) {
                           console.log('🛡️ Click bloqueado por el tutorial');
                           return;
                         }
@@ -992,7 +1005,7 @@ function TrimestresPageContent() {
                         setTrimestreToClose(trimestreAgregado);
                         setDialogOpen(true);
                       }}
-                      disabled={isTutorialActive && currentStep === 6}
+                      disabled={isTutorialActive && currentStep === TRIMESTRES_CLOSE_STEP_INDEX}
                     >
                       <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                       <span className="hidden xs:inline">Cerrar Trimestre</span>
@@ -1004,6 +1017,7 @@ function TrimestresPageContent() {
                     variant="outline"
                     size="sm"
                     className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+                    data-tutorial="trimestres-export"
                     onClick={() => setIsExportDialogOpen(true)}
                   >
                     <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
@@ -1011,7 +1025,7 @@ function TrimestresPageContent() {
                     <span className="xs:hidden">Export</span>
                   </Button>
 
-                  {puedeEnviarAlSII && (
+                  {puedeEnviarAlSII && trimestreAgregado && (
                     <Button
                       variant="default"
                       size="sm"
@@ -1043,7 +1057,7 @@ function TrimestresPageContent() {
                 <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
               ))}
             </div>
-          ) : selectedCompanyIds.length === 0 ? null : trimestreAgregado ? (
+          ) : selectedCompanyIds.length === 0 ? null : trimestreParaVista ? (
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7" data-tutorial="trimestres-stats">
 
               {/* 1️⃣ Total Documentos - SIN CAMBIOS */}
@@ -1051,7 +1065,7 @@ function TrimestresPageContent() {
                 title="Total Documentos"
                 value={numDocsCard}
                 icon={FileText}
-                description={`T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`}
+                description={`T${trimestreParaVista.trimestre} ${trimestreParaVista.año}`}
                 breakdown={[
                   {
                     label: "Facturas del Sistema",
@@ -1060,7 +1074,7 @@ function TrimestresPageContent() {
                   },
                   {
                     label: "Trimestre",
-                    value: `T${trimestreAgregado.trimestre} ${trimestreAgregado.año}`,
+                    value: `T${trimestreParaVista.trimestre} ${trimestreParaVista.año}`,
                     className: "text-muted-foreground"
                   }
                 ]}
@@ -1278,6 +1292,7 @@ function TrimestresPageContent() {
                 {/* Cabecera Colapsable de la Tabla */}
                 <div
                   className="px-6 py-4 border-b flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
+                  data-tutorial="trimestres-table-header"
                   onClick={() => setIsTableExpanded(!isTableExpanded)}
                 >
                   <div className="flex items-center gap-3">
@@ -1310,7 +1325,7 @@ function TrimestresPageContent() {
                       transition={{ duration: 0.3 }}
                     >
                       {/* Barra de filtros — filtra qué filas se ven, NO los totales del footer */}
-                      <div className="px-4 pt-3 border-b">
+                      <div className="px-4 pt-3 border-b" data-tutorial="trimestres-filters">
                         <TrimestresFilterBar
                           documentos={documentos}
                           filters={filters}

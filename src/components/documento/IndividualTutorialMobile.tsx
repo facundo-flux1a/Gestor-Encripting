@@ -103,7 +103,7 @@ export function IndividualTutorialMobile() {
             {
                 element: '[data-tutorial="documento-header"]',
                 popover: {
-                    title: '📄 Vista de Documento',
+                    title: 'Vista de Documento',
                     description: '¡Bienvenido! Aquí puedes ver todos los detalles de un documento, editarlo y validar incidencias.',
                     side: 'bottom' as const, align: 'start' as const,
                 },
@@ -111,7 +111,7 @@ export function IndividualTutorialMobile() {
             {
                 element: '[data-tutorial="documento-actions"]',
                 popover: {
-                    title: '⚡ Acciones',
+                    title: 'Acciones',
                     description: 'Desde aquí puedes: Ver el PDF, Editar, Validar incidencias y Exportar.',
                     side: 'bottom' as const, align: 'end' as const,
                 },
@@ -119,7 +119,7 @@ export function IndividualTutorialMobile() {
             {
                 element: '[data-tutorial="documento-auditoria"]',
                 popover: {
-                    title: '🔍 Modo Auditoría',
+                    title: 'Modo Auditoría',
                     description: 'Compará el documento original con los datos extraídos en vista dividida y usá la IA para corregir errores automáticamente.',
                     side: 'bottom' as const, align: 'center' as const,
                 },
@@ -127,7 +127,7 @@ export function IndividualTutorialMobile() {
             {
                 element: '[data-tutorial="documento-view"]',
                 popover: {
-                    title: '📋 Información',
+                    title: 'Información',
                     description: 'Datos del documento, fechas, estado y líneas de servicios.',
                     side: 'top' as const, align: 'start' as const,
                 },
@@ -138,7 +138,7 @@ export function IndividualTutorialMobile() {
             steps.push({
                 element: '[data-tutorial="documento-incidencias"]',
                 popover: {
-                    title: '⚠️ Incidencias',
+                    title: 'Incidencias',
                     description: 'Este documento tiene avisos sin resolver. Podés validarlas si ya las revisaste.',
                     side: 'left' as const, align: 'start' as const,
                 },
@@ -148,7 +148,7 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-analizar"]',
             popover: {
-                title: '🔍 Análisis IA',
+                title: 'Análisis con IA',
                 description: 'Detecta errores o duplicados automáticamente con inteligencia artificial.',
                 side: 'left' as const, align: 'start' as const,
             },
@@ -157,7 +157,7 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-entidades"]',
             popover: {
-                title: '🏢 Entidades',
+                title: 'Entidades',
                 description: 'Información del proveedor o cliente: nombre, CIF y dirección.',
                 side: 'top' as const, align: 'center' as const,
             },
@@ -166,7 +166,7 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-financiero"]',
             popover: {
-                title: '💰 Financiero',
+                title: 'Resumen financiero',
                 description: 'Base imponible, IVA desglosado y total del documento.',
                 side: 'top' as const, align: 'center' as const,
             },
@@ -176,7 +176,7 @@ export function IndividualTutorialMobile() {
             steps.push({
                 element: '[data-tutorial="documento-archivo"]',
                 popover: {
-                    title: '📎 Archivo',
+                    title: 'Archivo',
                     description: 'Acceso directo a la vista previa del PDF original.',
                     side: 'bottom' as const, align: 'center' as const,
                 },
@@ -186,8 +186,8 @@ export function IndividualTutorialMobile() {
         steps.push({
             element: '[data-tutorial="documento-header"]',
             popover: {
-                title: '🎉 ¡Tutorial Completado!',
-                description: '¡Listo! Ya podés gestionar tus documentos de forma avanzada.',
+                title: '¡Tutorial completado!',
+                description: 'Listo. Ya podés gestionar tus documentos de forma avanzada.',
                 side: 'over' as const, align: 'center' as const,
             },
         });

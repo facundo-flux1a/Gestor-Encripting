@@ -357,7 +357,9 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
                 <SidebarMenuButton
                   asChild
                   isActive={pathname === item.href}
-                  tooltip={item.label}>
+                  tooltip={item.label}
+                  data-tutorial={item.href === '/dashboard/auditoria' ? 'centro-seguridad-link' : undefined}
+                >
                   <Link href={item.href} className="flex items-center gap-2">
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span className="group-data-[collapsible=icon]:hidden truncate">

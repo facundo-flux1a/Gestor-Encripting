@@ -251,8 +251,8 @@ export function DashboardTutorial() {
           {
             element: 'body',
             popover: {
-              title: '¡Bienvenido a tu Gestor Documental! 🎉',
-              description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
+              title: 'Bienvenido a tu Gestor Documental',
+              description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección Dashboard.',
               side: 'bottom' as any,
               align: 'center' as any
             }
@@ -262,10 +262,10 @@ export function DashboardTutorial() {
               ? '[data-tutorial="company-selector"]'
               : '[data-tutorial="company-selector"] button',
             popover: {
-              title: hasCompaniesAtInit ? 'Seleccionar empresa 🏢' : 'Crear tu primera empresa 🏢',
+              title: hasCompaniesAtInit ? 'Seleccionar empresa' : 'Crear tu primera empresa',
               description: hasCompaniesAtInit
-                ? '<p><strong>Acción requerida:</strong> Haz clic en una empresa para seleccionarla.</p><p class="text-sm text-muted-foreground mt-2">Puedes seleccionar múltiples empresas desde el mismo panel.</p>'
-                : '<p><strong>Acción requerida:</strong> Haz clic en "Agregar Empresa" para crear tu primera empresa.</p>',
+                ? '<p>Haz clic en una empresa para seleccionarla y cargar sus datos.</p><p class="text-sm text-muted-foreground mt-2">Puedes seleccionar múltiples empresas desde el mismo panel.</p>'
+                : '<p>Haz clic en Agregar Empresa para crear tu primera empresa.</p>',
               side: 'right' as any,
               align: 'start' as any
             }
@@ -273,8 +273,8 @@ export function DashboardTutorial() {
           {
             element: '[data-sidebar="sidebar"], [data-sidebar="content"]',
             popover: {
-              title: 'Menú de navegación 🗂️',
-              description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Entidades.',
+              title: 'Menú de navegación',
+              description: 'Desde este menú lateral puedes acceder a todas las secciones: Documentos, Centro de Seguridad, Trimestres, Entidades, Webhooks, Docs y la Cola de Subidas.',
               side: 'right' as any,
               align: 'center' as any
             }
@@ -282,7 +282,7 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="kpis"]',
             popover: {
-              title: 'Métricas principales 📊',
+              title: 'Métricas principales',
               description: 'Estas tarjetas muestran las métricas clave: ingresos, gastos, beneficio bruto, resultado de IVA y total de documentos procesados.',
               side: 'bottom' as any,
               align: 'center' as any
@@ -291,8 +291,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="financial-summary"]',
             popover: {
-              title: 'Resumen Financiero 📈',
-              description: 'Este gráfico muestra la evolución trimestral de tus ingresos (ventas) y gastos.',
+              title: 'Resumen Financiero',
+              description: 'Este gráfico muestra la evolución trimestral de tus ingresos y gastos.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -300,8 +300,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="distribution-chart"]',
             popover: {
-              title: 'Distribución de Documentos 🥧',
-              description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes, abonos, etc.',
+              title: 'Distribución de Documentos',
+              description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes y otros.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -309,8 +309,17 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="iva-chart"]',
             popover: {
-              title: 'Resumen de IVA 💰',
+              title: 'Resumen de IVA',
               description: 'Este gráfico te muestra el IVA repercutido y soportado por trimestre para que controles tu situación fiscal.',
+              side: 'top' as any,
+              align: 'center' as any
+            }
+          },
+          {
+            element: '[data-tutorial="top-providers"]',
+            popover: {
+              title: 'Proveedores y Clientes Principales',
+              description: 'Aquí puedes consultar el listado con los proveedores y clientes que representan la mayor cantidad de gastos e ingresos.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -318,7 +327,7 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="filters"]',
             popover: {
-              title: 'Filtros de análisis 🔍',
+              title: 'Filtros de análisis',
               description: 'Usa estos filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
               side: 'bottom' as any,
               align: 'start' as any
@@ -327,11 +336,8 @@ export function DashboardTutorial() {
           {
             element: 'body',
             popover: {
-              title: '¡Todo listo! ✨',
-              description: `
-                <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
-                <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
-              `,
+              title: 'Todo listo',
+              description: '<p>Ya conoces las funciones principales del dashboard. Empieza a explorar y administrar tu negocio.</p>',
               side: 'bottom' as any,
               align: 'center' as any
             }
@@ -355,6 +361,9 @@ export function DashboardTutorial() {
           });
         }
       });
+
+      // DOM Cleanup para evitar popovers superpuestos o duplicados
+      document.querySelectorAll('.driver-popover, .driver-overlay').forEach(el => el.remove());
 
       setDriverInstance(driverObj as any);
       setIsTutorialActive(true);
@@ -506,144 +515,62 @@ export function DashboardTutorial() {
         cursor: not-allowed !important;
       }
 
-      /* ✅ FIX: Asegurar que el overlay tenga un z-index conocido y controlable */
+      /* Overlay: cubrir todo el viewport por encima del layout (z-10) */
       .driver-overlay {
+        z-index: 99999 !important;
+        position: fixed !important;
+        inset: 0 !important;
+        pointer-events: auto !important;
+      }
+
+      .driver-overlay svg {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      /* Solo el elemento activo del paso actual queda por encima del overlay */
+      .driver-active-element:not(body) {
         z-index: 100000 !important;
+        position: relative !important;
       }
 
-      /* ✅ FIX: Liberar el contexto de apilamiento del wrapper principal durante el tutorial */
-      body.driver-active #main-layout-wrapper,
-      body.driver-active #main-sidebar-inset {
-        z-index: auto !important;
-        transform: none !important;
-        position: static !important;
-        filter: none !important;
-        perspective: none !important;
-        contain: none !important;
-        will-change: auto !important;
-        isolation: auto !important;
-      }
-      
-      /* ✅ FIX: Desactivar animaciones que crean contexto de apilamiento */
-      body.driver-active .animate-fade-in {
-        animation: none !important;
-        transform: none !important;
-        opacity: 1 !important;
-        filter: none !important;
+      .driver-active-element:not(body),
+      .driver-active-element:not(body) * {
+        pointer-events: auto !important;
       }
 
-      /* ✅ FIX: Liberar el header (sticky z-50) para que los hijos puedan elevarse */
-      body.driver-active header.sticky {
-        z-index: auto !important;
-        position: relative !important; /* Desactivar sticky temporalmente */
-      }
-
-      /* ✅ FIX: Elevar sidebar sobre el overlay (100,000) */
-      body.driver-active [data-sidebar="container"] {
-        z-index: 100002 !important;
-      }
-      
-      /* ✅ FIX: Liberar TabsContent (tabpanel) para que no atrape el z-index */
-      body.driver-active [role="tabpanel"],
-      body.driver-active [data-state="active"] {
-        z-index: auto !important;
-        transform: none !important;
-        opacity: 1 !important;
-        filter: none !important;
-        perspective: none !important;
-        contain: none !important;
-        will-change: auto !important;
-        isolation: auto !important;
-        overflow: visible !important;
-      }
-      
-      /* ✅ FIX: Elevar elementos específicos del tutorial sobre el overlay */
-      body.driver-active [data-tutorial="kpis"],
-      body.driver-active [data-tutorial="financial-summary"],
-      body.driver-active [data-tutorial="distribution-chart"],
-      body.driver-active [data-tutorial="iva-chart"],
-      body.driver-active [data-tutorial="filters"],
-      body.driver-active [data-tutorial="export-button"],  
-      body.driver-active [data-tutorial="company-selector"] {
-         z-index: 100003 !important; /* Un poco más que sidebar */
-         position: relative !important;
-      }
-
-      /* EXCEPCIÓN IMPORTANTE: 
-         Si el elemento activo es BODY (Paso 1 y 10), NO habilitar pointer-events en todo el documento.
-         Solo habilitar en el elemento activo si NO es body
-      */
-      body.driver-active .driver-active-element:not(body),
-      body.driver-active .driver-active-element:not(body) * {
-         pointer-events: auto !important;
-         z-index: 100004 !important;
-         opacity: 1 !important;
-         visibility: visible !important;
-      }
-
-
-
-      /* ✅ FIX: Popover siempre encima de todo */
+      /* Popover siempre encima de todo */
       .driver-popover,
       .driver-popover-wrapper {
-        z-index: 2147483647 !important;
+        z-index: 100001 !important;
       }
 
-      /* 🔒 BLOQUEO TOTAL PARA PASO 1 (Body) 
-         Cuando estamos en el paso 0 o 9 (indices para body), desactivar pointer-events en todo
-         EXCEPTO el popover del driver.
-      */
-      body.tutorial-step-0 #main-layout-wrapper,
-      body.tutorial-step-0 header,
-      body.tutorial-step-0 [data-sidebar="sidebar"],
-      body.tutorial-step-9 #main-layout-wrapper,
-      body.tutorial-step-9 header,
-      body.tutorial-step-9 [data-sidebar="sidebar"] {
-        pointer-events: none !important;
-        user-select: none !important;
+      /* Paso 1: selector de empresa en sidebar */
+      body.tutorial-step-1 [data-tutorial="company-selector"],
+      body.tutorial-step-1 [data-tutorial="company-selector"] * {
+        z-index: 100002 !important;
+        pointer-events: auto !important;
       }
 
-      /* ✅ FIX HEADER: ELEVAR EL HEADER COMPLETO
-         En lugar de intentar "resetear" el header a auto (que lo deja bajo el overlay),
-         lo elevamos por encima del overlay (100000) cuando estamos en los pasos de filtros (7) y export (8)
-         Nota: Indices de driver son 0-based. Filtros es paso 8 (index 7), Export es paso 9 (index 8)
-         Revisando steps: 
-         0: Intro
-         1: Company
-         2: Sidebar
-         3-6: KPIs/Charts
-         7: Filters (index 7) -> tutorial-step-7
-         8: Export (index 8) -> tutorial-step-8
-         9: Outro
-      */
-      /* ✅ FIX: Ocultar el "background negro" (overlay) en pasos 8 y 9 */
-      body.tutorial-step-7 .driver-overlay,
-      body.tutorial-step-8 .driver-overlay {
-        opacity: 0 !important;
+      /* Paso 2: menú lateral */
+      body.tutorial-step-2 [data-sidebar="sidebar"],
+      body.tutorial-step-2 [data-sidebar="content"] {
+        z-index: 100002 !important;
+        position: relative !important;
       }
 
-      /* ✅ FIX HEADER: ELEVAR EL HEADER COMPLETO */
+      /* Pasos 7-8: filtros en header sticky */
       body.tutorial-step-7 header,
       body.tutorial-step-7 header *,
       body.tutorial-step-8 header,
       body.tutorial-step-8 header * {
-        z-index: 100001 !important;
+        z-index: 100002 !important;
         position: relative !important;
-        transform: none !important;
-        backdrop-filter: none !important;
-        background: transparent !important;
-        /* Interacción deshabilitada por config driver */
       }
-      
-      /* Asegurar que los selectores y dropdowns tengan z-index alto */
+
       body.tutorial-step-7 [data-radix-popper-content-wrapper],
       body.tutorial-step-8 [data-radix-popper-content-wrapper] {
-         z-index: 100005 !important;
-      }
-      /* Asegurar interactividad del popover */
-      .driver-popover,
-      .driver-popover * {
-        pointer-events: auto !important;
+        z-index: 100003 !important;
       }
     `;
 

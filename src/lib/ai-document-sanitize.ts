@@ -45,6 +45,8 @@ export type AgentDocumentSummary = {
   incidencia: boolean;
   verificado: boolean;
   incidencia_razon: string | null | undefined;
+  /** Motivos pendientes agrupados en un solo documento (salud + incidencias) */
+  pendientes_detalle?: string[];
   empresa_id: number | null;
   empresa_nombre: string | undefined;
   empresa_cif: string | undefined;
@@ -123,7 +125,10 @@ function toIsoDate(value: unknown): string | null {
   return String(value).slice(0, 10);
 }
 
-export function documentToSummary(doc: Document, extras?: { enviado_sii?: boolean }): AgentDocumentSummary {
+export function documentToSummary(
+  doc: Document,
+  extras?: { enviado_sii?: boolean; pendientes_detalle?: string[] },
+): AgentDocumentSummary {
   return {
     id: doc.id_documento,
     numero_documento: doc.numero_documento,
@@ -142,6 +147,7 @@ export function documentToSummary(doc: Document, extras?: { enviado_sii?: boolea
     incidencia: doc.incidencia,
     verificado: doc.verificado,
     incidencia_razon: doc.incidencia_razon,
+    pendientes_detalle: extras?.pendientes_detalle,
     empresa_id: doc.empresa_id,
     empresa_nombre: doc.empresa_nombre,
     empresa_cif: doc.empresa_cif,

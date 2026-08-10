@@ -60,7 +60,7 @@ export function IncidenciasTutorial() {
       {
         element: '[data-tutorial="incidencias-header"]',
         popover: {
-          title: '⚠️ Gestión de Incidencias',
+          title: 'Gestión de Incidencias',
           description: '¡Bienvenido! Aquí puedes gestionar todos los problemas detectados en tus documentos: duplicados, errores de cálculo y más.',
           side: 'bottom' as const,
           align: 'start' as const,
@@ -70,7 +70,7 @@ export function IncidenciasTutorial() {
       {
         element: '[data-tutorial="incidencias-analytics"]',
         popover: {
-          title: '📊 Panel de Métricas',
+          title: 'Panel de Métricas',
           description: 'Este panel te muestra un resumen de todas las incidencias: cuántas están abiertas, cuántas resueltas, y qué proveedores tienen más problemas.',
           side: 'right' as const,
           align: 'start' as const,
@@ -80,7 +80,7 @@ export function IncidenciasTutorial() {
       {
         element: '[data-tutorial="incidencias-analizar"]',
         popover: {
-          title: '🔍 Análisis Automático',
+          title: 'Análisis Automático',
           description: 'Usa esta herramienta para revisar todos tus documentos de una vez. El sistema comparará datos automáticamente para detectar duplicados, errores de cálculo y documentos incompletos.',
           side: 'left' as const,
           align: 'start' as const,
@@ -90,7 +90,7 @@ export function IncidenciasTutorial() {
       {
         element: '[data-tutorial="incidencias-ai-table"]',
         popover: {
-          title: '🤖 Incidencias del Análisis Individual',
+          title: 'Incidencias del Análisis Individual',
           description: 'Aquí aparecen las incidencias detectadas cuando analizas un documento individualmente desde su vista de detalle. Son análisis manuales e individuales que has iniciado tú.',
           side: 'top' as const,
           align: 'center' as const,
@@ -100,7 +100,7 @@ export function IncidenciasTutorial() {
       {
         element: '[data-tutorial="incidencias-documentos"]',
         popover: {
-          title: '📄 Incidencias de Subida Original',
+          title: 'Incidencias de Subida Original',
           description: 'Esta tabla muestra los documentos con incidencias detectadas durante la subida inicial al sistema. Son problemas encontrados automáticamente al procesar los documentos por primera vez.',
           side: 'top' as const,
           align: 'center' as const,
@@ -110,8 +110,8 @@ export function IncidenciasTutorial() {
       {
         element: 'body',
         popover: {
-          title: '🎉 ¡Tutorial Completado!',
-          description: '¡Perfecto! Ahora sabes cómo gestionar incidencias. Puedes analizar, validar y resolver problemas para mantener tus documentos en orden.',
+          title: '¡Tutorial completado!',
+          description: 'Ya sabes cómo gestionar incidencias. Puedes analizar, validar y resolver problemas para mantener tus documentos en orden.',
           side: 'over' as const,
           align: 'center' as const,
         },

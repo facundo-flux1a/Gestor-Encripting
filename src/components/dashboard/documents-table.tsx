@@ -1630,7 +1630,7 @@ export function DocumentsTable({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" data-tutorial="clean-duplicates">
             <CleanDuplicatesButton
               empresaId={selectedCompanyIds[0] || null}
               onComplete={() => {

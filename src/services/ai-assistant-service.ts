@@ -53,6 +53,14 @@ export {
 
 const MAX_TOOL_ROUNDS = 3;
 
+const SECURITY_CENTER_PROMPT = [
+  'Para incidencias o Centro de Seguridad usa PRIMERO get_security_center_summary (sin args).',
+  'El resultado incluye mensaje_detallado con el listado numerado completo: una línea por documento y todos sus motivos juntos (descuadre + alerta lógica + incidencias).',
+  'Copia ese detalle al responder: enumera TODOS los documentos del listado. NUNCA digas "sin detalle" si mensaje_detallado ya trae la información.',
+  'El total es documentos_pendientes (documentos únicos). No sumes descuadres + incidencias como documentos distintos.',
+  'Si documentos_listados < documentos_pendientes, indica cuántos faltan y remite a la tabla de Centro de Seguridad.',
+].join('\n');
+
 function buildSystemPrompt(): string {
   return `Eres el asistente de Gestor Documental Muvail (Valencia, España): ayudas con el uso de la plataforma y con consultas sobre los documentos fiscales del usuario.
 
@@ -75,7 +83,7 @@ DOS TIPOS DE CONSULTAS:
 
 2) DATOS DEL USUARIO (facturas, importes, proveedores, incidencias) → primero {"action":"tool","tool":"NOMBRE","args":{...}}, luego con el resultado genera {"action":"answer","text":"..."} estructurado y conciso.
 
-Para incidencias pendientes usa: list_documents_summary con args {"solo_incidencias_pendientes": true}
+${SECURITY_CENTER_PROMPT}
 
 CONTEXTO CONVERSACIONAL:
 - Estás en UNA conversación del usuario (puede tener hasta ${MAX_CONVERSATION_SESSIONS} conversaciones guardadas).
@@ -245,9 +253,13 @@ async function runInternalAssistantChat(
     if (lastToolResult.ok) {
       if (
         action.call.tool === 'list_documents_summary' ||
-        action.call.tool === 'search_documents'
+        action.call.tool === 'search_documents' ||
+        action.call.tool === 'get_security_center_summary'
       ) {
-        const docs = lastToolResult.data as AgentDocumentSummary[];
+        const docs =
+          action.call.tool === 'get_security_center_summary'
+            ? (lastToolResult.data as { documentos?: AgentDocumentSummary[] })?.documentos
+            : (lastToolResult.data as AgentDocumentSummary[]);
         if (Array.isArray(docs) && docs.length > 0) {
           await saveAssistantSessionContext(userId, conversationId, { lastDocuments: docs });
         }

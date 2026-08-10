@@ -7,6 +7,14 @@ import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
 import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
+import {
+    getTrimestresTutorialSteps,
+    isTrimestresMobileWhitelistedTarget,
+    prepareTrimestresTutorialStep,
+    TRIMESTRES_SHOW_EMPTY_FROM_STEP,
+    TRIMESTRES_STEP,
+    TRIMESTRES_TABLE_STEP_INDEX,
+} from '@/components/trimestres/trimestres-tutorial-steps';
 
 /**
  * Mobile version of TrimestresTutorial.
@@ -58,27 +66,7 @@ export function TrimestresTutorialMobile() {
             }
 
             // 2. Step-Specific Surgical Whitelists: Block everything else
-            let isWhitelisted = false;
-            // Step 2 (Index 1): Company Selector and its Radix portals
-            if (idx === 1) {
-                const isCompanySelector = !!target.closest('[data-tutorial="trimestres-company-selector"]');
-                const isGeneralCompanySelector = !!target.closest('[data-tutorial="company-selector"]');
-                const isRadixPortal = !!target.closest('[data-radix-portal]');
-                const isRadixPopper = !!target.closest('[data-radix-popper-content-wrapper]');
-                // Aditional check for specific Radix item roles (checkbox, label)
-                const isRadixItem = target.role === 'checkbox' || !!target.closest('[role="checkbox"]') || !!target.closest('label');
-
-                if (isCompanySelector || isGeneralCompanySelector || isRadixPortal || isRadixPopper || isRadixItem) {
-                    isWhitelisted = true;
-                    if (e.type === 'touchstart' || e.type === 'click') {
-                        logToTerminal(`🔹 Whitelist Step 1 DETALLE: Selector=${isCompanySelector}, Gen=${isGeneralCompanySelector}, Portal=${isRadixPortal}, Item=${isRadixItem}`);
-                    }
-                }
-            } else if (idx === 2 && target.closest('[data-tutorial="trimestres-selector"]')) {
-                isWhitelisted = true;
-            } else if (idx === 3 && target.closest('[data-tutorial="trimestres-toggle"]')) {
-                isWhitelisted = true;
-            }
+            const isWhitelisted = isTrimestresMobileWhitelistedTarget(idx, target);
 
             if (!isWhitelisted) {
                 if (e.type === 'touchstart' || e.type === 'click') logToTerminal(`🛑 BLOQUEADO [Paso ${idx}]: ${target.tagName} (${target.className})`);
@@ -136,101 +124,9 @@ export function TrimestresTutorialMobile() {
                 allowClose: false,
                 overlayOpacity: 0.75,
                 disableActiveInteraction: false,
+                skipMissingElement: true,
 
-                steps: [
-                    {
-                        element: '[data-tutorial="trimestres-welcome"]',
-                        popover: {
-                            title: '¡Bienvenido a Trimestres! 📅',
-                            description: 'Aquí vas a poder organizar y gestionar tus documentos por períodos trimestrales. Te voy a mostrar cómo funciona todo.',
-                            side: 'bottom', align: 'center',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-company-selector"]',
-                        popover: {
-                            title: '🏢 Selecciona tu empresa',
-                            // FIX: In mobile we can't programmatically open the combobox.
-                            // Instruction changed to guide the user to tap manually.
-                            description: '📱 Toca el selector para elegir una empresa y luego presiona \'Siguiente\'.',
-                            // Side changed to left and align to center to avoid overlapping with the dropdown on the right
-                            side: 'left', align: 'center',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-selector"]',
-                        popover: {
-                            title: 'Selector de Trimestre',
-                            description: 'Aquí puedes cambiar entre trimestres. El sistema muestra automáticamente el trimestre más reciente disponible.',
-                            side: 'bottom', align: 'start',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-toggle"]',
-                        popover: {
-                            title: 'Mostrar Trimestres Vacíos',
-                            description: 'Activa esta opción para ver trimestres sin documentos. Por defecto, solo se muestran trimestres con documentos.',
-                            side: 'left', align: 'start',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-stats"]',
-                        popover: {
-                            title: 'Estadísticas del Trimestre',
-                            description: 'Estas tarjetas te muestran un resumen rápido: documentos totales, ingresos, gastos y el IVA neto del trimestre.',
-                            side: 'bottom', align: 'center',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-table"]',
-                        popover: {
-                            title: '📋 Tabla de Documentos',
-                            description: 'Aquí ves todos los documentos del trimestre seleccionado. Podés buscar, filtrar y editar documentos.',
-                            side: 'top', align: 'center',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-close-button"]',
-                        popover: {
-                            title: 'Cerrar Trimestre ⚠️',
-                            description: '⚠️ IMPORTANTE: Al cerrar un trimestre, todos sus documentos quedan bloqueados y NO PODRÁN ser editados.',
-                            side: 'left', align: 'start',
-                        },
-                    },
-                    {
-                        element: '[data-tutorial="trimestres-table"]',
-                        popover: {
-                            title: '📌 Sobre la asignación de documentos',
-                            description: (() => {
-                                const now = new Date();
-                                const month = now.getMonth();
-                                const day = now.getDate();
-                                const year = now.getFullYear();
-                                let q = 0, qYear = year;
-                                if (month === 0 && day <= 30) { q = 4; qYear = year - 1; }
-                                else if (month === 3 && day <= 20) { q = 1; }
-                                else if (month === 6 && day <= 20) { q = 2; }
-                                else if (month === 9 && day <= 20) { q = 3; }
-                                else {
-                                    if (month < 3) q = 1;
-                                    else if (month < 6) q = 2;
-                                    else if (month < 9) q = 3;
-                                    else q = 4;
-                                }
-                                return `Los documentos se asignan al trimestre viable más cercano. Por ejemplo: documentos del T${q} ${qYear}.`;
-                            })(),
-                            side: 'top', align: 'center',
-                        },
-                    },
-                    {
-                        element: 'body',
-                        popover: {
-                            title: '¡Todo listo! 🎉',
-                            description: 'Ya conoces todas las herramientas para gestionar tus trimestres. ¡Empieza a organizar tus documentos!',
-                            side: 'over', align: 'center',
-                        },
-                    },
-                ],
+                steps: getTrimestresTutorialSteps({ mobile: true }),
 
                 nextBtnText: 'Siguiente →',
                 prevBtnText: '← Anterior',
@@ -249,11 +145,12 @@ export function TrimestresTutorialMobile() {
                     });
                     document.body.classList.add(`tutorial-step-${currentStepIndex}`);
 
+                    prepareTrimestresTutorialStep(currentStepIndex);
                     addGlobalTouchBlocker();
 
-                    if (currentStepIndex >= 3) setMostrarVacios(true);
+                    if (currentStepIndex >= TRIMESTRES_SHOW_EMPTY_FROM_STEP) setMostrarVacios(true);
 
-                    if (currentStepIndex === 1) {
+                    if (currentStepIndex === TRIMESTRES_STEP.COMPANY) {
                         document.body.setAttribute('data-tutorial-step', '1');
                     } else {
                         document.body.removeAttribute('data-tutorial-step');
@@ -271,7 +168,7 @@ export function TrimestresTutorialMobile() {
                     const idx = options.state.activeIndex ?? 0;
                     const totalStepsCount = driverInstance.getConfig().steps?.length ?? 0;
 
-                    if (idx === 1) {
+                    if (idx === TRIMESTRES_STEP.COMPANY) {
                         if (selectedIdsRef.current.length > 0) {
                             setTimeout(() => driverInstance.moveNext(), 100);
                         } else {
@@ -355,12 +252,12 @@ export function TrimestresTutorialMobile() {
       }
 
       /* Step 2 (Index 1): Company Selector + Portals (Ensure they render ABOVE everything else) */
-      body.tutorial-step-1 [data-tutorial="trimestres-company-selector"],
-      body.tutorial-step-1 [data-tutorial="company-selector"],
-      body.tutorial-step-1 [data-radix-portal],
-      body.tutorial-step-1 [data-radix-popper-content-wrapper],
-      body.tutorial-step-1 [role="checkbox"],
-      body.tutorial-step-1 label {
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} [data-tutorial="trimestres-company-selector"],
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} [data-tutorial="company-selector"],
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} [data-radix-portal],
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} [data-radix-popper-content-wrapper],
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} [role="checkbox"],
+      body.tutorial-step-${TRIMESTRES_STEP.COMPANY} label {
         z-index: 2147483648 !important;
         pointer-events: auto !important;
         opacity: 1 !important;
@@ -369,8 +266,8 @@ export function TrimestresTutorialMobile() {
       .driver-active-element { box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important; }
 
       /* 🔒 Step 6 (index 5): Tabla de Documentos - filas no clickeables */
-      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr,
-      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr * {
+      body.tutorial-step-${TRIMESTRES_TABLE_STEP_INDEX} [data-tutorial="trimestres-table"] tbody tr,
+      body.tutorial-step-${TRIMESTRES_TABLE_STEP_INDEX} [data-tutorial="trimestres-table"] tbody tr * {
         pointer-events: none !important;
         cursor: not-allowed !important;
       }

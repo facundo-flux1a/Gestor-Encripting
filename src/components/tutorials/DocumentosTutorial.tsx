@@ -8,6 +8,9 @@ import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTutorial } from '@/context/tutorial-context';
 import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
 
+const DESKTOP_UPLOAD_STEP_INDEX = 2;
+const MOBILE_UPLOAD_STEP_INDEX = 3;
+
 export function DocumentosTutorial() {
   const {
     setIsTutorialActive,
@@ -69,53 +72,39 @@ export function DocumentosTutorial() {
       console.log('🎯 [Tutorial Debug] Documento subido detectado');
       setDocumentUploaded(true);
       localStorage.setItem('tutorial_document_uploaded', 'true');
+
+      if (lastStepRef.current === DESKTOP_UPLOAD_STEP_INDEX && driverRef.current) {
+        setTimeout(() => {
+          try {
+            driverRef.current?.moveNext();
+          } catch {
+            /* driver puede haberse destruido */
+          }
+        }, 600);
+      }
     };
     window.addEventListener('documentUploaded', handleDocumentUpload);
     return () => window.removeEventListener('documentUploaded', handleDocumentUpload);
   }, []);
 
-  // 🔥 DETECCIÓN NULCEAR DE MODALES 🔥
+  // Detectar solo el modal de subida (no ocultar el tutorial)
   useEffect(() => {
-    const checkModal = () => {
-      // 1. Buscar TODOS los diálogos
-      const dialogs = document.querySelectorAll('[role="dialog"]');
-      // 2. Buscar TODOS los portales de Radix
-      const portals = document.querySelectorAll('[data-radix-portal]');
+    const checkUploadModal = () => {
+      const uploadModal = document.querySelector('[data-tutorial="upload-modal"]');
+      const isUploadOpen = !!uploadModal;
 
-      // Filtrar para encontrar "diálogos reales" que NO sean el tutorial
-      const realModals = Array.from(dialogs).filter(el =>
-        !el.classList.contains('driver-popover') &&
-        !el.closest('.driver-popover')
-      );
-
-      const hasRealModal = realModals.length > 0 || portals.length > 0;
-
-      if (hasRealModal !== isModalOpen) {
-        console.log(hasRealModal ? '🚀 [Tutorial Debug] MODAL ENCONTRADO' : '✅ [Tutorial Debug] MODAL CERRADO');
-        setIsModalOpen(hasRealModal);
-
-        if (hasRealModal) {
-          document.body.classList.add('tutorial-modal-open');
-          if (driverInstance) {
-            console.log('🧹 [Tutorial Debug] Destruyendo instancia');
-            driverInstance.destroy();
-            setDriverInstance(null);
-          }
-
-          // Limpieza manual de emergencia
-          const overlays = document.querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element, .driver-stage, .driver-highlight-overlay');
-          overlays.forEach(el => (el as HTMLElement).style.display = 'none');
-          document.body.style.pointerEvents = 'auto';
-          document.body.style.overflow = 'auto'; // Asegurar scroll si Radix lo bloquea mal
-        } else {
-          document.body.classList.remove('tutorial-modal-open');
-        }
+      if (isUploadOpen !== isModalOpen) {
+        setIsModalOpen(isUploadOpen);
+        document.body.classList.toggle('tutorial-upload-modal-open', isUploadOpen);
       }
     };
 
-    const interval = setInterval(checkModal, 150);
-    return () => clearInterval(interval);
-  }, [isModalOpen, driverInstance]);
+    const interval = setInterval(checkUploadModal, 150);
+    return () => {
+      clearInterval(interval);
+      document.body.classList.remove('tutorial-upload-modal-open');
+    };
+  }, [isModalOpen]);
 
   const showErrorMessage = (message: string) => {
     const popper = document.querySelector('.driver-popover-description');
@@ -130,80 +119,107 @@ export function DocumentosTutorial() {
     }
   };
 
+  const driverRef = useRef<any>(null);
+
   useEffect(() => {
-    if (!localShouldShow || isModalOpen) return;
+    if (!localShouldShow) return;
+
+    if (hasInitialized.current) return;
 
     const timer = setTimeout(() => {
+      hasInitialized.current = true;
+      if (driverRef.current) {
+        try { driverRef.current.destroy(); } catch (e) {}
+        driverRef.current = null;
+      }
+      document.querySelectorAll('.driver-popover, .driver-overlay, .driver-stage, .driver-popover-wrapper').forEach(el => el.remove());
+
       const finalSteps = [
         {
           element: 'body',
           popover: {
-            title: '📄 ¡Bienvenido a Documentos!',
-            description: 'Te guiaremos por las funciones principales de esta sección.',
+            title: 'Bienvenido a Documentos',
+            description: 'Te guiaremos detalladamente por las funciones y secciones clave de este módulo.',
             side: 'bottom', align: 'center'
           } as any
         },
         {
           element: '[data-tutorial="company-selector"]',
           popover: {
-            title: '🏢 Paso 1: Selecciona una empresa',
-            description: 'Selecciona al menos una empresa para continuar. Si ya tienes facturas registradas verás un resumen organizado por tipos.',
+            title: 'Paso 1: Selecciona una empresa',
+            description: 'Selecciona una o varias empresas en el selector lateral para visualizar y gestionar sus documentos en tiempo real.',
             side: 'right', align: 'start'
           }
         },
         {
           element: '[data-tutorial="upload-button"]',
           popover: {
-            title: '📤 Paso 2: Sube un documento',
-            description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. **Nota:** Si el documento tiene alguna inconsistencia, será enviado a la sección de **Incidencias**.',
+            title: 'Paso 2: Subir documentos',
+            description: 'Haz clic en Subir para abrir el asistente. Selecciona la empresa, elige un PDF o imagen y confirma la carga. Cuando el archivo se encole, avanzaremos automáticamente.',
             side: 'bottom', align: 'center'
           }
         },
         {
-          element: 'body',
+          element: '[data-tutorial="centro-seguridad-link"]',
           popover: {
-            title: '⚠️ ¿No ves tu documento?',
-            description: 'Si después de subir un documento no aparece aquí, es probable que tenga una **incidencia**. Podrás encontrarlo y corregirlo en la sección de Incidencias del menú lateral. Por ahora, sigamos conociendo esta sección.',
-            side: 'bottom', align: 'center'
+            title: 'Centro de Seguridad e Inconsistencias',
+            description: 'Si un documento subido tiene datos ambiguos o inconsistencias fiscales, se enviará al Centro de Seguridad para su validación manual.',
+            side: 'right', align: 'center'
           }
         },
         {
           element: '[data-tutorial="tabs-filters"]',
           popover: {
-            title: '🔍 Filtros y Categorías',
-            description: 'Organiza tus documentos. Filtra entre facturas recibidas, emitidas, otros tipos, y **documentos sin confirmar** (aquellos que el sistema no pudo clasificar y requieren tu revisión manual).',
+            title: 'Paso 3: Categorías y Pestañas',
+            description: 'Clasifica tus comprobantes. Cambia entre Facturas Recibidas (gastos), Facturas Emitidas (ingresos), Otros tipos, y Sin Confirmar.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: '[data-tutorial="clean-duplicates"]',
+          popover: {
+            title: 'Gestión de Duplicados',
+            description: 'El sistema detecta automáticamente facturas duplicadas. Haz clic en Limpiar Duplicados para revisar y resolver coincidencias en un solo clic.',
+            side: 'bottom', align: 'center'
+          }
+        },
+        {
+          element: '[data-tutorial="global-search"]',
+          popover: {
+            title: 'Búsqueda y Filtros',
+            description: 'Encuentra cualquier comprobante al instante escribiendo en la barra de búsqueda global o filtrando columnas específicas en la tabla.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: '[data-tutorial="export-pdf"]',
           popover: {
-            title: '📑 Exportar información',
-            description: '¿Necesitas un reporte? Puedes exportar la información de tus documentos filtrados directamente a PDF.',
+            title: 'Exportar Informes y Reportes',
+            description: 'Genera un informe PDF con los documentos filtrados usando el botón superior, o bien exporta a Excel y CSV desde la propia tabla.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: '[data-tutorial="documents-table"]',
           popover: {
-            title: '📋 Tabla de documentos',
-            description: 'Aquí verás todos los documentos procesados correctamente. Puedes ordenarlos, buscar y ver detalles. Si subiste un documento y no lo ves aquí, recuerda revisar la sección de **Incidencias**. ¡También puedes exportar en Excel, CSV y más!',
+            title: 'Tabla Interactiva y Arrastrar Filas',
+            description: 'Ordena columnas, ajusta el scroll horizontal y mueve facturas entre Emitidas y Recibidas arrastrando y soltando las filas sobre las pestañas.',
             side: 'top', align: 'center'
           }
         },
         {
           element: 'body',
           popover: {
-            title: '🔍 Detalle del Documento',
-            description: 'Al hacer clic en cualquier fila, entrarás al detalle del documento. Allí encontrarás otra tabla con todos los datos extraídos línea por línea (bases por producto, impuestos, etc.) para un control total.',
+            title: 'Detalle del Documento',
+            description: 'Haz clic en cualquier fila para inspeccionar el desglose individual: bases imponibles, desglose de impuestos (IVA, IRPF, recargos) y productos línea por línea.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: 'body',
           popover: {
-            title: '✨ ¡Listo para empezar!',
-            description: 'Ya conoces cómo gestionar tus documentos, facturas y abonos.',
+            title: 'Todo listo',
+            description: 'Ya conoces todas las secciones y herramientas para administrar tus documentos de forma eficiente.',
             side: 'bottom', align: 'center'
           }
         }
@@ -213,6 +229,29 @@ export function DocumentosTutorial() {
         }
         return true;
       });
+
+      const completeDocumentosTutorial = async (targetDriver: ReturnType<typeof driver>) => {
+        removeSkipButton();
+        document.body.classList.forEach(cls => {
+          if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+        });
+
+        try {
+          const res = await fetch('/api/user/tutorial-documentos', { method: 'POST' });
+          if (!res.ok) throw new Error('No se pudo marcar el tutorial como completado');
+
+          localStorage.removeItem('force_tutorial_documentos');
+          localStorage.removeItem('tutorial_document_uploaded');
+          setLocalShouldShow(false);
+          setIsTutorialActive(false);
+          driverRef.current = null;
+          targetDriver.destroy();
+          console.log('✅ [DocumentosTutorial] Tutorial completado, recargando página');
+          window.location.reload();
+        } catch (error) {
+          console.error('❌ [DocumentosTutorial] Error completando tutorial:', error);
+        }
+      };
 
       const driverObj = driver({
         showProgress: true,
@@ -236,14 +275,7 @@ export function DocumentosTutorial() {
           document.body.classList.add(`tutorial-step-${idx}`);
 
           injectSkipButton(() => {
-            fetch('/api/user/tutorial-documentos', { method: 'POST' })
-              .then(() => {
-                setLocalShouldShow(false);
-                setIsTutorialActive(false);
-                localStorage.removeItem('tutorial_document_uploaded');
-                driverObj.destroy();
-              })
-              .catch(console.error);
+            void completeDocumentosTutorial(driverObj);
           });
         },
 
@@ -274,28 +306,7 @@ export function DocumentosTutorial() {
             }
           } else if (idx === totalStepsCount - 1) {
             console.log('🏁 [DocumentosTutorial] Último paso alcanzado. Completando...');
-            // ✅ Llamada inmediata al backend
-            fetch('/api/user/tutorial-documentos', { method: 'POST' })
-              .then(res => {
-                if (res.ok) {
-                  setLocalShouldShow(false);
-                  setIsTutorialActive(false);
-                  localStorage.removeItem('tutorial_document_uploaded');
-                  // Clear replay flag
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem('force_tutorial_documentos');
-                  }
-                  console.log('✅ [DocumentosTutorial] DB actualizada');
-                }
-              })
-              .catch(console.error);
-
-            // ✅ Cierre de UI
-            setTimeout(() => {
-              console.log('🧨 [DocumentosTutorial] Ejecutando destroy() y forzando recarga para limpiar DOM');
-              driverObj.destroy();
-              window.location.reload();
-            }, 100);
+            void completeDocumentosTutorial(driverObj);
           } else {
             driverObj.moveNext();
           }
@@ -303,167 +314,227 @@ export function DocumentosTutorial() {
 
         onCloseClick: () => {
           console.log('❌ [DocumentosTutorial] onCloseClick');
-          fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
-          driverObj.destroy();
-          setIsTutorialActive(false);
-          removeSkipButton();
+          void completeDocumentosTutorial(driverObj);
         },
 
         onDestroyStarted: () => {
           console.log('🏁 [DocumentosTutorial] onDestroyStarted');
           setIsTutorialActive(false);
           removeSkipButton();
+          document.body.classList.remove('tutorial-upload-modal-open');
           document.body.classList.forEach(cls => {
             if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
           });
         },
       });
 
+      document.querySelectorAll('.driver-popover, .driver-overlay').forEach(el => el.remove());
+      driverRef.current = driverObj;
       setDriverInstance(driverObj);
       driverObj.drive(lastStepRef.current);
-
-      return () => {
-        clearTimeout(timer);
-        if (driverInstance) driverInstance.destroy();
-      };
     }, 400);
-  }, [localShouldShow, isModalOpen, setIsTutorialActive]);
+
+    return () => {
+      clearTimeout(timer);
+      // Do NOT destroy the driver here — cleanup runs on dep changes too.
+      // Driver destruction is handled inside onDestroyStarted and the unmount effect.
+    };
+  }, [localShouldShow, setIsTutorialActive]);
+
+  // Cleanup on component unmount only
+  useEffect(() => {
+    return () => {
+      if (driverRef.current) {
+        try { driverRef.current.destroy(); } catch (e) {}
+        driverRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const style = document.createElement('style');
+    style.id = 'documentos-tutorial-desktop-styles';
     style.textContent = `
-        /* .driver-popover { z-index: 10000 !important; } */
-        .driver-overlay { 
-           z-index: 9997 !important; 
-           pointer-events: none !important; 
-        }
+      .driver-overlay,
+      #driver-page-overlay,
+      #driver-highlighted-element-stage {
+        z-index: 9997 !important;
+        pointer-events: none !important;
+      }
 
-        .driver-active-element { 
-          z-index: 9999 !important; 
-          position: relative !important;
-          border: none !important;
-          border-radius: 8px !important;
-          box-shadow: none !important;
-          /* Fondo restaurado a natural (removido transparent !important) */
-          opacity: 1 !important;
-          transition: all 0.3s ease !important;
-          outline: none !important;
-        }
+      .driver-active-element {
+        z-index: 9999 !important;
+        position: relative !important;
+        outline: 4px solid hsl(var(--primary)) !important;
+        box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
+        border-radius: 8px !important;
+        opacity: 1 !important;
+        transition: all 0.3s ease !important;
+      }
 
-       body.tutorial-modal-open .driver-overlay,
-       body.tutorial-modal-open .driver-popover,
-       body.tutorial-modal-open .driver-active-element,
-       body.tutorial-modal-open .driver-stage,
-       body.tutorial-modal-open .driver-highlight-overlay {
-          display: none !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          visibility: hidden !important;
-       }
- 
-       /* Limpieza del stage de recorte */
-       .driver-stage {
-          background-color: transparent !important;
-          border-radius: 8px !important;
-          box-shadow: none !important;
-          z-index: 9998 !important; /* Justo debajo del elemento activo */
-       }
+      .driver-stage {
+        background-color: transparent !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        z-index: 9998 !important;
+        pointer-events: none !important;
+      }
 
-      /* 🔥 NIVEL DIVINO PARA EL MODAL 🔥 */
-      [role="dialog"], [data-radix-portal], [data-radix-portal] > *, .fixed.inset-0.z-[100] {
-         z-index: 2147483647 !important;
-         pointer-events: auto !important;
-         opacity: 1 !important;
+      /* Modal de subida: por encima del tutorial y totalmente interactivo */
+      [data-radix-portal]:has([data-tutorial="upload-modal"]),
+      [data-radix-portal]:has([data-tutorial="upload-modal"]) *,
+      [data-tutorial="upload-modal"],
+      [data-tutorial="upload-modal"] *,
+      body.driver-active [data-tutorial="upload-modal"],
+      body.driver-active [data-tutorial="upload-modal"] *,
+      body.driver-active [data-radix-portal]:has([data-tutorial="upload-modal"]),
+      body.driver-active [data-radix-portal]:has([data-tutorial="upload-modal"]) * {
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+      }
+
+      [data-radix-popper-content-wrapper],
+      [data-radix-popper-content-wrapper] * {
+        pointer-events: auto !important;
+        z-index: 2147483648 !important;
+      }
+
+      body.tutorial-upload-modal-open .driver-overlay {
+        opacity: 0.12 !important;
+      }
+
+      body.tutorial-upload-modal-open .driver-popover {
+        z-index: 2147483640 !important;
       }
 
       body[class*="tutorial-step-"] * {
-         backdrop-filter: none !important;
-         -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
       }
 
       body.tutorial-step-1 [data-sidebar="container"] { pointer-events: none !important; }
       body.tutorial-step-1 [data-tutorial="company-selector"] [role="checkbox"],
       body.tutorial-step-1 [data-tutorial="company-selector"] label {
-         pointer-events: auto !important;
+        pointer-events: auto !important;
       }
 
       body.tutorial-step-2 [data-sidebar="container"] { pointer-events: none !important; }
       body.tutorial-step-2 [data-tutorial="upload-button"] {
-         pointer-events: auto !important;
-         z-index: 100 !important;
+        pointer-events: auto !important;
+        z-index: 100 !important;
       }
 
       .driver-popover {
-        border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.8) !important;
-        backdrop-filter: blur(12px) !important;
-        border-radius: 12px !important;
+        border: 1px solid rgba(139, 92, 246, 0.4) !important;
+        background-color: rgba(15, 23, 42, 0.95) !important;
+        backdrop-filter: blur(16px) !important;
+        border-radius: 14px !important;
         color: white !important;
-        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
+        padding: 18px 20px !important;
+        min-width: 320px !important;
+        max-width: 380px !important;
+        box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.5), 0 8px 15px -6px rgba(0, 0, 0, 0.3) !important;
         z-index: 10000 !important;
       }
-      
+
       .driver-popover-title {
         color: white !important;
         font-weight: 700 !important;
         font-size: 1.1rem !important;
+        margin-bottom: 6px !important;
       }
 
       .driver-popover-description {
         color: rgba(255, 255, 255, 0.9) !important;
-        font-weight: 500 !important;
+        font-weight: 400 !important;
+        font-size: 0.875rem !important;
         line-height: 1.5 !important;
       }
-      
-      .driver-popover-progress-text {
-        color: rgba(255, 255, 255, 0.5) !important;
+
+      .driver-popover-footer {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        margin-top: 16px !important;
+        padding-top: 12px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
       }
-      
+
+      .driver-popover-navigation-btns {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+      }
+
+      .driver-popover-progress-text {
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: rgba(255, 255, 255, 0.5) !important;
+        margin: 0 4px !important;
+        white-space: nowrap !important;
+      }
+
       .driver-popover-next-btn {
-        background-color: hsl(var(--primary)) !important;
+        background-color: #6600A3 !important;
         color: white !important;
         border: none !important;
         text-shadow: none !important;
+        font-size: 12px !important;
         font-weight: 600 !important;
+        padding: 6px 14px !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
         transition: all 0.2s;
-        border-radius: 6px !important;
       }
-      
+
       .driver-popover-next-btn:hover {
-        background-color: hsl(var(--primary) / 0.9) !important;
+        background-color: #7c3aed !important;
         transform: translateY(-1px);
       }
-      
+
       .driver-popover-prev-btn {
-        color: white !important;
+        color: rgba(255, 255, 255, 0.9) !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        background: transparent !important;
+        background: rgba(255, 255, 255, 0.06) !important;
         text-shadow: none !important;
+        font-size: 12px !important;
         font-weight: 500 !important;
-        border-radius: 6px !important;
+        padding: 6px 12px !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
       }
 
       .driver-popover-prev-btn:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
+        background: rgba(255, 255, 255, 0.15) !important;
         color: white !important;
       }
-      
+
       .driver-popover-close-btn {
         color: rgba(255, 255, 255, 0.5) !important;
+        top: 12px !important;
+        right: 12px !important;
       }
-      
+
       .driver-popover-close-btn:hover {
         color: white !important;
       }
 
       .driver-popover-arrow {
-        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
-        border-top-color: rgba(15, 23, 42, 0.8) !important;
+        border-bottom-color: rgba(15, 23, 42, 0.95) !important;
+        border-top-color: rgba(15, 23, 42, 0.95) !important;
       }
     `;
     document.head.appendChild(style);
     return () => {
-      if (document.head.contains(style)) document.head.removeChild(style);
+      const el = document.getElementById('documentos-tutorial-desktop-styles');
+      if (el) el.remove();
     };
   }, []);
 

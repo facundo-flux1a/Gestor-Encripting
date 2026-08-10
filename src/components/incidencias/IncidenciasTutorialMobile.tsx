@@ -106,7 +106,7 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-header"]',
                 popover: {
-                    title: '⚠️ Gestión de Incidencias',
+                    title: 'Gestión de Incidencias',
                     description: '¡Bienvenido! Aquí puedes gestionar todos los problemas detectados en tus documentos: duplicados, errores de cálculo y más.',
                     side: 'bottom' as const, align: 'start' as const,
                 },
@@ -114,7 +114,7 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-analytics"]',
                 popover: {
-                    title: '📊 Panel de Métricas',
+                    title: 'Panel de Métricas',
                     description: 'Resumen de incidencias: abiertas, resueltas y qué proveedores tienen más problemas.',
                     side: 'bottom' as const, align: 'start' as const,
                 },
@@ -122,7 +122,7 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-analizar"]',
                 popover: {
-                    title: '🔍 Análisis Automático',
+                    title: 'Análisis Automático',
                     description: 'Usa esta herramienta para detectar automáticamente anomalías en todos tus documentos.',
                     side: 'bottom' as const, align: 'start' as const,
                 },
@@ -130,7 +130,7 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-ai-table"]',
                 popover: {
-                    title: '🤖 Análisis Individual',
+                    title: 'Análisis Individual',
                     description: 'Aquí aparecen las incidencias detectadas al analizar documentos uno a uno.',
                     side: 'top' as const, align: 'center' as const,
                 },
@@ -138,7 +138,7 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-documentos"]',
                 popover: {
-                    title: '📄 Subida Original',
+                    title: 'Subida Original',
                     description: 'Documentos con incidencias detectadas durante la carga inicial.',
                     side: 'top' as const, align: 'center' as const,
                 },
@@ -146,8 +146,8 @@ export function IncidenciasTutorialMobile() {
             {
                 element: '[data-tutorial="incidencias-header"]',
                 popover: {
-                    title: '🎉 ¡Tutorial Completado!',
-                    description: '¡Listo! Ya podés gestionar todas las incidencias de tu sistema.',
+                    title: '¡Tutorial completado!',
+                    description: 'Listo. Ya podés gestionar todas las incidencias de tu sistema.',
                     side: 'over' as const, align: 'center' as const,
                 },
             },

@@ -877,7 +877,7 @@ export function DataTable<TData extends object, TValue>({
     <div className="space-y-4">
       {/* Controls: Filter input and column visibility */}
       <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
-        <div className="flex-1 w-full sm:w-auto">
+        <div className="flex-1 w-full sm:w-auto" data-tutorial="global-search">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input

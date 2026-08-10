@@ -4,7 +4,8 @@ import { TrimestresTutorial } from './TrimestresTutorial';
 import { TrimestresTutorialMobile } from './TrimestresTutorialMobile';
 
 export function TrimestresTutorialRouter() {
-    const { isMobile } = useDevice();
+    const { isMobile, isMounted } = useDevice();
+    if (!isMounted) return null;
     if (isMobile) return <TrimestresTutorialMobile />;
     return <TrimestresTutorial />;
 }

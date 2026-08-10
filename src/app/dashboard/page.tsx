@@ -1136,21 +1136,21 @@ export default function DashboardPage() {
                   defaultYear={selectedAño?.toString() || null}
                 />
               </div>
-              <div className="col-span-3">
+              <div className="col-span-3" data-tutorial="distribution-chart">
                 <DocumentStatusChart data={analytics.documentDistribution} />
               </div>
             </div>
 
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <div className="col-span-4">
+              <div className="col-span-4" data-tutorial="iva-chart">
                 <IvaSummary
                   annualData={ivaAnnualData}
                   quarterlyData={ivaQuarterlyData}
                   defaultYear={selectedAño?.toString() || null}
                 />
               </div>
-              <div className="col-span-3 flex flex-col gap-4">
+              <div className="col-span-3 flex flex-col gap-4" data-tutorial="top-providers">
                 <TopProviders data={analytics.topProviders} />
                 <TopClients data={analytics.topClients} />
               </div>

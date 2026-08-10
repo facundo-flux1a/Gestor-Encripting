@@ -839,7 +839,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
     }
 
     return (
-        <Card className="w-full mb-8 overflow-hidden border-slate-800 bg-slate-900 shadow-2xl transition-all duration-300">
+        <Card className="w-full mb-8 overflow-hidden border-slate-800 bg-slate-900 shadow-2xl transition-all duration-300" data-tutorial="trimestres-excel-view">
             <CardHeader
                 className="bg-slate-950/80 border-b border-slate-800 py-4 px-6 flex flex-row items-center justify-between space-y-0 cursor-pointer hover:bg-slate-900/40 transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
@@ -886,7 +886,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                             </div>
 
                             {/* AG Grids */}
-                            <div className="flex flex-col gap-8 p-6 bg-[#0f172a]">
+                            <div className="flex flex-col gap-8 p-6 bg-[#0f172a]" data-tutorial="trimestres-excel-grid">
                                 <AnimatePresence mode="wait">
                                     {viewType === 'unified' ? (
                                         <motion.div

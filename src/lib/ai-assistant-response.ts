@@ -3,6 +3,7 @@
  */
 
 import type { AgentDocumentSummary } from '@/lib/ai-document-sanitize';
+import type { SecurityCenterSummary } from '@/services/ai-document-access-gate';
 
 const JSON_ACTION_RE = /^\s*\{[\s\S]*"action"\s*:\s*"(tool|answer)"[\s\S]*\}\s*$/;
 
@@ -65,11 +66,64 @@ export function formatDocumentListFallback(
   const rows = docs.map((d) => {
     const num = d.numero_documento || `#${d.id}`;
     const fecha = d.fecha_emision ?? 'sin fecha';
-    const inc = d.incidencia_razon ? ` — _${d.incidencia_razon}_` : '';
+    const issues =
+      d.pendientes_detalle?.length
+        ? d.pendientes_detalle.join(' · ')
+        : d.incidencia_razon ?? '';
+    const inc = issues ? ` — _${issues}_` : '';
     return `- **${num}** · ${d.proveedor} · ${d.total.toFixed(2)} ${d.moneda} · ${fecha}${inc}`;
   });
 
   return `${header}\n\n${rows.join('\n')}`;
+}
+
+export function formatSecurityCenterSummaryText(s: SecurityCenterSummary): string {
+  if (s.documentos_pendientes === 0) {
+    return 'No tienes pendientes en el Centro de Seguridad para las empresas seleccionadas.';
+  }
+
+  const empresas =
+    s.empresas_consultadas.length > 1
+      ? ` (${s.empresas_consultadas.length} empresas en tu selección)`
+      : '';
+
+  const lines = [
+    `Centro de Seguridad${empresas}:`,
+    `- ${s.documentos_pendientes} documento(s) pendiente(s) de revisión (cada documento cuenta una sola vez)`,
+    `- Descuadres matemáticos: ${s.descuadres_matematicos} · Alertas lógicas: ${s.alertas_logicas}`,
+    `- Incidencias abiertas: ${s.registros_incidencias_abiertas} registro(s) repartidos en ${s.documentos_con_incidencia} documento(s)`,
+    '',
+    'Detalle por documento (todos los motivos de cada uno en la misma línea):',
+  ];
+
+  s.documentos.forEach((d, index) => {
+    lines.push(formatSecurityDocumentLine(d, index + 1));
+  });
+
+  if (s.documentos_listados < s.documentos_pendientes) {
+    lines.push(
+      '',
+      `Nota: se listan ${s.documentos_listados} de ${s.documentos_pendientes} pendientes (límite ${s.limite_listado}). El resto está en la tabla de Centro de Seguridad.`,
+    );
+  } else if (s.documentos_listados === 0) {
+    lines.push(
+      '',
+      'No pude cargar el detalle de los documentos, pero el total pendiente es el indicado arriba. Consulta la tabla en Centro de Seguridad.',
+    );
+  }
+
+  return lines.join('\n');
+}
+
+function formatSecurityDocumentLine(d: AgentDocumentSummary, index: number): string {
+  const num = d.numero_documento || `#${d.id}`;
+  const fecha = d.fecha_emision ?? 'sin fecha';
+  const tipo = d.tipo_documento ? ` [${d.tipo_documento}]` : '';
+  const issues =
+    d.pendientes_detalle?.length
+      ? d.pendientes_detalle.join(' · ')
+      : d.incidencia_razon || 'Pendiente de revisión';
+  return `${index}. ${num}${tipo} · ${d.proveedor} · ${d.total.toFixed(2)} ${d.moneda} · ${fecha} — ${issues}`;
 }
 
 export function tryFormatToolFallback(
@@ -106,6 +160,12 @@ export function tryFormatToolFallback(
       `- IVA repercutido: **${q.iva_repercutido.toFixed(2)} €**\n` +
       `- IVA soportado: **${q.iva_soportado.toFixed(2)} €**`
     );
+  }
+
+  if (toolName === 'get_security_center_summary') {
+    const s = toolResult.data as SecurityCenterSummary;
+    if (!s || typeof s !== 'object') return null;
+    return formatSecurityCenterSummaryText(s);
   }
 
   return null;

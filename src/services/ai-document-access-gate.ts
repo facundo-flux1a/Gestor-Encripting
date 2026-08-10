@@ -7,6 +7,10 @@ import { prisma } from '@/lib/prisma';
 import { getSelectedCompanies } from '@/lib/upstash';
 import { resolveEffectiveEmpresaIds } from '@/lib/empresa-access';
 import {
+  getHealthCheckAnalytics,
+  getIncidentsAnalytics,
+} from '@/services/document-service';
+import {
   documentToFull,
   documentToSummary,
   type AgentDocumentFull,
@@ -16,6 +20,7 @@ import { getDocumentByIdForUser } from '@/services/document-service';
 import type { Document } from '@/lib/types';
 
 const MAX_LIST_RESULTS = 10;
+const MAX_SECURITY_LIST = 25;
 
 export type AgentDocumentScope = {
   userId: number;
@@ -45,6 +50,139 @@ export type QuarterSummary = {
   iva_soportado: number;
   trimestre_cerrado: boolean;
 };
+
+export type SecurityCenterSummary = {
+  empresas_consultadas: number[];
+  /** Documentos únicos que requieren revisión (unión, no suma) */
+  documentos_pendientes: number;
+  /** Coincide con la tarjeta "Descuadres" del Centro de Seguridad */
+  descuadres_matematicos: number;
+  /** Coincide con "Alertas Lógicas" */
+  alertas_logicas: number;
+  /** Registros de incidencia abiertos (puede haber varios por documento) */
+  registros_incidencias_abiertas: number;
+  /** Documentos distintos con al menos una incidencia abierta */
+  documentos_con_incidencia: number;
+  /** Documentos en el listado de salud (descuadres + alertas lógicas) */
+  documentos_con_alerta_salud: number;
+  /** Documentos que tienen incidencia Y alerta de salud a la vez */
+  documentos_con_ambos: number;
+  documentos: AgentDocumentSummary[];
+  documentos_listados: number;
+  limite_listado: number;
+};
+
+const DOCUMENT_ROWS_INCLUDE = {
+  empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
+  entidades_documento: {
+    where: { rol: { in: ['emisor', 'proveedor', 'receptor', 'cliente'] as const } },
+    select: { rol: true, nombre: true, identificador_fiscal: true, identificador_fiscal_hash: true },
+  },
+  archivos_documento: { select: { id: true }, take: 1 },
+  incidencias_documento: {
+    where: { validado: false },
+    orderBy: { fecha_incidencia: 'desc' as const },
+    take: 10,
+    select: { descripcion: true, validado: true },
+  },
+} as const;
+
+type DocumentRowWithHealth = Record<string, unknown> & {
+  _healthPending?: { check_type: string | null; motivo: string | null } | null;
+};
+
+function formatHealthPendingLabel(health: {
+  check_type?: string | null;
+  motivo?: string | null;
+}): string {
+  if (health.motivo?.trim()) return health.motivo.trim();
+  switch (health.check_type) {
+    case 'FECHA_ANOMALA':
+      return 'Alerta lógica: fecha anómala';
+    case 'ENTIDAD_DUPLICADA':
+      return 'Alerta lógica: entidad duplicada';
+    case 'MISMATCH_MATEMATICO':
+      return 'Descuadre matemático';
+    default:
+      return health.check_type
+        ? `Alerta de salud (${health.check_type})`
+        : 'Alerta de salud pendiente';
+  }
+}
+
+function buildPendingIssuesForDocument(
+  openIncidencias: Array<{ descripcion: string | null; validado: boolean }>,
+  health: { check_type?: string | null; motivo?: string | null } | null | undefined,
+): string[] {
+  const detalle: string[] = [];
+  if (health) {
+    detalle.push(formatHealthPendingLabel(health));
+  }
+  for (const inc of openIncidencias) {
+    const text = inc.descripcion?.trim();
+    if (text && !detalle.includes(text)) {
+      detalle.push(text);
+    }
+  }
+  return detalle;
+}
+
+function mapPendingRowToSummary(d: Record<string, unknown>): AgentDocumentSummary {
+  const { doc, enviado_sii } = mapRowToDocumentLike(d as Parameters<typeof mapRowToDocumentLike>[0]);
+  const openIncidencias = ((d.incidencias_documento as Array<{ descripcion: string | null; validado: boolean }>) ?? []).filter(
+    (inc) => !inc.validado,
+  );
+  const health = d._healthPending as { check_type?: string | null; motivo?: string | null } | null;
+  const pendientesDetalle = buildPendingIssuesForDocument(openIncidencias, health);
+
+  if (pendientesDetalle.length > 0) {
+    doc.incidencia = true;
+    doc.verificado = false;
+    doc.incidencia_razon = pendientesDetalle.join(' · ');
+  }
+
+  return documentToSummary(doc, {
+    enviado_sii,
+    pendientes_detalle: pendientesDetalle.length > 0 ? pendientesDetalle : undefined,
+  });
+}
+
+async function fetchPendingDocumentSummaries(
+  scope: AgentDocumentScope,
+  pendingIds: number[],
+  limit: number,
+): Promise<AgentDocumentSummary[]> {
+  if (pendingIds.length === 0 || limit <= 0) return [];
+
+  const healthStatuses = await prisma.health_check_status.findMany({
+    where: { verified: false, documento_id: { in: pendingIds } },
+    select: { documento_id: true, check_type: true, motivo: true },
+  });
+  const healthByDocId = new Map(
+    healthStatuses.map((h: { documento_id: number; check_type: string | null; motivo: string | null }) => [
+      Number(h.documento_id),
+      { check_type: h.check_type, motivo: h.motivo },
+    ]),
+  );
+
+  const rows = await prisma.documentos.findMany({
+    where: {
+      id: { in: pendingIds.map((id) => BigInt(id)) },
+      id_de_empresa: { in: scope.effectiveEmpresaIds.map((id) => BigInt(id)) },
+      empresas: { id_de_usuario: { array_contains: scope.userId } },
+    } as any,
+    orderBy: { fecha_emision: 'desc' },
+    take: limit,
+    include: DOCUMENT_ROWS_INCLUDE,
+  });
+
+  return rows.map((row) =>
+    mapPendingRowToSummary({
+      ...row,
+      _healthPending: healthByDocId.get(Number(row.id)) ?? null,
+    }),
+  );
+}
 
 function computeIsIssued(
   empresaCif: string | null | undefined,
@@ -182,79 +320,163 @@ function buildDocumentWhere(scope: AgentDocumentScope, filters: ListDocumentsFil
   return { where, limit, soloIncidencias: filters.solo_incidencias_pendientes ?? false };
 }
 
+function applyStandardDocumentFilters(
+  docs: DocumentRowWithHealth[],
+  filters: ListDocumentsFilters,
+  blockedIds: Set<number>,
+  options?: { soloIncidencias?: boolean },
+) {
+  let result = docs;
+
+  if (!options?.soloIncidencias) {
+    result = result.filter((d: any) => {
+      const tipo = (d.tipo_documento || '').toLowerCase();
+      if (tipo.includes('(sin confirmar)')) return false;
+      return (
+        tipo.includes('factura') ||
+        tipo.includes('abono') ||
+        tipo.includes('crédito') ||
+        tipo.includes('credito')
+      );
+    });
+  }
+
+  if (!options?.soloIncidencias && blockedIds.size > 0) {
+    result = result.filter((d: any) => !blockedIds.has(Number(d.id)));
+  }
+
+  if (options?.soloIncidencias) {
+    result = result.filter(
+      (d: any) =>
+        (d.incidencias_documento?.length ?? 0) > 0 || Boolean(d._healthPending),
+    );
+  }
+
+  if (filters.proveedor?.trim()) {
+    const q = filters.proveedor.trim().toLowerCase();
+    result = result.filter((d: any) =>
+      d.entidades_documento.some((e: any) => (e.nombre || '').toLowerCase().includes(q)),
+    );
+  }
+
+  if (filters.tipo === 'emitidas') {
+    result = result.filter((d: any) =>
+      computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
+    );
+  } else if (filters.tipo === 'recibidas') {
+    result = result.filter(
+      (d: any) => !computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
+    );
+  }
+
+  return result;
+}
+
+/** Documentos pendientes en Centro de Seguridad: incidencias + descuadres (health check). */
+async function fetchPendingSecurityIssues(
+  scope: AgentDocumentScope,
+  filters: ListDocumentsFilters,
+  limit: number,
+) {
+  const baseWhere: Record<string, unknown> = {
+    id_de_empresa: { in: scope.effectiveEmpresaIds.map((id) => BigInt(id)) },
+    empresas: { id_de_usuario: { array_contains: scope.userId } },
+  };
+  if (filters.trimestre != null) baseWhere.num_trimestre = filters.trimestre;
+  if (filters.año != null) baseWhere.año_trimestre = filters.año;
+  if (filters.numero?.trim()) {
+    baseWhere.numero_documento = { contains: filters.numero.trim() };
+  }
+
+  const healthStatuses = await prisma.health_check_status.findMany({
+    where: { verified: false },
+    select: { documento_id: true, check_type: true, motivo: true },
+  });
+  const healthByDocId = new Map<number, { check_type: string | null; motivo: string | null }>(
+    healthStatuses.map((h: { documento_id: number; check_type: string | null; motivo: string | null }) => [
+      Number(h.documento_id),
+      { check_type: h.check_type, motivo: h.motivo },
+    ]),
+  );
+  const healthDocIds = [...healthByDocId.keys()];
+
+  const [byIncidencia, byHealth] = await Promise.all([
+    prisma.documentos.findMany({
+      where: {
+        ...baseWhere,
+        incidencias_documento: { some: { validado: false } },
+      } as any,
+      orderBy: { fecha_emision: 'desc' },
+      take: limit * 3,
+      include: DOCUMENT_ROWS_INCLUDE,
+    }),
+    healthDocIds.length > 0
+      ? prisma.documentos.findMany({
+          where: {
+            ...baseWhere,
+            id: { in: healthDocIds.map((id) => BigInt(id)) },
+          } as any,
+          orderBy: { fecha_emision: 'desc' },
+          take: limit * 3,
+          include: DOCUMENT_ROWS_INCLUDE,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const seen = new Set<string>();
+  const merged: DocumentRowWithHealth[] = [];
+  for (const doc of [...byIncidencia, ...byHealth]) {
+    const key = String(doc.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({
+      ...doc,
+      _healthPending: healthByDocId.get(Number(doc.id)) ?? null,
+    });
+  }
+
+  return applyStandardDocumentFilters(merged, filters, new Set(), { soloIncidencias: true }).slice(
+    0,
+    limit,
+  );
+}
+
 async function fetchDocumentRows(scope: AgentDocumentScope, filters: ListDocumentsFilters) {
   const { where, limit, soloIncidencias } = buildDocumentWhere(scope, filters);
+
+  if (soloIncidencias) {
+    const pending = await fetchPendingSecurityIssues(scope, filters, limit);
+    console.log('[ai-access-gate] fetchPendingSecurityIssues:', {
+      empresaIds: scope.effectiveEmpresaIds,
+      count: pending.length,
+    });
+    return pending;
+  }
 
   // IDs bloqueados por health_check fallido — no hay @relation en el schema de Prisma.
   const blockedByHealthCheck = await prisma.health_check_status.findMany({
     where: { verified: false },
     select: { documento_id: true },
   });
-  const blockedIds = new Set(blockedByHealthCheck.map((r: any) => r.documento_id));
+  const blockedIds = new Set<number>(
+    blockedByHealthCheck.map((r: { documento_id: number }) => Number(r.documento_id)),
+  );
 
   let docs = await prisma.documentos.findMany({
     where: where as any,
     orderBy: { fecha_emision: 'desc' },
     take: limit * 5, // traemos más para compensar los filtros post-query
-    include: {
-      empresas: { select: { nombre_de_empresa: true, CIF: true, cif_hash: true } },
-      entidades_documento: {
-        where: { rol: { in: ['emisor', 'proveedor', 'receptor', 'cliente'] } },
-        select: { rol: true, nombre: true, identificador_fiscal: true, identificador_fiscal_hash: true },
-      },
-      archivos_documento: { select: { id: true }, take: 1 },
-      incidencias_documento: { where: { validado: false }, take: 1, select: { descripcion: true, validado: true } },
-    },
+    include: DOCUMENT_ROWS_INCLUDE,
   });
 
-  // ── Filtros post-query ──
-
-  // 1. tipo_documento: solo facturas/abonos/créditos confirmados (case-insensitive con toLowerCase,
-  //    equivalente al LOWER(tipo_documento) LIKE del SQL).
+  // ── Filtros post-query (listado general; excluye health check fallido) ──
   const afterTipo0 = docs.length;
-  docs = docs.filter((d: any) => {
-    const tipo = (d.tipo_documento || '').toLowerCase();
-    if (tipo.includes('(sin confirmar)')) return false;
-    return tipo.includes('factura') || tipo.includes('abono') ||
-           tipo.includes('crédito') || tipo.includes('credito');
-  });
-
-  // 2. Health_check fallido: excluir si verified=false en health_check_status.
-  const afterTipo = docs.length;
-  if (blockedIds.size > 0) {
-    docs = docs.filter((d: any) => !blockedIds.has(Number(d.id)));
-  }
-
-  // 3. Incidencias: SOLO filtrar si el usuario pidió explícitamente soloIncidencias=true.
-  //    En el flujo normal, el agente VE todos los docs (incluyendo con incidencias)
-  //    para poder informar al usuario. La propiedad incidencia:true ya se setea en listDocumentsSummary.
-  const afterHealth = docs.length;
-  if (soloIncidencias) {
-    docs = docs.filter((d: any) => d.incidencias_documento?.length > 0);
-  }
-
-  // 4. Filtro de proveedor (nombre de entidad)
-  if (filters.proveedor?.trim()) {
-    const q = filters.proveedor.trim().toLowerCase();
-    docs = docs.filter((d: any) =>
-      d.entidades_documento.some((e: any) => (e.nombre || '').toLowerCase().includes(q)),
-    );
-  }
-
-  // 5. Filtro de tipo emitidas/recibidas
-  if (filters.tipo === 'emitidas') {
-    docs = docs.filter((d: any) =>
-      computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
-    );
-  } else if (filters.tipo === 'recibidas') {
-    docs = docs.filter(
-      (d: any) => !computeIsIssued(d.empresas?.CIF, d.entidades_documento, d.empresas?.cif_hash),
-    );
-  }
+  docs = applyStandardDocumentFilters(docs as DocumentRowWithHealth[], filters, blockedIds);
 
   console.log('[ai-access-gate] fetchDocumentRows pipeline:', {
     empresaIds: scope.effectiveEmpresaIds,
-    raw: afterTipo0, afterTipo, afterHealth, final: docs.length,
+    raw: afterTipo0,
+    final: docs.length,
     filters: { trimestre: filters.trimestre, año: filters.año, tipo: filters.tipo },
   });
 
@@ -268,16 +490,79 @@ export async function listDocumentsSummary(
   if (scope.effectiveEmpresaIds.length === 0) return [];
 
   const rows = await fetchDocumentRows(scope, filters);
+  const soloIncidencias = filters.solo_incidencias_pendientes ?? false;
+
+  if (soloIncidencias) {
+    return rows.map((d: any) => mapPendingRowToSummary(d));
+  }
+
   return rows.map((d: any) => {
     const { doc, enviado_sii } = mapRowToDocumentLike(d);
-    const pending = d.incidencias_documento?.[0];
-    if (pending) {
-      doc.incidencia = true;
-      doc.verificado = false;
-      doc.incidencia_razon = pending.descripcion;
-    }
     return documentToSummary(doc, { enviado_sii });
   });
+}
+
+export async function getSecurityCenterSummary(
+  scope: AgentDocumentScope,
+): Promise<SecurityCenterSummary> {
+  const empresaIds = scope.effectiveEmpresaIds;
+  const empty: SecurityCenterSummary = {
+    empresas_consultadas: [],
+    documentos_pendientes: 0,
+    descuadres_matematicos: 0,
+    alertas_logicas: 0,
+    registros_incidencias_abiertas: 0,
+    documentos_con_incidencia: 0,
+    documentos_con_alerta_salud: 0,
+    documentos_con_ambos: 0,
+    documentos: [],
+    documentos_listados: 0,
+    limite_listado: MAX_SECURITY_LIST,
+  };
+
+  if (empresaIds.length === 0) return empty;
+
+  const baseWhere = {
+    id_de_empresa: { in: empresaIds.map((id) => BigInt(id)) },
+    empresas: { id_de_usuario: { array_contains: scope.userId } },
+  };
+
+  const [healthData, incidentsAnalytics, incidenciaDocRows] = await Promise.all([
+    getHealthCheckAnalytics(empresaIds),
+    getIncidentsAnalytics(empresaIds),
+    prisma.documentos.findMany({
+      where: {
+        ...baseWhere,
+        incidencias_documento: { some: { validado: false } },
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  const healthDocIds = new Set(
+    healthData.documents.map((d) => Number(d.id_documento)).filter((id) => Number.isFinite(id)),
+  );
+  const incidenciaDocIds = new Set(
+    incidenciaDocRows.map((d: { id: bigint }) => Number(d.id)),
+  );
+
+  const documentosConAmbos = [...incidenciaDocIds].filter((id) => healthDocIds.has(id)).length;
+  const pendingIds = [...new Set<number>([...healthDocIds, ...incidenciaDocIds])];
+  const documentos = await fetchPendingDocumentSummaries(scope, pendingIds, MAX_SECURITY_LIST);
+
+  return {
+    empresas_consultadas: empresaIds,
+    documentos_pendientes: pendingIds.length,
+    descuadres_matematicos: healthData.summary.mismatches ?? 0,
+    alertas_logicas: healthData.summary.logic_checks ?? 0,
+    registros_incidencias_abiertas: incidentsAnalytics.totalOpen ?? 0,
+    documentos_con_incidencia: incidenciaDocIds.size,
+    documentos_con_alerta_salud: healthDocIds.size,
+    documentos_con_ambos: documentosConAmbos,
+    documentos,
+    documentos_listados: documentos.length,
+    limite_listado: MAX_SECURITY_LIST,
+  };
 }
 
 export async function getDocumentFull(

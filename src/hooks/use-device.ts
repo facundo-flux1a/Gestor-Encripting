@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
  */
 export function useDevice() {
     const [isMobile, setIsMobile] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
         const check = () =>
@@ -17,9 +18,9 @@ export function useDevice() {
             window.matchMedia('(any-pointer: coarse)').matches;
 
         const val = check();
-        console.log('📱 [useDevice] Detection result:', val, 'UA:', navigator.userAgent);
         setIsMobile(val);
+        setIsMounted(true);
     }, []);
 
-    return { isMobile };
+    return { isMobile, isMounted };
 }

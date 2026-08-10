@@ -5,11 +5,8 @@ import { HealthCheckTutorial } from './HealthCheckTutorial';
 import { HealthCheckTutorialMobile } from './HealthCheckTutorialMobile';
 
 export function HealthCheckTutorialRouter() {
-    const { isMobile } = useDevice();
-
-    if (isMobile) {
-        return <HealthCheckTutorialMobile />;
-    }
-
+    const { isMobile, isMounted } = useDevice();
+    if (!isMounted) return null;
+    if (isMobile) return <HealthCheckTutorialMobile />;
     return <HealthCheckTutorial />;
 }

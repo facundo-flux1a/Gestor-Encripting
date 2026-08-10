@@ -4,7 +4,8 @@ import { DashboardTutorial } from './dashboard-tutorial';
 import { DashboardTutorialMobile } from './DashboardTutorialMobile';
 
 export function DashboardTutorialRouter() {
-    const { isMobile } = useDevice();
+    const { isMobile, isMounted } = useDevice();
+    if (!isMounted) return null;
     if (isMobile) return <DashboardTutorialMobile />;
     return <DashboardTutorial />;
 }

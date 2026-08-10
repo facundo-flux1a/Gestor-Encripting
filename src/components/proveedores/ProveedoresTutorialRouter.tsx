@@ -4,7 +4,8 @@ import { ProveedoresTutorial } from './ProveedoresTutorial';
 import { ProveedoresTutorialMobile } from './ProveedoresTutorialMobile';
 
 export function ProveedoresTutorialRouter() {
-    const { isMobile } = useDevice();
+    const { isMobile, isMounted } = useDevice();
+    if (!isMounted) return null;
     if (isMobile) return <ProveedoresTutorialMobile />;
     return <ProveedoresTutorial />;
 }

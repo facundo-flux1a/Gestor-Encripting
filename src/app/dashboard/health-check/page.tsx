@@ -333,7 +333,7 @@ export default function HealthCheckPage() {
                             </TableHeader>
                             <TableBody>
                                 {filteredDocs.length > 0 ? (
-                                    filteredDocs.map((doc) => {
+                                    filteredDocs.map((doc, rowIndex) => {
                                         const emisor = doc.entidades.find((e: any) => e.rol?.toUpperCase() === 'EMISOR' || e.rol?.toUpperCase() === 'PROVEEDOR')?.nombre || 'Desconocido';
                                         return (
                                             <TableRow
@@ -431,6 +431,7 @@ export default function HealthCheckPage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             className="h-8 gap-1.5 text-violet-500 hover:text-violet-600 hover:bg-violet-500/10"
+                                                            data-tutorial={rowIndex === 0 ? 'health-ia' : undefined}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleDiagnose(doc.id_documento, (doc as any).hcs_check_type);
@@ -442,39 +443,44 @@ export default function HealthCheckPage() {
                                                             ) : (
                                                                 <Sparkles className="h-3.5 w-3.5" />
                                                             )}
-                                                            <span className="font-bold tracking-tight" data-tutorial="health-ia">IA</span>
+                                                            <span className="font-bold tracking-tight">IA</span>
                                                         </Button>
-                                                        {/* Botón Confirmar — siempre disponible */}
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 gap-1.5 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleConfirm(doc.id_documento);
-                                                            }}
-                                                            disabled={isConfirming === doc.id_documento}
+                                                        {/* Validar + Ver — spotlight conjunto en tutorial */}
+                                                        <div
+                                                            className="flex items-center gap-2"
+                                                            data-tutorial={rowIndex === 0 ? 'health-validate' : undefined}
                                                         >
-                                                            {isConfirming === doc.id_documento ? (
-                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                            ) : (
-                                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                            )}
-                                                            Validar
-                                                        </Button>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm" 
-                                                            className="h-8 gap-1 text-primary hover:text-primary"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                const checkType = (doc as any).hcs_check_type || 'MISMATCH_MATEMATICO';
-                                                                const motivo = (doc as any).hcs_motivo || '';
-                                                                router.push(`/documento/${doc.id_documento}?audit=true&checkType=${checkType}&motivo=${encodeURIComponent(motivo)}`);
-                                                            }}
-                                                        >
-                                                            Ver <ArrowRight className="h-3 w-3" />
-                                                        </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-8 gap-1.5 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleConfirm(doc.id_documento);
+                                                                }}
+                                                                disabled={isConfirming === doc.id_documento}
+                                                            >
+                                                                {isConfirming === doc.id_documento ? (
+                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                ) : (
+                                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                                )}
+                                                                Validar
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-8 gap-1 text-primary hover:text-primary"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const checkType = (doc as any).hcs_check_type || 'MISMATCH_MATEMATICO';
+                                                                    const motivo = (doc as any).hcs_motivo || '';
+                                                                    router.push(`/documento/${doc.id_documento}?audit=true&checkType=${checkType}&motivo=${encodeURIComponent(motivo)}`);
+                                                                }}
+                                                            >
+                                                                Ver <ArrowRight className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

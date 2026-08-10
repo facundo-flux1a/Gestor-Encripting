@@ -257,10 +257,10 @@ export function DashboardTutorialMobile() {
 
                 steps: [
                     {
-                        element: 'body', // Use body for welcome step like PC version
+                        element: 'body',
                         popover: {
-                            title: '¡Bienvenido a tu Gestor Documental! 🎉',
-                            description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
+                            title: 'Bienvenido a tu Gestor Documental',
+                            description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección Dashboard.',
                             side: 'bottom' as any, align: 'center' as any
                         }
                     },
@@ -269,25 +269,25 @@ export function DashboardTutorialMobile() {
                             ? '[data-tutorial="company-selector"]'
                             : '[data-tutorial="company-selector"] button',
                         popover: {
-                            title: hasCompaniesAtInit ? 'Seleccionar empresa 🏢' : 'Crear tu primera empresa 🏢',
+                            title: hasCompaniesAtInit ? 'Seleccionar empresa' : 'Crear tu primera empresa',
                             description: hasCompaniesAtInit
-                                ? '<p><strong>Acción requerida:</strong> Toca una empresa para seleccionarla.</p><p class="text-sm text-muted-foreground mt-2">Puedes seleccionar múltiples empresas desde el mismo panel.</p>'
-                                : '<p><strong>Acción requerida:</strong> Toca "Agregar Empresa" para crear tu primera empresa.</p>',
+                                ? '<p>Toca una empresa para seleccionarla y cargar sus datos.</p><p class="text-sm text-muted-foreground mt-2">Puedes seleccionar múltiples empresas desde el mismo panel.</p>'
+                                : '<p>Toca Agregar Empresa para crear tu primera empresa.</p>',
                             side: 'right' as any, align: 'start' as any
                         }
                     },
                     {
                         element: '[data-sidebar="sidebar"], [data-sidebar="content"]',
                         popover: {
-                            title: 'Menú de navegación 🗂️',
-                            description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Entidades.',
+                            title: 'Menú de navegación',
+                            description: 'Desde este menú lateral puedes acceder a todas las secciones: Documentos, Centro de Seguridad, Trimestres, Entidades, Webhooks, Docs y la Cola de Subidas.',
                             side: 'right' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="kpis"]',
                         popover: {
-                            title: 'Métricas principales 📊',
+                            title: 'Métricas principales',
                             description: 'Estas tarjetas muestran las métricas clave: ingresos, gastos, beneficio bruto, resultado de IVA y total de documentos procesados.',
                             side: 'bottom' as any, align: 'center' as any
                         }
@@ -295,31 +295,39 @@ export function DashboardTutorialMobile() {
                     {
                         element: '[data-tutorial="financial-summary"]',
                         popover: {
-                            title: 'Resumen Financiero 📈',
-                            description: 'Este gráfico muestra la evolución trimestral de tus ingresos (ventas) y gastos.',
+                            title: 'Resumen Financiero',
+                            description: 'Este gráfico muestra la evolución trimestral de tus ingresos y gastos.',
                             side: 'top' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="distribution-chart"]',
                         popover: {
-                            title: 'Distribución de Documentos 🥧',
-                            description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes, abonos, etc.',
+                            title: 'Distribución de Documentos',
+                            description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes y otros.',
                             side: 'top' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="iva-chart"]',
                         popover: {
-                            title: 'Resumen de IVA 💰',
+                            title: 'Resumen de IVA',
                             description: 'Este gráfico te muestra el IVA repercutido y soportado por trimestre para que controles tu situación fiscal.',
+                            side: 'top' as any, align: 'center' as any
+                        }
+                    },
+                    {
+                        element: '[data-tutorial="top-providers"]',
+                        popover: {
+                            title: 'Proveedores y Clientes Principales',
+                            description: 'Aquí puedes consultar el listado con los proveedores y clientes que representan la mayor cantidad de gastos e ingresos.',
                             side: 'top' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="filters"]',
                         popover: {
-                            title: 'Filtros de análisis 🔍',
+                            title: 'Filtros de análisis',
                             description: 'Usa los filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
                             side: 'bottom' as any, align: 'start' as any
                         }
@@ -327,11 +335,8 @@ export function DashboardTutorialMobile() {
                     {
                         element: 'body',
                         popover: {
-                            title: '¡Todo listo! ✨',
-                            description: `
-                <p>Ya conoces las funciones principales del dashboard. ¡Empieza a explorar!</p>
-                <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
-              `,
+                            title: 'Todo listo',
+                            description: '<p>Ya conoces las funciones principales del dashboard. Empieza a explorar y administrar tu negocio.</p>',
                             side: 'bottom' as any, align: 'center' as any
                         }
                     }
@@ -350,6 +355,7 @@ export function DashboardTutorialMobile() {
                 }
             });
 
+            document.querySelectorAll('.driver-popover, .driver-overlay').forEach(el => el.remove());
             setDriverInstance(driverObj as any);
             setIsTutorialActive(true);
             hasInitialized.current = true;

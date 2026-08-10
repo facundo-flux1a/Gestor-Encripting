@@ -59,7 +59,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: '¡Bienvenido a Entidades! 🏢',
+            title: '¡Bienvenido a Entidades!',
             description: 'Esta sección te permite gestionar todos tus proveedores y clientes de forma centralizada. Puedes analizar gastos e ingresos, ver documentos, explorar productos y detectar anomalías.\n\nNota: Para ver datos reales, necesitas tener empresas seleccionadas en el sistema.',
             side: 'over' as const,
           },
@@ -67,7 +67,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Tabla de Entidades 📊',
+            title: 'Tabla de Entidades',
             description: 'La tabla principal muestra un listado de todos tus proveedores o clientes (usá las pestañas para cambiar) con información básica:\n\n• Nombre de la entidad y su identificación fiscal\n• Total Gastado / Ingresado: Suma de todas las operaciones\n• Documentos: Cantidad de facturas y comprobantes\n• Productos Únicos: Número de productos diferentes\n\nPodés ordenar por cualquier columna, filtrar resultados y buscar entidades específicas por nombre.',
             side: 'over' as const,
           },
@@ -75,7 +75,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Vista de Detalle de la Entidad 🔍',
+            title: 'Vista de Detalle de la Entidad',
             description: 'Al hacer clic en cualquier proveedor o cliente de la tabla, entrás a su página de detalle donde encontrarás tres pestañas principales:\n\n• Resumen: Dashboard interactivo con gráficos de gastos o ingresos mensuales y métricas clave.\n\n• Documentos: Acceso completo a todas las facturas y comprobantes con filtros avanzados.\n\n• Productos: Catálogo completo con historial de precios, cantidades totales y frecuencia de compra o venta.',
             side: 'over' as const,
           },
@@ -83,8 +83,8 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: '¡Tutorial Completado! 🎉',
-            description: 'Ahora conocés las funcionalidades principales de la sección Entidades:\n\n✔️ Tabla con listado de proveedores y clientes\n✔️ Pestañas para cambiar entre Proveedores y Clientes\n✔️ Vista de detalle con tres pestañas: Resumen, Documentos y Productos\n✔️ Análiticas completas de gastos e ingresos\n\n¡Seleccióná empresas y empezá a gestionar tus entidades de forma inteligente!',
+            title: '¡Tutorial completado!',
+            description: 'Ahora conocés las funcionalidades principales de la sección Entidades:\n\n• Tabla con listado de proveedores y clientes\n• Pestañas para cambiar entre Proveedores y Clientes\n• Vista de detalle con tres pestañas: Resumen, Documentos y Productos\n• Analíticas completas de gastos e ingresos\n\nSeleccioná empresas y empezá a gestionar tus entidades.',
             side: 'over' as const,
           },
         },
@@ -169,7 +169,7 @@ export function ProveedoresTutorial() {
         {
           element: '[data-tutorial="proveedores-header"]',
           popover: {
-            title: '¡Bienvenido a Entidades! 🏢',
+            title: '¡Bienvenido a Entidades!',
             description: 'Aquí podés gestionar todos tus proveedores y clientes, analizar gastos e ingresos, ver documentos y explorar productos. Te mostramos cómo funciona esta sección paso a paso.',
             side: 'bottom' as const,
             align: 'start' as const,
@@ -178,7 +178,7 @@ export function ProveedoresTutorial() {
         {
           element: '[data-tutorial="proveedores-tabs"]',
           popover: {
-            title: 'Proveedores y Clientes 🔄',
+            title: 'Proveedores y Clientes',
             description: 'Usá estas pestañas para cambiar entre el listado de Proveedores (gastos) y Clientes (ingresos). Ambas vistas muestran las mismas métricas y detalles, adaptándose al tipo de entidad.',
             side: 'bottom' as const,
             align: 'end' as const,
@@ -187,7 +187,7 @@ export function ProveedoresTutorial() {
         {
           element: '[data-tutorial="proveedores-tabla"]',
           popover: {
-            title: 'Tabla de Entidades 📊',
+            title: 'Tabla de Entidades',
             description: 'Esta tabla muestra el listado de todas las entidades con información resumida:\n\n• Nombre e identificación fiscal\n• Total Gastado / Ingresado\n• Documentos: Cantidad de facturas\n• Productos Únicos\n\nPodés ordenar, filtrar y buscar. Hacé clic en cualquier fila para ver el detalle completo.',
             side: 'top' as const,
             align: 'start' as const,
@@ -196,7 +196,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Vista de Detalle de la Entidad 🔍',
+            title: 'Vista de Detalle de la Entidad',
             description: 'Al hacer clic en un proveedor o cliente entrás a su página de detalle. Si aún no ves ninguno, irán apareciendo a medida que procesés documentos. En esa vista encontrarás tres pestañas:\n\n• Resumen: Análiticas y gráficos de gastos o ingresos\n• Documentos: Todas las facturas con filtros avanzados\n• Productos: Catálogo completo con historial de precios',
             side: 'over' as const,
           },
@@ -204,7 +204,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Pestaña Resumen - Análiticas 📈',
+            title: 'Pestaña Resumen - Analíticas',
             description: 'En la pestaña Resumen visualizarás gráficos de gastos o ingresos mensuales, frecuencia de operaciones y métricas clave. Para proveedores verás gastos; para clientes, ingresos. Ideal para identificar patrones estacionales y optimizar tu negocio.',
             side: 'over' as const,
           },
@@ -212,7 +212,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Pestaña Documentos 📄',
+            title: 'Pestaña Documentos',
             description: 'La pestaña Documentos almacena todas las facturas y comprobantes ordenados cronológicamente. Podés usar filtros avanzados y descargar PDFs originales.',
             side: 'over' as const,
           },
@@ -220,7 +220,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Pestaña Productos 📦',
+            title: 'Pestaña Productos',
             description: 'Aquí encontrarás el catálogo completo de productos comprados o vendidos a esa entidad. Podés ver historiales de precios y frecuencias para comparar periodos.',
             side: 'over' as const,
           },
@@ -228,7 +228,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Detalle Individual de Producto 🎯',
+            title: 'Detalle individual de producto',
             description: 'Al acceder al detalle de un producto específico verés estadísticas completas: precio promedio, gráficos de evolución y alertas sobre variaciones de costos o precios de venta.',
             side: 'over' as const,
           },
@@ -236,7 +236,7 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: 'Alertas Inteligentes 🚨',
+            title: 'Alertas inteligentes',
             description: 'El sistema detecta automáticamente anomalías como cambios bruscos de precio o cantidades inusuales. Estas alertas te avisarán proactivamente sobre problemas potenciales.',
             side: 'over' as const,
           },
@@ -244,8 +244,8 @@ export function ProveedoresTutorial() {
         {
           element: 'body',
           popover: {
-            title: '¡Tutorial Completado! 🎉',
-            description: 'Ahora conocés todas las funcionalidades de la sección Entidades:\n\n✔️ Pestañas Proveedores y Clientes\n✔️ Tabla con listado y métricas\n✔️ Vista de detalle con tres pestañas\n✔️ Análiticas de gastos e ingresos\n✔️ Exploración profunda de productos\n✔️ Detección inteligente de anomalías\n\n¡Empezá a usar la plataforma para optimizar tus compras y ventas!',
+            title: '¡Tutorial completado!',
+            description: 'Ahora conocés todas las funcionalidades de la sección Entidades:\n\n• Pestañas Proveedores y Clientes\n• Tabla con listado y métricas\n• Vista de detalle con tres pestañas\n• Analíticas de gastos e ingresos\n• Exploración profunda de productos\n• Detección de anomalías\n\nEmpezá a usar la plataforma para optimizar tus compras y ventas.',
             side: 'over' as const,
           },
         },

@@ -7,6 +7,12 @@ import { usePathname } from 'next/navigation';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useTrimestres } from '@/context/TrimestresProvider';
 import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
+import {
+  getTrimestresTutorialSteps,
+  prepareTrimestresTutorialStep,
+  TRIMESTRES_SHOW_EMPTY_FROM_STEP,
+  TRIMESTRES_TABLE_STEP_INDEX,
+} from '@/components/trimestres/trimestres-tutorial-steps';
 
 export function TrimestresTutorial() {
   const { shouldShowTutorial, isLoading, markAsCompleted, setTutorialState, setMostrarVacios } = useTrimestres();
@@ -61,112 +67,9 @@ export function TrimestresTutorial() {
         allowClose: false,
         overlayOpacity: 0.75,
         disableActiveInteraction: false,
+        skipMissingElement: true,
 
-        steps: [
-          {
-            element: '[data-tutorial="trimestres-welcome"]',
-            popover: {
-              title: '¡Bienvenido a Trimestres! 📅',
-              description: 'Aquí vas a poder organizar y gestionar tus documentos por períodos trimestrales. Te voy a mostrar cómo funciona todo.',
-              side: 'bottom',
-              align: 'center',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-company-selector"]',
-            popover: {
-              title: '🏢 Selecciona tu empresa',
-              description: '¡Selecciona una y dale a \'siguiente\'!',
-              side: 'left',
-              align: 'center',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-selector"]',
-            popover: {
-              title: 'Selector de Trimestre',
-              description: 'Aquí puedes cambiar entre trimestres. El sistema muestra automáticamente el trimestre más reciente disponible.',
-              side: 'bottom',
-              align: 'start',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-toggle"]',
-            popover: {
-              title: 'Mostrar Trimestres Vacíos',
-              description: 'Activa esta opción para ver trimestres sin documentos. Por defecto, solo se muestran trimestres con documentos.',
-              side: 'left',
-              align: 'start',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-stats"]',
-            popover: {
-              title: 'Estadísticas del Trimestre',
-              description: 'Estas tarjetas te muestran un resumen rápido: documentos totales, ingresos, gastos y el IVA neto del trimestre.',
-              side: 'bottom',
-              align: 'center',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-table"]',
-            popover: {
-              title: '📋 Tabla de Documentos',
-              description: 'Aquí ves todos los documentos del trimestre seleccionado. Podés buscar, filtrar y editar documentos.',
-              side: 'top',
-              align: 'center',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-close-button"]',
-            popover: {
-              title: 'Cerrar Trimestre ⚠️',
-              description: '⚠️ IMPORTANTE: Al cerrar un trimestre, todos sus documentos quedan bloqueados y NO PODRÁN ser editados. Los nuevos documentos se asignan al siguiente trimestre disponible.',
-              side: 'left',
-              align: 'start',
-            },
-          },
-          {
-            element: '[data-tutorial="trimestres-table"]',
-            popover: {
-              title: '📌 Sobre la asignación de documentos',
-              description: (() => {
-                const now = new Date();
-                const month = now.getMonth();
-                const day = now.getDate();
-                const year = now.getFullYear();
-
-                let q = 0;
-                let qYear = year;
-
-                // Lógica de periodos de gracia (20/30 días)
-                if (month === 0 && day <= 30) { q = 4; qYear = year - 1; }
-                else if (month === 3 && day <= 20) { q = 1; }
-                else if (month === 6 && day <= 20) { q = 2; }
-                else if (month === 9 && day <= 20) { q = 3; }
-                else {
-                  if (month < 3) q = 1;
-                  else if (month < 6) q = 2;
-                  else if (month < 9) q = 3;
-                  else q = 4;
-                }
-
-                return `Los documentos se asignan al trimestre viable más cercano. Por ejemplo: si hay documentos antiguos, irán al T${q} ${qYear} (actual). Si ese trimestre está cerrado, irán al siguiente disponible.`;
-              })(),
-              side: 'top',
-              align: 'center',
-            },
-          },
-          {
-            element: 'body',
-            popover: {
-              title: '¡Todo listo! 🎉',
-              description: 'Ya conoces todas las herramientas para gestionar tus trimestres. ¡Empieza a organizar tus documentos!',
-              side: 'over',
-              align: 'center',
-            },
-          },
-        ],
+        steps: getTrimestresTutorialSteps(),
 
         nextBtnText: 'Siguiente →',
         prevBtnText: '← Anterior',
@@ -187,8 +90,10 @@ export function TrimestresTutorial() {
           });
           document.body.classList.add(`tutorial-step-${currentStepIndex}`);
 
-          // ✅ FORZAR MOSTRAR VACIOS (Step 4 en adelante = índice 3)
-          if (currentStepIndex >= 3) {
+          prepareTrimestresTutorialStep(currentStepIndex);
+
+          // Forzar mostrar vacíos desde el paso del toggle en adelante
+          if (currentStepIndex >= TRIMESTRES_SHOW_EMPTY_FROM_STEP) {
             console.log('🔄 [TrimestresTutorial] Forzando mostrarVacios: true');
             setMostrarVacios(true);
           }
@@ -365,9 +270,9 @@ export function TrimestresTutorial() {
         box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
       }
 
-      /* 🔒 Step 6 (index 5): Tabla de Documentos - filas no clickeables */
-      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr,
-      body.tutorial-step-5 [data-tutorial="trimestres-table"] tbody tr * {
+      /* Step del listado: filas no clickeables */
+      body.tutorial-step-${TRIMESTRES_TABLE_STEP_INDEX} [data-tutorial="trimestres-table"] tbody tr,
+      body.tutorial-step-${TRIMESTRES_TABLE_STEP_INDEX} [data-tutorial="trimestres-table"] tbody tr * {
         pointer-events: none !important;
         cursor: not-allowed !important;
       }

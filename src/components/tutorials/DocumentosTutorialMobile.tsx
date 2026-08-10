@@ -16,6 +16,8 @@ import { injectSkipButton, removeSkipButton } from '@/lib/tutorial-utils';
  * - touch-action: manipulation on buttons, min 44px touch targets
  * - Removed setInterval for modal detection (replaced with simpler check)
  */
+const MOBILE_UPLOAD_STEP_INDEX = 3;
+
 export function DocumentosTutorialMobile() {
     const { setIsTutorialActive, setCurrentStep } = useTutorial();
     const [localShouldShow, setLocalShouldShow] = useState(false);
@@ -30,6 +32,7 @@ export function DocumentosTutorialMobile() {
 
     const hasInitialized = useRef(false);
     const lastStepRef = useRef(0);
+    const driverRef = useRef<ReturnType<typeof driver> | null>(null);
     const { selectedCompanyIds } = useCompanyContext();
     const selectedIdsRef = useRef<number[]>([]);
     const overlayTouchBlockerRef = useRef<((e: TouchEvent) => void) | null>(null);
@@ -72,6 +75,16 @@ export function DocumentosTutorialMobile() {
         const handleDocumentUpload = () => {
             setDocumentUploaded(true);
             localStorage.setItem('tutorial_document_uploaded', 'true');
+
+            if (lastStepRef.current === MOBILE_UPLOAD_STEP_INDEX && driverRef.current) {
+                setTimeout(() => {
+                    try {
+                        driverRef.current?.moveNext();
+                    } catch {
+                        /* driver puede haberse destruido */
+                    }
+                }, 600);
+            }
         };
         window.addEventListener('documentUploaded', handleDocumentUpload);
         return () => window.removeEventListener('documentUploaded', handleDocumentUpload);
@@ -117,7 +130,10 @@ export function DocumentosTutorialMobile() {
             let isStepWhitelisted = false;
             if (idx === 1 && target.closest('[data-tutorial="company-selector"]')) isStepWhitelisted = true;
             else if (idx === 2 && target.closest('[data-sidebar="trigger"]')) isStepWhitelisted = true;
-            else if (idx === 3 && target.closest('[data-tutorial="upload-button"]')) isStepWhitelisted = true;
+            else if (idx === MOBILE_UPLOAD_STEP_INDEX && (
+                target.closest('[data-tutorial="upload-button"]') ||
+                target.closest('[data-tutorial="upload-modal"]')
+            )) isStepWhitelisted = true;
             else if (idx === 5 && target.closest('[data-tutorial="tabs-filters"]')) isStepWhitelisted = true;
 
             if (!isStepWhitelisted) {
@@ -168,45 +184,73 @@ export function DocumentosTutorialMobile() {
             const finalSteps = [
                 {
                     element: 'body',
-                    popover: { title: '📄 ¡Bienvenido! (1/10)', description: 'Te guiaremos por las funciones principales de esta sección.', side: 'bottom', align: 'center' } as any
+                    popover: { title: 'Bienvenido a Documentos', description: 'Te guiaremos por todas las secciones de esta vista.', side: 'bottom', align: 'center' } as any
                 },
                 {
                     element: '[data-tutorial="company-selector"]',
-                    popover: { title: '🏢 Empresa (2/10)', description: 'Selecciona al menos una empresa para continuar.', side: 'bottom', align: 'start' }
+                    popover: { title: 'Empresa (1/10)', description: 'Selecciona la empresa activa para cargar sus facturas y documentos.', side: 'bottom', align: 'start' }
                 },
                 {
                     element: '[data-sidebar="trigger"]',
-                    popover: { title: '📱 Menú (3/10)', description: 'Utiliza el menú lateral para navegar entre las distintas secciones.', side: 'bottom', align: 'start' }
+                    popover: { title: 'Menú Lateral (2/10)', description: 'Navega rápidamente entre Dashboard, Centro de Seguridad y Trimestres.', side: 'bottom', align: 'start' }
                 },
                 {
                     element: '[data-tutorial="upload-button"]',
-                    popover: { title: '📤 Subir (4/10)', description: 'Toca aquí para seleccionar archivos. Los documentos con inconsistencias irán a Incidencias.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Subir (3/10)', description: 'Toca Subir, elige empresa y archivo en el asistente, y confirma. Al encolar el documento avanzaremos solos.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: 'body',
-                    popover: { title: '⚠️ ¿No ves tu documento? (5/10)', description: 'Si el documento no aparece aquí, puede tener una incidencia. Encuéntralo en la sección de Incidencias.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Centro de Seguridad (4/10)', description: 'Si un documento tiene inconsistencias, se enviará al Centro de Seguridad.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: '[data-tutorial="tabs-filters"]',
-                    popover: { title: '🔍 Filtros (6/10)', description: 'Organiza tus documentos. Filtra entre facturas recibidas, emitidas y otros tipos.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Categorías (5/10)', description: 'Filtra entre Facturas Recibidas, Emitidas, Otros y Sin Confirmar.', side: 'bottom', align: 'center' }
+                },
+                {
+                    element: '[data-tutorial="clean-duplicates"]',
+                    popover: { title: 'Duplicados (6/10)', description: 'Limpia y resuelve coincidencias de facturas duplicadas en un toque.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: '[data-tutorial="export-pdf"]',
-                    popover: { title: '📑 Exportar (7/10)', description: '¿Necesitas un reporte? Exporta la información directamente a PDF.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Exportar (7/10)', description: 'Genera y descarga reportes resumidos directamente en formato PDF.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: '[data-tutorial="documents-table"]',
-                    popover: { title: '📋 Tabla (8/10)', description: 'Aquí verás todos los documentos procesados. Toca cualquier fila para ver detalles.', side: 'top', align: 'center' }
-                },
-                {
-                    element: '[data-tutorial="documents-table"]',
-                    popover: { title: '🔍 Detalle (9/10)', description: 'Al tocar una fila, verás el detalle del documento con todos los datos extraídos.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Tabla (8/10)', description: 'Revisa tus documentos procesados y desplázate horizontalmente para ver todos los importes.', side: 'top', align: 'center' }
                 },
                 {
                     element: 'body',
-                    popover: { title: '✨ ¡Listo! (10/10)', description: 'Ya conoces cómo gestionar tus documentos en mobile.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Detalle (9/10)', description: 'Toca cualquier fila para abrir la auditoría completa línea por línea del comprobante.', side: 'bottom', align: 'center' }
+                },
+                {
+                    element: 'body',
+                    popover: { title: 'Todo listo (10/10)', description: 'Ya conoces todas las secciones para gestionar tus documentos.', side: 'bottom', align: 'center' }
                 }
             ];
+
+            const completeDocumentosTutorial = async (targetDriver: ReturnType<typeof driver>) => {
+                removeSkipButton();
+                removeGlobalTouchBlocker();
+                document.body.classList.remove('tutorial-active');
+                document.body.classList.forEach(cls => {
+                    if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
+                });
+
+                try {
+                    const res = await fetch('/api/user/tutorial-documentos', { method: 'POST' });
+                    if (!res.ok) throw new Error('No se pudo marcar el tutorial como completado');
+
+                    localStorage.removeItem('force_tutorial_documentos');
+                    localStorage.removeItem('tutorial_document_uploaded');
+                    setLocalShouldShow(false);
+                    setIsTutorialActive(false);
+                    targetDriver.destroy();
+                    console.log('✅ [DocumentosTutorialMobile] Tutorial completado, recargando página');
+                    window.location.reload();
+                } catch (error) {
+                    console.error('❌ [DocumentosTutorialMobile] Error completando tutorial:', error);
+                }
+            };
 
             const driverObj = driver({
                 showProgress: true,
@@ -235,8 +279,8 @@ export function DocumentosTutorialMobile() {
                     addGlobalTouchBlocker();
 
                     // Cerrar sidebar si llegamos al paso del botón de subida y sigue abierta
-                    if (idx === 3) {
-                        const sidebarContent = document.querySelector('[role="dialog"][data-state="open"]');
+                    if (idx === MOBILE_UPLOAD_STEP_INDEX) {
+                        const sidebarContent = document.querySelector('[role="dialog"][data-state="open"]:not([data-tutorial="upload-modal"])');
                         const trigger = document.querySelector('[data-sidebar="trigger"]') as HTMLElement | null;
                         if (sidebarContent && trigger) {
                             trigger.click();
@@ -244,15 +288,7 @@ export function DocumentosTutorialMobile() {
                     }
 
                     injectSkipButton(() => {
-                        fetch('/api/user/tutorial-documentos', { method: 'POST' })
-                            .then(() => {
-                                setLocalShouldShow(false);
-                                setIsTutorialActive(false);
-                                localStorage.removeItem('tutorial_document_uploaded');
-                                removeGlobalTouchBlocker();
-                                driverInstance?.destroy();
-                            })
-                            .catch(console.error);
+                        void completeDocumentosTutorial(driverObj);
                     });
                 },
 
@@ -272,7 +308,7 @@ export function DocumentosTutorialMobile() {
                         } else {
                             driverObj.moveNext();
                         }
-                    } else if (idx === 3) {
+                    } else if (idx === MOBILE_UPLOAD_STEP_INDEX) {
                         const documentContainer = document.querySelector('[data-tutorial="documents-table"]');
                         const hasTableRows = !!documentContainer?.querySelector('tbody tr:not(.no-docs)');
                         const hasFolders = !!documentContainer?.querySelector('.space-y-3 button span.font-semibold');
@@ -285,26 +321,7 @@ export function DocumentosTutorialMobile() {
                             showErrorMessage('⚠️ Por favor, sube al menos un documento antes de continuar.');
                         }
                     } else if (idx === totalStepsCount - 1) {
-                        fetch('/api/user/tutorial-documentos', { method: 'POST' })
-                            .then(res => {
-                                if (res.ok) {
-                                    setLocalShouldShow(false);
-                                    setIsTutorialActive(false);
-                                    localStorage.removeItem('tutorial_document_uploaded');
-                                    // Clear replay flag
-                                    if (typeof window !== 'undefined') {
-                                        localStorage.removeItem('force_tutorial_documentos');
-                                    }
-                                }
-                            })
-                            .catch(console.error);
-                        // Clean up blocker before destroying driver
-                        removeGlobalTouchBlocker();
-                        setTimeout(() => {
-                            driverObj.destroy();
-                            console.log('🔄 [DocumentosTutorialMobile] Forzando recarga de página');
-                            window.location.reload();
-                        }, 100);
+                        void completeDocumentosTutorial(driverObj);
                     } else {
                         driverObj.moveNext();
                     }
@@ -312,31 +329,25 @@ export function DocumentosTutorialMobile() {
 
                 onCloseClick: () => {
                     console.log('❌ [DocumentosTutorialMobile] onCloseClick');
-                    fetch('/api/user/tutorial-documentos', { method: 'POST' }).catch(console.error);
-                    removeSkipButton();
-                    removeGlobalTouchBlocker();
-                    document.body.classList.remove('tutorial-active');
-                    document.body.classList.forEach(cls => {
-                        if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
-                    });
-                    driverObj.destroy();
-                    setIsTutorialActive(false);
+                    void completeDocumentosTutorial(driverObj);
                 },
 
                 onDestroyStarted: () => {
                     setIsTutorialActive(false);
                     removeSkipButton();
                     removeGlobalTouchBlocker();
-                    document.body.classList.remove('tutorial-active');
+                    document.body.classList.remove('tutorial-active', 'tutorial-upload-modal-open');
                     document.body.classList.forEach(cls => {
                         if (cls.startsWith('tutorial-step-')) document.body.classList.remove(cls);
                     });
-                    // Remove injected style element to clean up CSS overrides
+                    driverRef.current = null;
                     const styleEl = document.getElementById('documentos-tutorial-mobile-styles');
                     if (styleEl) styleEl.remove();
                 },
             });
 
+            document.querySelectorAll('.driver-popover, .driver-overlay').forEach(el => el.remove());
+            driverRef.current = driverObj;
             setDriverInstance(driverObj);
             addGlobalTouchBlocker();
             driverObj.drive(lastStepRef.current);
@@ -358,25 +369,36 @@ export function DocumentosTutorialMobile() {
       /* Visual & Functional Priority for Tutorial Popover */
       .driver-popover, .driver-popover-wrapper, .driver-popover * {
         pointer-events: auto !important; 
+        z-index: 2147483640 !important;
+      }
+
+      /* Modal de subida por encima del popover del tutorial */
+      [data-radix-portal]:has([data-tutorial="upload-modal"]),
+      [data-radix-portal]:has([data-tutorial="upload-modal"]) *,
+      body.driver-active [data-tutorial="upload-modal"],
+      body.driver-active [data-tutorial="upload-modal"] *,
+      body.driver-active [data-radix-portal]:has([data-tutorial="upload-modal"]),
+      body.driver-active [data-radix-portal]:has([data-tutorial="upload-modal"]) *,
+      [data-tutorial="upload-modal"],
+      [data-tutorial="upload-modal"] * {
+        pointer-events: auto !important;
         z-index: 2147483647 !important;
       }
 
-      /* Modal Exceptions: Ensure Modals and Portals render above the blocking logic */
-      [data-tutorial="upload-modal"],
-      [data-tutorial="upload-modal"] *,
-      [data-radix-portal], 
-      [data-radix-portal] *,
-      [role="dialog"]:not(.driver-popover),
-      [role="dialog"] *,
       [data-radix-popper-content-wrapper],
       [data-radix-popper-content-wrapper] * {
         pointer-events: auto !important;
-        z-index: 2147483645 !important;
+        z-index: 2147483648 !important;
       }
 
-      /* Safety Valve for Modals: Soften overlay visually when the Upload Modal is active */
-      body:has([data-tutorial="upload-modal"]) .driver-overlay {
+      /* Atenuar overlay cuando el modal de subida está abierto */
+      body:has([data-tutorial="upload-modal"]) .driver-overlay,
+      body.tutorial-upload-modal-open .driver-overlay {
         opacity: 0.1 !important;
+      }
+
+      body:has([data-tutorial="upload-modal"]) .driver-popover {
+        z-index: 2147483638 !important;
       }
 
       /* Highlighted active element */

@@ -43,12 +43,16 @@ function DocumentoPageContent() {
   useFieldArray({ control: form.control, name: 'entidades' });
 
   const resetFormWithDocData = useCallback((docData: Document) => {
+    const clientEnt = docData.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
     form.reset({
       ...docData,
       fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
       fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
       cif: docData.cif || '',
       proveedor: docData.proveedor || '',
+      empresa_nombre: docData.empresa_nombre || '',
+      cliente_nombre: clientEnt?.nombre || '',
+      cliente_cif: clientEnt?.identificador_fiscal || '',
     }, { keepErrors: false, keepDirty: false, keepIsSubmitted: false, keepTouched: false, keepIsValid: false, keepSubmitCount: false });
   }, [form]);
 
@@ -156,10 +160,12 @@ function DocumentoPageContent() {
     if (!doc || (!isEditing && !isAuditMode) || isSaving) return;
     setIsSaving(true);
     try {
-      // ✅ Sincronizar proveedor y cif modificados hacia el array de entidades antes de enviar
+      // ✅ Sincronizar proveedor, cif y cliente hacia el array de entidades antes de enviar
       const finalData = { ...data };
+      let updatedEntidades = [...(finalData.entidades || [])];
+
       if (finalData.proveedor !== undefined || finalData.cif !== undefined) {
-        finalData.entidades = finalData.entidades.map(e => {
+        updatedEntidades = updatedEntidades.map(e => {
           if (e.rol === 'emisor' || e.rol === 'proveedor') {
             return {
               ...e,
@@ -170,6 +176,31 @@ function DocumentoPageContent() {
           return e;
         });
       }
+
+      if (finalData.cliente_nombre !== undefined || finalData.cliente_cif !== undefined) {
+        let foundClient = false;
+        updatedEntidades = updatedEntidades.map(e => {
+          if (e.rol === 'cliente' || e.rol === 'receptor') {
+            foundClient = true;
+            return {
+              ...e,
+              nombre: finalData.cliente_nombre !== undefined ? finalData.cliente_nombre : e.nombre,
+              identificador_fiscal: finalData.cliente_cif !== undefined ? finalData.cliente_cif : e.identificador_fiscal
+            };
+          }
+          return e;
+        });
+        if (!foundClient && (finalData.cliente_nombre || finalData.cliente_cif)) {
+          updatedEntidades.push({
+            rol: 'cliente',
+            nombre: finalData.cliente_nombre || null,
+            identificador_fiscal: finalData.cliente_cif || null,
+            direccion: null, telefono: null, email: null, datos_extra: null
+          });
+        }
+      }
+
+      finalData.entidades = updatedEntidades;
 
       const res = await fetch(`/api/documents/${doc.id_documento}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(finalData) });
       const result = await res.json();

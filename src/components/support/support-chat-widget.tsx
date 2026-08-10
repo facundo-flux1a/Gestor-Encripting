@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTutorial } from '@/context/tutorial-context';
 import {
   HelpCircle,
   X,
@@ -123,7 +124,21 @@ function welcomeOnly(): ChatMessage[] {
 
 export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(true);
+  const { isTutorialActive } = useTutorial();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const checkTutorialState = () => {
+      const isDriverActive = isTutorialActive || (typeof document !== 'undefined' && !!document.querySelector('.driver-popover, .driver-overlay'));
+      if (isDriverActive) {
+        setOpen(false);
+      }
+    };
+
+    checkTutorialState();
+    const interval = setInterval(checkTutorialState, 300);
+    return () => clearInterval(interval);
+  }, [isTutorialActive]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);

@@ -56,7 +56,7 @@ export function IndividualTutorial() {
       {
         element: '[data-tutorial="documento-header"]',
         popover: {
-          title: '📄 Vista de Documento',
+          title: 'Vista de Documento',
           description: '¡Bienvenido! Aquí puedes ver todos los detalles de un documento, editarlo, validar incidencias y más.',
           side: 'bottom' as const,
           align: 'start' as const,
@@ -66,7 +66,7 @@ export function IndividualTutorial() {
       {
         element: '[data-tutorial="documento-actions"]',
         popover: {
-          title: '⚡ Acciones del Documento',
+          title: 'Acciones del Documento',
           description: 'Desde aquí puedes: Ver el PDF original, Editar el documento, Validar incidencias, Eliminar y Exportar. Ten en cuenta que si el trimestre está cerrado, no podrás editar.',
           side: 'bottom' as const,
           align: 'end' as const,
@@ -76,7 +76,7 @@ export function IndividualTutorial() {
       {
         element: '[data-tutorial="documento-auditoria"]',
         popover: {
-          title: '🔍 Modo Auditoría',
+          title: 'Modo Auditoría',
           description: '¿Ves algún descuadre o error? El Modo Auditoría abre una vista dividida donde puedes comparar el documento original con los datos extraídos, mientras la IA te sugiere correcciones automáticas.',
           side: 'bottom' as const,
           align: 'center' as const,
@@ -86,7 +86,7 @@ export function IndividualTutorial() {
       {
         element: '[data-tutorial="documento-view"]',
         popover: {
-          title: '📋 Información del Documento',
+          title: 'Información del Documento',
           description: 'Aquí podrás ver datos como: número de documento, fechas, tipo, estado de verificación y todas las líneas de productos/servicios.',
           side: 'right' as const,
           align: 'start' as const,
@@ -99,7 +99,7 @@ export function IndividualTutorial() {
       steps.push({
         element: '[data-tutorial="documento-incidencias"]',
         popover: {
-          title: '⚠️ Incidencias Detectadas',
+          title: 'Incidencias Detectadas',
           description: 'Este documento tiene incidencias sin resolver. Puedes analizarlo de nuevo o validarlas manualmente si ya las resolviste.',
           side: 'left' as const,
           align: 'start' as const,
@@ -111,7 +111,7 @@ export function IndividualTutorial() {
     steps.push({
       element: '[data-tutorial="documento-analizar"]',
       popover: {
-        title: '🔍 Análisis Inteligente con IA',
+        title: 'Análisis con IA',
         description: 'Usa ésta herramienta para que el sistema analice automáticamente el documento y detecte posibles errores o duplicados. Puedes usar tu propia API key o la API pública (con límites diarios), además de especificar aún más el prompt.',
         side: 'left' as const,
         align: 'start' as const,
@@ -122,7 +122,7 @@ export function IndividualTutorial() {
     steps.push({
       element: '[data-tutorial="documento-entidades"]',
       popover: {
-        title: '🏢 Entidades del Documento',
+        title: 'Entidades del Documento',
         description: 'Aquí ves la información del proveedor o cliente, como: nombre, CIF, dirección y datos de contacto. En modo edición puedes modificarlos.',
         side: 'left' as const,
         align: 'start' as const,
@@ -133,7 +133,7 @@ export function IndividualTutorial() {
     steps.push({
       element: '[data-tutorial="documento-financiero"]',
       popover: {
-        title: '💰 Resumen Financiero',
+        title: 'Resumen Financiero',
         description: 'Resumen de importes: Base imponible, IVA desglosado por tipo, retenciones (si aplica) y total del documento.',
         side: 'left' as const,
         align: 'start' as const,
@@ -145,7 +145,7 @@ export function IndividualTutorial() {
       steps.push({
         element: '[data-tutorial="documento-archivo"]',
         popover: {
-          title: '📎 Archivo Original',
+          title: 'Archivo Original',
           description: 'Puedes hacer click en "Ver" para abrir el PDF original del documento en una vista previa.',
           side: 'bottom' as const,
           align: 'center' as const,
@@ -157,8 +157,8 @@ export function IndividualTutorial() {
     steps.push({
       element: 'body',
       popover: {
-        title: '🎉 ¡Tutorial Completado!',
-        description: '¡Perfecto! Ya conoces todas las herramientas para gestionar documentos. Puedes editar, analizar y validar documentos según tus necesidades.',
+        title: '¡Tutorial completado!',
+        description: 'Ya conoces las herramientas para gestionar documentos. Puedes editar, analizar y validar documentos según tus necesidades.',
         side: 'over' as const,
         align: 'center' as const,
       },

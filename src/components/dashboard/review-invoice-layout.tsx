@@ -188,18 +188,37 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           <Div />
 
           {/* Recibe tu empresa + Dirigida a */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">
-                <span className="font-semibold text-foreground/90">Recibe tu empresa:</span>{' '}
-                {doc.empresa_nombre || '—'} {doc.empresa_cif && <span className="font-mono text-[10px] text-muted-foreground">({doc.empresa_cif})</span>}
-              </p>
+              <SL>Recibe tu empresa</SL>
+              {isEditing ? (
+                <FormField control={form.control} name="empresa_nombre" render={({ field }) => (
+                  <EInput readOnly={false} value={field.value ?? doc.empresa_nombre ?? ''} onChange={v => field.onChange(v)} placeholder="Nombre de tu empresa" />
+                )} />
+              ) : (
+                <p className="text-xs text-muted-foreground mb-0.5">
+                  <span className="font-semibold text-foreground/90">{doc.empresa_nombre || '—'}</span>{' '}
+                  {doc.empresa_cif && <span className="font-mono text-[10px] text-muted-foreground">({doc.empresa_cif})</span>}
+                </p>
+              )}
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">
-                <span className="font-semibold text-foreground/90">Dirigida a (según documento):</span>{' '}
-                {client?.nombre || '—'} {client?.identificador_fiscal && <span className="font-mono text-[10px] text-muted-foreground">({client.identificador_fiscal})</span>}
-              </p>
+              <SL>Dirigida a (Cliente / Receptor)</SL>
+              {isEditing ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="cliente_nombre" render={({ field }) => (
+                    <EInput readOnly={false} value={field.value ?? client?.nombre ?? ''} onChange={v => field.onChange(v)} placeholder="Nombre del cliente/receptor" />
+                  )} />
+                  <FormField control={form.control} name="cliente_cif" render={({ field }) => (
+                    <EInput readOnly={false} value={field.value ?? client?.identificador_fiscal ?? ''} onChange={v => field.onChange(v)} className="font-mono" placeholder="CIF / NIF del cliente" />
+                  )} />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mb-0.5">
+                  <span className="font-semibold text-foreground/90">{client?.nombre || '—'}</span>{' '}
+                  {client?.identificador_fiscal && <span className="font-mono text-[10px] text-muted-foreground">({client.identificador_fiscal})</span>}
+                </p>
+              )}
             </div>
           </div>
 

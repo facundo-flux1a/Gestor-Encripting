@@ -5,6 +5,7 @@
 import {
   getDocumentFull,
   getQuarterSummary,
+  getSecurityCenterSummary,
   listDocumentsSummary,
   resolveAgentScope,
   searchDocuments,
@@ -12,13 +13,15 @@ import {
   type ListDocumentsFilters,
 } from '@/services/ai-document-access-gate';
 import { truncateContextJson } from '@/lib/ai-document-sanitize';
+import { formatSecurityCenterSummaryText } from '@/lib/ai-assistant-response';
 
 export type AgentToolName =
   | 'list_documents_summary'
   | 'get_document_detail'
   | 'search_documents'
   | 'get_quarter_summary'
-  | 'get_user_companies';
+  | 'get_user_companies'
+  | 'get_security_center_summary';
 
 export type AgentToolCall = {
   tool: AgentToolName;
@@ -46,6 +49,11 @@ const TOOL_DEFINITIONS = [
   {
     name: 'get_user_companies',
     description: 'Empresas a las que el usuario tiene acceso y cuáles están activas en su selección.',
+  },
+  {
+    name: 'get_security_center_summary',
+    description:
+      'Resumen del Centro de Seguridad. documentos_pendientes = documentos únicos. Cada item en documentos incluye pendientes_detalle con todos los motivos agrupados (salud + incidencias).',
   },
 ] as const;
 
@@ -106,6 +114,16 @@ export async function executeAgentTool(
           },
         };
       }
+      case 'get_security_center_summary': {
+        const data = await getSecurityCenterSummary(scope);
+        return {
+          ok: true,
+          data: {
+            ...data,
+            mensaje_detallado: formatSecurityCenterSummaryText(data),
+          },
+        };
+      }
       default:
         return { ok: false, error: 'Tool desconocida' };
     }
@@ -119,8 +137,16 @@ export async function resolveScopeForUser(userId: number) {
   return resolveAgentScope(userId);
 }
 
-export function formatToolResultForLlm(result: unknown): string {
-  return truncateContextJson(result);
+export function formatToolResultForLlm(
+  result: { ok: true; data: unknown } | { ok: false; error: string },
+): string {
+  if (!result.ok) return result.error;
+  const data = result.data;
+  if (data && typeof data === 'object' && 'mensaje_detallado' in data) {
+    const msg = (data as { mensaje_detallado?: unknown }).mensaje_detallado;
+    if (typeof msg === 'string' && msg.trim()) return msg;
+  }
+  return truncateContextJson(result.data);
 }
 
 function boolArg(v: unknown): boolean | undefined {

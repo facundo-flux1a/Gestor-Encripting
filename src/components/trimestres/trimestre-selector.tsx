@@ -65,7 +65,7 @@ export function TrimestreSelector({
   return (
     <div className="flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 bg-card rounded-lg border shadow-sm">
       {/* 📱 CABECERA: Desplegable Multi-año de Checkboxes */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b pb-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b pb-3" data-tutorial="trimestres-years">
         <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
           <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
           <Popover>
@@ -119,8 +119,8 @@ export function TrimestreSelector({
       </div>
 
       {/* 📱 FILAS DE TRIMESTRES (Una fila por cada Año seleccionado) */}
-      <div className="space-y-3 sm:space-y-4">
-        {añosOrdenados.map(año => {
+      <div className="space-y-3 sm:space-y-4" data-tutorial="trimestres-periods">
+        {añosOrdenados.map((año, yearIndex) => {
           // Filtrar trimestres del año
           const trimestresAño = trimestres
             .filter(t => t.año === año)
@@ -138,7 +138,10 @@ export function TrimestreSelector({
                 </span>
 
                 {onSelectAñoPreset && (
-                  <div className="flex items-center gap-1">
+                  <div
+                    className="flex items-center gap-1"
+                    data-tutorial={yearIndex === 0 ? 'trimestres-presets' : undefined}
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
@@ -168,7 +171,7 @@ export function TrimestreSelector({
               </div>
 
               {/* Botones de Trimestres (T4, T3, T2, T1) */}
-              <ScrollArea className="w-full sm:w-auto">
+              <ScrollArea className="w-full sm:w-auto" data-tutorial={yearIndex === 0 ? 'trimestres-quarter-buttons' : undefined}>
                 <div className="flex gap-2 pb-1 sm:pb-0 flex-nowrap">
                   {trimestresAño.map(t => {
                     const key = `${t.año}-${t.trimestre}`;
