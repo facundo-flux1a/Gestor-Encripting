@@ -117,6 +117,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialHealthCheck: z.number().optional(),
       tutorialWebhooks: z.number().optional(),
       tutorialDocs: z.number().optional(),
+      tutorialUploadQueue: z.number().optional(),
       organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
       exp: z.number(),
     }).safeParse(payload);
@@ -137,6 +138,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialHealthCheck: parsedPayload.data.tutorialHealthCheck,
       tutorialWebhooks: parsedPayload.data.tutorialWebhooks,
       tutorialDocs: parsedPayload.data.tutorialDocs,
+      tutorialUploadQueue: parsedPayload.data.tutorialUploadQueue,
       organization_rol: (parsedPayload.data.organization_rol as "ADMIN" | "EDITOR" | "VIEWER") || 'EDITOR',
       expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
@@ -224,7 +226,8 @@ export async function createSession(
   tutorialHealthCheck: number = 0,
   tutorialWebhooks: number = 0,
   tutorialDocs: number = 0,
-  organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR'
+  organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR',
+  tutorialUploadQueue: number = 0
 ) {
   // Limpiar/actualizar inmediatamente el cache en memoria para este usuario
   activoCache.set(userId, { activo: true, expires: Date.now() + ACTIVO_TTL_MS });
@@ -235,6 +238,7 @@ export async function createSession(
     tutorialDocumentos, tutorialTrimestres, tutorialActividad,
     tutorialIndividual, tutorialIncidencias, tutorialProveedores,
     tutorialHealthCheck, tutorialWebhooks, tutorialDocs,
+    tutorialUploadQueue,
     organization_rol: organizationRol
   });
 
@@ -330,7 +334,8 @@ export async function login(formData: FormData) {
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
-      (user.organization_rol as any) || 'EDITOR');
+      (user.organization_rol as any) || 'EDITOR',
+      t((user as any).tutorial_upload_queue));
     await logAuthEvent('LOGIN', userEmail);
 
     if (inviteToken) {
@@ -384,6 +389,7 @@ export async function register(formData: FormData) {
         tutorial_incidencias: true,
         tutorial_proveedores: true,
         tutorial_health_check: true,
+        tutorial_upload_queue: true,
         email_verified: false,
         two_factor_code: code,
         two_factor_expires_at: expiresAt,
@@ -474,7 +480,8 @@ export async function verifyEmailCode(formData: FormData) {
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
-      (user.organization_rol as any) || 'EDITOR');
+      (user.organization_rol as any) || 'EDITOR',
+      t((user as any).tutorial_upload_queue));
     await logAuthEvent('LOGIN', user.email as string);
 
     if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
@@ -517,7 +524,8 @@ export async function verify2FACode(formData: FormData) {
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
-      (user.organization_rol as any) || 'EDITOR');
+      (user.organization_rol as any) || 'EDITOR',
+      t((user as any).tutorial_upload_queue));
     await logAuthEvent('LOGIN', user.email as string);
 
     if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
@@ -552,7 +560,7 @@ export async function handleGoogleSignInOnServer(
           activo: true,
           tutorial: true, tutorial_documentos: true, tutorial_trimestres: true,
           tutorial_actividad: true, tutorial_individual: true, tutorial_incidencias: true,
-          tutorial_proveedores: true, tutorial_health_check: true,
+          tutorial_proveedores: true, tutorial_health_check: true, tutorial_upload_queue: true,
         }
       });
       await createDefaultAIConfig(Number(newUser.id));
@@ -567,7 +575,8 @@ export async function handleGoogleSignInOnServer(
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
-      (user.organization_rol as any) || 'EDITOR');
+      (user.organization_rol as any) || 'EDITOR',
+      t((user as any).tutorial_upload_queue));
     await logAuthEvent('LOGIN', email);
 
     return { success: true };
@@ -645,7 +654,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       'tutorial_proveedores': 'tutorialProveedores',
       'tutorial_health_check': 'tutorialHealthCheck',
       'tutorial_webhooks': 'tutorialWebhooks',
-      'tutorial_docs': 'tutorialDocs'
+      'tutorial_docs': 'tutorialDocs',
+      'tutorial_upload_queue': 'tutorialUploadQueue'
     };
 
     const payloadField = fieldMap[field];
@@ -668,7 +678,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       updatedPayload.tutorialHealthCheck ?? 0,
       updatedPayload.tutorialWebhooks ?? 0,
       updatedPayload.tutorialDocs ?? 0,
-      (updatedPayload as any).organization_rol as any
+      (updatedPayload as any).organization_rol as any,
+      (updatedPayload as any).tutorialUploadQueue ?? 0
     );
 
     console.log(`✅ [auth-service] ${field} actualizado exitosamente`);
@@ -719,3 +730,6 @@ export async function completeTutorialDocs() {
   return await updateUserTutorialField('tutorial_docs', 0);
 }
 
+export async function completeTutorialUploadQueue() {
+  return await updateUserTutorialField('tutorial_upload_queue', 0);
+}

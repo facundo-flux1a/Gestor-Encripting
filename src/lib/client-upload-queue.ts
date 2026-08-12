@@ -48,11 +48,37 @@ function openDb(): Promise<IDBDatabase> {
           db.createObjectStore(STORE, { keyPath: 'uploadId' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('No se pudo abrir IndexedDB'));
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onclose = () => {
+          console.warn('⚠️ [ClientUploadQueue] Conexión IndexedDB cerrada, reseteando handle');
+          dbPromise = null;
+        };
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
+      req.onerror = () => {
+        dbPromise = null;
+        reject(req.error || new Error('No se pudo abrir IndexedDB'));
+      };
     });
   }
   return dbPromise;
+}
+
+async function getTransaction(storeName: string, mode: IDBTransactionMode): Promise<IDBTransaction> {
+  try {
+    const db = await openDb();
+    return db.transaction(storeName, mode);
+  } catch (err) {
+    console.warn('⚠️ [ClientUploadQueue] Falló db.transaction (reabriendo IndexedDB)...', err);
+    dbPromise = null;
+    const db = await openDb();
+    return db.transaction(storeName, mode);
+  }
 }
 
 function idbReq<T>(req: IDBRequest<T>): Promise<T> {
@@ -63,8 +89,7 @@ function idbReq<T>(req: IDBRequest<T>): Promise<T> {
 }
 
 async function putPending(record: PendingUploadRecord) {
-  const db = await openDb();
-  const tx = db.transaction(STORE, 'readwrite');
+  const tx = await getTransaction(STORE, 'readwrite');
   await idbReq(tx.objectStore(STORE).put(record));
   try {
     (window as any).__gestorUploadPendingCount = await getPendingUploadCount();
@@ -74,8 +99,7 @@ async function putPending(record: PendingUploadRecord) {
 }
 
 async function deletePending(uploadId: string) {
-  const db = await openDb();
-  const tx = db.transaction(STORE, 'readwrite');
+  const tx = await getTransaction(STORE, 'readwrite');
   await idbReq(tx.objectStore(STORE).delete(uploadId));
   try {
     (window as any).__gestorUploadPendingCount = await getPendingUploadCount();
@@ -85,14 +109,12 @@ async function deletePending(uploadId: string) {
 }
 
 async function getAllPending(): Promise<PendingUploadRecord[]> {
-  const db = await openDb();
-  const tx = db.transaction(STORE, 'readonly');
-  return idbReq(tx.objectStore(STORE).getAll());
+  const tx = await getTransaction(STORE, 'readonly');
+  return await idbReq(tx.objectStore(STORE).getAll());
 }
 
 async function updateAttempts(uploadId: string, attempts: number) {
-  const db = await openDb();
-  const tx = db.transaction(STORE, 'readwrite');
+  const tx = await getTransaction(STORE, 'readwrite');
   const store = tx.objectStore(STORE);
   const row = await idbReq<PendingUploadRecord | undefined>(store.get(uploadId));
   if (!row) return;

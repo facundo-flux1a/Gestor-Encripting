@@ -27,44 +27,11 @@ export function parseFechaLocal(fecha: Date | string): Date {
 export function calcularTrimestreExtendido(fecha: Date | string): { año: number; trimestre: number } {
   const date = parseFechaLocal(fecha);
   const mes = date.getMonth() + 1; // 1-12
-  const dia = date.getDate();
   const año = date.getFullYear();
 
-  // T1: Enero-Marzo + extensión hasta 20 Abril
-  if (mes >= 1 && mes <= 3) {
-    return { año, trimestre: 1 };
-  }
-  if (mes === 4 && dia <= 20) {
-    return { año, trimestre: 1 };
-  }
-
-  // T2: Abril-Junio + extensión hasta 20 Julio
-  if (mes >= 4 && mes <= 6) {
-    return { año, trimestre: 2 };
-  }
-  if (mes === 7 && dia <= 20) {
-    return { año, trimestre: 2 };
-  }
-
-  // T3: Julio-Septiembre + extensión hasta 20 Octubre
-  if (mes >= 7 && mes <= 9) {
-    return { año, trimestre: 3 };
-  }
-  if (mes === 10 && dia <= 20) {
-    return { año, trimestre: 3 };
-  }
-
-  // T4: Octubre-Diciembre
-  if (mes >= 10 && mes <= 12) {
-    return { año, trimestre: 4 };
-  }
-
-  // Enero días 1-30 del año siguiente → T4 del año anterior
-  if (mes === 1 && dia <= 30) {
-    return { año: año - 1, trimestre: 4 };
-  }
-
-  // Fallback (no debería llegar aquí)
+  if (mes >= 1 && mes <= 3) return { año, trimestre: 1 };
+  if (mes >= 4 && mes <= 6) return { año, trimestre: 2 };
+  if (mes >= 7 && mes <= 9) return { año, trimestre: 3 };
   return { año, trimestre: 4 };
 }
 
@@ -84,6 +51,14 @@ export function obtenerFechaLimiteExtension(año: number, trimestre: number): Da
     default:
       throw new Error(`Trimestre inválido: ${trimestre}`);
   }
+}
+
+/**
+ * Indica si la prórroga para presentar el trimestre (día 20 del mes posterior) ya venció respecto a la fecha actual.
+ */
+export function haVencidoExtensionTrimestre(año: number, trimestre: number, now = new Date()): boolean {
+  const limite = obtenerFechaLimiteExtension(año, trimestre);
+  return now > limite;
 }
 
 /**
@@ -180,37 +155,29 @@ export async function obtenerPrimerTrimestreAbiertoDelAnio(
  * Resuelve el trimestre contable OPERATIVO al importar (dónde encajar el documento en el gestor).
  * No valida la fecha contable — eso es evaluarFechaContable() en fecha-contable-utils.
  *
- * - Salta trimestres cerrados/bloqueados hacia el siguiente abierto.
- * - Si la fecha cae antes del primer trimestre abierto del año, usa el primero abierto.
- * - Ejercicios anteriores → primer trimestre abierto del ejercicio actual (inyección operativa).
+ * Reglas de negocio:
+ * 1. Calcula el trimestre natural de la fecha de emisión del documento (ej: 1 de Julio -> T3).
+ * 2. Si el trimestre natural NO ha vencido por fecha límite de declaración (hasta el día 20 del mes posterior)
+ *    y NO está cerrado manualmente en la BD, se asigna a su TRIMESTRE NATURAL.
+ * 3. Si el trimestre natural YA VENCIÓ (pasó el día 20) o está cerrado en BD,
+ *    se asigna al primer trimestre ABIERTO a partir de la fecha actual (HOY).
  */
 export async function resolverTrimestreContableImportacion(
   fecha: Date | string,
   empresaId: number | null,
-  userId?: number | null
+  userId?: number | null,
+  now = new Date()
 ): Promise<{ año: number; trimestre: number }> {
-  const calc = calcularTrimestreExtendido(fecha);
-  const ejercicioActual = new Date().getFullYear();
+  const natural = calcularTrimestreExtendido(fecha);
+  const vencido = haVencidoExtensionTrimestre(natural.año, natural.trimestre, now);
+  const cerradoEnDb = await estaTrimestreCerrado(natural.año, natural.trimestre, empresaId, userId);
 
-  let añoInicial: number;
-  let trimestreInicial: number;
-
-  if (calc.año < ejercicioActual) {
-    const destino = await obtenerPrimerTrimestreAbiertoDelAnio(ejercicioActual, empresaId, userId);
-    añoInicial = destino.año;
-    trimestreInicial = destino.trimestre;
-  } else {
-    const primerAbierto = await obtenerPrimerTrimestreAbiertoDelAnio(calc.año, empresaId, userId);
-    if (calc.año === primerAbierto.año && calc.trimestre < primerAbierto.trimestre) {
-      añoInicial = primerAbierto.año;
-      trimestreInicial = primerAbierto.trimestre;
-    } else {
-      añoInicial = calc.año;
-      trimestreInicial = calc.trimestre;
-    }
+  if (!vencido && !cerradoEnDb) {
+    return natural;
   }
 
-  return obtenerSiguienteTrimestreAbierto(añoInicial, trimestreInicial, empresaId, userId);
+  const actualNatural = calcularTrimestreExtendido(now);
+  return obtenerSiguienteTrimestreAbierto(actualNatural.año, actualNatural.trimestre, empresaId, userId);
 }
 
 /**

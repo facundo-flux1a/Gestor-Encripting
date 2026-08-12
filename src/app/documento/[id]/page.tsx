@@ -357,7 +357,9 @@ function DocumentoPageContent() {
         trimestre: doc.num_trimestre || targetQuarter.trimestre
       };
 
-      if (newDateStr !== oldDateStr || !doc.num_trimestre || !doc.año_trimestre) {
+      const isQuarterMismatch = currentQuarter.año !== targetQuarter.año || currentQuarter.trimestre !== targetQuarter.trimestre;
+
+      if (newDateStr !== oldDateStr || !doc.num_trimestre || !doc.año_trimestre || isQuarterMismatch) {
         let availableQuarters: QuarterOption[] = [];
         try {
           const resAvail = await fetch(`/api/trimestres/disponibles?empresa_id=${doc.empresa_id || ''}`);
@@ -380,8 +382,8 @@ function DocumentoPageContent() {
             type: 'QUARTER_CHANGE',
             title: 'Reasignación de Trimestre Fiscal',
             description: isTargetClosed
-              ? `El trimestre de la nueva fecha (${targetQuarter.año} - T${targetQuarter.trimestre}) está CERRADO.`
-              : `La nueva fecha corresponde al trimestre ${targetQuarter.año} - T${targetQuarter.trimestre}.`,
+              ? `El trimestre de la fecha ingresada (${targetQuarter.año} - T${targetQuarter.trimestre}) está CERRADO.`
+              : `La fecha ingresada corresponde al trimestre ${targetQuarter.año} - T${targetQuarter.trimestre}.`,
             blocking: false,
           });
         } else {

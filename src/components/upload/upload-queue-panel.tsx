@@ -623,7 +623,7 @@ export function UploadQueuePanel() {
         >
           <SheetHeader className="px-5 pt-5 pb-4 border-b shrink-0 space-y-1 text-left">
             <div className="flex items-start justify-between gap-3 pr-6">
-              <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0" data-tutorial="queue-header">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                   <UploadCloud className="w-5 h-5 text-primary" />
                 </div>
@@ -648,6 +648,7 @@ export function UploadQueuePanel() {
                   onClick={() => fetchQueue()}
                   disabled={isRefreshing}
                   title="Refrescar"
+                  data-tutorial="queue-refresh"
                 >
                   <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
                 </Button>
@@ -655,7 +656,7 @@ export function UploadQueuePanel() {
             </div>
 
             {!isLoading && activeUploads.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 pt-2">
+              <div className="grid grid-cols-3 gap-2 pt-2" data-tutorial="queue-stats">
                 <div className="rounded-md border border-border/50 bg-muted/30 px-2.5 py-2">
                   <p className="text-[10px] text-muted-foreground">En cola</p>
                   <p className="text-lg font-bold leading-none mt-0.5">{enColaDocs}</p>
@@ -676,7 +677,7 @@ export function UploadQueuePanel() {
 
             {/* ── Barra de búsqueda + toggle filtros ── */}
             {!isLoading && activeUploads.length > 0 && (
-              <div className="pt-2 space-y-2">
+              <div className="pt-2 space-y-2" data-tutorial="queue-search">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -812,7 +813,7 @@ export function UploadQueuePanel() {
             )}
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3" data-tutorial="queue-jobs">
             {selectedCompanyIds.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground px-4">
                 <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
