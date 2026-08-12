@@ -302,15 +302,22 @@ export function normalizeDocumento(doc: DocumentoExtraido, empresaCif?: string):
       normalized.descripcion_incidencia = currDesc ? `${currDesc} | ${conflictMsg}` : conflictMsg;
     }
   }
-  // CASO 2: El CIF del emisor está ausente pero se marcó incidencia o falta el del cliente
+  // CASO 2a: Emisor sin CIF y el único NIF encontrado es el de la empresa del sistema/cliente
+  // → siempre enriquecer con la explicación específica, incluso si el LLM ya puso algo genérico
+  else if (!emisorCif && systemCif && clienteCif === systemCif) {
+    normalized.incidencia = true;
+    const specificMsg = `El CIF del emisor se omitió porque el NIF detectado (${systemCif}) coincide con el CIF de la empresa del sistema.`;
+    const currDesc = String(normalized.descripcion_incidencia || '').trim();
+    // Solo añadir si el mensaje específico no está ya incluido
+    if (!currDesc.includes(systemCif) || !currDesc.toLowerCase().includes('empresa del sistema')) {
+      normalized.descripcion_incidencia = currDesc ? `${currDesc} | ${specificMsg}` : specificMsg;
+    }
+  }
+  // CASO 2b: Emisor sin CIF, incidencia marcada, pero no hay coincidencia con sistema
   else if (!emisorCif && (normalized.incidencia || !clienteCif)) {
     const currDesc = String(normalized.descripcion_incidencia || '').trim();
     if (!currDesc) {
-      if (systemCif && rawClienteCif && normalizeCIF(rawClienteCif) === systemCif) {
-        normalized.descripcion_incidencia = `El CIF del emisor se dejó en blanco porque el único NIF detectado coincide con el CIF de la empresa del sistema (${systemCif}).`;
-      } else {
-        normalized.descripcion_incidencia = `El CIF del emisor no figura impreso en el documento original.`;
-      }
+      normalized.descripcion_incidencia = `El CIF del emisor no figura impreso en el documento original.`;
     }
   }
 

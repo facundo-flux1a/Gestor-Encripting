@@ -793,7 +793,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     return;
   }
 
-  const normalized = normalizeDocumento(rawParsed);
+  const normalized = normalizeDocumento(rawParsed, ingestion.cif);
   console.log(`[ExtractionWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
 
   // LOG: resultado normalizado antes de los guards
@@ -831,6 +831,7 @@ async function doVisionFallback(params: {
   prompt: string;
   uploadId: string;
   parentUploadId?: string;
+  empresaCif?: string;
 }): Promise<DocumentoExtraido | null> {
   const { fileBuffer, ocrText, firstResult, prompt, uploadId } = params;
   try {
@@ -892,7 +893,7 @@ ${ocrSummary}
 
     // [5/5] Parsear y normalizar resultado visual
     const rawParsed = parseLlmResponse(text);
-    const visionNormalized = normalizeDocumento(rawParsed);
+    const visionNormalized = normalizeDocumento(rawParsed, params.empresaCif);
     wLog('VisionFallback', `🏁 [5/5] Resultado visual normalizado:\n  importe_total=${(visionNormalized as any).importe_total ?? 'N/A'}\n  importe_sin_iva=${(visionNormalized as any).importe_sin_iva ?? 'N/A'}\n  impuestos=${JSON.stringify((visionNormalized as any).totales_por_impuesto ?? [])}\n  incidencia=${(visionNormalized as any).incidencia} | tipos=${JSON.stringify((visionNormalized as any).tipos_incidencia ?? [])}`, 'info');
 
     return visionNormalized;
@@ -953,6 +954,7 @@ async function enqueueAfterFiscalGuards(params: {
       prompt: basePrompt,
       uploadId: ingestion.uploadId,
       parentUploadId: ingestion.parentUploadId,
+      empresaCif: ingestion.cif,
     });
 
     if (visionResult) {
@@ -1130,7 +1132,7 @@ Reglas de Reparación:
   );
 
   const rawParsed = parseLlmResponse(JSON.stringify(result));
-  const normalized = normalizeDocumento(rawParsed);
+  const normalized = normalizeDocumento(rawParsed, ingestion.cif);
 
   await enqueueAfterFiscalGuards({
     job,
@@ -1183,7 +1185,7 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
   }
 
   if (docs.length === 1) {
-    const normalized = normalizeDocumento(docs[0]);
+    const normalized = normalizeDocumento(docs[0], ingestion.cif);
     await dbWriterQueue.add(`db-writer-${ingestion.uploadId}`, {
       ingestion,
       aiResult: normalized
@@ -1206,7 +1208,7 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
     const dbJobs = docs.map((doc: any, idx: number) => {
       const randomHash = crypto.randomBytes(4).toString('hex');
       const subUploadId = `${ingestion.uploadId}_doc_${randomHash}`;
-      const normalized = normalizeDocumento(doc);
+      const normalized = normalizeDocumento(doc, ingestion.cif);
       return {
         name: `db-writer-non-${subUploadId}`,
         data: {
@@ -1352,7 +1354,7 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
     const subUploadId = `${ingestion.uploadId}_img_${randomHash}`;
 
     const rawParsed  = parseLlmResponse(JSON.stringify(doc));
-    const normalized = normalizeDocumento(rawParsed);
+    const normalized = normalizeDocumento(rawParsed, ingestion.cif);
 
     return {
       name: `db-writer-img-${subUploadId}`,

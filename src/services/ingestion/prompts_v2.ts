@@ -361,10 +361,10 @@ El campo "cliente" SIEMPRE debe estar presente y completo:
 **SI FALTA IDENTIFICACIÓN FISCAL O HAY CONFUSIÓN DE CIF:**
 - Déjalo vacío ("") en el JSON en la entidad afectada.
 - Marca incidencia: true
-- **MOTIVO EXPLICATIVO OBLIGATORIO EN descripcion_incidencia (SIEMPRE EN ESPAÑOL):**
-  Debes especificar el MOTIVO EXACTO por el cual no se asignó el CIF o se requiere revisión manual:
-  1. **Si NO figura en el documento**: "El CIF de [emisor/cliente] no aparece impreso en el documento original tras revisar cabecera, pie y márgenes."
-  2. **Si el CIF detectado en el emisor es exactamente igual al CIF del cliente o de la empresa del sistema (CIFs coincidentes/duplicados)**: "Se omitió el CIF del emisor porque el único NIF visible ([CIF]) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación."
+- **MOTIVO EXPLICATIVO OBLIGATORIO EN descripcion_incidencia (SIEMPRE EN ESPAÑOL, UNA SOLA ORACIÓN CONCISA Y BREVE):**
+  Debes especificar en UNA SOLA ORACIÓN el motivo exacto sin rodeos:
+  1. **Si NO figura en el documento**: "El CIF de [emisor/cliente] no aparece impreso en el documento original."
+  2. **Si el CIF detectado en el emisor es exactamente igual al CIF del cliente o de la empresa del sistema (CIFs coincidentes/duplicados)**: "Se omitió el CIF del emisor porque el NIF detectado ([CIF]) coincide con el del cliente/sistema para evitar autofacturación."
 
 🖼️ IMAGEN DE REFERENCIA ADJUNTA — BÚSQUEDA DE CIFs OCULTOS O ILEGIBLES
 

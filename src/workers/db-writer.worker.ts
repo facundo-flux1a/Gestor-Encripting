@@ -395,19 +395,22 @@ export function startDbWriterWorker() {
             const motivosParts: string[] = [];
 
             if (enRevision) {
-              const guardText = formatGuardFailures(revisionReasons as any) || descIncidencia || 'fallo de validación dura';
-              motivosParts.push(`REVISION fiscal: ${guardText}`);
+              const guardText = formatGuardFailures(revisionReasons as any) || 'fallo de validación dura';
+              // Incluir la explicación del LLM/normalizer si aporta contexto extra al guard
+              const aiExplain = descIncidencia && !guardText.toLowerCase().includes(descIncidencia.substring(0, 30).toLowerCase())
+                ? ` — ${descIncidencia}`
+                : '';
+              motivosParts.push(`REVISION fiscal: ${guardText}${aiExplain}`);
             }
 
             if (incidenciasFecha.length > 0) {
               motivosParts.push(incidenciasFecha.join(' '));
             }
 
-            if (!enRevision && tieneIncidenciaBlanda && descIncidencia) {
+            if (!enRevision && descIncidencia) {
               motivosParts.push(descIncidencia);
             } else if (!enRevision && !incidenciasFecha.length) {
               motivosParts.push(
-                descIncidencia ||
                 `Documento clasificado como "${tipoDocumento}" con incidencia detectada por el extractor.`
               );
             }
