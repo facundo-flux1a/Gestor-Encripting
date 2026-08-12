@@ -55,6 +55,7 @@ interface Company {
   name: string;
   nombre_fiscal?: string | null;
   cif?: string | null;
+  CIF?: string | null;       // ← API retorna 'CIF' en mayúsculas
   mail_de_carga?: string | null;
   recargo?: boolean | number | null;
 }
@@ -223,7 +224,7 @@ const EditCompanyFormComponent = React.memo(({
 }) => {
   const [localName, setLocalName] = React.useState(company.name || '');
   const [localFiscal, setLocalFiscal] = React.useState(company.nombre_fiscal ?? '');
-  const [localCIF, setLocalCIF] = React.useState(company.cif || '');
+  const [localCIF, setLocalCIF] = React.useState(company.CIF || company.cif || '');
   const [localEmail, setLocalEmail] = React.useState(company.mail_de_carga ?? '');
   const [localRecargo, setLocalRecargo] = React.useState(!!company.recargo);
   const [emailError, setEmailError] = React.useState<string>('');
@@ -231,7 +232,7 @@ const EditCompanyFormComponent = React.memo(({
   React.useEffect(() => {
     setLocalName(company.name || '');
     setLocalFiscal(company.nombre_fiscal || '');
-    setLocalCIF(company.cif || '');
+    setLocalCIF(company.CIF || company.cif || '');
     setLocalEmail(company.mail_de_carga || '');
     setLocalRecargo(!!company.recargo);
   }, [company]);

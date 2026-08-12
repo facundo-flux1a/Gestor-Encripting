@@ -9,7 +9,7 @@ import type { IncidentAnalysisResult } from '@/lib/types';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from './user-service';
 import { revalidatePath } from 'next/cache';
-import { normalizeProductDescription } from "@/lib/utils";
+import { normalizeProductDescription, normalizeCIF } from "@/lib/utils";
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
 
@@ -250,13 +250,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const pendientes = incidencias.filter(i => !i.validado).length;
     const primeraIncidenciaPendiente = incidencias.find(i => !i.validado);
 
+    // ✅ Las entidades son la fuente canónica de verdad para los CIFs.
+    // datos_extra es metadata auxiliar y sólo se usa como último recurso.
     const datosExtra: any = safeJsonParse(doc.datos_extra) || {};
 
-    // Priorizar CIF de datos_extra si existe
     const cifFromDatosExtra = datosExtra?.cif ||
-      datosExtra?.CLIENTE?.CIF ||
       datosExtra?.METADATOS?.NIF_CIF_RELACIONADO ||
-      datosExtra?.EMPRESA_EMISORA?.CIF;
+      datosExtra?.EMPRESA_EMISORA?.CIF ||
+      datosExtra?.CLIENTE?.CIF;
 
     return {
       id_documento: doc.id,
@@ -282,7 +283,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       archivos: archivos,
       incidencias: incidencias,
       proveedor: emisor?.nombre || receptor?.nombre || 'N/A',
-      cif: cifFromDatosExtra || emisor?.identificador_fiscal || receptor?.identificador_fiscal || 'N/A',
+      cif: emisor?.identificador_fiscal || cifFromDatosExtra || 'N/A',
       empresa_id: doc.id_de_empresa,
       empresa_nombre: doc.empresa_nombre || 'Sin empresa',
       empresa_cif: doc.empresa_cif || null,
@@ -727,6 +728,29 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
     console.log('🚀 [updateDocument] INICIO - ID:', id);
     console.log('═══════════════════════════════════════════════════════════');
 
+    // ═══════════════════════════════════════════════════════════
+    // PASO 0: Validar unicidad de CIF entre Emisor y Receptor
+    // ═══════════════════════════════════════════════════════════
+    let checkCifEmisor: string | null = data.cif || null;
+    let checkCifReceptor: string | null = data.cliente_cif || null;
+
+    for (const ent of data.entidades || []) {
+      const rol = (ent.rol || '').toLowerCase();
+      if ((rol === 'emisor' || rol === 'proveedor') && ent.identificador_fiscal) {
+        checkCifEmisor = ent.identificador_fiscal;
+      }
+      if ((rol === 'cliente' || rol === 'receptor') && ent.identificador_fiscal) {
+        checkCifReceptor = ent.identificador_fiscal;
+      }
+    }
+
+    const normEmisor = normalizeCIF(checkCifEmisor);
+    const normReceptor = normalizeCIF(checkCifReceptor);
+
+    if (normEmisor && normReceptor && normEmisor === normReceptor) {
+      throw new Error('El CIF del emisor y del receptor no pueden ser idénticos');
+    }
+
     let camposReales: string[] = [];
     let empresaId: number = 0;
 
@@ -1101,7 +1125,7 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
     console.error('═══════════════════════════════════════════════════════════');
     
     // We no longer need to manually rollback since Prisma handles it
-    return { success: false };
+    return { success: false, error: error?.message || 'Error al actualizar documento' };
   }
 }
 
@@ -1199,6 +1223,18 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         }
         await tx.documentos.update({ where: { id: BigInt(id) }, data: { datos_extra: datosExtra } });
       } else if (fieldName === 'proveedor_nombre' || fieldName === 'proveedor_cif') {
+        if (fieldName === 'proveedor_cif' && value) {
+          const normNewCif = normalizeCIF(value);
+          if (normNewCif) {
+            const clienteEnt = await tx.entidades_documento.findFirst({
+              where: { documento_id: BigInt(id), rol: { in: ['cliente', 'receptor'] } }
+            });
+            const normClienteCif = normalizeCIF(clienteEnt?.identificador_fiscal);
+            if (normClienteCif && normNewCif === normClienteCif) {
+              throw new Error('El CIF del emisor y del receptor no pueden ser idénticos');
+            }
+          }
+        }
         const fieldToUpdate = fieldName === 'proveedor_nombre' ? 'nombre' : 'identificador_fiscal';
         const existing = await tx.entidades_documento.findFirst({
           where: { documento_id: BigInt(id), rol: { in: ['proveedor', 'emisor'] } }
@@ -1212,6 +1248,34 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
         } else {
           await tx.entidades_documento.create({
             data: { documento_id: BigInt(id), rol: 'proveedor', [fieldToUpdate]: value } as any
+          });
+        }
+      } else if (fieldName === 'cliente_nombre' || fieldName === 'cliente_cif') {
+        if (fieldName === 'cliente_cif' && value) {
+          const normNewCif = normalizeCIF(value);
+          if (normNewCif) {
+            const emisorEnt = await tx.entidades_documento.findFirst({
+              where: { documento_id: BigInt(id), rol: { in: ['proveedor', 'emisor'] } }
+            });
+            const normEmisorCif = normalizeCIF(emisorEnt?.identificador_fiscal);
+            if (normEmisorCif && normNewCif === normEmisorCif) {
+              throw new Error('El CIF del emisor y del receptor no pueden ser idénticos');
+            }
+          }
+        }
+        const fieldToUpdate = fieldName === 'cliente_nombre' ? 'nombre' : 'identificador_fiscal';
+        const existing = await tx.entidades_documento.findFirst({
+          where: { documento_id: BigInt(id), rol: { in: ['cliente', 'receptor'] } }
+        });
+
+        if (existing) {
+          await tx.entidades_documento.update({
+            where: { id: existing.id },
+            data: { [fieldToUpdate]: value }
+          });
+        } else {
+          await tx.entidades_documento.create({
+            data: { documento_id: BigInt(id), rol: 'cliente', [fieldToUpdate]: value } as any
           });
         }
       } else if (fieldName.startsWith('iva_base_') || fieldName.startsWith('iva_cuota_')) {

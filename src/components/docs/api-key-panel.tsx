@@ -139,7 +139,7 @@ export function ApiKeyPanel({ apiKey, setApiKey, selectedKeyId, setSelectedKeyId
 
   return (
     <>
-      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4" data-tutorial="docs-api-keys">
         {/* Header row */}
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -149,6 +149,7 @@ export function ApiKeyPanel({ apiKey, setApiKey, selectedKeyId, setSelectedKeyId
           <Button
             size="sm"
             variant="outline"
+            data-tutorial="docs-create-key-btn"
             className="flex items-center gap-1.5 text-xs h-8"
             onClick={() => { fetchKeys(); setCreateOpen(true); }}
           >
@@ -162,7 +163,7 @@ export function ApiKeyPanel({ apiKey, setApiKey, selectedKeyId, setSelectedKeyId
         </p>
 
         {/* API Key input */}
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-tutorial="docs-key-selector">
           <div className="flex-1 relative">
             <input
               type="password"

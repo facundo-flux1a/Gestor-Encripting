@@ -38,6 +38,8 @@ model usuarios {
   sin_seleccion_mostrar_todo Boolean?                   @default(true)
   organization_rol           usuarios_organization_rol? @default(EDITOR)
   tutorial_health_check      Boolean?                   @default(true)
+  tutorial_webhooks          Boolean?                   @default(true)
+  tutorial_docs              Boolean?                   @default(true)
   email_verified             Boolean?                   @default(false)
   two_factor_code            String?                    @db.VarChar(10)
   two_factor_expires_at      DateTime?                  @db.DateTime(0)

@@ -351,7 +351,7 @@ export function InteractiveEndpoint({
 
         {/* Parameters */}
         {params.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-2" data-tutorial="docs-param-inputs">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Parámetros</h4>
             <div className="grid gap-2">
               {params.map(param => {
@@ -488,7 +488,7 @@ export function InteractiveEndpoint({
         </div>
 
         {/* Execute Button */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" data-tutorial="docs-run-btn">
           <Button
             onClick={handleExecute}
             disabled={isLoading}
@@ -519,7 +519,7 @@ export function InteractiveEndpoint({
 
         {/* Response Viewer */}
         {showResponse && response && (
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" data-tutorial="docs-json-response">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setShowResponse(v => !v)}

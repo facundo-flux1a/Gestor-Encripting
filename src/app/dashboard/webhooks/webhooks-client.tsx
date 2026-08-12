@@ -165,7 +165,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6" data-tutorial="webhooks-header">
         <div className="flex items-center gap-4">
           <a
             href="/dashboard"
@@ -188,6 +188,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
             Ver Documentación
           </a>
           <button 
+            data-tutorial="webhooks-create-btn"
             onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
           >
@@ -212,7 +213,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
       )}
 
       {/* Lista de Webhooks */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full" data-tutorial="webhooks-list">
         <div className="overflow-x-auto">
           {webhooks.length === 0 ? (
             <div className="p-12 text-center">
@@ -231,10 +232,10 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
               <tr>
                 {empresas.length > 1 && <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Empresa</th>}
                 <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">URL Destino</th>
-                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Eventos</th>
-                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400" data-tutorial="webhooks-events">Eventos</th>
+                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400" data-tutorial="webhooks-config">Estado</th>
                 <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Secreto</th>
-                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 text-right">Acciones</th>
+                <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 text-right" data-tutorial="webhooks-logs">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">

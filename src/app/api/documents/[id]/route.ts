@@ -58,8 +58,9 @@ export async function PUT(
     // Validar con Zod
     const validation = DocumentUpdateSchema.safeParse(body);
     if (!validation.success) {
+      const firstIssueMsg = validation.error.errors[0]?.message;
       return NextResponse.json({ 
-        error: 'Datos inválidos', 
+        error: firstIssueMsg || 'Datos inválidos', 
         details: validation.error.errors 
       }, { status: 400 });
     }
@@ -67,7 +68,7 @@ export async function PUT(
     const result = await updateDocument(documentId, validation.data, user.email);
     
     if (!result.success) {
-      return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
+      return NextResponse.json({ error: (result as any).error || 'Error al actualizar' }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

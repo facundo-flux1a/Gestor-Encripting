@@ -55,7 +55,10 @@ export function QueueTracker() {
 
       try {
         const res = await fetch('/api/queues/stats');
-        if (!res.ok) throw new Error('Failed to fetch');
+        if (!res.ok) {
+          if (!cancelled) setError(true);
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
         setStats(data);

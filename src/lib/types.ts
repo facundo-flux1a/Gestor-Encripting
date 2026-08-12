@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { normalizeCIF } from './utils';
 
 // =====================================
 // USUARIO Y SESIÓN
 // =====================================
+
 
 export const UserSchema = z.object({
   id: z.number(),
@@ -16,6 +18,9 @@ export const UserSchema = z.object({
   tutorial_individual: z.number().optional(),
   tutorial_incidencias: z.number().optional(),
   tutorial_proveedores: z.number().optional(),
+  tutorial_health_check: z.number().optional(),
+  tutorial_webhooks: z.number().optional(),
+  tutorial_docs: z.number().optional(),
   config_otros_tipos: z.string().nullable().optional(),
   organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
 });
@@ -40,6 +45,9 @@ export const SessionPayloadSchema = z.object({
   tutorialIndividual: z.number().optional(),
   tutorialIncidencias: z.number().optional(),
   tutorialProveedores: z.number().optional(),
+  tutorialHealthCheck: z.number().optional(),
+  tutorialWebhooks: z.number().optional(),
+  tutorialDocs: z.number().optional(),
   organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
@@ -205,9 +213,68 @@ export const DocumentUpdateSchema = z.object({
   descuento_global: z.coerce.number().optional(),
   base_no_sujeta: z.coerce.number().optional(),
   retencion_irpf: z.coerce.number().optional(),
+}).superRefine((data, ctx) => {
+  let cifEmisor: string | null = data.cif || null;
+  let cifReceptor: string | null = data.cliente_cif || null;
+
+  for (const ent of data.entidades || []) {
+    const rol = (ent.rol || '').toLowerCase();
+    if ((rol === 'emisor' || rol === 'proveedor') && ent.identificador_fiscal) {
+      cifEmisor = ent.identificador_fiscal;
+    }
+    if ((rol === 'cliente' || rol === 'receptor') && ent.identificador_fiscal) {
+      cifReceptor = ent.identificador_fiscal;
+    }
+  }
+
+  const normEmisor = normalizeCIF(cifEmisor);
+  const normReceptor = normalizeCIF(cifReceptor);
+
+  if (normEmisor && normReceptor && normEmisor === normReceptor) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'El CIF del emisor y del receptor no pueden ser idénticos.',
+      path: ['cliente_cif'],
+    });
+  }
+
+  // V4: Validar fecha_vencimiento >= fecha_emision
+  if (data.fecha_emision && data.fecha_vencimiento) {
+    const dateEmision = new Date(data.fecha_emision);
+    const dateVencimiento = new Date(data.fecha_vencimiento);
+    if (!isNaN(dateEmision.getTime()) && !isNaN(dateVencimiento.getTime())) {
+      if (dateVencimiento < dateEmision) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La fecha de vencimiento no puede ser anterior a la fecha de emisión.',
+          path: ['fecha_vencimiento'],
+        });
+      }
+    }
+  }
 });
 
 export type DocumentUpdatePayload = z.infer<typeof DocumentUpdateSchema>;
+
+export type PreSaveIssueType = 'QUARTER_CHANGE' | 'TIPO_MISMATCH' | 'MATH_MISMATCH' | 'DUPLICATE_NUMBER' | 'CHANGES_REVIEW';
+
+export interface FieldChange {
+  label: string;
+  before: string;
+  after: string;
+}
+
+export interface PreSaveIssue {
+  type: PreSaveIssueType;
+  title: string;
+  description: string;
+  blocking?: boolean;
+  suggestedActionLabel?: string;
+  suggestedValue?: any;
+  currentValue?: any;
+  changedFields?: FieldChange[];
+}
+
 
 export const IncidentAnalysisResultSchema = z.object({
   newIncidentsFound: z.number().describe('The number of new incidents created.'),

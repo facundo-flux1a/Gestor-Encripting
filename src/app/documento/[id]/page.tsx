@@ -19,7 +19,12 @@ import { AuditSplitView } from '@/components/dashboard/audit-split-view';
 import { ReviewInvoiceLayout } from '@/components/dashboard/review-invoice-layout';
 import { getAuditHistory, clearSuggestions } from '@/services/vertex-ai-service';
 import { calcularTrimestreExtendido } from '@/lib/client-utils';
-import { QuarterReassignmentDialog, type QuarterOption } from '@/components/documento/quarter-reassignment-dialog';
+import { type QuarterOption } from '@/components/documento/quarter-reassignment-dialog';
+import { UnifiedPreSaveDialog } from '@/components/documento/UnifiedPreSaveDialog';
+import { normalizeCIF } from '@/lib/utils';
+import { PreSaveIssue } from '@/lib/types';
+import { checkTipoMismatch, checkFieldChanges } from '@/lib/presave-validations';
+
 
 function DocumentoPageContent() {
   const params = useParams();
@@ -33,15 +38,19 @@ function DocumentoPageContent() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isAuditMode, setIsAuditMode] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [isQuarterDialogOpen, setIsQuarterDialogOpen] = useState(false);
-  const [quarterValidationState, setQuarterValidationState] = useState<{
+  const [isPreSaveDialogOpen, setIsPreSaveDialogOpen] = useState(false);
+  const [preSaveState, setPreSaveState] = useState<{
     pendingPayload: DocumentUpdatePayload;
-    newDate: string;
-    targetQuarter: { año: number; trimestre: number };
-    currentQuarter: { año: number; trimestre: number };
-    isTargetClosed: boolean;
-    availableQuarters: QuarterOption[];
+    issues: PreSaveIssue[];
+    quarterContext?: {
+      newDate: string;
+      targetQuarter: { año: number; trimestre: number };
+      currentQuarter: { año: number; trimestre: number };
+      isTargetClosed: boolean;
+      availableQuarters: QuarterOption[];
+    };
   } | null>(null);
+
   const { toast } = useToast();
   const lastDocIdRef = useRef<number | null>(null);
 
@@ -159,9 +168,21 @@ function DocumentoPageContent() {
     try {
       const res = await fetch(`/api/documents/${doc.id_documento}/duplicate`, { method: 'POST' });
       if (!res.ok) throw new Error('Error al actualizar');
-      
+
+      if (doc.empresa_id) {
+        try {
+          await fetch('/api/documents/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ empresaId: doc.empresa_id }),
+          });
+        } catch (dupErr) {
+          console.error('⚠️ [handleMarkDuplicate] Error forzando check-duplicates:', dupErr);
+        }
+      }
+
       toast({ title: '✅ Marcado como Duplicado', description: 'El documento ha sido enviado a revisión por duplicidad.', className: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white' });
-      fetchDocument(doc.id_documento);
+      await fetchDocument(doc.id_documento);
     } catch {
       toast({ title: 'Error', description: 'No se pudo marcar como duplicado.', variant: 'destructive' });
     }
@@ -174,17 +195,31 @@ function DocumentoPageContent() {
       const res = await fetch(`/api/documents/${doc.id_documento}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
+
       const result = await res.json();
+
       if (!res.ok || !result.success) throw new Error(result.error || 'Error al actualizar');
-      
-      const updatedDoc = { ...doc, ...payload };
-      setDoc(updatedDoc as Document);
-      resetFormWithDocData(updatedDoc as Document);
+
+      // 🔄 Forzar re-verificación de duplicados inmediata para la empresa
+      const targetEmpresaId = doc.empresa_id;
+      if (targetEmpresaId) {
+        try {
+          await fetch('/api/documents/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ empresaId: targetEmpresaId }),
+          });
+        } catch (dupErr) {
+          console.error('⚠️ [executeSave] Error forzando check-duplicates:', dupErr);
+        }
+      }
+
+      await fetchDocument(doc.id_documento);
       toast({
         title: '✅ Cambios Guardados',
-        description: 'El documento y su trimestre se actualizaron correctamente.',
+        description: 'El documento y su configuración se actualizaron correctamente.',
         className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white'
       });
       setIsEditing(false);
@@ -198,18 +233,13 @@ function DocumentoPageContent() {
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc || (!isEditing && !isAuditMode) || isSaving) return;
 
-    // 1. Sincronizar proveedor, cif y cliente hacia el array de entidades
     const finalData = { ...data };
     let updatedEntidades = [...(finalData.entidades || [])];
 
     if (finalData.proveedor !== undefined || finalData.cif !== undefined) {
       updatedEntidades = updatedEntidades.map(e => {
         if (e.rol === 'emisor' || e.rol === 'proveedor') {
-          return {
-            ...e,
-            nombre: finalData.proveedor !== undefined ? finalData.proveedor : e.nombre,
-            identificador_fiscal: finalData.cif !== undefined ? finalData.cif : e.identificador_fiscal
-          };
+          return { ...e, nombre: finalData.proveedor !== undefined ? finalData.proveedor : e.nombre, identificador_fiscal: finalData.cif !== undefined ? finalData.cif : e.identificador_fiscal };
         }
         return e;
       });
@@ -220,29 +250,105 @@ function DocumentoPageContent() {
       updatedEntidades = updatedEntidades.map(e => {
         if (e.rol === 'cliente' || e.rol === 'receptor') {
           foundClient = true;
-          return {
-            ...e,
-            nombre: finalData.cliente_nombre !== undefined ? finalData.cliente_nombre : e.nombre,
-            identificador_fiscal: finalData.cliente_cif !== undefined ? finalData.cliente_cif : e.identificador_fiscal
-          };
+          return { ...e, nombre: finalData.cliente_nombre !== undefined ? finalData.cliente_nombre : e.nombre, identificador_fiscal: finalData.cliente_cif !== undefined ? finalData.cliente_cif : e.identificador_fiscal };
         }
         return e;
       });
       if (!foundClient && (finalData.cliente_nombre || finalData.cliente_cif)) {
-        updatedEntidades.push({
-          rol: 'cliente',
-          nombre: finalData.cliente_nombre || null,
-          identificador_fiscal: finalData.cliente_cif || null,
-          direccion: null, telefono: null, email: null, datos_extra: null
-        });
+        updatedEntidades.push({ rol: 'cliente', nombre: finalData.cliente_nombre || null, identificador_fiscal: finalData.cliente_cif || null, direccion: null, telefono: null, email: null, datos_extra: null });
       }
     }
 
     finalData.entidades = updatedEntidades;
 
-    // 2. Re-validación lógica de trimestre si la fecha_emision ha sido ajustada
+    const issues: PreSaveIssue[] = [];
+
+    // ── V1: Tipo de Documento / is_issued Mismatch ───────────────────────
+    const tipoIssue = checkTipoMismatch({
+      tipoDocumento: finalData.tipo_documento || doc.tipo_documento,
+      total: finalData.total ?? doc.total,
+      entidades: updatedEntidades,
+      empresaCIF: doc.empresa_cif,
+      empresaNombre: doc.empresa_nombre,
+      cif: finalData.cif,
+      clienteCIF: finalData.cliente_cif,
+    });
+    if (tipoIssue) {
+      issues.push(tipoIssue);
+    }
+
+    // ── V2: Revisión de cambios (diff original doc vs propuesto) ────────
+    const originalIvaCuotas = (doc.iva_details || []).reduce((s: number, i: any) => s + Number(i.cuota || 0), 0);
+    const proposedIvaCuotas = (finalData.iva_details || []).reduce((s: number, i: any) => s + Number(i.cuota || 0), 0);
+
+    // Derive original client data from doc.entidades (Document type has no flat cliente_* fields)
+    const origEntidades: any[] = (doc as any).entidades || [];
+    const origClientEnt = origEntidades.find((e: any) => e.rol === 'cliente' || e.rol === 'receptor');
+    const origProvEnt   = origEntidades.find((e: any) => e.rol === 'proveedor' || e.rol === 'emisor');
+
+    const changesIssue = checkFieldChanges(
+      {
+        numero_documento:  doc.numero_documento,
+        fecha_emision:     doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : null,
+        fecha_vencimiento: doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : null,
+        tipo_documento:    doc.tipo_documento,
+        base_imponible:    Number(doc.base_imponible ?? 0),
+        iva_cuotas_sum:    originalIvaCuotas,
+        total:             Number(doc.total ?? 0),
+        cif:               origProvEnt?.identificador_fiscal ?? doc.cif,
+        proveedor:         origProvEnt?.nombre ?? doc.proveedor,
+        cliente_cif:       origClientEnt?.identificador_fiscal ?? null,
+        cliente_nombre:    origClientEnt?.nombre ?? null,
+        moneda:            doc.moneda,
+        observaciones:     doc.observaciones,
+      },
+      {
+        numero_documento:  finalData.numero_documento ?? doc.numero_documento,
+        fecha_emision:     finalData.fecha_emision ?? (doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : null),
+        fecha_vencimiento: finalData.fecha_vencimiento ?? (doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toISOString().split('T')[0] : null),
+        tipo_documento:    finalData.tipo_documento ?? doc.tipo_documento,
+        base_imponible:    Number(finalData.base_imponible ?? doc.base_imponible ?? 0),
+        iva_cuotas_sum:    proposedIvaCuotas,
+        total:             Number(finalData.total ?? doc.total ?? 0),
+        cif:               finalData.cif ?? origProvEnt?.identificador_fiscal ?? doc.cif,
+        proveedor:         finalData.proveedor ?? origProvEnt?.nombre ?? doc.proveedor,
+        cliente_cif:       finalData.cliente_cif ?? origClientEnt?.identificador_fiscal ?? null,
+        cliente_nombre:    finalData.cliente_nombre ?? origClientEnt?.nombre ?? null,
+        moneda:            finalData.moneda ?? doc.moneda,
+        observaciones:     finalData.observaciones ?? doc.observaciones,
+      }
+    );
+    if (changesIssue) issues.push(changesIssue);
+
+
+    if (finalData.numero_documento && doc.empresa_id) {
+      try {
+        const res = await fetch(`/api/documents/${doc.id_documento}/pre-save-check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            numero_documento: finalData.numero_documento,
+            empresa_id: doc.empresa_id,
+            tipo_documento: finalData.tipo_documento || doc.tipo_documento,
+            cif: finalData.cif || origProvEnt?.identificador_fiscal || doc.cif,
+            proveedor: finalData.proveedor || origProvEnt?.nombre || doc.proveedor,
+          }),
+        });
+        if (res.ok) {
+          const checkRes = await res.json();
+          if (checkRes.issues && Array.isArray(checkRes.issues)) {
+            issues.push(...checkRes.issues);
+          }
+        }
+      } catch (e) {
+        console.error('Error en pre-save-check API:', e);
+      }
+    }
+
     const oldDateStr = doc.fecha_emision ? new Date(doc.fecha_emision).toISOString().split('T')[0] : '';
     const newDateStr = finalData.fecha_emision ? finalData.fecha_emision.split('T')[0] : oldDateStr;
+
+    let quarterCtx: any = null;
 
     if (newDateStr) {
       const targetQuarter = calcularTrimestreExtendido(newDateStr);
@@ -252,36 +358,32 @@ function DocumentoPageContent() {
       };
 
       if (newDateStr !== oldDateStr || !doc.num_trimestre || !doc.año_trimestre) {
-        setIsSaving(true);
         let availableQuarters: QuarterOption[] = [];
         try {
           const resAvail = await fetch(`/api/trimestres/disponibles?empresa_id=${doc.empresa_id || ''}`);
-          if (resAvail.ok) {
-            availableQuarters = await resAvail.json();
-          }
-        } catch (e) {
-          console.error('Error al obtener trimestres disponibles:', e);
-        } finally {
-          setIsSaving(false);
-        }
+          if (resAvail.ok) availableQuarters = await resAvail.json();
+        } catch (e) { console.error(e); }
 
-        const isTargetOpen = availableQuarters.some(
-          q => q.año === targetQuarter.año && q.trimestre === targetQuarter.trimestre && !q.cerrado
-        );
+        const isTargetOpen = availableQuarters.some(q => q.año === targetQuarter.año && q.trimestre === targetQuarter.trimestre && !q.cerrado);
         const isTargetClosed = !isTargetOpen;
         const isQuarterChanged = currentQuarter.año !== targetQuarter.año || currentQuarter.trimestre !== targetQuarter.trimestre;
 
         if (isTargetClosed || isQuarterChanged) {
-          setQuarterValidationState({
-            pendingPayload: finalData,
+          quarterCtx = {
             newDate: newDateStr,
             targetQuarter,
             currentQuarter,
             isTargetClosed,
-            availableQuarters
+            availableQuarters,
+          };
+          issues.push({
+            type: 'QUARTER_CHANGE',
+            title: 'Reasignación de Trimestre Fiscal',
+            description: isTargetClosed
+              ? `El trimestre de la nueva fecha (${targetQuarter.año} - T${targetQuarter.trimestre}) está CERRADO.`
+              : `La nueva fecha corresponde al trimestre ${targetQuarter.año} - T${targetQuarter.trimestre}.`,
+            blocking: false,
           });
-          setIsQuarterDialogOpen(true);
-          return;
         } else {
           finalData.año_trimestre = targetQuarter.año;
           finalData.num_trimestre = targetQuarter.trimestre;
@@ -289,16 +391,31 @@ function DocumentoPageContent() {
       }
     }
 
+    if (issues.length > 0) {
+      setPreSaveState({
+        pendingPayload: finalData,
+        issues,
+        quarterContext: quarterCtx,
+      });
+      setIsPreSaveDialogOpen(true);
+      return;
+    }
+
     await executeSave(finalData);
   };
 
-  const handleQuarterConfirm = async (selectedAño: number, selectedTrimestre: number) => {
-    if (!quarterValidationState?.pendingPayload) return;
-    setIsQuarterDialogOpen(false);
+  const handlePreSaveConfirm = async (resolutions: {
+    año?: number;
+    trimestre?: number;
+    tipoDocumento?: string;
+  }) => {
+    if (!preSaveState?.pendingPayload) return;
+    setIsPreSaveDialogOpen(false);
     const finalPayload = {
-      ...quarterValidationState.pendingPayload,
-      año_trimestre: selectedAño,
-      num_trimestre: selectedTrimestre,
+      ...preSaveState.pendingPayload,
+      ...(resolutions.tipoDocumento ? { tipo_documento: resolutions.tipoDocumento } : {}),
+      ...(resolutions.año ? { año_trimestre: resolutions.año } : {}),
+      ...(resolutions.trimestre ? { num_trimestre: resolutions.trimestre } : {}),
     };
     await executeSave(finalPayload);
   };
@@ -338,16 +455,13 @@ function DocumentoPageContent() {
           checkType={searchParams.get('checkType') || 'MISMATCH_MATEMATICO'}
           motivo={searchParams.get('motivo') || ''}
         />
-        {quarterValidationState && (
-          <QuarterReassignmentDialog
-            isOpen={isQuarterDialogOpen}
-            onClose={() => setIsQuarterDialogOpen(false)}
-            onConfirm={handleQuarterConfirm}
-            newDate={quarterValidationState.newDate}
-            currentQuarter={quarterValidationState.currentQuarter}
-            targetQuarter={quarterValidationState.targetQuarter}
-            isTargetClosed={quarterValidationState.isTargetClosed}
-            availableQuarters={quarterValidationState.availableQuarters}
+        {preSaveState && (
+          <UnifiedPreSaveDialog
+            isOpen={isPreSaveDialogOpen}
+            onClose={() => setIsPreSaveDialogOpen(false)}
+            onConfirm={handlePreSaveConfirm}
+            issues={preSaveState.issues}
+            quarterContext={preSaveState.quarterContext}
           />
         )}
       </>
@@ -384,20 +498,18 @@ function DocumentoPageContent() {
         documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
         isDeleting={isDeleting}
       />
-      {quarterValidationState && (
-        <QuarterReassignmentDialog
-          isOpen={isQuarterDialogOpen}
-          onClose={() => setIsQuarterDialogOpen(false)}
-          onConfirm={handleQuarterConfirm}
-          newDate={quarterValidationState.newDate}
-          currentQuarter={quarterValidationState.currentQuarter}
-          targetQuarter={quarterValidationState.targetQuarter}
-          isTargetClosed={quarterValidationState.isTargetClosed}
-          availableQuarters={quarterValidationState.availableQuarters}
+      {preSaveState && (
+        <UnifiedPreSaveDialog
+          isOpen={isPreSaveDialogOpen}
+          onClose={() => setIsPreSaveDialogOpen(false)}
+          onConfirm={handlePreSaveConfirm}
+          issues={preSaveState.issues}
+          quarterContext={preSaveState.quarterContext}
         />
       )}
     </MainLayout>
   );
+
 }
 
 export default function DocumentoPage() {

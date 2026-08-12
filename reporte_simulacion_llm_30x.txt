@@ -1,0 +1,329 @@
+=========================================================================
+   🤖 SIMULACIÓN REAL CON LLM Y AZURE DI (30 LLAMADAS EN TOTAL)
+   Fecha: 12/8/2026, 11:13:46
+=========================================================================
+
+🔧 Azure DI Endpoint: https://gestor.cognitiveservices.azure.com/
+🔧 Azure OpenAI Deployment: gpt-5.6-luna-1
+
+=========================================================================
+📄 PROCESANDO DOCUMENTO #1: Doc Tecnico PDF
+URL: https://minio.allbase.com.ar/gestor-documental/archivos/doc_upload_1786535249216_d7436206b1_doc_4820ecd9_2026_08_12_10_17_59.pdf
+-------------------------------------------------------------------------
+⏬ Descargando PDF desde MinIO...
+✔ PDF descargado (1068.9 KB). Iniciando 15 iteraciones reales con LLM...
+
+⏳ [Doc #1 | Llamada 1/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 24.1s | Tokens usados: 15265
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MONFORTE DUART, MIREN (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 2/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.5s | Tokens usados: 14897
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 3/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.0s | Tokens usados: 15163
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 4/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.4s | Tokens usados: 15523
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MONFORTE DUART, MIREN (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 5/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.9s | Tokens usados: 14959
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 6/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.9s | Tokens usados: 14913
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 7/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.3s | Tokens usados: 14969
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART, REGISTRADOR TITULAR DEL REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 8/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 20.2s | Tokens usados: 14925
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART - REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 9/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.2s | Tokens usados: 15435
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP SL (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 10/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.4s | Tokens usados: 15445
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 11/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.3s | Tokens usados: 15411
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MONFORTE DUART, MIREN (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 12/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.9s | Tokens usados: 15483
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART, REGISTRADORA TITULAR DEL REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 13/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 20.7s | Tokens usados: 14918
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 14/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 21.5s | Tokens usados: 15031
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 3101
+   - Importe  : 155.33 EUR
+   - Emisor   : REGISTRO DE LA PROPIEDAD DE GANDIA 4 (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #1 | Llamada 15/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.9s | Tokens usados: 15202
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A3101
+   - Importe  : 155.33 EUR
+   - Emisor   : MIREN KARMELE MONFORTE DUART (CIF: 29206583X)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+-------------------------------------------------------------------------
+📊 REPORTE DE CONSISTENCIA PARA DOCUMENTO #1 (15/15 ÉXITOS)
+-------------------------------------------------------------------------
+👥 Entidades Emisoras Extraídas:
+   - [EMISOR] MONFORTE DUART, MIREN | CIF: 29206583X → 3/15 veces (20.0%)
+   - [EMISOR] MIREN KARMELE MONFORTE DUART | CIF: 29206583X → 3/15 veces (20.0%)
+   - [EMISOR] REGISTRO DE LA PROPIEDAD DE GANDIA 4 | CIF: 29206583X → 6/15 veces (40.0%)
+   - [EMISOR] MIREN KARMELE MONFORTE DUART, REGISTRADOR TITULAR DEL REGISTRO DE LA PROPIEDAD DE GANDIA 4 | CIF: 29206583X → 1/15 veces (6.7%)
+   - [EMISOR] MIREN KARMELE MONFORTE DUART - REGISTRO DE LA PROPIEDAD DE GANDIA 4 | CIF: 29206583X → 1/15 veces (6.7%)
+   - [EMISOR] MIREN KARMELE MONFORTE DUART, REGISTRADORA TITULAR DEL REGISTRO DE LA PROPIEDAD DE GANDIA 4 | CIF: 29206583X → 1/15 veces (6.7%)
+👥 Entidades Receptoras Extraídas:
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP S.L. | CIF: B56214109 → 14/15 veces (93.3%)
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP SL | CIF: B56214109 → 1/15 veces (6.7%)
+📄 Tipo de Documento: {"FACTURA RECIBIDA":15}
+📄 Número de Documento: {"3101":5,"A3101":10}
+💰 Importe Total: {"155.33":15}
+
+=========================================================================
+📄 PROCESANDO DOCUMENTO #2: Alquila y Descansa Factura RM PDF
+URL: https://minio.allbase.com.ar/gestor-documental/archivos/alquila-y-descansa-factura-registro-mercantil_2026_08_11_16_26_39_2026_08_12_10_17_59.pdf
+-------------------------------------------------------------------------
+⏬ Descargando PDF desde MinIO...
+✔ PDF descargado (219.2 KB). Iniciando 15 iteraciones reales con LLM...
+
+⏳ [Doc #2 | Llamada 1/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.6s | Tokens usados: 14943
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 2/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.9s | Tokens usados: 14693
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 3/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 26.1s | Tokens usados: 15068
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 4/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 20.4s | Tokens usados: 14711
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : LONGAS PASTOR, MARIA BEGOÑA - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 5/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.1s | Tokens usados: 14724
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 6/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.5s | Tokens usados: 14978
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : LONGAS PASTOR, MARIA BEGOÑA (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 7/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 21.6s | Tokens usados: 14691
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 8/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 24.5s | Tokens usados: 15143
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 9/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.7s | Tokens usados: 15214
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : LONGAS PASTOR, MARIA BEGOÑA - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 10/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.9s | Tokens usados: 15114
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 11/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 28.0s | Tokens usados: 15492
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 12/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.2s | Tokens usados: 14914
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 13/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.7s | Tokens usados: 14696
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 14/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 26.1s | Tokens usados: 14940
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A4549
+   - Importe  : 350.13 EUR
+   - Emisor   : MARÍA BEGOÑA LONGAS PASTOR, REGISTRADORA TITULAR DEL REGISTRO DE LA PROPIEDAD DE VALENCIA NÚMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+⏳ [Doc #2 | Llamada 15/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.0s | Tokens usados: 14694
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: 24333118S)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Incidencia: NO
+
+-------------------------------------------------------------------------
+📊 REPORTE DE CONSISTENCIA PARA DOCUMENTO #2 (15/15 ÉXITOS)
+-------------------------------------------------------------------------
+👥 Entidades Emisoras Extraídas:
+   - [EMISOR] REGISTRO PROPIEDAD VALENCIA NUMERO SIETE | CIF: 24333118S → 6/15 veces (40.0%)
+   - [EMISOR] MARÍA BEGOÑA LONGAS PASTOR | CIF: 24333118S → 2/15 veces (13.3%)
+   - [EMISOR] LONGAS PASTOR, MARIA BEGOÑA - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE | CIF: 24333118S → 2/15 veces (13.3%)
+   - [EMISOR] LONGAS PASTOR, MARIA BEGOÑA | CIF: 24333118S → 1/15 veces (6.7%)
+   - [EMISOR] MARÍA BEGOÑA LONGAS PASTOR - REGISTRO PROPIEDAD VALENCIA NUMERO SIETE | CIF: 24333118S → 3/15 veces (20.0%)
+   - [EMISOR] MARÍA BEGOÑA LONGAS PASTOR, REGISTRADORA TITULAR DEL REGISTRO DE LA PROPIEDAD DE VALENCIA NÚMERO SIETE | CIF: 24333118S → 1/15 veces (6.7%)
+👥 Entidades Receptoras Extraídas:
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP S.L. | CIF: B56214109 → 9/15 veces (60.0%)
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP, S.L. | CIF: B56214109 → 6/15 veces (40.0%)
+📄 Tipo de Documento: {"FACTURA RECIBIDA":15}
+📄 Número de Documento: {"4549":12,"A4549":2,"A 4549":1}
+💰 Importe Total: {"350.13":15}
+
+=========================================================================
+🏁 RESUMEN FINAL DE LAS 30 LLAMADAS AL LLM
+=========================================================================

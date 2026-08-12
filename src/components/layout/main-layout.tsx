@@ -93,7 +93,13 @@ const UserProfile = React.memo(function UserProfile({ user }: { user: User | nul
   if (!user) {
     return (
       <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left w-full justify-start" asChild>
-        <Link href="/auth/login">
+        <Link 
+          href="/auth/login?force=true"
+          onClick={() => {
+            document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          }}
+        >
           <Avatar className="h-8 w-8 flex items-center justify-center bg-muted">
             <LogIn className="h-4 w-4" />
           </Avatar>

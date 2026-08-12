@@ -104,8 +104,9 @@ export async function middleware(request: NextRequest) {
     const hasToken = request.nextUrl.searchParams.has('token') || request.nextUrl.searchParams.has('invite_token');
 
     if (isPublicRoute) {
-      // ✅ Si es login/register y ya tiene sesión -> Dashboard
-      if ((pathname.startsWith('/auth/login') || pathname.startsWith('/auth/register')) && !hasToken) {
+      // ✅ Si es login/register y ya tiene sesión -> Dashboard (salvo si viene con ?logout=true o ?force=true)
+      const isForceLogin = request.nextUrl.searchParams.has('logout') || request.nextUrl.searchParams.has('force');
+      if ((pathname.startsWith('/auth/login') || pathname.startsWith('/auth/register')) && !hasToken && !isForceLogin) {
         return renovarSesionSiHaceFalta(
           NextResponse.redirect(new URL('/dashboard', request.url)),
           payload,

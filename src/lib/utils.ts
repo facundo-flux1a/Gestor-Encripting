@@ -54,3 +54,14 @@ export function fixMinioUrl(url: string | null | undefined): string {
   }
   return url;
 }
+
+// 🪪 Normaliza un CIF/NIF/NIE español a formato estándar (sin separadores ni prefijo ES)
+export function normalizeCIF(raw: string | null | undefined): string | null {
+  if (!raw || raw.trim() === '') return null;
+  let cif = raw.toUpperCase().replace(/[\s\-./()]/g, '');
+  if (cif.startsWith('ES')) {
+    cif = cif.substring(2);
+  }
+  return cif || null;
+}
+

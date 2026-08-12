@@ -5,6 +5,7 @@ import { getWebhooks } from '@/services/webhook-service';
 import { prisma } from '@/lib/prisma';
 import { MainLayout } from '@/components/layout/main-layout';
 import WebhooksClient from './webhooks-client';
+import WebhooksWrapper from './webhooks-wrapper';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,10 +39,11 @@ export default async function WebhooksPage() {
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-6xl mx-auto w-full">
-        <WebhooksClient empresas={empRows} initialWebhooks={webhooks} />
-      </div>
+      <WebhooksWrapper>
+        <div className="p-8 max-w-6xl mx-auto w-full">
+          <WebhooksClient empresas={empRows} initialWebhooks={webhooks} />
+        </div>
+      </WebhooksWrapper>
     </MainLayout>
   );
 }
-

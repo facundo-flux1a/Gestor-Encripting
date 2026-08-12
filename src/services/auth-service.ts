@@ -115,6 +115,8 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIncidencias: z.number().optional(),
       tutorialProveedores: z.number().optional(),
       tutorialHealthCheck: z.number().optional(),
+      tutorialWebhooks: z.number().optional(),
+      tutorialDocs: z.number().optional(),
       organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
       exp: z.number(),
     }).safeParse(payload);
@@ -133,6 +135,8 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialIncidencias: parsedPayload.data.tutorialIncidencias,
       tutorialProveedores: parsedPayload.data.tutorialProveedores,
       tutorialHealthCheck: parsedPayload.data.tutorialHealthCheck,
+      tutorialWebhooks: parsedPayload.data.tutorialWebhooks,
+      tutorialDocs: parsedPayload.data.tutorialDocs,
       organization_rol: (parsedPayload.data.organization_rol as "ADMIN" | "EDITOR" | "VIEWER") || 'EDITOR',
       expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
@@ -179,7 +183,7 @@ export async function getSession(cookie?: string): Promise<SessionPayload | null
     });
     const dbMs = Math.round(performance.now() - tDb);
     const isActive = user?.activo === true;
-    activoCache.set(session.userId, { activo: isActive, expires: Date.now() + ACTIVO_TTL_MS });
+    activoCache.set(session.userId, { activo: isActive, expires: Date.now() + (isActive ? ACTIVO_TTL_MS : 1000) });
 
     // Usuario inexistente o desactivado → cookie zombie
     if (!isActive) {
@@ -218,14 +222,19 @@ export async function createSession(
   tutorialIncidencias: number = 0,
   tutorialProveedores: number = 0,
   tutorialHealthCheck: number = 0,
+  tutorialWebhooks: number = 0,
+  tutorialDocs: number = 0,
   organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR'
 ) {
+  // Limpiar/actualizar inmediatamente el cache en memoria para este usuario
+  activoCache.set(userId, { activo: true, expires: Date.now() + ACTIVO_TTL_MS });
+
   const expires = new Date(Date.now() + SESSION_MAX_AGE_S * 1000);
   const session = await encrypt({
     userId, email, nombre, tutorial,
     tutorialDocumentos, tutorialTrimestres, tutorialActividad,
     tutorialIndividual, tutorialIncidencias, tutorialProveedores,
-    tutorialHealthCheck,
+    tutorialHealthCheck, tutorialWebhooks, tutorialDocs,
     organization_rol: organizationRol
   });
 
@@ -320,6 +329,7 @@ export async function login(formData: FormData) {
       t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR');
     await logAuthEvent('LOGIN', userEmail);
 
@@ -463,6 +473,7 @@ export async function verifyEmailCode(formData: FormData) {
       t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR');
     await logAuthEvent('LOGIN', user.email as string);
 
@@ -505,6 +516,7 @@ export async function verify2FACode(formData: FormData) {
       t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR');
     await logAuthEvent('LOGIN', user.email as string);
 
@@ -554,6 +566,7 @@ export async function handleGoogleSignInOnServer(
       t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
+      t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR');
     await logAuthEvent('LOGIN', email);
 
@@ -595,17 +608,26 @@ async function updateUserTutorialField(field: string, value: number = 0) {
 
     console.log(`🔄 [auth-service] Actualizando "${field}" a ${value} para usuario ${session.userId}`);
 
-    // 1. Actualizar en Base de Datos con Prisma (los campos de tutorial son Boolean en el schema)
-    const boolValue = value === 0 ? false : true;
-    const updated = await prisma.usuarios.update({
-      where: { id: BigInt(session.userId) },
-      data: { [field]: boolValue } as any
-    });
+    // 1. Actualizar en Base de Datos vía SQL directo y Prisma
+    try {
+      await db.query(
+        `UPDATE usuarios SET \`${field}\` = ? WHERE id = ?`,
+        [value, session.userId]
+      );
+      console.log(`✅ [auth-service] DB (SQL) actualizada para usuario ${session.userId} (${field} = ${value})`);
+    } catch (sqlErr) {
+      console.warn(`⚠️ [auth-service] Direct SQL update for ${field} failed:`, sqlErr);
+    }
 
-    if (!updated) {
-      console.warn(`⚠️ [auth-service] El UPDATE no afectó a ninguna fila. ¿El usuario ${session.userId} existe?`);
-    } else {
-      console.log(`✅ [auth-service] DB actualizada para usuario ${session.userId}`);
+    try {
+      const boolValue = value === 0 ? false : true;
+      await prisma.usuarios.update({
+        where: { id: BigInt(session.userId) },
+        data: { [field]: boolValue } as any
+      });
+      console.log(`✅ [auth-service] DB (Prisma) actualizada para usuario ${session.userId}`);
+    } catch (prismaErr) {
+      // Si el campo aún no existe en Prisma client generado, se ignora
     }
 
     // 2. Re-crear sesión con el valor actualizado para sincronizar la cookie
@@ -621,7 +643,9 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       'tutorial_individual': 'tutorialIndividual',
       'tutorial_incidencias': 'tutorialIncidencias',
       'tutorial_proveedores': 'tutorialProveedores',
-      'tutorial_health_check': 'tutorialHealthCheck'
+      'tutorial_health_check': 'tutorialHealthCheck',
+      'tutorial_webhooks': 'tutorialWebhooks',
+      'tutorial_docs': 'tutorialDocs'
     };
 
     const payloadField = fieldMap[field];
@@ -642,6 +666,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       updatedPayload.tutorialIncidencias ?? 0,
       updatedPayload.tutorialProveedores ?? 0,
       updatedPayload.tutorialHealthCheck ?? 0,
+      updatedPayload.tutorialWebhooks ?? 0,
+      updatedPayload.tutorialDocs ?? 0,
       (updatedPayload as any).organization_rol as any
     );
 
@@ -684,3 +710,12 @@ export async function completeTutorialProveedores() {
 export async function completeTutorialHealthCheck() {
   return await updateUserTutorialField('tutorial_health_check', 0);
 }
+
+export async function completeTutorialWebhooks() {
+  return await updateUserTutorialField('tutorial_webhooks', 0);
+}
+
+export async function completeTutorialDocs() {
+  return await updateUserTutorialField('tutorial_docs', 0);
+}
+

@@ -224,8 +224,8 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
           <Div />
 
-          {/* Nº FACTURA + FECHA — always inputs */}
-          <div className="grid grid-cols-2 gap-6">
+          {/* Nº FACTURA + FECHA EMISIÓN + FECHA VENCIMIENTO */}
+          <div className="grid grid-cols-3 gap-4">
             <div><SL>Nº Factura</SL>
               {isEditing
                 ? <FormField control={form.control} name="numero_documento" render={({ field }) => (
@@ -233,7 +233,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                   )} />
                 : <EInput value={doc.numero_documento || ''} className="font-mono text-foreground" />}
             </div>
-            <div><SL>Fecha</SL>
+            <div><SL>Fecha Emisión</SL>
               {isEditing
                 ? <FormField control={form.control} name="fecha_emision" render={({ field }) => (
                     <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
@@ -241,7 +241,16 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                   )} />
                 : <EInput value={fmtDate(doc.fecha_emision)} />}
             </div>
+            <div><SL>Fecha Vencimiento</SL>
+              {isEditing
+                ? <FormField control={form.control} name="fecha_vencimiento" render={({ field }) => (
+                    <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
+                      className="w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                  )} />
+                : <EInput value={fmtDate(doc.fecha_vencimiento) || '—'} placeholder="—" />}
+            </div>
           </div>
+
 
           <div className="grid grid-cols-2 gap-6 mt-6">
             <div><SL>Tipo de Documento</SL>

@@ -195,13 +195,16 @@ const SidebarProvider = React.forwardRef<
           // ✅ USAR API ROUTE
           const response = await fetch('/api/companies');
           if (!response.ok) {
-            throw new Error('Error al cargar empresas');
+            console.warn(`⚠️ [Sidebar] No se pudieron cargar las empresas (Status ${response.status})`);
+            return;
           }
           const fetchedCompanies = await response.json();
 
-          setCompanies(fetchedCompanies);
-          if (fetchedCompanies.length > 0) {
-            setSelectedCompanyId(fetchedCompanies[0].id);
+          if (Array.isArray(fetchedCompanies)) {
+            setCompanies(fetchedCompanies);
+            if (fetchedCompanies.length > 0) {
+              setSelectedCompanyId(fetchedCompanies[0].id);
+            }
           }
         } catch (err) {
           console.error("Error fetching companies:", err);

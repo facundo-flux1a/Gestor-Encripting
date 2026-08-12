@@ -10,6 +10,9 @@ import {
   ShieldAlert, BarChart3, TriangleAlert, AlertTriangle,
   Calendar, FileImage,
 } from 'lucide-react';
+import { DocsProvider } from '@/context/DocsProvider';
+import { DocsTutorial } from '@/components/tutorials/DocsTutorial';
+import { DocsTutorialMobile } from '@/components/tutorials/DocsTutorialMobile';
 
 // ------------- Param definitions per endpoint -------------
 
@@ -255,17 +258,27 @@ export default function DocsPage() {
   const [selectedKeyId, setSelectedKeyId] = useState<number | null>(null);
 
   return (
-    <MainLayout>
-      <PageHeader
-        title="Documentación de la API (v1)"
-        description="Referencia técnica completa para integradores, ERPs externos y automatizaciones (Make/n8n)."
-        icon={BookOpen}
-      />
+    <DocsProvider>
+      {/* Desktop tutorial */}
+      <div className="hidden md:block">
+        <DocsTutorial />
+      </div>
+      {/* Mobile tutorial */}
+      <div className="block md:hidden">
+        <DocsTutorialMobile />
+      </div>
+
+      <MainLayout>
+        <PageHeader
+          title="Documentación de la API (v1)"
+          description="Referencia técnica completa para integradores, ERPs externos y automatizaciones (Make/n8n)."
+          icon={BookOpen}
+        />
 
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-14 pb-24">
 
         {/* Introducción */}
-        <section className="space-y-4">
+        <section className="space-y-4" data-tutorial="docs-header">
           <p className="text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
             La API REST v1 del Gestor Documental está concebida como la capa de integración oficial para sistemas externos que necesiten consumir, analizar o sincronizar datos fiscales y contables en tiempo real. Es la interfaz preferida para desarrolladores de ERPs, contabilidades, herramientas de BI como Tableau o Google Data Studio, y plataformas de automatización como Make o n8n.
           </p>
@@ -286,7 +299,7 @@ export default function DocsPage() {
         </section>
 
         {/* 1. Autenticación */}
-        <section className="space-y-4">
+        <section className="space-y-4" data-tutorial="docs-auth-section">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
             <Key className="h-6 w-6 text-primary" />
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -311,7 +324,7 @@ export default function DocsPage() {
         </section>
 
         {/* 2. Endpoints */}
-        <section className="space-y-8">
+        <section className="space-y-8" data-tutorial="docs-endpoints-list">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
             <Database className="h-6 w-6 text-primary" />
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -468,7 +481,7 @@ export default function DocsPage() {
         </section>
 
         {/* 3. Regla Crítica */}
-        <section className="bg-red-50 dark:bg-red-950/20 border-2 border-red-500/50 rounded-xl overflow-hidden shadow-sm">
+        <section className="bg-red-50 dark:bg-red-950/20 border-2 border-red-500/50 rounded-xl overflow-hidden shadow-sm" data-tutorial="docs-responses-section">
           <div className="bg-red-500 text-white px-6 py-3 flex items-center gap-3">
             <TriangleAlert className="h-6 w-6 animate-pulse" />
             <h2 className="text-lg font-bold tracking-wider uppercase">
@@ -527,7 +540,7 @@ export default function DocsPage() {
         </section>
 
         {/* ====================== WEBHOOKS ====================== */}
-        <section className="space-y-6" id="webhooks">
+        <section className="space-y-6" id="webhooks" data-tutorial="docs-webhooks-info">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
             <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -727,5 +740,6 @@ export async function POST(req: Request) {
 
       </div>
     </MainLayout>
+    </DocsProvider>
   );
 }
