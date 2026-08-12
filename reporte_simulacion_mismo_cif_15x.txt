@@ -1,0 +1,177 @@
+=========================================================================
+🤖 SIMULACIÓN DE CONSISTENCIA DE EXTRACCIÓN CON LLM (15 ITERACIONES EN MEMORIA)
+📄 Documento: alquila-y-descansa-factura-mismo-cif-test_2026_08_12_17_15_04.pdf
+🔗 URL: https://minio.allbase.com.ar/gestor-documental/archivos/alquila-y-descansa-factura-mismo-cif-test_2026_08_12_17_15_04.pdf
+Fecha: 12/8/2026, 02:32:35
+=========================================================================
+
+⏬ Descargando PDF desde MinIO...
+✔ PDF descargado (301.9 KB). Iniciando 15 ejecuciones sin persistencia en BD...
+
+⏳ [Llamada 1/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.8s | Tokens usados: 15395
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 2/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.8s | Tokens usados: 15593
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 3/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 33.3s | Tokens usados: 15793
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 4/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.3s | Tokens usados: 15587
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 5/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.0s | Tokens usados: 15433
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 6/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.5s | Tokens usados: 15396
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 7/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 25.9s | Tokens usados: 15343
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 8/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 24.8s | Tokens usados: 15365
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 9/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.1s | Tokens usados: 15453
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : A 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 10/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.0s | Tokens usados: 15412
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 11/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 24.8s | Tokens usados: 15292
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 12/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 22.7s | Tokens usados: 15108
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 13/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 23.4s | Tokens usados: 15114
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 14/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 27.1s | Tokens usados: 15214
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema/cliente, requiriendo revisión manual para evitar autofacturación.)
+
+⏳ [Llamada 15/15] Ejecutando Azure DI + Azure OpenAI...
+   - Duración : 24.3s | Tokens usados: 15328
+   - Tipo Doc : FACTURA RECIBIDA
+   - N° Doc   : 4549
+   - Importe  : 350.13 EUR
+   - Emisor   : REGISTRO PROPIEDAD VALENCIA NUMERO SIETE (CIF: N/A)
+   - Receptor : ALQUILA Y DESCANSA TAP, S.L. (CIF: B56214109)
+   - Mismo CIF: NO
+   - Incidencia: SÍ (Se omitió el CIF del emisor porque el único NIF visible (B56214109) coincide exactamente con el CIF de la empresa del sistema y del cliente, requiriendo revisión manual para evitar autofacturación.)
+
+=========================================================================
+📊 REPORTE FINAL DE CONSISTENCIA PARA FACTURA MISMO CIF (15/15 ÉXITOS)
+=========================================================================
+
+👥 Entidades Emisoras Extraídas:
+   - [EMISOR] REGISTRO PROPIEDAD VALENCIA NUMERO SIETE | CIF: Vacío → 15/15 veces (100.0%)
+
+👥 Entidades Receptoras Extraídas:
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP, S.L. | CIF: B56214109 → 14/15 veces (93.3%)
+   - [RECEPTOR] ALQUILA Y DESCANSA TAP S.L. | CIF: B56214109 → 1/15 veces (6.7%)
+
+⚖️ Coincidencia de CIF Emisor/Receptor:
+   - ¿CIF de Emisor == CIF de Receptor?: 0/15 veces (0.0%)
+
+📄 Tipo de Documento: {"FACTURA RECIBIDA":15}
+📄 Número de Documento: {"4549":13,"A4549":1,"A 4549":1}
+💰 Importe Total: {"350.13":15}

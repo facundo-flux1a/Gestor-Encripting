@@ -272,7 +272,7 @@ export function computeProgressForMultiple(
 /**
  * Orquesta normalizaciones sobre el documento extraído.
  */
-export function normalizeDocumento(doc: DocumentoExtraido): DocumentoExtraido {
+export function normalizeDocumento(doc: DocumentoExtraido, empresaCif?: string): DocumentoExtraido {
   let normalized = toLowerCaseKeysDeep(doc);
 
   if (normalized.desglose_iva && Array.isArray(normalized.desglose_iva)) {
@@ -280,6 +280,38 @@ export function normalizeDocumento(doc: DocumentoExtraido): DocumentoExtraido {
   }
   if (normalized.totales_por_impuesto && Array.isArray(normalized.totales_por_impuesto)) {
     normalized.totales_por_impuesto = validateRetenciones(normalized.totales_por_impuesto as Impuesto[]);
+  }
+
+  // Auditar consistencia de CIFs y enriquecer el motivo en descripcion_incidencia
+  const emisor = (normalized.empresa_emisora || {}) as EmpresaDoc;
+  const cliente = (normalized.cliente || normalized.empresa_receptora || {}) as EmpresaDoc;
+
+  const rawEmisorCif = emisor.cif;
+  const rawClienteCif = cliente.cif;
+
+  const emisorCif = normalizeCIF(rawEmisorCif);
+  const clienteCif = normalizeCIF(rawClienteCif);
+  const systemCif = normalizeCIF(empresaCif);
+
+  // CASO 1: Emisor y Cliente tienen el MISMO CIF (conflicto directo)
+  if (emisorCif && clienteCif && emisorCif === clienteCif) {
+    normalized.incidencia = true;
+    const conflictMsg = `Conflicto de CIF: El CIF del emisor (${emisorCif}) es exactamente idéntico al CIF del cliente (${clienteCif}).`;
+    const currDesc = String(normalized.descripcion_incidencia || '').trim();
+    if (!currDesc.includes(emisorCif) || !currDesc.toLowerCase().includes('idéntico')) {
+      normalized.descripcion_incidencia = currDesc ? `${currDesc} | ${conflictMsg}` : conflictMsg;
+    }
+  }
+  // CASO 2: El CIF del emisor está ausente pero se marcó incidencia o falta el del cliente
+  else if (!emisorCif && (normalized.incidencia || !clienteCif)) {
+    const currDesc = String(normalized.descripcion_incidencia || '').trim();
+    if (!currDesc) {
+      if (systemCif && rawClienteCif && normalizeCIF(rawClienteCif) === systemCif) {
+        normalized.descripcion_incidencia = `El CIF del emisor se dejó en blanco porque el único NIF detectado coincide con el CIF de la empresa del sistema (${systemCif}).`;
+      } else {
+        normalized.descripcion_incidencia = `El CIF del emisor no figura impreso en el documento original.`;
+      }
+    }
   }
 
   return normalized;
