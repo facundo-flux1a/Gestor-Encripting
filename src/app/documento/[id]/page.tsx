@@ -230,6 +230,18 @@ function DocumentoPageContent() {
     }
   };
 
+  const onFormError = (errors: any) => {
+    console.warn('⚠️ Error de validación en formulario:', errors);
+    const firstKey = Object.keys(errors)[0];
+    const firstErr = errors[firstKey];
+    const msg = firstErr?.message || 'Por favor revisa los campos del formulario.';
+    toast({
+      title: '⚠️ Validación del formulario',
+      description: String(msg),
+      variant: 'destructive',
+    });
+  };
+
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc || (!isEditing && !isAuditMode) || isSaving) return;
 
@@ -351,7 +363,26 @@ function DocumentoPageContent() {
     let quarterCtx: any = null;
 
     if (newDateStr) {
-      const targetQuarter = calcularTrimestreExtendido(newDateStr);
+      let availableQuarters: QuarterOption[] = [];
+      try {
+        const resAvail = await fetch(`/api/trimestres/disponibles?empresa_id=${doc.empresa_id || ''}`);
+        if (resAvail.ok) availableQuarters = await resAvail.json();
+      } catch (e) { console.error(e); }
+
+      const naturalQuarter = calcularTrimestreExtendido(newDateStr);
+      const currentYear = new Date().getFullYear();
+      const isPastYear = naturalQuarter.año < currentYear;
+
+      let targetQuarter = naturalQuarter;
+      if (isPastYear) {
+        const openInCurrentYear = availableQuarters.find(q => q.año === currentYear && !q.cerrado);
+        if (openInCurrentYear) {
+          targetQuarter = { año: openInCurrentYear.año, trimestre: openInCurrentYear.trimestre };
+        } else {
+          targetQuarter = { año: currentYear, trimestre: 1 };
+        }
+      }
+
       const currentQuarter = {
         año: doc.año_trimestre || targetQuarter.año,
         trimestre: doc.num_trimestre || targetQuarter.trimestre
@@ -359,21 +390,17 @@ function DocumentoPageContent() {
 
       const isQuarterMismatch = currentQuarter.año !== targetQuarter.año || currentQuarter.trimestre !== targetQuarter.trimestre;
 
-      if (newDateStr !== oldDateStr || !doc.num_trimestre || !doc.año_trimestre || isQuarterMismatch) {
-        let availableQuarters: QuarterOption[] = [];
-        try {
-          const resAvail = await fetch(`/api/trimestres/disponibles?empresa_id=${doc.empresa_id || ''}`);
-          if (resAvail.ok) availableQuarters = await resAvail.json();
-        } catch (e) { console.error(e); }
-
+      if (newDateStr !== oldDateStr || !doc.num_trimestre || !doc.año_trimestre || isQuarterMismatch || isPastYear) {
         const isTargetOpen = availableQuarters.some(q => q.año === targetQuarter.año && q.trimestre === targetQuarter.trimestre && !q.cerrado);
         const isTargetClosed = !isTargetOpen;
         const isQuarterChanged = currentQuarter.año !== targetQuarter.año || currentQuarter.trimestre !== targetQuarter.trimestre;
 
-        if (isTargetClosed || isQuarterChanged) {
+        if (isTargetClosed || isQuarterChanged || isPastYear) {
           quarterCtx = {
             newDate: newDateStr,
             targetQuarter,
+            naturalQuarter,
+            isPastYear,
             currentQuarter,
             isTargetClosed,
             availableQuarters,
@@ -381,7 +408,9 @@ function DocumentoPageContent() {
           issues.push({
             type: 'QUARTER_CHANGE',
             title: 'Reasignación de Trimestre Fiscal',
-            description: isTargetClosed
+            description: isPastYear
+              ? `La fecha de emisión pertenece al ejercicio anterior (${naturalQuarter.año} - T${naturalQuarter.trimestre}). Por normativa fiscal, debe ser asignada al año actual (${targetQuarter.año} - T${targetQuarter.trimestre}).`
+              : isTargetClosed
               ? `El trimestre de la fecha ingresada (${targetQuarter.año} - T${targetQuarter.trimestre}) está CERRADO.`
               : `La fecha ingresada corresponde al trimestre ${targetQuarter.año} - T${targetQuarter.trimestre}.`,
             blocking: false,
@@ -476,7 +505,7 @@ function DocumentoPageContent() {
       isDeleting={isDeleting} isValidating={isValidating} isEditable={isEditable}
       onEdit={() => setIsEditing(true)}
       onCancelEdit={() => { setIsEditing(false); resetForm(); }}
-      onSave={form.handleSubmit(onSubmit)}
+      onSave={form.handleSubmit(onSubmit, onFormError)}
       onDelete={() => setIsDeleteDialogOpen(true)}
       onValidate={handleValidate}
       onAuditMode={() => setIsAuditMode(true)}
@@ -489,7 +518,7 @@ function DocumentoPageContent() {
       <TooltipProvider>
         <Form {...form}>
           {isEditing
-            ? <form onSubmit={form.handleSubmit(onSubmit)}>{reviewLayout}</form>
+            ? <form onSubmit={form.handleSubmit(onSubmit, onFormError)}>{reviewLayout}</form>
             : reviewLayout
           }
         </Form>

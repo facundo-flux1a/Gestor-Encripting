@@ -228,24 +228,33 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           <div className="grid grid-cols-3 gap-4">
             <div><SL>Nº Factura</SL>
               {isEditing
-                ? <FormField control={form.control} name="numero_documento" render={({ field }) => (
-                    <EInput readOnly={false} value={field.value ?? ''} onChange={(v) => field.onChange(v)} className="font-mono" />
+                ? <FormField control={form.control} name="numero_documento" render={({ field, fieldState }) => (
+                    <div>
+                      <EInput readOnly={false} value={field.value ?? ''} onChange={(v) => field.onChange(v)} className={cn("font-mono", fieldState.error && "border-destructive focus:ring-destructive")} />
+                      {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
+                    </div>
                   )} />
                 : <EInput value={doc.numero_documento || ''} className="font-mono text-foreground" />}
             </div>
             <div><SL>Fecha Emisión</SL>
               {isEditing
-                ? <FormField control={form.control} name="fecha_emision" render={({ field }) => (
-                    <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
-                      className="w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                ? <FormField control={form.control} name="fecha_emision" render={({ field, fieldState }) => (
+                    <div>
+                      <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
+                        className={cn("w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50", fieldState.error && "border-destructive focus:ring-destructive")} />
+                      {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
+                    </div>
                   )} />
                 : <EInput value={fmtDate(doc.fecha_emision)} />}
             </div>
             <div><SL>Fecha Vencimiento</SL>
               {isEditing
-                ? <FormField control={form.control} name="fecha_vencimiento" render={({ field }) => (
-                    <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
-                      className="w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                ? <FormField control={form.control} name="fecha_vencimiento" render={({ field, fieldState }) => (
+                    <div>
+                      <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
+                        className={cn("w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50", fieldState.error && "border-destructive focus:ring-destructive")} />
+                      {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
+                    </div>
                   )} />
                 : <EInput value={fmtDate(doc.fecha_vencimiento) || '—'} placeholder="—" />}
             </div>
@@ -465,7 +474,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded border border-border text-sm hover:bg-muted transition-colors">
                 <X className="h-4 w-4" />Cancelar
               </button>
-              <button type="submit" disabled={isSaving || !form.formState.isDirty}
+              <button type="submit" disabled={isSaving}
                 style={{ background: '#059669' }}
                 className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

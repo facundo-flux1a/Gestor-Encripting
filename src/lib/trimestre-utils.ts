@@ -155,12 +155,14 @@ export async function obtenerPrimerTrimestreAbiertoDelAnio(
  * Resuelve el trimestre contable OPERATIVO al importar (dónde encajar el documento en el gestor).
  * No valida la fecha contable — eso es evaluarFechaContable() en fecha-contable-utils.
  *
- * Reglas de negocio:
- * 1. Calcula el trimestre natural de la fecha de emisión del documento (ej: 1 de Julio -> T3).
- * 2. Si el trimestre natural NO ha vencido por fecha límite de declaración (hasta el día 20 del mes posterior)
- *    y NO está cerrado manualmente en la BD, se asigna a su TRIMESTRE NATURAL.
- * 3. Si el trimestre natural YA VENCIÓ (pasó el día 20) o está cerrado en BD,
- *    se asigna al primer trimestre ABIERTO a partir de la fecha actual (HOY).
+ * Reglas de negocio actualizadas:
+ * 1. Calcula el trimestre natural de la fecha de emisión del documento (ej: 15 de Junio -> T2 2026).
+ * 2. Factura de un año anterior (ej: 2025 o 2024 estando en 2026):
+ *    - Se asigna al primer trimestre ABIERTO del año actual (2026).
+ * 3. Factura del mismo año actual o futuro (ej: 2026):
+ *    - Si el trimestre natural NO está cerrado/bloqueado en la BD, se asigna a su TRIMESTRE NATURAL
+ *      (los trimestres se consideran abiertos hasta que el usuario los cierra manualmente en el gestor).
+ *    - Si el trimestre natural SÍ está cerrado/pausado en la BD, se reasigna al siguiente trimestre ABIERTO.
  */
 export async function resolverTrimestreContableImportacion(
   fecha: Date | string,
@@ -169,15 +171,22 @@ export async function resolverTrimestreContableImportacion(
   now = new Date()
 ): Promise<{ año: number; trimestre: number }> {
   const natural = calcularTrimestreExtendido(fecha);
-  const vencido = haVencidoExtensionTrimestre(natural.año, natural.trimestre, now);
+  const anioActual = now.getFullYear();
+
+  // Caso 1: Factura de un año anterior -> primer trimestre abierto del año actual
+  if (natural.año < anioActual) {
+    return obtenerPrimerTrimestreAbiertoDelAnio(anioActual, empresaId, userId);
+  }
+
+  // Caso 2: Factura del mismo año o futuro -> verificar únicamente estado de cierre en BD
   const cerradoEnDb = await estaTrimestreCerrado(natural.año, natural.trimestre, empresaId, userId);
 
-  if (!vencido && !cerradoEnDb) {
+  if (!cerradoEnDb) {
     return natural;
   }
 
-  const actualNatural = calcularTrimestreExtendido(now);
-  return obtenerSiguienteTrimestreAbierto(actualNatural.año, actualNatural.trimestre, empresaId, userId);
+  // Si el trimestre natural está cerrado en BD, buscar el siguiente abierto
+  return obtenerSiguienteTrimestreAbierto(natural.año, natural.trimestre, empresaId, userId);
 }
 
 /**

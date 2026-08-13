@@ -46,6 +46,8 @@ export interface UnifiedPreSaveDialogProps {
     newDate: string;
     currentQuarter: { año: number; trimestre: number };
     targetQuarter: { año: number; trimestre: number };
+    naturalQuarter?: { año: number; trimestre: number };
+    isPastYear?: boolean;
     isTargetClosed: boolean;
     availableQuarters: QuarterOption[];
   };
@@ -158,7 +160,8 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
       setAcknowledgeDuplicate(true);
       setAcknowledgeChanges(false);
       if (quarterContext) {
-        setSelectedQuarterOption(quarterContext.isTargetClosed ? 'current' : 'target');
+        // Si es ejercicio anterior: sugerir 'target' (año actual). Si está cerrado sin ser pastYear: mantener 'current'.
+        setSelectedQuarterOption(quarterContext.isPastYear ? 'target' : quarterContext.isTargetClosed ? 'current' : 'target');
         if (quarterContext.availableQuarters.length > 0) {
           const first = quarterContext.availableQuarters[0];
           setCustomQuarterKey(`${first.año}-T${first.trimestre}`);
@@ -270,24 +273,32 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
                   <Calendar className="h-4 w-4 text-blue-400 shrink-0" />
                   <span className="text-[13px] font-semibold text-foreground">Reasignación de Trimestre Fiscal</span>
                 </div>
-                <Pill color={quarterContext.isTargetClosed ? 'amber' : 'blue'}>
-                  {quarterContext.isTargetClosed ? 'Trimestre cerrado' : `Fecha: ${fmtDate(quarterContext.newDate)}`}
+                <Pill color={quarterContext.isPastYear ? 'orange' : quarterContext.isTargetClosed ? 'amber' : 'blue'}>
+                  {quarterContext.isPastYear
+                    ? `Ejercicio anterior (${quarterContext.naturalQuarter?.año ?? ''} – T${quarterContext.naturalQuarter?.trimestre ?? ''})`
+                    : quarterContext.isTargetClosed ? 'Trimestre cerrado' : `Fecha: ${fmtDate(quarterContext.newDate)}`}
                 </Pill>
               </div>
 
               <p className="text-[12px] text-muted-foreground leading-relaxed">
-                {quarterContext.isTargetClosed
+                {quarterContext.isPastYear
+                  ? `La fecha de emisión (${fmtDate(quarterContext.newDate)}) pertenece al ejercicio anterior (${quarterContext.naturalQuarter?.año ?? ''} - T${quarterContext.naturalQuarter?.trimestre ?? ''}). Por normativa fiscal, no se puede imputar a trimestres ya liquidados — se sugiere asignar al año actual (${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}).`
+                  : quarterContext.isTargetClosed
                   ? `La fecha elegida corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}, el cual ya está cerrado contablemente. Elegí cómo clasificar este documento.`
                   : `La fecha de emisión ingresada corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}. Elegí a qué trimestre asignar este documento.`}
               </p>
 
               <div className="space-y-2">
-                {!quarterContext.isTargetClosed && (
+                {(!quarterContext.isTargetClosed || quarterContext.isPastYear) && (
                   <RadioOption
                     selected={selectedQuarterOption === 'target'}
                     onClick={() => setSelectedQuarterOption('target')}
                     label={`Reasignar a ${quarterContext.targetQuarter.año} – T${quarterContext.targetQuarter.trimestre}`}
-                    sublabel="Calculado automáticamente por la fecha de emisión"
+                    sublabel={
+                      quarterContext.isPastYear
+                        ? 'Sugerido por normativa fiscal (ejercicio fiscal activo)'
+                        : 'Calculado automáticamente por la fecha de emisión'
+                    }
                     badge="Sugerido"
                     accent="blue"
                   />

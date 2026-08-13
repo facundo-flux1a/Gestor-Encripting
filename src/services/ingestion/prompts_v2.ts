@@ -325,8 +325,7 @@ cliente.nombre = ""  ← no encontrado, pero no se duplica
 **PROVEEDOR (Emisor/Vendedor):**
 - Ubicación: Cabecera, membrete, logo superior, "Datos del emisor", "De:", "From:", "Seller:"
 - Extraer: Nombre/razón social, CIF/NIF/Tax ID, dirección, teléfono, email
-- Va en: empresa_emisora en el JSON
-- Busca cerca del nombre, tras etiquetas: "CIF:", "NIF:", "Tax ID:", "VAT:", "RFC:", "NIT:", "EIN:"
+- Busca cerca del nombre, tras etiquetas: "CIF:", "NIF:", "Tax ID:", "VAT:", "RFC:", "NIT:", "EIN:", o impreso inmediatamente junto a la razón social en la cabecera (ej: "Adaix Graogandia 20027991-M"). Si observas una secuencia con formato de NIF/DNI/CIF español junto al nombre del emisor, extráelo como su CIF aunque no lleve la palabra "CIF:" o "NIF:" escrita antes, siempre que no sea el CIF del cliente ni del sistema.
 - **OBLIGATORIO**: Revisa cabecera, márgenes superiores, pie de página y zonas laterales
 
 **CLIENTE (Receptor/Comprador):**
