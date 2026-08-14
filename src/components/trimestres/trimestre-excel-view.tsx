@@ -455,7 +455,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                 textAlign: p.data?.isSectionHeader ? 'center' : 'left'
             }),
             tooltipValueGetter: (p: any) => {
-                if (p.data?.concepto === 'Otras Bases (Sin desglose)') {
+                if (p.data?.concepto === 'Bases No Sujetas / Suplidos') {
                     let baseMsg = 'ℹ️ Ajuste técnico: Refleja diferencias entre el total de base imponible declarado en cabecera y la suma de sus desgloses de impuestos.';
 
                     let tooltipLines = [baseMsg];
@@ -660,7 +660,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
 
             // OTRAS BASES (DIFERENCIA / REDONDEO) - Para cuadrar con las Cards
             const adjustmentRow: any = {
-                concepto: 'Otras Bases (Sin desglose)',
+                concepto: 'Bases No Sujetas / Suplidos',
                 q1: 0, q2: 0, q3: 0, q4: 0, total: 0,
                 isAdjustment: true
             };

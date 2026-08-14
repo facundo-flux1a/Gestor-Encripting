@@ -102,7 +102,7 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
 
         // 3. Abono / Rectificativa
         const tipoLower = (doc.tipo_documento || '').toLowerCase();
-        const docTotalVal = Number(doc.total || doc.base_imponible || 0);
+        const docTotalVal = Number(doc.total ?? (doc as any).importe_total ?? doc.base_imponible ?? (doc as any).importe_sin_impuestos ?? 0);
         const esAbono = tipoLower.includes('abono') || tipoLower.includes('crédito') || tipoLower.includes('credito') || docTotalVal < 0;
 
         const target = isIssued ? ingresos : gastos;
@@ -115,8 +115,9 @@ export function calculateFinancials(documents: Document[], companyCIF: string | 
         // ✅ OPCIÓN A: base_no_sujeta (datos_extra) se fusiona con la base fiscal total.
         // base_no_sujeta = importe no gravado por IVA que sí forma parte del total del documento.
         // Fórmula: Total = (base_imponible + base_no_sujeta) + IVA + Recargo - Retencion - Descuento
-        const docBaseNoSujeta = Math.abs(Number((doc as any).base_no_sujeta || 0));
-        const baseRealVal = Math.abs(Number(doc.base_imponible || (doc as any).importe_sin_impuestos || 0)) + docBaseNoSujeta;
+        const datosExtra = typeof (doc as any).datos_extra === 'string' ? JSON.parse((doc as any).datos_extra) : ((doc as any).datos_extra || {});
+        const docBaseNoSujeta = Math.abs(Number((doc as any).base_no_sujeta ?? datosExtra?.base_no_sujeta ?? datosExtra?.BASE_NO_SUJETA ?? 0));
+        const baseRealVal = Math.abs(Number(doc.base_imponible ?? (doc as any).importe_sin_impuestos ?? 0)) + docBaseNoSujeta;
         const docDescuentoGlobal = Math.abs(Number((doc as any).descuento_global || 0));
         // Si no hay iva explícito, aproximamos por diferencia (se ajustará al final sumando impuestos)
         let ivaRealVal = Math.abs(Number(doc.iva || (doc as any).total_iva || 0));

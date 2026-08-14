@@ -94,6 +94,7 @@ export function DataTableFacetedFilter<TData, TValue>({
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const [open, setOpen] = useState(false);
   const selectedValues = new Set(column?.getFilterValue() as string[]);
+  const hasActiveFilter = selectedValues.size > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -105,6 +106,7 @@ export function DataTableFacetedFilter<TData, TValue>({
             'h-8 rounded-xl border border-border/50 bg-background/90 text-xs shadow-sm',
             'transition-all duration-300 ease-out hover:border-primary/35 hover:bg-primary/5 hover:shadow-md',
             open && 'border-primary/45 bg-primary/5 shadow-md',
+            hasActiveFilter && 'border-primary/70 bg-primary/20 text-primary font-bold shadow-md ring-2 ring-primary/40',
             fullWidth ? 'w-full justify-between px-2.5' : 'border-dashed'
           )}
           disabled={isLoading}
@@ -117,8 +119,8 @@ export function DataTableFacetedFilter<TData, TValue>({
             )}
             <span className="truncate">{fullWidth ? (title ?? 'Filtrar') : title}</span>
           </span>
-          {selectedValues?.size > 0 && (
-            <span className="ml-1.5 shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 font-mono text-[10px]">
+          {hasActiveFilter && (
+            <span className="ml-1.5 shrink-0 rounded-md bg-primary/30 text-primary px-1.5 py-0.5 font-mono text-[10px] font-bold border border-primary/40">
               {selectedValues.size}
             </span>
           )}
@@ -212,6 +214,7 @@ export function TextColumnFilter<TData>({
   };
 
   const showSuggestions = open && inputValue.trim().length > 0 && suggestions.length > 0;
+  const hasActiveFilter = inputValue.trim().length > 0;
 
   return (
     <div className="relative w-full min-w-0">
@@ -228,7 +231,11 @@ export function TextColumnFilter<TData>({
           onFocus={() => inputValue.trim() && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 180)}
           placeholder={placeholder}
-          className={cn(filterInputClass, 'w-full pr-7 text-xs')}
+          className={cn(
+            filterInputClass,
+            'w-full pr-7 text-xs',
+            hasActiveFilter && 'border-primary/70 bg-primary/15 font-semibold text-primary ring-2 ring-primary/30'
+          )}
         />
         {inputValue && (
           <button
@@ -294,6 +301,7 @@ export function TrimestreFilter<TData>({
 }) {
   const rowCount = table.getPreFilteredRowModel().rows.length;
   const current = (column.getFilterValue() as string) ?? '';
+  const hasActiveFilter = !!(current && current !== '__all__');
 
   const options = useMemo(() => {
     const map = new Map<string, string>();
@@ -316,7 +324,10 @@ export function TrimestreFilter<TData>({
         value={current || '__all__'}
         onValueChange={(v) => column.setFilterValue(v === '__all__' ? undefined : v)}
       >
-        <SelectTrigger className={filterSelectTriggerClass}>
+        <SelectTrigger className={cn(
+          filterSelectTriggerClass,
+          hasActiveFilter && 'border-primary/70 bg-primary/20 text-primary font-bold shadow-md ring-2 ring-primary/40'
+        )}>
           <SelectValue placeholder="Trimestre" />
         </SelectTrigger>
         <SelectContent className={filterSelectContentClass}>
@@ -348,6 +359,7 @@ export function AnioFilter<TData>({
 }) {
   const rowCount = table.getPreFilteredRowModel().rows.length;
   const current = (column.getFilterValue() as string) ?? '';
+  const hasActiveFilter = !!(current && current !== '__all__');
 
   const options = useMemo(() => {
     const yearsSet = new Set<string>();
@@ -369,7 +381,10 @@ export function AnioFilter<TData>({
         value={current || '__all__'}
         onValueChange={(v) => column.setFilterValue(v === '__all__' ? undefined : v)}
       >
-        <SelectTrigger className={filterSelectTriggerClass}>
+        <SelectTrigger className={cn(
+          filterSelectTriggerClass,
+          hasActiveFilter && 'border-primary/70 bg-primary/20 text-primary font-bold shadow-md ring-2 ring-primary/40'
+        )}>
           <SelectValue placeholder="Año" />
         </SelectTrigger>
         <SelectContent className={filterSelectContentClass}>
@@ -446,6 +461,7 @@ export function IncidenciasFilter<TData>({
   column: Column<TData, unknown>;
 }) {
   const current = (column.getFilterValue() as string) ?? '';
+  const hasActiveFilter = !!(current && current !== '__all__');
 
   return (
     <div className="w-full min-w-0">
@@ -453,7 +469,10 @@ export function IncidenciasFilter<TData>({
         value={current || '__all__'}
         onValueChange={(v) => column.setFilterValue(v === '__all__' ? undefined : v)}
       >
-        <SelectTrigger className={filterSelectTriggerClass}>
+        <SelectTrigger className={cn(
+          filterSelectTriggerClass,
+          hasActiveFilter && 'border-primary/70 bg-primary/20 text-primary font-bold shadow-md ring-2 ring-primary/40'
+        )}>
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent className={filterSelectContentClass}>
@@ -471,6 +490,7 @@ export function IncidenciasFilter<TData>({
     </div>
   );
 }
+
 
 export function TipoDocumentoFilter<TData>({
   column,

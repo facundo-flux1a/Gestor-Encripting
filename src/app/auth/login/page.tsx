@@ -295,6 +295,8 @@ function LoginForm() {
   );
 }
 
+
+
 export default function LoginPage() {
   const anio = new Date().getFullYear();
 
@@ -311,12 +313,13 @@ export default function LoginPage() {
         <div className="w-full max-w-[380px]">
           <AuthBrandMobile />
 
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-2xl font-semibold tracking-tight">Iniciar sesión</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
               Ingresá tus credenciales para acceder a tu cuenta.
             </p>
           </div>
+
 
           <Suspense>
             <LoginError />
@@ -340,3 +343,4 @@ export default function LoginPage() {
     </main>
   );
 }
+

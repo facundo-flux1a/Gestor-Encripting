@@ -221,7 +221,7 @@ export function StatsHoverTable({
 
                     {Math.abs(diffBases) > 0.01 && (
                         <TaxRow
-                            label="Otras Bases (Sin desglose)"
+                            label="Bases No Sujetas / Suplidos"
                             value={diffBases}
                             className="italic text-muted-foreground/70"
                             onClick={() => toggleKey('otrasBases')}

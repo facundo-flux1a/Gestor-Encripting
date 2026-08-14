@@ -33,6 +33,13 @@ import { cn } from '@/lib/utils';
 import { PreSaveIssue } from '@/lib/types';
 import { QuarterOption } from './quarter-reassignment-dialog';
 
+export interface HealthTransitionContext {
+  wasInHealthCheck: boolean;
+  willBeInHealthCheck: boolean;
+  resolvedReason?: string;
+  newIssueReason?: string;
+}
+
 export interface UnifiedPreSaveDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,6 +47,7 @@ export interface UnifiedPreSaveDialogProps {
     año?: number;
     trimestre?: number;
     tipoDocumento?: string;
+    validateAndRedirect?: boolean;
   }) => void;
   issues: PreSaveIssue[];
   quarterContext?: {
@@ -51,15 +59,17 @@ export interface UnifiedPreSaveDialogProps {
     isTargetClosed: boolean;
     availableQuarters: QuarterOption[];
   };
+  healthTransition?: HealthTransitionContext;
 }
 
 // ── Pill badge ─────────────────────────────────────────────────────────────
-function Pill({ children, color }: { children: React.ReactNode; color: 'amber' | 'orange' | 'slate' | 'blue' }) {
+function Pill({ children, color }: { children: React.ReactNode; color: 'amber' | 'orange' | 'slate' | 'blue' | 'green' }) {
   const styles = {
-    amber:  'bg-amber-500/15  text-amber-400  ring-amber-500/30',
+    amber: 'bg-amber-500/15  text-amber-400  ring-amber-500/30',
     orange: 'bg-orange-500/15 text-orange-400 ring-orange-500/30',
-    slate:  'bg-slate-500/15  text-slate-400  ring-slate-500/20',
-    blue:   'bg-blue-500/15   text-blue-400   ring-blue-500/30',
+    slate: 'bg-slate-500/15  text-slate-400  ring-slate-500/20',
+    blue: 'bg-blue-500/15   text-blue-400   ring-blue-500/30',
+    green: 'bg-green-500/15  text-green-400  ring-green-500/30',
   };
   return (
     <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 uppercase tracking-wide', styles[color])}>
@@ -69,12 +79,13 @@ function Pill({ children, color }: { children: React.ReactNode; color: 'amber' |
 }
 
 // ── Section card ───────────────────────────────────────────────────────────
-function IssueCard({ children, accent }: { children: React.ReactNode; accent: 'amber' | 'orange' | 'slate' | 'blue' }) {
+function IssueCard({ children, accent }: { children: React.ReactNode; accent: 'amber' | 'orange' | 'slate' | 'blue' | 'green' }) {
   const border = {
-    amber:  'border-amber-500/25  bg-amber-500/[0.04]',
+    amber: 'border-amber-500/25  bg-amber-500/[0.04]',
     orange: 'border-orange-500/25 bg-orange-500/[0.04]',
-    slate:  'border-border         bg-muted/20',
-    blue:   'border-blue-500/25   bg-blue-500/[0.04]',
+    slate: 'border-border         bg-muted/20',
+    blue: 'border-blue-500/25   bg-blue-500/[0.04]',
+    green: 'border-green-500/30  bg-green-500/[0.06]',
   };
   return (
     <div className={cn('rounded-xl border p-4 space-y-3 shadow-sm', border[accent])}>
@@ -97,10 +108,10 @@ function RadioOption({
   label: string;
   sublabel?: string;
   badge?: string;
-  accent?: 'blue' | 'primary' | 'violet';
+  accent?: 'blue' | 'primary' | 'violet' | 'green';
 }) {
-  const ringColor = { blue: 'border-blue-500 bg-blue-500', primary: 'border-primary bg-primary', violet: 'border-violet-500 bg-violet-500' };
-  const bgColor  = { blue: 'bg-blue-500/10 border-blue-500/35', primary: 'bg-primary/10 border-primary/35', violet: 'bg-violet-500/10 border-violet-500/35' };
+  const ringColor = { blue: 'border-blue-500 bg-blue-500', primary: 'border-primary bg-primary', violet: 'border-violet-500 bg-violet-500', green: 'border-green-500 bg-green-500' };
+  const bgColor = { blue: 'bg-blue-500/10 border-blue-500/35', primary: 'bg-primary/10 border-primary/35', violet: 'bg-violet-500/10 border-violet-500/35', green: 'bg-green-500/10 border-green-500/35' };
 
   return (
     <div
@@ -128,7 +139,7 @@ function RadioOption({
 function Callout({ type, children }: { type: 'error' | 'info'; children: React.ReactNode }) {
   const styles = {
     error: { wrap: 'bg-rose-950/60 border-rose-500/40 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.15)]', icon: <XCircle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />, text: 'text-rose-200' },
-    info:  { wrap: 'bg-sky-950/60  border-sky-500/40  shadow-[inset_0_0_0_1px_rgba(56,189,248,0.10)]',  icon: <Info className="h-4 w-4 text-sky-400 shrink-0 mt-0.5" />,  text: 'text-sky-200' },
+    info: { wrap: 'bg-sky-950/60  border-sky-500/40  shadow-[inset_0_0_0_1px_rgba(56,189,248,0.10)]', icon: <Info className="h-4 w-4 text-sky-400 shrink-0 mt-0.5" />, text: 'text-sky-200' },
   };
   const s = styles[type];
   return (
@@ -139,19 +150,20 @@ function Callout({ type, children }: { type: 'error' | 'info'; children: React.R
   );
 }
 
-export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quarterContext }: UnifiedPreSaveDialogProps) {
+export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quarterContext, healthTransition }: UnifiedPreSaveDialogProps) {
   const [selectedQuarterOption, setSelectedQuarterOption] = useState<'target' | 'current' | 'custom'>('target');
   const [customQuarterKey, setCustomQuarterKey] = useState<string>('');
   const [acceptTipoCorrection, setAcceptTipoCorrection] = useState<boolean>(true);
   const [acknowledgeMathMismatch, setAcknowledgeMathMismatch] = useState<boolean>(true);
   const [acknowledgeDuplicate, setAcknowledgeDuplicate] = useState<boolean>(true);
   const [acknowledgeChanges, setAcknowledgeChanges] = useState<boolean>(false);
+  const [validateAndRedirect, setValidateAndRedirect] = useState<boolean>(true);
 
-  const quarterIssue   = issues.find(i => i.type === 'QUARTER_CHANGE');
-  const tipoIssue      = issues.find(i => i.type === 'TIPO_MISMATCH');
-  const mathIssue      = issues.find(i => i.type === 'MATH_MISMATCH');
+  const quarterIssue = issues.find(i => i.type === 'QUARTER_CHANGE');
+  const tipoIssue = issues.find(i => i.type === 'TIPO_MISMATCH');
+  const mathIssue = issues.find(i => i.type === 'MATH_MISMATCH');
   const duplicateIssue = issues.find(i => i.type === 'DUPLICATE_NUMBER');
-  const changesIssue   = issues.find(i => i.type === 'CHANGES_REVIEW');
+  const changesIssue = issues.find(i => i.type === 'CHANGES_REVIEW');
 
   useEffect(() => {
     if (isOpen) {
@@ -159,8 +171,8 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
       setAcknowledgeMathMismatch(true);
       setAcknowledgeDuplicate(true);
       setAcknowledgeChanges(false);
+      setValidateAndRedirect(true);
       if (quarterContext) {
-        // Si es ejercicio anterior: sugerir 'target' (año actual). Si está cerrado sin ser pastYear: mantener 'current'.
         setSelectedQuarterOption(quarterContext.isPastYear ? 'target' : quarterContext.isTargetClosed ? 'current' : 'target');
         if (quarterContext.availableQuarters.length > 0) {
           const first = quarterContext.availableQuarters[0];
@@ -174,7 +186,7 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
 
   const handleConfirm = () => {
     if (isBlocked) return;
-    const resolutions: { año?: number; trimestre?: number; tipoDocumento?: string } = {};
+    const resolutions: { año?: number; trimestre?: number; tipoDocumento?: string; validateAndRedirect?: boolean } = {};
     if (tipoIssue && acceptTipoCorrection && tipoIssue.suggestedValue) resolutions.tipoDocumento = tipoIssue.suggestedValue;
     if (quarterIssue && quarterContext) {
       if (selectedQuarterOption === 'target') {
@@ -189,6 +201,9 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
         if (!isNaN(año) && !isNaN(trimestre)) { resolutions.año = año; resolutions.trimestre = trimestre; }
       }
     }
+    if (healthTransition?.wasInHealthCheck && !healthTransition?.willBeInHealthCheck) {
+      resolutions.validateAndRedirect = validateAndRedirect;
+    }
     onConfirm(resolutions);
   };
 
@@ -197,6 +212,8 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
     return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
   };
 
+  const isResolvedHealth = healthTransition?.wasInHealthCheck && !healthTransition?.willBeInHealthCheck;
+
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent className="sm:max-w-[540px] bg-[hsl(var(--card))] border border-border/60 shadow-[0_32px_64px_rgba(0,0,0,0.5)] rounded-2xl p-0 max-h-[88vh] overflow-hidden flex flex-col gap-0">
@@ -204,18 +221,24 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
         {/* Header */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
           <div className="flex items-center gap-3.5">
-            <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.08) 100%)', border: '1px solid rgba(245,158,11,0.3)' }}>
-              <ShieldAlert className="h-5 w-5 text-amber-400" />
+            <div className={cn(
+              "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border",
+              isResolvedHealth
+                ? "bg-green-500/20 text-green-400 border-green-500/30"
+                : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+            )}>
+              {isResolvedHealth ? <CheckCircle2 className="h-5 w-5 text-green-400" /> : <ShieldAlert className="h-5 w-5 text-amber-400" />}
             </div>
             <div className="min-w-0">
               <DialogTitle className="text-[15px] font-bold text-foreground tracking-tight leading-tight">
-                Verificación previa al guardado
+                {isResolvedHealth ? 'Resolución de Cuarentena de Seguridad' : 'Verificación previa al guardado'}
               </DialogTitle>
               <DialogDescription className="text-[12px] text-muted-foreground mt-0.5">
-                {issues.length === 1
-                  ? 'Se detectó 1 observación que requiere tu confirmación.'
-                  : `Se detectaron ${issues.length} observaciones que requieren tu confirmación.`}
+                {isResolvedHealth
+                  ? 'Tus ediciones resuelven las inconsistencias del documento.'
+                  : issues.length === 1
+                    ? 'Se detectó 1 observación que requiere tu confirmación.'
+                    : `Se detectaron ${issues.length} observaciones que requieren tu confirmación.`}
               </DialogDescription>
             </div>
           </div>
@@ -223,6 +246,56 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {/* ── HEALTH CHECK TRANSITION CARD ──────────────────────────── */}
+          {healthTransition?.wasInHealthCheck && !healthTransition?.willBeInHealthCheck && (
+            <IssueCard accent="green">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4.5 w-4.5 text-green-400 shrink-0" />
+                  <span className="text-[13px] font-semibold text-foreground">🟢 Documento Cuadrado y Válido</span>
+                </div>
+                <Pill color="green">Cuarentena Resuelta</Pill>
+              </div>
+
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Con las modificaciones introducidas, los totales coinciden perfectamente y se eliminan las alertas. El documento se considera listo para ingresar a contabilidad.
+              </p>
+
+              <div className="space-y-2 pt-1">
+                <RadioOption
+                  selected={validateAndRedirect === true}
+                  onClick={() => setValidateAndRedirect(true)}
+                  label="Validar e Integrar ya a Contabilidad"
+                  sublabel="Saca el documento de cuarentena y sé redirigido al Health Check para continuar"
+                  badge="Recomendado"
+                  accent="green"
+                />
+                <RadioOption
+                  selected={validateAndRedirect === false}
+                  onClick={() => setValidateAndRedirect(false)}
+                  label="Solo Guardar Cambios"
+                  sublabel="Conserva las ediciones pero deja el documento en lista de cuarentena para revisión posterior"
+                  accent="primary"
+                />
+              </div>
+            </IssueCard>
+          )}
+
+          {!healthTransition?.wasInHealthCheck && healthTransition?.willBeInHealthCheck && (
+            <IssueCard accent="orange">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4.5 w-4.5 text-orange-400 shrink-0" />
+                  <span className="text-[13px] font-semibold text-foreground">⚠️ Entrará al Health Check</span>
+                </div>
+                <Pill color="orange">Atención</Pill>
+              </div>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Con los importes o datos que estás ingresando, el documento pasará al Centro de Seguridad para su revisión ({healthTransition.newIssueReason || 'descuadre entre Total y la suma de Base + IVA'}).
+              </p>
+            </IssueCard>
+          )}
 
           {/* ── V1: TIPO MISMATCH ─────────────────────────────────────── */}
           {tipoIssue && (
@@ -284,8 +357,8 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
                 {quarterContext.isPastYear
                   ? `La fecha de emisión (${fmtDate(quarterContext.newDate)}) pertenece al ejercicio anterior (${quarterContext.naturalQuarter?.año ?? ''} - T${quarterContext.naturalQuarter?.trimestre ?? ''}). Por normativa fiscal, no se puede imputar a trimestres ya liquidados — se sugiere asignar al año actual (${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}).`
                   : quarterContext.isTargetClosed
-                  ? `La fecha elegida corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}, el cual ya está cerrado contablemente. Elegí cómo clasificar este documento.`
-                  : `La fecha de emisión ingresada corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}. Elegí a qué trimestre asignar este documento.`}
+                    ? `La fecha elegida corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}, el cual ya está cerrado contablemente. Elegí cómo clasificar este documento.`
+                    : `La fecha de emisión ingresada corresponde al trimestre ${quarterContext.targetQuarter.año} - T${quarterContext.targetQuarter.trimestre}. Elegí a qué trimestre asignar este documento.`}
               </p>
 
               <div className="space-y-2">
@@ -472,12 +545,16 @@ export function UnifiedPreSaveDialog({ isOpen, onClose, onConfirm, issues, quart
             size="sm"
             disabled={!!isBlocked}
             onClick={handleConfirm}
-            className="text-[12px] h-8 px-5 font-semibold disabled:opacity-40"
+            className={cn(
+              "text-[12px] h-8 px-5 font-semibold disabled:opacity-40",
+              isResolvedHealth && validateAndRedirect ? "bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20" : ""
+            )}
           >
-            Confirmar y Guardar
+            {isResolvedHealth && validateAndRedirect ? 'Validar e Integrar a Contabilidad' : 'Confirmar y Guardar'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

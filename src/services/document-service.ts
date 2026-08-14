@@ -978,6 +978,11 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
         hasDatosExtraUpdates = true;
       }
 
+      // ✅ Al editar/guardar un documento, marcar fiscal_status como VALIDADO
+      datosExtra.fiscal_status = 'VALIDADO';
+      delete datosExtra.fiscal_revision_reasons;
+      hasDatosExtraUpdates = true;
+
       if (hasDatosExtraUpdates) {
         await tx.documentos.update({ where: { id: BigInt(id) }, data: { datos_extra: datosExtra } });
       }
@@ -1702,16 +1707,27 @@ export async function validateDocumentIncidents(documentId: number): Promise<{ s
     data: { validado: true, fecha_validacion: new Date(), validado_por: 'system' }
   });
 
-  // ✅ Marcar documento como confirmado (is_new = 0)
-  const doc = await prisma.documentos.findUnique({ where: { id: BigInt(documentId) }, select: { tipo_documento: true, is_new: true, id_de_empresa: true } });
+  // ✅ Marcar en health_check_status como verificado
+  await prisma.health_check_status.updateMany({
+    where: { documento_id: Number(documentId) },
+    data: { verified: true }
+  });
+
+  // ✅ Marcar documento como confirmado (is_new = 0) y fiscal_status: VALIDADO
+  const doc = await prisma.documentos.findUnique({ where: { id: BigInt(documentId) }, select: { tipo_documento: true, is_new: true, id_de_empresa: true, datos_extra: true } });
   if (doc) {
     const wasNew = doc.is_new === 1;
+
+    const datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+    datosExtra.fiscal_status = 'VALIDADO';
+    delete datosExtra.fiscal_revision_reasons;
 
     await prisma.documentos.update({
       where: { id: BigInt(documentId) },
       data: {
         is_new: 0,
-        tipo_documento: doc.tipo_documento?.replace('(SIN CONFIRMAR)', '').trim() || ''
+        tipo_documento: doc.tipo_documento?.replace('(SIN CONFIRMAR)', '').trim() || '',
+        datos_extra: datosExtra
       }
     });
 
@@ -5533,7 +5549,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     FROM documentos d
     LEFT JOIN ${dbName}.health_check_status hcs ON hcs.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
-    HAVING mismatch_amount > 0.05
+    HAVING (mismatch_amount > 0.05 AND (hcs.verified IS NULL OR hcs.verified = 0))
        OR (mismatch_amount <= 0.05 AND hcs.verified = 0)
     ORDER BY d.fecha_emision DESC
     LIMIT 50
@@ -5646,6 +5662,21 @@ export async function confirmHealthCheckDocument(documentId: number): Promise<vo
     where: { documento_id: Number(documentId) },
     data: { verified: true }
   });
+
+  const doc = await prisma.documentos.findUnique({
+    where: { id: BigInt(documentId) },
+    select: { datos_extra: true }
+  });
+
+  if (doc) {
+    const datosExtra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+    datosExtra.fiscal_status = 'VALIDADO';
+    delete datosExtra.fiscal_revision_reasons;
+    await prisma.documentos.update({
+      where: { id: BigInt(documentId) },
+      data: { datos_extra: datosExtra }
+    });
+  }
 }
 
 

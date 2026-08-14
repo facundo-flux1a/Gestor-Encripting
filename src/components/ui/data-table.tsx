@@ -487,6 +487,39 @@ export function DataTable<TData extends object, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+
+  // 🆕 PERSISTENCIA DE FILTROS DE TABLA (Trimestres, Años, Tipos, etc.)
+  const isFiltersLoadedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!viewId) return;
+    fetch(`/api/filters?viewId=${encodeURIComponent(viewId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.filters && Array.isArray(data.filters)) {
+          console.log(`🔄 [DataTable] Filtros recuperados para ${viewId}:`, data.filters);
+          setColumnFilters(data.filters);
+        }
+        isFiltersLoadedRef.current = true;
+      })
+      .catch((err) => {
+        console.error('Error cargando filtros persistentes:', err);
+        isFiltersLoadedRef.current = true;
+      });
+  }, [viewId]);
+
+  React.useEffect(() => {
+    if (!viewId || !isFiltersLoadedRef.current) return;
+    const timer = setTimeout(() => {
+      fetch('/api/filters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewId, filters: columnFilters }),
+      }).catch((err) => console.error('Error guardando filtros persistentes:', err));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [viewId, columnFilters]);
+
   // 🆕 PAGINACIÓN CONTROLADA para forzar 100 por defecto
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,

@@ -1024,11 +1024,47 @@ const getColumns = (
     },
 
     {
+      id: 'base_no_sujeta',
+      header: 'Base Exenta / No Sujeta',
+      ...noColumnFilter,
+      cell: ({ row }: { row: Row<Document> }) => {
+        const doc = row.original;
+        const extra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+        const value = Number(extra?.base_no_sujeta || extra?.BASE_NO_SUJETA || (doc as any).base_no_sujeta || 0);
+        if (value === 0) return <div className="text-right text-muted-foreground">-</div>;
+        const formatted = formatCurrency(value);
+        return (
+          <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
+            {formatted}
+          </div>
+        );
+      },
+      footer: ({ table }: { table: TanstackTable<Document> }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+          const doc = row.original;
+          const extra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+          const value = Number(extra?.base_no_sujeta || extra?.BASE_NO_SUJETA || (doc as any).base_no_sujeta || 0);
+          return sum + value;
+        }, 0);
+        if (total === 0) return null;
+        const formatted = formatCurrency(total);
+        return (
+          <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted">
+            {formatted}
+          </div>
+        );
+      }
+    },
+
+    {
       accessorKey: 'base_imponible',
       header: 'Total Base',
       ...noColumnFilter,
       cell: ({ row }) => {
-        const value = row.getValue('base_imponible');
+        const doc = row.original;
+        const extra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+        const baseNoSujeta = Number(extra?.base_no_sujeta || extra?.BASE_NO_SUJETA || (doc as any).base_no_sujeta || 0);
+        const value = (Number(doc.base_imponible) || 0) + baseNoSujeta;
         const formatted = formatCurrency(value);
         return (
           <div className="text-right font-semibold transition-colors duration-300 hover:text-primary">
@@ -1037,7 +1073,12 @@ const getColumns = (
         );
       },
       footer: ({ table }: { table: TanstackTable<Document> }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => sum + (Number(row.original.base_imponible) || 0), 0);
+        const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
+          const doc = row.original;
+          const extra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : (doc.datos_extra || {});
+          const baseNoSujeta = Number(extra?.base_no_sujeta || extra?.BASE_NO_SUJETA || (doc as any).base_no_sujeta || 0);
+          return sum + (Number(doc.base_imponible) || 0) + baseNoSujeta;
+        }, 0);
         return (
           <div className="text-right font-bold text-sm bg-muted/50 px-2 py-1 rounded transition-colors duration-300 hover:bg-muted inline-block">
             {formatCurrency(total)}

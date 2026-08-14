@@ -256,3 +256,41 @@ export async function getSelectedCompanies(
     return null;
   }
 }
+
+// ========================================
+// Funciones helpers para filtros de tabla
+// ========================================
+
+export function getTableFiltersKey(userId: number, viewId: string): string {
+  return `table-filters:${userId}:${viewId}`;
+}
+
+export async function saveTableFilters(
+  userId: number,
+  viewId: string,
+  filters: Record<string, any>
+): Promise<boolean> {
+  try {
+    const key = getTableFiltersKey(userId, viewId);
+    await upstash.set(key, { filters, updatedAt: new Date().toISOString() }, { ex: 60 * 60 * 24 * 30 });
+    return true;
+  } catch (error) {
+    console.error('❌ [Upstash] Error guardando filtros de tabla:', error);
+    return false;
+  }
+}
+
+export async function getTableFilters(
+  userId: number,
+  viewId: string
+): Promise<Record<string, any> | null> {
+  try {
+    const key = getTableFiltersKey(userId, viewId);
+    const data = await upstash.get<{ filters: Record<string, any> }>(key);
+    return data?.filters || null;
+  } catch (error) {
+    console.error('❌ [Upstash] Error obteniendo filtros de tabla:', error);
+    return null;
+  }
+}
+

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { notFound, useParams, useSearchParams } from 'next/navigation';
+import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout/main-layout';
 import { type Document, DocumentUpdateSchema, type DocumentUpdatePayload } from '@/lib/types';
 import { useForm } from 'react-hook-form';
@@ -24,11 +24,13 @@ import { UnifiedPreSaveDialog } from '@/components/documento/UnifiedPreSaveDialo
 import { normalizeCIF } from '@/lib/utils';
 import { PreSaveIssue } from '@/lib/types';
 import { checkTipoMismatch, checkFieldChanges } from '@/lib/presave-validations';
+import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-confirm-dialog';
 
 
 function DocumentoPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +50,11 @@ function DocumentoPageContent() {
       currentQuarter: { año: number; trimestre: number };
       isTargetClosed: boolean;
       availableQuarters: QuarterOption[];
+    };
+    healthTransition?: {
+      wasInHealthCheck: boolean;
+      willBeInHealthCheck: boolean;
+      newIssueReason?: string;
     };
   } | null>(null);
 
@@ -142,8 +149,10 @@ function DocumentoPageContent() {
     }
   };
 
-  const handleValidate = async () => {
-    if (!doc?.incidencia) return;
+  const [isFiscalConfirmDialogOpen, setIsFiscalConfirmDialogOpen] = useState(false);
+
+  const executeValidate = async () => {
+    if (!doc) return;
     setIsValidating(true);
     try {
       const res = await fetch(`/api/documents/${doc.id_documento}/validate`, { method: 'POST' });
@@ -152,14 +161,36 @@ function DocumentoPageContent() {
         const cr = await fetch('/api/documents-confirm', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ documentId: doc.id_documento }) });
         if (!cr.ok) throw new Error('Error al confirmar');
       }
-      toast({ title: '✅ Documento Validado', description: 'Las incidencias han sido marcadas como resueltas', className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white' });
+      toast({ title: '✅ Documento Validado', description: 'El documento ha sido verificado e integrado a contabilidad.', className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white' });
       await clearSuggestions(doc.id_documento);
       setSuggestions([]);
-      fetchDocument(doc.id_documento);
+      // Navegar de vuelta a la página anterior
+      setTimeout(() => router.back(), 400);
     } catch {
       toast({ title: 'Error', description: 'No se pudieron validar las incidencias.', variant: 'destructive' });
     } finally {
       setIsValidating(false);
+      setIsFiscalConfirmDialogOpen(false);
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!doc) return;
+    // Mostrar diálogo si hay cualquier señal de error activo:
+    // - tiene incidencia abierta, O
+    // - viene de health check (audit=true en URL), O
+    // - tiene hcs_motivo registrado, O
+    // - tiene mismatch matemático detectado
+    const hasActiveIssue =
+      !!doc.incidencia ||
+      searchParams.get('audit') === 'true' ||
+      !!(doc as any).hcs_motivo ||
+      Number((doc as any).hcs_mismatch_amount || 0) > 0.05;
+
+    if (hasActiveIssue) {
+      setIsFiscalConfirmDialogOpen(true);
+    } else {
+      await executeValidate();
     }
   };
 
@@ -245,6 +276,9 @@ function DocumentoPageContent() {
   const onSubmit = async (data: DocumentUpdatePayload) => {
     if (!doc || (!isEditing && !isAuditMode) || isSaving) return;
 
+    // Mostrar spinner de inmediato mientras corren los chequeos previos al guardado
+    setIsSaving(true);
+    try {
     const finalData = { ...data };
     let updatedEntidades = [...(finalData.entidades || [])];
 
@@ -422,23 +456,52 @@ function DocumentoPageContent() {
       }
     }
 
-    if (issues.length > 0) {
+    // ── Simulación Pre-guardado de Health Check ──────────────────────
+    const wasInHealthCheck = !!(doc as any).hcs_check_type || doc.incidencia || searchParams.get('audit') === 'true';
+    const propBase = Number(finalData.base_imponible ?? doc.base_imponible ?? 0);
+    const propTotal = Number(finalData.total ?? doc.total ?? 0);
+    // Campos adicionales que afectan el total: base exenta, retención IRPF (campo separado), descuento
+    const propBaseNoSujeta   = Number(finalData.base_no_sujeta   ?? (doc as any).base_no_sujeta   ?? 0);
+    const propRetencionIrpf  = Number(finalData.retencion_irpf   ?? (doc as any).retencion_irpf   ?? 0);
+    const propDescuentoGlobal = Number(finalData.descuento_global ?? (doc as any).descuento_global ?? 0);
+    const mathMismatch = Math.abs(
+      propTotal - (propBase + propBaseNoSujeta + proposedIvaCuotas - propRetencionIrpf - propDescuentoGlobal)
+    ) > 0.05;
+
+    let healthTransition: { wasInHealthCheck: boolean; willBeInHealthCheck: boolean; newIssueReason?: string } | undefined = undefined;
+
+    if (wasInHealthCheck && !mathMismatch) {
+      healthTransition = { wasInHealthCheck: true, willBeInHealthCheck: false };
+    } else if (!wasInHealthCheck && mathMismatch) {
+      healthTransition = { wasInHealthCheck: false, willBeInHealthCheck: true, newIssueReason: 'descuadre entre Importe Total y la suma de Base + IVA' };
+    }
+
+    if (issues.length > 0 || healthTransition) {
+      // Pausamos el spinner: el usuario debe interactuar con el dialog antes de guardar
+      setIsSaving(false);
       setPreSaveState({
         pendingPayload: finalData,
         issues,
         quarterContext: quarterCtx,
+        healthTransition,
       });
       setIsPreSaveDialogOpen(true);
       return;
     }
 
     await executeSave(finalData);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'Error al procesar el guardado.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePreSaveConfirm = async (resolutions: {
     año?: number;
     trimestre?: number;
     tipoDocumento?: string;
+    validateAndRedirect?: boolean;
   }) => {
     if (!preSaveState?.pendingPayload) return;
     setIsPreSaveDialogOpen(false);
@@ -449,6 +512,24 @@ function DocumentoPageContent() {
       ...(resolutions.trimestre ? { num_trimestre: resolutions.trimestre } : {}),
     };
     await executeSave(finalPayload);
+
+    if (resolutions.validateAndRedirect && doc) {
+      try {
+        await fetch('/api/documents/health-confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: doc.id_documento }),
+        });
+        toast({
+          title: '✅ Documento Validado',
+          description: 'El documento fue marcado como verificado y pasó a contabilidad.',
+          className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white',
+        });
+        window.location.href = '/dashboard/health-check';
+      } catch (e) {
+        console.error('Error al autoconfirmar documento:', e);
+      }
+    }
   };
 
   const resetForm = useCallback(() => { if (doc) resetFormWithDocData(doc); }, [doc, resetFormWithDocData]);
@@ -493,6 +574,7 @@ function DocumentoPageContent() {
             onConfirm={handlePreSaveConfirm}
             issues={preSaveState.issues}
             quarterContext={preSaveState.quarterContext}
+            healthTransition={preSaveState.healthTransition}
           />
         )}
       </>
@@ -536,10 +618,49 @@ function DocumentoPageContent() {
           onConfirm={handlePreSaveConfirm}
           issues={preSaveState.issues}
           quarterContext={preSaveState.quarterContext}
+          healthTransition={preSaveState.healthTransition}
         />
       )}
+      <FiscalAuditConfirmDialog
+        isOpen={isFiscalConfirmDialogOpen}
+        onClose={() => setIsFiscalConfirmDialogOpen(false)}
+        onConfirm={executeValidate}
+        onEdit={() => {
+          setIsFiscalConfirmDialogOpen(false);
+          setIsEditing(true);
+        }}
+        documentNumber={doc.numero_documento || `ID: ${doc.id_documento}`}
+        motivo={(() => {
+          // 1. Motivo registrado por el health check engine
+          if ((doc as any).hcs_motivo) return (doc as any).hcs_motivo;
+          // 2. Motivo pasado por URL al navegar desde Centro de Salud
+          if (searchParams.get('motivo')) return searchParams.get('motivo')!;
+          // 3. Razones de revisión fiscal guardadas durante el OCR (puede ser objeto o string)
+          const datosExtra = typeof (doc as any).datos_extra === 'string'
+            ? JSON.parse((doc as any).datos_extra || '{}')
+            : ((doc as any).datos_extra || {});
+          if (datosExtra.fiscal_revision_reasons) {
+            const r = datosExtra.fiscal_revision_reasons;
+            // Si es objeto {code, message}, extraer el message; si es array, unirlo; si es string, usarlo tal cual
+            if (typeof r === 'string') return r;
+            if (Array.isArray(r)) return r.map((x: any) => (typeof x === 'string' ? x : x.message || JSON.stringify(x))).join(' | ');
+            if (typeof r === 'object' && r !== null) return r.message || r.code || JSON.stringify(r);
+          }
+          // 4. Incidencia abierta
+          if (doc.incidencia) return doc.incidencia;
+          // 5. Calcular mismatch directamente desde los campos del doc
+          const base = Number((doc as any).importe_sin_impuestos || doc.base_imponible || 0);
+          const total = Number((doc as any).importe_total || (doc as any).total || 0);
+          if (total > 0 && Math.abs(total - base) > 0.05 && base > 0) {
+            return `Posible descuadre detectado: el importe total (${total.toFixed(2)}€) y la base imponible (${base.toFixed(2)}€) presentan diferencias que requieren verificación.`;
+          }
+          return undefined;
+        })()}
+        isConfirming={isValidating}
+      />
     </MainLayout>
   );
+
 
 }
 

@@ -43,6 +43,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-confirm-dialog';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -127,6 +128,7 @@ export default function HealthCheckPage() {
     };
 
     const [isConfirming, setIsConfirming] = useState<number | null>(null);
+    const [auditConfirmDoc, setAuditConfirmDoc] = useState<Document | null>(null);
 
     const handleConfirm = async (docId: number) => {
         try {
@@ -143,6 +145,7 @@ export default function HealthCheckPage() {
             console.error('Error confirming document:', err);
         } finally {
             setIsConfirming(null);
+            setAuditConfirmDoc(null);
         }
     };
 
@@ -456,7 +459,8 @@ export default function HealthCheckPage() {
                                                                 className="h-8 gap-1.5 text-green-500 hover:text-green-600 hover:bg-green-500/10"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    handleConfirm(doc.id_documento);
+                                                                    // Siempre mostrar el diálogo — si el doc está en Centro de Salud, tiene algún error activo
+                                                                    setAuditConfirmDoc(doc);
                                                                 }}
                                                                 disabled={isConfirming === doc.id_documento}
                                                             >
@@ -555,6 +559,41 @@ export default function HealthCheckPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
+
+                {auditConfirmDoc && (
+                    <FiscalAuditConfirmDialog
+                        isOpen={!!auditConfirmDoc}
+                        onClose={() => setAuditConfirmDoc(null)}
+                        onConfirm={() => handleConfirm(auditConfirmDoc.id_documento)}
+                        onEdit={() => {
+                            const checkType = (auditConfirmDoc as any).hcs_check_type || 'MISMATCH_MATEMATICO';
+                            const motivo = (auditConfirmDoc as any).hcs_motivo || (auditConfirmDoc as any).incidencia || '';
+                            const docId = auditConfirmDoc.id_documento;
+                            setAuditConfirmDoc(null);
+                            router.push(`/documento/${docId}?audit=true&checkType=${checkType}&motivo=${encodeURIComponent(motivo)}`);
+                        }}
+                        documentNumber={auditConfirmDoc.numero_documento || `ID: ${auditConfirmDoc.id_documento}`}
+                        motivo={(() => {
+                            const parts: string[] = [];
+                            if ((auditConfirmDoc as any).hcs_motivo) parts.push((auditConfirmDoc as any).hcs_motivo);
+                            try {
+                                const de = typeof (auditConfirmDoc as any).datos_extra === 'string'
+                                    ? JSON.parse((auditConfirmDoc as any).datos_extra || '{}')
+                                    : ((auditConfirmDoc as any).datos_extra || {});
+                                if (de.fiscal_revision_reasons) {
+                                    const r = de.fiscal_revision_reasons;
+                                    const str = typeof r === 'string' ? r
+                                        : Array.isArray(r) ? r.map((x: any) => typeof x === 'string' ? x : (x.message || x.code || '')).filter(Boolean).join(' | ')
+                                        : typeof r === 'object' && r !== null ? (r.message || r.code || JSON.stringify(r)) : '';
+                                    if (str && !parts.some(p => p.includes(str.slice(0, 20)))) parts.push(str);
+                                }
+                            } catch {}
+                            return parts.filter(Boolean).join(' | ') || undefined;
+                        })()}
+                        checkType={(auditConfirmDoc as any).hcs_check_type || undefined}
+                        isConfirming={isConfirming === auditConfirmDoc.id_documento}
+                    />
+                )}
             </div>
             <HealthCheckTutorialRouter />
         </MainLayout>
