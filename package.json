@@ -17,6 +17,7 @@
     "workers": "tsx --env-file=.env src/workers/index.ts",
     "corpus:pull": "tsx scripts/pull-minio-corpus.ts",
     "recalc:trimestres": "tsx --env-file=.env scripts/recalcular-trimestres.ts",
+    "migrate:trimestres": "tsx --env-file=.env scripts/migrate-trimestres-legacy.ts",
     "backup:db": "bash scripts/backup-db.sh",
     "sync:contabilidad": "tsx scripts/sync-contabilidad-template.ts",
     "postinstall": "patch-package && prisma generate"

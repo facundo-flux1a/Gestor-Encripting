@@ -6,15 +6,31 @@ import type { RowDataPacket } from 'mysql2';
  */
 export function parseFechaLocal(fecha: Date | string): Date {
   if (fecha instanceof Date) return fecha;
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha.trim());
-  if (isoMatch) {
-    return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  if (!fecha || typeof fecha !== 'string') return new Date(NaN);
+  const trimmed = fecha.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined' || trimmed.toLowerCase() === 'invalid date') {
+    return new Date(NaN);
   }
-  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(fecha.trim());
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (isoMatch) {
+    const d = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    if (!isNaN(d.getTime())) return d;
+  }
+  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(trimmed);
   if (esMatch) {
-    return new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
+    const d = new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
+    if (!isNaN(d.getTime())) return d;
   }
   return new Date(fecha);
+}
+
+export function parseFechaLocalNullable(fecha: Date | string | null | undefined): Date | null {
+  if (!fecha) return null;
+  const d = parseFechaLocal(fecha);
+  if (d && !isNaN(d.getTime())) {
+    return d;
+  }
+  return null;
 }
 
 /**

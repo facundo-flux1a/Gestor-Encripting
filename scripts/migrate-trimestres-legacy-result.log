@@ -1,0 +1,51 @@
+═══════════════════════════════════════════════════════════
+  migrate-trimestres-legacy.ts
+  Modo       : 🔴 APPLY (escritura real)
+  Fecha corte: documentos con fecha_creacion <= 2026-08-10
+  Empresas   : #11, #101, #102, #112, #120
+  Ejecutado  : 2026-08-17T14:25:24.197Z
+═══════════════════════════════════════════════════════════
+
+📋 Total documentos candidatos: 29 (procesando en batches de 500)
+
+─── Detalle por documento ───────────────────────────────────
+
+  [Batch] Procesando docs #7596 → #8230 (29/29)
+  ✅ OK      | Doc #7596     (nro: 261711494           ) empresa: 11 | emision: 2026-04-08 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7597     (nro: V-26-01-11528       ) empresa: 11 | emision: 2026-01-31 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7598     (nro: V-26-02-10834       ) empresa: 11 | emision: 2026-02-28 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7599     (nro: V-26-06-16661       ) empresa: 11 | emision: 2026-06-30 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7600     (nro: V-26-04-11771       ) empresa: 11 | emision: 2026-04-30 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  🔄 CAMBIO  | Doc #7601     (nro: 1/9                 ) empresa: 11 | emision: 2025-09-30 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  ✅ OK      | Doc #7604     (nro: V-26-05-11050       ) empresa: 11 | emision: 2026-05-31 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  🔄 CAMBIO  | Doc #7605     (nro: 2/2                 ) empresa: 11 | emision: 2025-08-31 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  ✅ OK      | Doc #7606     (nro: V-26-03-35289       ) empresa: 11 | emision: 2026-03-31 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  🔄 CAMBIO  | Doc #7607     (nro: 1/8                 ) empresa: 11 | emision: 2025-08-31 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  🔄 CAMBIO  | Doc #7608     (nro: 2/3                 ) empresa: 11 | emision: 2025-09-30 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  🔄 CAMBIO  | Doc #7609     (nro: 2/1                 ) empresa: 11 | emision: 2025-07-31 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  🔄 CAMBIO  | Doc #7610     (nro: 2025/1085           ) empresa: 11 | emision: 2025-08-12 | subida: 2026-08-02 | 2025Q3 → 2026Q1
+  🔄 CAMBIO  | Doc #7611     (nro: 2/113               ) empresa: 11 | emision: 2026-07-06 | subida: 2026-08-02 | 2026Q2 → 2026Q3
+  ✅ OK      | Doc #7612     (nro: 2/112               ) empresa: 11 | emision: 2026-06-30 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7613     (nro: 2/110               ) empresa: 11 | emision: 2026-05-04 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  🔄 CAMBIO  | Doc #7615     (nro: 2/114               ) empresa: 11 | emision: 2026-07-13 | subida: 2026-08-02 | 2026Q2 → 2026Q3
+  ✅ OK      | Doc #7616     (nro: 1                   ) empresa: 11 | emision: 2026-06-20 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7617     (nro: 2/108               ) empresa: 11 | emision: 2026-03-26 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7618     (nro: 2/115               ) empresa: 11 | emision: 2026-07-27 | subida: 2026-08-02 | trimestre: 2026Q3 ✓
+  ✅ OK      | Doc #7619     (nro: 2/111               ) empresa: 11 | emision: 2026-05-18 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7620     (nro: INV/2026/00975      ) empresa: 11 | emision: 2026-03-26 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7621     (nro: 2/107               ) empresa: 11 | emision: 2026-03-25 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7623     (nro: INV/2026/00164      ) empresa: 11 | emision: 2026-01-16 | subida: 2026-08-02 | trimestre: 2026Q1 ✓
+  ✅ OK      | Doc #7624     (nro: FAC/P/2026/00113    ) empresa: 11 | emision: 2026-06-26 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7625     (nro: INV/2026/02000      ) empresa: 11 | emision: 2026-06-22 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7626     (nro: FC/PX/2026/00001    ) empresa: 11 | emision: 2026-06-30 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #7627     (nro: FAC/P/2026/00081    ) empresa: 11 | emision: 2026-06-11 | subida: 2026-08-02 | trimestre: 2026Q2 ✓
+  ✅ OK      | Doc #8230     (nro: 01/2026             ) empresa: 102 | emision: 2026-07-01 | subida: 2026-08-09 | trimestre: 2026Q3 ✓
+
+─── Resumen ─────────────────────────────────────────────────
+  Total evaluados : 29
+  ✅ Ya correctos  : 21
+  🔄 Actualizados : 8
+  ⏭️  Skipeados    : 0
+
+  ✅ Cambios aplicados a la base de datos.
+═══════════════════════════════════════════════════════════

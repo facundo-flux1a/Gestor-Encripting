@@ -21,6 +21,7 @@ import { TutorialReplaySection } from "@/components/settings/TutorialReplaySecti
 import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
 import { TwoFactorSettingsSection } from "@/components/settings/TwoFactorSettingsSection";
 import { NotificationPrefsSection } from "@/components/settings/NotificationPrefsSection";
+import { DelsolConfigSection } from "@/components/settings/DelsolConfigSection";
 
 
 async function handleLogout() {
@@ -78,6 +79,11 @@ export default async function SettingsPage() {
                 <div className="grid gap-6">
                     {/* Gestión de Equipo */}
                     <TeamManagement companies={companiesWithMembers} currentUser={user} />
+
+                    {/* Integración Software DELSOL */}
+                    <DelsolConfigSection
+                        companies={userCompanies.map((c: Company) => ({ id: c.id, name: c.name }))}
+                    />
 
                     {/* Perfil de Usuario */}
                     <UserProfileForm

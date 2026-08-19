@@ -25,7 +25,7 @@ import { dbWriterQueue, DbWriterJobData, DB_WRITER_QUEUE_NAME } from '@/lib/queu
 import { updateIngestionProgress, updateParentProgress } from '@/lib/ingestion-progress';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
-import { calcularTrimestreExtendido, obtenerPrimerTrimestreAbiertoDelAnio, parseFechaLocal, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
+import { calcularTrimestreExtendido, obtenerPrimerTrimestreAbiertoDelAnio, parseFechaLocal, parseFechaLocalNullable, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
 import { wLog } from '@/lib/worker-logger';
 import {
   FiscalStatus,
@@ -136,9 +136,9 @@ export function startDbWriterWorker() {
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
         const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
         const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
-        const fechaEmision = fechaEmisionRaw ? parseFechaLocal(String(fechaEmisionRaw)) : null;
+        const fechaEmision = parseFechaLocalNullable(fechaEmisionRaw ? String(fechaEmisionRaw) : null);
         const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
-        const fechaVencimiento = fechaVencimientoRaw ? parseFechaLocal(String(fechaVencimientoRaw)) : null;
+        const fechaVencimiento = parseFechaLocalNullable(fechaVencimientoRaw ? String(fechaVencimientoRaw) : null);
 
         // ── Fecha contable (independiente del trimestre asignado) ──
         const ejercicioActual = new Date().getFullYear();
@@ -535,11 +535,18 @@ export function startDbWriterWorker() {
         wLog('DbWriterWorker', `❌ Error en job ${job.id} (${fileName}): ${error.message}`, 'error');
         console.error(error.stack);
 
+        let userMsg = 'Error al guardar los datos del documento en la base de datos.';
+        if ((error?.message || '').includes('fecha_vencimiento') || (error?.message || '').includes('fecha_emision')) {
+          userMsg = 'Error en el formato de fecha del documento extraído.';
+        } else if ((error?.message || '').includes('Prisma') || (error?.message || '').includes('invocation')) {
+          userMsg = 'Error de estructura en los datos extraídos del documento.';
+        }
+
         await updateIngestionProgress(uploadId, {
           status: 'Fallido',
-          step: 'Error guardando en base de datos',
+          step: 'Error de guardado',
           progress: 0,
-          mensaje: `Error al guardar en base de datos: ${error.message}`,
+          mensaje: userMsg,
         }).catch(() => {});
 
         throw error;

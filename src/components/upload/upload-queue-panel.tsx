@@ -134,7 +134,14 @@ function getProgressColor(status?: string, step?: string, mensaje?: string) {
 
 function cleanText(text?: string) {
   if (!text) return '';
-  return text.replace(/[🍪🧠📦✅❌⚠️🔄🚀💾📊📝🏢🛒💰⏳🔑📬📄📅🎯🔧💡🌐🎫🎉🔥⛔🚫🚨❗❓✨🏥📋🔍🏆✂🖼🛑⏱️]/gu, '').trim();
+  const cleaned = text.replace(/[🍪🧠📦✅❌⚠️🔄🚀💾📊📝🏢🛒💰⏳🔑📬📄📅🎯🔧💡🌐🎫🎉🔥⛔🚫🚨❗❓✨🏥📋🔍🏆✂🖼🛑⏱️]/gu, '').trim();
+  if (cleaned.includes('prisma.') || cleaned.includes('Invalid `') || cleaned.includes('invocation:') || cleaned.includes('Provided Date object is invalid')) {
+    if (cleaned.includes('fecha_vencimiento') || cleaned.includes('Date')) {
+      return 'Error en el formato de fecha del documento extraído.';
+    }
+    return 'Error interno al guardar los datos del documento.';
+  }
+  return cleaned;
 }
 
 function JobCard({ job, onDelete, onDismiss, onRemoveLocally, onNavigate }: { job: ActiveUpload; onDelete: (id: string) => void; onDismiss: (id: string) => Promise<void>; onRemoveLocally: (id: string) => void; onNavigate: (documentId: number) => void }) {

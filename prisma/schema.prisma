@@ -72,6 +72,10 @@ model empresas {
   config_roles          Json?                   @default(dbgenerated("(json_object())"))
   cif_hash              String?                 @db.VarChar(64)
   mail_de_carga_hash    String?                 @unique(map: "mail_de_carga_hash") @db.VarChar(64)
+  delsol_api_cliente    String?                 @db.VarChar(50)
+  delsol_api_base_datos String?                 @db.VarChar(50)
+  /// @encrypted
+  delsol_api_password   String?                 @db.Text
   actividad             actividad[]
   archivos_documento    archivos_documento[]
   documentos            documentos[]

@@ -66,15 +66,14 @@ export async function GET(req: NextRequest) {
       orderBy: { updated_at: 'desc' }
     });
 
-    // Calcular ETA
-    let totalPendingChildren = 0;
+    const parentUploadIds = parentUploads.map(p => p.upload_id);
 
-    // Para cada padre, buscar sus hijos y agregar estadísticas
-    const uploadsWithChildren = await Promise.all(
-      parentUploads.map(async (parent) => {
-        const children = await prisma.actividad.findMany({
-          where: { parent_upload_id: parent.upload_id },
+    // BATCH QUERY: Traer TODOS los hijos de TODOS los padres en UNA SOLA consulta (evita pool timeout)
+    const allChildren = parentUploadIds.length > 0
+      ? await prisma.actividad.findMany({
+          where: { parent_upload_id: { in: parentUploadIds } },
           select: {
+            parent_upload_id: true,
             upload_id: true,
             documento_id: true,
             documento_nombre: true,
@@ -85,83 +84,90 @@ export async function GET(req: NextRequest) {
             created_at: true,
             updated_at: true,
           },
-          // Quitamos el orderBy de Prisma porque lo vamos a ordenar en memoria con más inteligencia
-        });
+        })
+      : [];
 
-        const isWaitingCapacity = (c: { status?: string | null; step?: string | null; mensaje?: string | null }) => {
-          const st = (c.status || '').toLowerCase();
-          if (st === 'waiting_capacity') return true;
-          const step = (c.step || '').toLowerCase();
-          const msg = (c.mensaje || '').toLowerCase();
-          return (
-            step.includes('cuota') ||
-            step.includes('cupo') ||
-            step.includes('esperando') ||
-            msg.includes('pausado') ||
-            msg.includes('capacidad')
-          );
-        };
+    // Agrupar hijos por parent_upload_id en memoria
+    const childrenByParent = new Map<string, typeof allChildren>();
+    for (const child of allChildren) {
+      if (!child.parent_upload_id) continue;
+      const list = childrenByParent.get(child.parent_upload_id) || [];
+      list.push(child);
+      childrenByParent.set(child.parent_upload_id, list);
+    }
 
-        const totalChildren = children.length;
-        const completedChildren = children.filter(c => c.status === 'completed' || c.status === 'Completado').length;
-        const failedChildren = children.filter(c => c.status === 'failed' || c.status === 'Fallido').length;
-        const waitingChildren = children.filter(isWaitingCapacity).length;
-        const processingChildren = totalChildren - completedChildren - failedChildren;
-        totalPendingChildren += processingChildren;
+    let totalPendingChildren = 0;
 
-        return {
-          uploadId: parent.upload_id,
-          batchId: parent.batch_id,
-          empresaId: parent.id_de_empresa ? Number(parent.id_de_empresa) : null,
-          documentId: parent.documento_id ? Number(parent.documento_id) : null,
-          nombre: parent.documento_nombre,
-          status: parent.status,
-          step: parent.step,
-          progress: parent.progress,
-          mensaje: parent.mensaje,
-          isNew: parent.is_new,
-          updatedAt: parent.updated_at,
-          createdAt: parent.created_at,
-          // Resumen de hijos para lotes multi-documento
-          childrenSummary: totalChildren > 0 ? {
-            total: totalChildren,
-            completed: completedChildren,
-            failed: failedChildren,
-            waiting: waitingChildren,
-            processing: processingChildren,
-            // Todos los hijos para mostrar en la UI
-            recentActive: children
-              .sort((a, b) => {
-                // Primero: los pausados van al fondo
-                const aPaused = isWaitingCapacity(a);
-                const bPaused = isWaitingCapacity(b);
-                
-                if (aPaused && !bPaused) return 1;
-                if (!aPaused && bPaused) return -1;
-                
-                // Segundo: por fecha de actualización (los más recientes arriba)
-                return b.updated_at.getTime() - a.updated_at.getTime();
-              })
-              .map(c => ({
-                uploadId: c.upload_id,
-                documentId: c.documento_id ? Number(c.documento_id) : null,
-                nombre: c.documento_nombre,
-                status: c.status,
-                step: c.step,
-                progress: c.progress,
-                mensaje: c.mensaje,
-                createdAt: c.created_at,
-                updatedAt: c.updated_at,
-              })),
-            // Exponemos el resumen guardado si el padre ya terminó
-            webhookPayload: parent.webhook_payload,
-          } : { webhookPayload: parent.webhook_payload }, // Para cuando no hay hijos, igual pasamos el payload
-        };
-      })
-    );
+    const isWaitingCapacity = (c: { status?: string | null; step?: string | null; mensaje?: string | null }) => {
+      const st = (c.status || '').toLowerCase();
+      if (st === 'waiting_capacity') return true;
+      const step = (c.step || '').toLowerCase();
+      const msg = (c.mensaje || '').toLowerCase();
+      return (
+        step.includes('cuota') ||
+        step.includes('cupo') ||
+        step.includes('esperando') ||
+        msg.includes('pausado') ||
+        msg.includes('capacidad')
+      );
+    };
 
-    // ETA en segundos (25s promedio por documento, contando rate limits y delays)
-    // También sumamos los padres que no tienen hijos aún (están siendo divididos por pdftools, asumiendo 1 lote = 1 hijo virtual para no dejar en 0)
+    const uploadsWithChildren = parentUploads.map((parent) => {
+      const children = childrenByParent.get(parent.upload_id) || [];
+
+      const totalChildren = children.length;
+      const completedChildren = children.filter(c => c.status === 'completed' || c.status === 'Completado').length;
+      const failedChildren = children.filter(c => c.status === 'failed' || c.status === 'Fallido').length;
+      const waitingChildren = children.filter(isWaitingCapacity).length;
+      const processingChildren = totalChildren - completedChildren - failedChildren;
+      totalPendingChildren += processingChildren;
+
+      return {
+        uploadId: parent.upload_id,
+        batchId: parent.batch_id,
+        empresaId: parent.id_de_empresa ? Number(parent.id_de_empresa) : null,
+        documentId: parent.documento_id ? Number(parent.documento_id) : null,
+        nombre: parent.documento_nombre,
+        status: parent.status,
+        step: parent.step,
+        progress: parent.progress,
+        mensaje: parent.mensaje,
+        isNew: parent.is_new,
+        updatedAt: parent.updated_at,
+        createdAt: parent.created_at,
+        // Resumen de hijos para lotes multi-documento
+        childrenSummary: totalChildren > 0 ? {
+          total: totalChildren,
+          completed: completedChildren,
+          failed: failedChildren,
+          waiting: waitingChildren,
+          processing: processingChildren,
+          // Todos los hijos para mostrar en la UI
+          recentActive: children
+            .sort((a, b) => {
+              const aPaused = isWaitingCapacity(a);
+              const bPaused = isWaitingCapacity(b);
+              if (aPaused && !bPaused) return 1;
+              if (!aPaused && bPaused) return -1;
+              return b.updated_at.getTime() - a.updated_at.getTime();
+            })
+            .map(c => ({
+              uploadId: c.upload_id,
+              documentId: c.documento_id ? Number(c.documento_id) : null,
+              nombre: c.documento_nombre,
+              status: c.status,
+              step: c.step,
+              progress: c.progress,
+              mensaje: c.mensaje,
+              createdAt: c.created_at,
+              updatedAt: c.updated_at,
+            })),
+          webhookPayload: parent.webhook_payload,
+        } : { webhookPayload: parent.webhook_payload },
+      };
+    });
+
+    // ETA en segundos (25s promedio por documento)
     let etaSeconds = 0;
     if (uploadsWithChildren.length > 0) {
       const activeParentsWithoutChildren = uploadsWithChildren.filter(u => !u.childrenSummary).length;
