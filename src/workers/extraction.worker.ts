@@ -227,87 +227,79 @@ const TPM_LIMIT = parseInt(process.env.OPENAI_TPM_LIMIT || process.env.GEMINI_TP
 const RPM_LIMIT = parseInt(process.env.OPENAI_RPM_LIMIT || process.env.GEMINI_RPM_LIMIT || '120', 10);
 const TPM_SAFETY_MARGIN = 0.85;
 const TOKENS_PER_DOC_ESTIMATE = parseInt(
-  process.env.LLM_TOKENS_PER_DOC_ESTIMATE || process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE || '8000',
+  process.env.LLM_TOKENS_PER_DOC_ESTIMATE || process.env.GEMINI_TOKENS_PER_DOC_ESTIMATE || '13000',
   10
 );
 
 /**
- * Suma tokens y requests al contador de la ventana actual (60s).
- * CRÍTICO: el TTL solo se setea en la PRIMERA escritura de la ventana.
- */
-async function recordTokenUsage(tokens: number): Promise<void> {
-  try {
-    const newTpm = await redis.incrby(TPM_REDIS_KEY, tokens);
-    if (newTpm === tokens) await redis.expire(TPM_REDIS_KEY, 61);
-
-    const newRpm = await redis.incr(RPM_REDIS_KEY);
-    if (newRpm === 1) await redis.expire(RPM_REDIS_KEY, 61);
-
-    console.log(`[RateLimit] ✅ +${tokens} tokens | TPM: ${newTpm}/${TPM_LIMIT} | RPM: ${newRpm}/${RPM_LIMIT}`);
-  } catch (err) {
-    console.warn('[RateLimit] ⚠️ No se pudo registrar uso:', err);
-  }
-}
-
-/**
- * Espera hasta que haya suficiente presupuesto de TPM y RPM disponible.
- * Escudo proactivo: frena el procesamiento ANTES de llamar al LLM.
+ * Reserva cuota de tokens/RPM en Redis ANTES de realizar la llamada HTTP al LLM.
+ * Esto evita condiciones de carrera cuando hay múltiples workers en paralelo.
  */
 async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): Promise<void> {
   const tpmBudget = Math.floor(TPM_LIMIT * TPM_SAFETY_MARGIN);
+  const estimatedTokens = TOKENS_PER_DOC_ESTIMATE || 13000;
 
-  for (let attempt = 0; attempt < 500; attempt++) { // Bucle largo: puede esperar horas si es necesario
+  for (let attempt = 0; attempt < 500; attempt++) {
     try {
-      const currentTpm = parseInt(await redis.get(TPM_REDIS_KEY) || '0', 10);
-      const currentRpm = parseInt(await redis.get(RPM_REDIS_KEY) || '0', 10);
+      const currentTpm = parseInt((await redis.get(TPM_REDIS_KEY)) || '0', 10);
+      const currentRpm = parseInt((await redis.get(RPM_REDIS_KEY)) || '0', 10);
 
-      // Si ambos contadores están por debajo del límite, damos luz verde
-      if (currentTpm < tpmBudget && currentRpm < RPM_LIMIT) {
-        if (attempt > 0) {
-          console.log(`[RateLimit] ✅ Cuota disponible (TPM: ${currentTpm}, RPM: ${currentRpm}). Reanudando...`);
-          if (uploadId) {
-            await updateIngestionProgress(uploadId, {
-              status: 'processing',
-              step: 'Analizando con IA',
-              progress: 60,
-              mensaje: 'Cuota disponible, retomando análisis...',
-            }).catch(() => {});
-          }
+      // Verificar si la reserva preventivamente cabe dentro del presupuesto
+      if (currentTpm + estimatedTokens <= tpmBudget && currentRpm + 1 <= RPM_LIMIT) {
+        // Reservar en Redis INMEDIATAMENTE antes de enviar la petición
+        const newTpm = await redis.incrby(TPM_REDIS_KEY, estimatedTokens);
+        if (newTpm === estimatedTokens) await redis.expire(TPM_REDIS_KEY, 61);
+
+        const newRpm = await redis.incr(RPM_REDIS_KEY);
+        if (newRpm === 1) await redis.expire(RPM_REDIS_KEY, 61);
+
+        console.log(`[RateLimit] 🛡️ Pre-reserva: +${estimatedTokens} tokens | TPM: ${newTpm}/${TPM_LIMIT} | RPM: ${newRpm}/${RPM_LIMIT}`);
+
+        if (attempt > 0 && uploadId) {
+          await updateIngestionProgress(uploadId, {
+            status: 'processing',
+            step: 'Analizando con IA',
+            progress: 60,
+            mensaje: 'Cuota disponible, retomando análisis...',
+          }).catch(() => {});
         }
-        return; 
+        return;
       }
 
-      // Averiguar qué límite nos frenó para saber cuánto esperar
+      // Si excede la cuota estimada, esperar a que expire la ventana
       let waitMs = 5000;
       let causa = '';
-      if (currentRpm >= RPM_LIMIT) {
-        waitMs = Math.max(((await redis.ttl(RPM_REDIS_KEY)) + 1) * 1000, 5000);
+      if (currentRpm + 1 > RPM_LIMIT) {
+        const ttl = await redis.ttl(RPM_REDIS_KEY);
+        waitMs = Math.max((ttl + 1) * 1000, 5000);
         causa = 'RPM';
       } else {
-        waitMs = Math.max(((await redis.ttl(TPM_REDIS_KEY)) + 1) * 1000, 5000);
+        const ttl = await redis.ttl(TPM_REDIS_KEY);
+        waitMs = Math.max((ttl + 1) * 1000, 5000);
         causa = 'TPM';
       }
 
       const waitSec = Math.ceil(waitMs / 1000);
-      console.warn(`[RateLimit] ⏳ Límite ${causa} alcanzado. Esperando ${waitSec}s...`);
+      console.warn(
+        `[RateLimit] ⏳ Límite ${causa} alcanzado (TPM actual: ${currentTpm}/${TPM_LIMIT}, RPM: ${currentRpm}/${RPM_LIMIT}). Esperando ${waitSec}s...`
+      );
 
-      // Avisar en la UI
       if (uploadId) {
         await updateIngestionProgress(uploadId, {
           status: 'waiting_capacity',
           step: 'Esperando cupo de procesamiento',
           progress: 50,
-          mensaje: `Pausado para optimizar rendimiento. Retomando en ${waitSec}s...`,
+          mensaje: `Pausado por límite de tokens (${causa}). Retomando en ${waitSec}s...`,
         }).catch(() => {});
       }
       if (parentUploadId) {
         await updateParentProgress(parentUploadId).catch(() => {});
       }
 
-      await new Promise(resolve => setTimeout(resolve, waitMs));
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     } catch (err) {
-      console.warn('[RateLimit] ⚠️ Error leyendo contadores, esperando 10s por seguridad...', err);
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      console.warn('[RateLimit] ⚠️ Error leyendo contadores de Redis, esperando 10s...', err);
+      await new Promise((resolve) => setTimeout(resolve, 10000));
     }
   }
 }
@@ -322,9 +314,11 @@ async function callLlm(
   callType: LlmCallType = 'other'
 ): Promise<any> {
   const started = Date.now();
+  const estimatedTokens = TOKENS_PER_DOC_ESTIMATE || 13000;
+  
+  // Esperar y pre-reservar cuota en Redis
   await waitForTokenBudget(uploadId, parentUploadId);
 
-  // json_object no admite array raíz → pedimos { documents: [...] } si el prompt pide array
   const azurePrompt =
     /JSON array|array sin texto|ÚNICAMENTE un JSON array/i.test(prompt)
       ? `${prompt}\n\nIMPORTANTE: envuelve el array en un objeto JSON: {"documents":[...]}`
@@ -339,8 +333,12 @@ async function callLlm(
       maxCompletionTokens: 16384,
     });
 
-    const totalTokens = usage?.total_tokens || 0;
-    if (totalTokens > 0) await recordTokenUsage(totalTokens);
+    // Ajustar la pre-reserva de Redis con el consumo real exacto
+    const actualTokens = usage?.total_tokens || estimatedTokens;
+    const diff = actualTokens - estimatedTokens;
+    if (diff !== 0) {
+      await redis.incrby(TPM_REDIS_KEY, diff).catch(() => {});
+    }
 
     if (uploadId) {
       await recordLlmCall({
@@ -353,24 +351,37 @@ async function callLlm(
 
     await redis.del(CONSECUTIVE_429_KEY).catch(() => {});
 
-    // LOG COMPLETO para debugging (hasta 8000 chars — ver worker-logs en el frontend)
     const logChunks = Math.ceil(text.length / 4000);
     if (logChunks <= 1) {
       wLog('LLM-RAW', `📝 [${callType}] Respuesta completa (${text.length} chars):\n${text}`, 'info');
     } else {
       for (let i = 0; i < Math.min(logChunks, 2); i++) {
-        wLog('LLM-RAW', `📝 [${callType}] Parte ${i + 1}/${logChunks} (${text.length} chars total):\n${text.substring(i * 4000, (i + 1) * 4000)}`, 'info');
-      }
-      if (logChunks > 2) {
-        wLog('LLM-RAW', `📝 [${callType}] ⚠️ Respuesta truncada — solo se muestran 8000 de ${text.length} chars`, 'warn');
+        wLog(
+          'LLM-RAW',
+          `📝 [${callType}] Parte ${i + 1}/${logChunks} (${text.length} chars total):\n${text.substring(i * 4000, (i + 1) * 4000)}`,
+          'info'
+        );
       }
     }
     const parsed = parseLlmJson(text);
-    wLog('LLM-RAW', `✅ [${callType}] JSON parseado OK. Tokens usados: ${usage?.total_tokens ?? '?'} (prompt: ${usage?.prompt_tokens ?? '?'}, completion: ${usage?.completion_tokens ?? '?'})`, 'success');
+    wLog(
+      'LLM-RAW',
+      `✅ [${callType}] JSON parseado OK. Tokens usados: ${usage?.total_tokens ?? '?'} (prompt: ${usage?.prompt_tokens ?? '?'}, completion: ${usage?.completion_tokens ?? '?'})`,
+      'success'
+    );
     return parsed;
   } catch (e: any) {
-    const status = e?.status || e?.statusCode;
-    if (status === 429) throw e;
+    const is429 =
+      e?.status === 429 ||
+      e?.statusCode === 429 ||
+      e?.message?.includes('429') ||
+      e?.message?.includes('rate limit');
+
+    if (is429) {
+      console.warn('[RateLimit] 🚨 429 capturado de Azure OpenAI. Bloqueando ventana en Redis por 60s...');
+      await redis.set(TPM_REDIS_KEY, TPM_LIMIT.toString(), 'EX', 60).catch(() => {});
+      await redis.set(RPM_REDIS_KEY, RPM_LIMIT.toString(), 'EX', 60).catch(() => {});
+    }
     throw e;
   }
 }
@@ -1154,10 +1165,21 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
     mensaje: 'Clasificando y archivando documento interno...',
   });
 
-  const noFacturablePrompt = PROMPT_EXTRACTOR_NO_FACTURABLE
+  let noFacturablePrompt = PROMPT_EXTRACTOR_NO_FACTURABLE
     .replace(/\{\{CIF_EMPRESA\}\}/g, ingestion.cif || 'NO_PROPORCIONADO')
     .replace(/\{\{NOMBRE_EMPRESA\}\}/g, ingestion.nombreEmpresa || 'NO_PROPORCIONADO')
     .replace(/\{\{RECARGO_EMPRESA\}\}/g, 'false');
+
+  if (isAzureDiConfigured() && ingestion.mimeType === 'application/pdf') {
+    try {
+      const diResult = await analyzeInvoiceDocument(fileBuffer);
+      if (diResult?.content) {
+        noFacturablePrompt += `\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content}`;
+      }
+    } catch (err: any) {
+      console.warn(`[ExtractionWorker] Azure DI falló en no facturable: ${err.message}`);
+    }
+  }
 
   const result = await callLlm(
     noFacturablePrompt,

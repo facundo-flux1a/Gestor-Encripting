@@ -54,3 +54,6 @@ firestore-debug.log
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Migration docs with secrets
+MIGRACION_AZURE_OPENAI_GPT4O.txt

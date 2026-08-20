@@ -46,35 +46,43 @@ export async function updateIngestionProgress(
   uploadId: string,
   update: ProgressUpdate
 ): Promise<void> {
-  try {
-    // 1. Obtener si tiene parent ANTES de actualizar
-    const record = await prisma.actividad.findFirst({
-      where: { upload_id: uploadId },
-      select: { parent_upload_id: true }
-    });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // 1. Obtener si tiene parent ANTES de actualizar
+      const record = await prisma.actividad.findFirst({
+        where: { upload_id: uploadId },
+        select: { parent_upload_id: true }
+      });
 
-    // 2. Actualizar el registro
-    await prisma.actividad.updateMany({
-      where: { upload_id: uploadId },
-      data: {
-        status: update.status,
-        step: update.step,
-        progress: update.progress,
-        mensaje: update.mensaje,
-        documento_id: update.documentoId ?? undefined,
-        error_detalle: update.errorDetalle ?? undefined,
-        updated_at: new Date(),
-        ...(update.status === 'completed' || update.status === 'Completado' ? { completed_at: new Date() } : {}),
-      },
-    });
+      // 2. Actualizar el registro
+      await prisma.actividad.updateMany({
+        where: { upload_id: uploadId },
+        data: {
+          status: update.status,
+          step: update.step,
+          progress: update.progress,
+          mensaje: update.mensaje,
+          documento_id: update.documentoId ?? undefined,
+          error_detalle: update.errorDetalle ?? undefined,
+          updated_at: new Date(),
+          ...(update.status === 'completed' || update.status === 'Completado' ? { completed_at: new Date() } : {}),
+        },
+      });
 
-    // 3. Si tiene padre, recalcular el progreso del padre
-    if (record?.parent_upload_id) {
-      await updateParentProgress(record.parent_upload_id);
+      // 3. Si tiene padre, recalcular el progreso del padre
+      if (record?.parent_upload_id) {
+        await updateParentProgress(record.parent_upload_id);
+      }
+      return;
+    } catch (err: any) {
+      if ((err?.code === 'P2034' || err?.message?.includes('deadlock') || err?.message?.includes('write conflict')) && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 60 * (attempt + 1)));
+        continue;
+      }
+      // Log pero no relanzar — un fallo en el tracking no debe detener la ingesta
+      console.error(`[IngestionProgress] Error actualizando ${uploadId}:`, err);
+      break;
     }
-  } catch (err) {
-    // Log pero no relanzar — un fallo en el tracking no debe detener la ingesta
-    console.error(`[IngestionProgress] Error actualizando ${uploadId}:`, err);
   }
 }
 

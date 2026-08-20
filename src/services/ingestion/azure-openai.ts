@@ -60,15 +60,19 @@ export function assertAzureOpenAiConfigured(): void {
 
 function chatUrl(): string {
   const base = requireEnv('AZURE_OPENAI_ENDPOINT').replace(/\/$/, '');
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-05-01-preview';
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o';
+  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-06-01';
+
   if (base.includes('/openai/deployments/')) {
     return `${base}/chat/completions?api-version=${apiVersion}`;
   }
-  // Foundry / models hub: .../models/chat/completions
+  if (base.includes('/api/projects/')) {
+    return `${base}/chat/completions?api-version=${apiVersion}`;
+  }
   if (base.endsWith('/models')) {
     return `${base}/chat/completions?api-version=${apiVersion}`;
   }
-  return `${base}/models/chat/completions?api-version=${apiVersion}`;
+  return `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 }
 
 async function buildUserContent(
@@ -112,10 +116,16 @@ async function buildUserContent(
     ];
   }
 
-  // PDF / otros: Foundry chat completions acepta type=file
-  const filename =
-    mime.includes('pdf') ? 'document.pdf' : mime.startsWith('image/') ? 'document.png' : 'document.bin';
+  // PDF: type=file solo es soportado por modelos gpt-5.x en Azure Foundry.
+  // Con gpt-4o (y modelos estándar), omitimos el archivo y confiamos en el texto del prompt.
+  // En modo hybrid el OCR completo ya está embebido en el prompt, por lo que no se pierde información.
+  // En el vision fallback, el ocrSummary también está en el prompt como contexto.
+  if (mime.includes('pdf')) {
+    return [{ type: 'text', text: prompt }, ...exampleParts];
+  }
 
+  // Otros binarios (fallback genérico)
+  const filename = mime.startsWith('image/') ? 'document.png' : 'document.bin';
   return [
     { type: 'text', text: prompt },
     ...exampleParts,
@@ -208,21 +218,29 @@ export async function callAzureOpenAiChat(opts: AzureOpenAiCallOpts): Promise<{
 /** Parsea JSON de la respuesta (limpia fences si vienen). */
 export function parseLlmJson(text: string): any {
   let t = (text || '').trim();
+  if (!t) {
+    console.warn('[AzureOpenAI] ⚠️ Respuesta vacía (0 caracteres) recibida del LLM. Retornando objeto de incidencia por defecto.');
+    return {};
+  }
   if (t.includes('```')) {
     t = t.replace(/```json\n?|```/g, '').trim();
   }
-  // Si el modelo devolvió un array suelto, response_format json_object a veces lo envuelve
-  const parsed = JSON.parse(t);
-  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.documents)) {
-    return parsed.documents;
+  try {
+    const parsed = JSON.parse(t);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.documents)) {
+      return parsed.documents;
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pages)) {
+      return parsed.pages;
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) {
+      return parsed.items;
+    }
+    return parsed;
+  } catch (err: any) {
+    console.error(`[AzureOpenAI] ❌ Error al parsear JSON: ${err.message}. Contenido original: "${t.slice(0, 150)}..."`);
+    return {};
   }
-  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pages)) {
-    return parsed.pages;
-  }
-  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) {
-    return parsed.items;
-  }
-  return parsed;
 }
 
 /**
