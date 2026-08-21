@@ -258,10 +258,15 @@ export async function callAzureOpenAiChatWithImages(opts: {
   const deployment = requireEnv('AZURE_OPENAI_DEPLOYMENT');
   const url = chatUrl();
 
-  const imageParts = opts.images.map((img) => ({
-    type: 'image_url',
-    image_url: { url: `data:image/png;base64,${img.toString('base64')}` },
-  }));
+  const imageParts = opts.images.map((img) => {
+    const b64 = img ? img.toString('base64') : '';
+    const isJpeg = (img && img.length > 2 && img[0] === 0xff && img[1] === 0xd8) || b64.startsWith('/9j/');
+    const mime = isJpeg ? 'image/jpeg' : 'image/png';
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${mime};base64,${b64}` },
+    };
+  });
 
   const content = [
     { type: 'text', text: opts.prompt },

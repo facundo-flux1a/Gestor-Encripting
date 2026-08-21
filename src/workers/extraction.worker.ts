@@ -11,6 +11,9 @@ import { extractionQueue, ExtractionJobData, ingestionQueue, dbWriterQueue, EXTR
 import { updateIngestionProgress, createIngestionRecord, updateParentProgress } from '@/lib/ingestion-progress';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import {
   PROMPT_PAGINADOR,
   PROMPT_EXTRACTOR_FACTURABLE,
@@ -424,6 +427,189 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
   return { buffer, croppedUrl };
 }
 
+async function convertPdfToImagesWithPdfTools(pdfUrl: string, pageStart = 1, pageEnd = 10): Promise<Buffer[]> {
+  const pdftoolsUrl = (process.env.PDFTOOLS_URL || 'https://pdftools.allbase.com.ar/split').replace(/\/split$/, '/to-images');
+  const apiKey = process.env.PDFTOOLS_API_KEY || 'pdf_tools_secret';
+
+  const res = await fetch(pdftoolsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey,
+    },
+    body: JSON.stringify({
+      pdf_url: pdfUrl,
+      page_start: pageStart,
+      page_end: pageEnd,
+      output: 'base64',
+      dpi: 150,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`pdftools to-images (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  const b64List: string[] = data.images || [];
+  return b64List.map((b64) => Buffer.from(b64, 'base64'));
+}
+
+/** Paginador primario usando Vertex AI Service Account (GCP OAuth2 REST API, PDF directo en base64) */
+async function callGeminiPdfPaginate(opts: {
+  prompt: string;
+  fileBuffer: Buffer;
+}): Promise<any> {
+  const rawCreds = process.env.VERTEX_AI_CREDENTIALS;
+  if (!rawCreds) {
+    throw new Error('Falta VERTEX_AI_CREDENTIALS en el entorno.');
+  }
+
+  let creds: { client_email: string; private_key: string; project_id: string };
+  try {
+    creds = JSON.parse(
+      rawCreds.startsWith('{') ? rawCreds : Buffer.from(rawCreds, 'base64').toString('utf8')
+    );
+  } catch (err: any) {
+    throw new Error(`Error parseando VERTEX_AI_CREDENTIALS: ${err.message}`);
+  }
+
+  // 1. Obtener Access Token vía OAuth2 con JWT firmado
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: creds.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const b64h = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const b64p = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(b64h + '.' + b64p);
+  const sig = signer.sign(creds.private_key, 'base64url');
+  const jwt = b64h + '.' + b64p + '.' + sig;
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    const tokenErr = await tokenRes.text().catch(() => '');
+    throw new Error(`OAuth2 token error (${tokenRes.status}): ${tokenErr.slice(0, 200)}`);
+  }
+
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+
+  // 2. Invocación a Vertex AI Generative AI endpoint
+  const proj = creds.project_id || process.env.VERTEX_AI_PROJECT_ID;
+  const loc =
+    process.env.VERTEX_AI_LOCATION === 'global'
+      ? 'us-central1'
+      : process.env.VERTEX_AI_LOCATION || 'us-central1';
+  const model = process.env.VERTEX_AI_MODEL || 'gemini-1.5-flash';
+
+  const targetUrl = `https://${loc}-aiplatform.googleapis.com/v1/projects/${proj}/locations/${loc}/publishers/google/models/${model}:generateContent`;
+
+  const body = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: opts.fileBuffer.toString('base64'),
+            },
+          },
+          { text: opts.prompt },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
+  };
+
+  const res = await fetch(targetUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Vertex AI HTTP ${res.status}: ${errText.slice(0, 250)}`);
+  }
+
+  const json = await res.json();
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text) throw new Error('Vertex AI devolvió respuesta vacía');
+  return parseLlmJson(text);
+}
+
+const GEMINI_TPM_LIMIT = parseInt(process.env.GEMINI_TPM_LIMIT || '50000', 10);
+const GEMINI_RPM_LIMIT = parseInt(process.env.GEMINI_RPM_LIMIT || '4', 10);
+const GEMINI_TPM_REDIS_KEY = 'ratelimit:gemini:tpm';
+const GEMINI_RPM_REDIS_KEY = 'ratelimit:gemini:rpm';
+
+/** Reserva cuota en Redis específicamente para Vertex AI / Gemini (GEMINI_RPM_LIMIT y GEMINI_TPM_LIMIT) */
+async function waitForGeminiTokenBudget(uploadId?: string, parentUploadId?: string): Promise<void> {
+  const estimatedTokens = 3000;
+
+  for (let attempt = 0; attempt < 500; attempt++) {
+    try {
+      const currentTpm = parseInt((await redis.get(GEMINI_TPM_REDIS_KEY)) || '0', 10);
+      const currentRpm = parseInt((await redis.get(GEMINI_RPM_REDIS_KEY)) || '0', 10);
+
+      if (currentTpm + estimatedTokens <= GEMINI_TPM_LIMIT && currentRpm + 1 <= GEMINI_RPM_LIMIT) {
+        const newTpm = await redis.incrby(GEMINI_TPM_REDIS_KEY, estimatedTokens);
+        if (newTpm === estimatedTokens) await redis.expire(GEMINI_TPM_REDIS_KEY, 61);
+
+        const newRpm = await redis.incr(GEMINI_RPM_REDIS_KEY);
+        if (newRpm === 1) await redis.expire(GEMINI_RPM_REDIS_KEY, 61);
+
+        console.log(`[VertexRateLimit] 🛡️ Pre-reserva: +${estimatedTokens} tokens | TPM: ${newTpm}/${GEMINI_TPM_LIMIT} | RPM: ${newRpm}/${GEMINI_RPM_LIMIT}`);
+        return;
+      }
+
+      let waitMs = 5000;
+      let causa = '';
+      if (currentRpm + 1 > GEMINI_RPM_LIMIT) {
+        const ttl = await redis.ttl(GEMINI_RPM_REDIS_KEY);
+        waitMs = Math.max((ttl + 1) * 1000, 5000);
+        causa = 'RPM';
+      } else {
+        const ttl = await redis.ttl(GEMINI_TPM_REDIS_KEY);
+        waitMs = Math.max((ttl + 1) * 1000, 5000);
+        causa = 'TPM';
+      }
+
+      const waitSec = Math.ceil(waitMs / 1000);
+      console.warn(
+        `[VertexRateLimit] ⏳ Límite Vertex/Gemini ${causa} alcanzado (TPM actual: ${currentTpm}/${GEMINI_TPM_LIMIT}, RPM: ${currentRpm}/${GEMINI_RPM_LIMIT}). Esperando ${waitSec}s...`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    } catch (err) {
+      console.warn('[VertexRateLimit] ⚠️ Error leyendo contadores Redis, esperando 5s...', err);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+}
+
 // ─── Handlers por Tipo ────────────────────────────────────────────────────────
 
 async function handleClassify(job: Job<ExtractionJobData>, _fileBuffer: Buffer) {
@@ -461,15 +647,127 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
     }
   };
 
-  const pagesRaw = await callLlm(
-    PROMPT_PAGINADOR,
-    fileBuffer,
-    ingestion.mimeType,
-    schema,
-    ingestion.uploadId,
-    undefined,
-    'paginate'
-  );
+  let pagesRaw: any = null;
+  const isPdf = ingestion.mimeType === 'application/pdf' || /\.pdf$/i.test(ingestion.fileName || '');
+
+  // 1. Primario: Paginador con Vertex AI Service Account (PDF directo en base64)
+  const hasVertexCreds = Boolean(process.env.VERTEX_AI_CREDENTIALS?.trim());
+
+  if (isPdf && fileBuffer && fileBuffer.length > 0 && hasVertexCreds) {
+    try {
+      wLog('ExtractionWorker', `📑 Intentando paginar PDF primario con Vertex AI Service Account (${ingestion.fileName})...`);
+      await waitForGeminiTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
+      pagesRaw = await callGeminiPdfPaginate({ prompt: PROMPT_PAGINADOR, fileBuffer });
+      if (pagesRaw) {
+        wLog('ExtractionWorker', `✅ Paginación completada con Vertex AI Service Account!`);
+      }
+    } catch (geminiErr: any) {
+      wLog('ExtractionWorker', `⚠️ Vertex AI paginador falló (${geminiErr?.message || geminiErr}). Saltando a fallback visual gpt-4o...`, 'warn');
+    }
+  }
+
+  // 2. Fallback 1: Conversión visual local mediante pdf-img-convert + gpt-4o Visión
+  if (!pagesRaw && isPdf && fileBuffer && fileBuffer.length > 0) {
+    let tempPath: string | null = null;
+    try {
+      wLog('ExtractionWorker', `📑 Convirtiendo PDF a PNG en local con pdf-img-convert para paginación visual...`);
+      // @ts-ignore
+      const { convert } = await import('pdf-img-convert');
+      tempPath = path.join(os.tmpdir(), `pag_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
+      fs.writeFileSync(tempPath, fileBuffer);
+
+      const rawPages = await convert(tempPath, { width: 1200 });
+      const imageBuffers: Buffer[] = rawPages.map((p: any) => Buffer.isBuffer(p) ? p : Buffer.from(p as Uint8Array));
+
+      if (imageBuffers.length > 0) {
+        wLog('ExtractionWorker', `📑 Paginando con ${imageBuffers.length} imágenes PNG locales (gpt-4o Visión)...`);
+        await waitForTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
+
+        const azurePrompt = `${PROMPT_PAGINADOR}\n\nIMPORTANTE: Se adjuntan ${imageBuffers.length} imágenes que corresponden a las páginas 1 a ${imageBuffers.length} del PDF en orden exacto. Analiza la visual de cada página y envuelve el array en un objeto JSON: {"documents":[...]}`;
+
+        const { text, usage } = await callAzureOpenAiChatWithImages({
+          prompt: azurePrompt,
+          images: imageBuffers,
+          json: true,
+        });
+
+        if (usage?.total_tokens) {
+          await recordLlmCall({
+            uploadId: ingestion.uploadId,
+            callType: 'paginate',
+            bytes: fileBuffer.length,
+            durationMs: 0,
+          }).catch(() => {});
+        }
+
+        pagesRaw = parseLlmJson(text);
+      }
+    } catch (convErr: any) {
+      wLog('ExtractionWorker', `⚠️ pdf-img-convert local no disponible (${convErr?.message || convErr}). Intentando pdftools /to-images...`, 'warn');
+    } finally {
+      if (tempPath && fs.existsSync(tempPath)) {
+        try { fs.unlinkSync(tempPath); } catch {}
+      }
+    }
+  }
+
+  // 2. Fallback a microservicio pdftools /to-images si fuera necesario
+  if (!pagesRaw && isPdf && ingestion.publicUrl) {
+    try {
+      wLog('ExtractionWorker', `📑 Convirtiendo PDF a PNG con pdftools (/to-images) para paginación visual...`);
+      const imageBuffers = await convertPdfToImagesWithPdfTools(ingestion.publicUrl, 1, 20);
+
+      if (imageBuffers.length > 0) {
+        wLog('ExtractionWorker', `📑 Paginando con ${imageBuffers.length} imágenes PNG (gpt-4o Visión)...`);
+        await waitForTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
+
+        const azurePrompt = `${PROMPT_PAGINADOR}\n\nIMPORTANTE: Se adjuntan ${imageBuffers.length} imágenes que corresponden a las páginas 1 a ${imageBuffers.length} del PDF en orden exacto. Analiza la visual de cada página y envuelve el array en un objeto JSON: {"documents":[...]}`;
+
+        const { text, usage } = await callAzureOpenAiChatWithImages({
+          prompt: azurePrompt,
+          images: imageBuffers,
+          json: true,
+        });
+
+        if (usage?.total_tokens) {
+          await recordLlmCall({
+            uploadId: ingestion.uploadId,
+            callType: 'paginate',
+            bytes: fileBuffer.length,
+            durationMs: 0,
+          }).catch(() => {});
+        }
+
+        pagesRaw = parseLlmJson(text);
+      }
+    } catch (pdftoolsErr: any) {
+      wLog('ExtractionWorker', `⚠️ pdftools /to-images falló (${pdftoolsErr?.message || pdftoolsErr}). Usando OCR layout...`, 'warn');
+    }
+  }
+
+  // 3. Fallback a Azure DI OCR layout o llamada estándar (enviando prompt en texto)
+  if (!pagesRaw) {
+    let promptWithContext = PROMPT_PAGINADOR;
+    if (isAzureDiConfigured() && isPdf && fileBuffer && fileBuffer.length > 0) {
+      try {
+        const diResult = await analyzeInvoiceDocument(fileBuffer, ingestion.mimeType);
+        if (diResult?.content) {
+          promptWithContext = `${PROMPT_PAGINADOR}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content}`;
+        }
+      } catch {}
+    }
+
+    pagesRaw = await callLlm(
+      promptWithContext,
+      Buffer.from(''),
+      'text/plain',
+      schema,
+      ingestion.uploadId,
+      undefined,
+      'paginate'
+    );
+  }
+
   const pages = Array.isArray(pagesRaw)
     ? pagesRaw
     : Array.isArray((pagesRaw as any)?.documents)
@@ -477,7 +775,22 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
       : [];
 
   if (pages.length === 0) {
-    throw new Error('Paginador no devolvió documentos (array vacío)');
+    wLog(
+      'ExtractionWorker',
+      `⚠️ Paginador devolvió array vacío para ${ingestion.fileName}. Fallback → extract-facturable como documento único.`,
+      'warn'
+    );
+    await updateIngestionProgress(ingestion.uploadId, {
+      status: 'procesando',
+      step: 'Fallback: documento único',
+      progress: 45,
+      mensaje: 'No se detectaron múltiples documentos. Procesando como archivo único...',
+    });
+    await extractionQueue.add(`extract-facturable-${ingestion.uploadId}`, {
+      type: 'extract-facturable',
+      ingestion,
+    }, { jobId: `extract-facturable-${ingestion.uploadId}` });
+    return;
   }
 
   console.log(`[ExtractionWorker] 📑 Paginación completada: ${pages.length} documentos encontrados.`);
@@ -899,7 +1212,7 @@ ${ocrSummary}
     }
 
     const totalTokens = usage?.total_tokens || 0;
-    if (totalTokens > 0) await recordTokenUsage(totalTokens);
+    if (totalTokens > 0) await redis.incrby(TPM_REDIS_KEY, totalTokens).catch(() => {});
     wLog('VisionFallback', `✅ [4/5] LLM respondió | tokens=${totalTokens} (prompt=${usage?.prompt_tokens ?? '?'} + completion=${usage?.completion_tokens ?? '?'}) | chars=${text.length}\nRespuesta:\n${text.substring(0, 6000)}${text.length > 6000 ? `\n...[+${text.length - 6000} chars]` : ''}`, 'info');
 
     // [5/5] Parsear y normalizar resultado visual
