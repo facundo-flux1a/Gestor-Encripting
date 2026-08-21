@@ -113,7 +113,7 @@ async function callLlm(
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '');
   const key = process.env.AZURE_OPENAI_API_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-06-01';
+  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-05-01-preview';
 
   if (!endpoint || !key || !deployment) {
     throw new Error('Azure OpenAI no configurado para el asistente');
@@ -123,7 +123,7 @@ async function callLlm(
     ? `${endpoint}/chat/completions?api-version=${apiVersion}`
     : endpoint.includes('/api/projects/') || endpoint.endsWith('/models')
       ? `${endpoint}/chat/completions?api-version=${apiVersion}`
-      : `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+      : `${endpoint}/models/chat/completions?api-version=${apiVersion}`;
 
   const body: Record<string, unknown> = {
     model: deployment,

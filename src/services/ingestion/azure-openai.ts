@@ -60,19 +60,20 @@ export function assertAzureOpenAiConfigured(): void {
 
 function chatUrl(): string {
   const base = requireEnv('AZURE_OPENAI_ENDPOINT').replace(/\/$/, '');
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o';
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-06-01';
+  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-05-01-preview';
 
   if (base.includes('/openai/deployments/')) {
     return `${base}/chat/completions?api-version=${apiVersion}`;
   }
+  // Azure AI Foundry Projects: .../api/projects/{project}/chat/completions
   if (base.includes('/api/projects/')) {
     return `${base}/chat/completions?api-version=${apiVersion}`;
   }
+  // Foundry / models hub: .../models/chat/completions
   if (base.endsWith('/models')) {
     return `${base}/chat/completions?api-version=${apiVersion}`;
   }
-  return `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+  return `${base}/models/chat/completions?api-version=${apiVersion}`;
 }
 
 async function buildUserContent(
@@ -116,16 +117,10 @@ async function buildUserContent(
     ];
   }
 
-  // PDF: type=file solo es soportado por modelos gpt-5.x en Azure Foundry.
-  // Con gpt-4o (y modelos estándar), omitimos el archivo y confiamos en el texto del prompt.
-  // En modo hybrid el OCR completo ya está embebido en el prompt, por lo que no se pierde información.
-  // En el vision fallback, el ocrSummary también está en el prompt como contexto.
-  if (mime.includes('pdf')) {
-    return [{ type: 'text', text: prompt }, ...exampleParts];
-  }
+  // PDF / otros: Foundry chat completions acepta type=file
+  const filename =
+    mime.includes('pdf') ? 'document.pdf' : mime.startsWith('image/') ? 'document.png' : 'document.bin';
 
-  // Otros binarios (fallback genérico)
-  const filename = mime.startsWith('image/') ? 'document.png' : 'document.bin';
   return [
     { type: 'text', text: prompt },
     ...exampleParts,

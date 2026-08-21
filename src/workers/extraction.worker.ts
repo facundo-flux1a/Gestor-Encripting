@@ -657,126 +657,16 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
     }
   };
 
-  let pagesRaw: any = null;
-  const isPdf = ingestion.mimeType === 'application/pdf' || /\.pdf$/i.test(ingestion.fileName || '');
-
-  // 1. Primario: Paginador con Vertex AI Service Account (PDF directo en base64)
-  const hasVertexCreds = Boolean(process.env.VERTEX_AI_CREDENTIALS?.trim());
-
-  if (isPdf && fileBuffer && fileBuffer.length > 0 && hasVertexCreds) {
-    try {
-      wLog('ExtractionWorker', `📑 Intentando paginar PDF primario con Vertex AI Service Account (${ingestion.fileName})...`);
-      await waitForGeminiTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
-      pagesRaw = await callGeminiPdfPaginate({ prompt: PROMPT_PAGINADOR, fileBuffer });
-      if (pagesRaw) {
-        wLog('ExtractionWorker', `✅ Paginación completada con Vertex AI Service Account!`);
-      }
-    } catch (geminiErr: any) {
-      wLog('ExtractionWorker', `⚠️ Vertex AI paginador falló (${geminiErr?.message || geminiErr}). Saltando a fallback visual gpt-4o...`, 'warn');
-    }
-  }
-
-  // 2. Fallback 1: Conversión visual local mediante pdf-img-convert + gpt-4o Visión
-  if (!pagesRaw && isPdf && fileBuffer && fileBuffer.length > 0) {
-    let tempPath: string | null = null;
-    try {
-      wLog('ExtractionWorker', `📑 Convirtiendo PDF a PNG en local con pdf-img-convert para paginación visual...`);
-      // @ts-ignore
-      const { convert } = await import('pdf-img-convert');
-      tempPath = path.join(os.tmpdir(), `pag_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
-      fs.writeFileSync(tempPath, fileBuffer);
-
-      const rawPages = await convert(tempPath, { width: 1200 });
-      const imageBuffers: Buffer[] = rawPages.map((p: any) => Buffer.isBuffer(p) ? p : Buffer.from(p as Uint8Array));
-
-      if (imageBuffers.length > 0) {
-        wLog('ExtractionWorker', `📑 Paginando con ${imageBuffers.length} imágenes PNG locales (gpt-4o Visión)...`);
-        await waitForTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
-
-        const azurePrompt = `${PROMPT_PAGINADOR}\n\nIMPORTANTE: Se adjuntan ${imageBuffers.length} imágenes que corresponden a las páginas 1 a ${imageBuffers.length} del PDF en orden exacto. Analiza la visual de cada página y envuelve el array en un objeto JSON: {"documents":[...]}`;
-
-        const { text, usage } = await callAzureOpenAiChatWithImages({
-          prompt: azurePrompt,
-          images: imageBuffers,
-          json: true,
-        });
-
-        if (usage?.total_tokens) {
-          await recordLlmCall({
-            uploadId: ingestion.uploadId,
-            callType: 'paginate',
-            bytes: fileBuffer.length,
-            durationMs: 0,
-          }).catch(() => {});
-        }
-
-        pagesRaw = parseLlmJson(text);
-      }
-    } catch (convErr: any) {
-      wLog('ExtractionWorker', `⚠️ pdf-img-convert local no disponible (${convErr?.message || convErr}). Intentando pdftools /to-images...`, 'warn');
-    } finally {
-      if (tempPath && fs.existsSync(tempPath)) {
-        try { fs.unlinkSync(tempPath); } catch {}
-      }
-    }
-  }
-
-  // 2. Fallback a microservicio pdftools /to-images si fuera necesario
-  if (!pagesRaw && isPdf && ingestion.publicUrl) {
-    try {
-      wLog('ExtractionWorker', `📑 Convirtiendo PDF a PNG con pdftools (/to-images) para paginación visual...`);
-      const imageBuffers = await convertPdfToImagesWithPdfTools(ingestion.publicUrl, 1, 20);
-
-      if (imageBuffers.length > 0) {
-        wLog('ExtractionWorker', `📑 Paginando con ${imageBuffers.length} imágenes PNG (gpt-4o Visión)...`);
-        await waitForTokenBudget(ingestion.uploadId, ingestion.parentUploadId);
-
-        const azurePrompt = `${PROMPT_PAGINADOR}\n\nIMPORTANTE: Se adjuntan ${imageBuffers.length} imágenes que corresponden a las páginas 1 a ${imageBuffers.length} del PDF en orden exacto. Analiza la visual de cada página y envuelve el array en un objeto JSON: {"documents":[...]}`;
-
-        const { text, usage } = await callAzureOpenAiChatWithImages({
-          prompt: azurePrompt,
-          images: imageBuffers,
-          json: true,
-        });
-
-        if (usage?.total_tokens) {
-          await recordLlmCall({
-            uploadId: ingestion.uploadId,
-            callType: 'paginate',
-            bytes: fileBuffer.length,
-            durationMs: 0,
-          }).catch(() => {});
-        }
-
-        pagesRaw = parseLlmJson(text);
-      }
-    } catch (pdftoolsErr: any) {
-      wLog('ExtractionWorker', `⚠️ pdftools /to-images falló (${pdftoolsErr?.message || pdftoolsErr}). Usando OCR layout...`, 'warn');
-    }
-  }
-
-  // 3. Fallback a Azure DI OCR layout o llamada estándar (enviando prompt en texto)
-  if (!pagesRaw) {
-    let promptWithContext = PROMPT_PAGINADOR;
-    if (isAzureDiConfigured() && isPdf && fileBuffer && fileBuffer.length > 0) {
-      try {
-        const diResult = await analyzeInvoiceDocument(fileBuffer, ingestion.mimeType);
-        if (diResult?.content) {
-          promptWithContext = `${PROMPT_PAGINADOR}\n\n[TEXTO OCR DEL DOCUMENTO EXTRAÍDO POR AZURE DI]:\n${diResult.content}`;
-        }
-      } catch {}
-    }
-
-    pagesRaw = await callLlm(
-      promptWithContext,
-      Buffer.from(''),
-      'text/plain',
-      schema,
-      ingestion.uploadId,
-      undefined,
-      'paginate'
-    );
-  }
+  // Paginador directo: gpt-5.x en Azure AI Foundry procesa el PDF nativo via type:file
+  const pagesRaw = await callLlm(
+    PROMPT_PAGINADOR,
+    fileBuffer,
+    ingestion.mimeType,
+    schema,
+    ingestion.uploadId,
+    undefined,
+    'paginate'
+  );
 
   const pages = Array.isArray(pagesRaw)
     ? pagesRaw
@@ -1145,7 +1035,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     normalized,
     pageStart,
     pageEnd,
-    fileBuffer: ingestion.mimeType === 'application/pdf' ? fileBuffer : undefined,
+    fileBuffer: (ingestion.mimeType === 'application/pdf' || /\.pdf$/i.test(ingestion.fileName || '')) ? finalBuffer : undefined,
     ocrText: ocrText,
   });
 }

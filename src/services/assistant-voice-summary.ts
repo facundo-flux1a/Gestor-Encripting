@@ -12,7 +12,7 @@ async function callAzureForVoiceSummary(prompt: string): Promise<string> {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '');
   const key = process.env.AZURE_OPENAI_API_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-06-01';
+  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-05-01-preview';
 
   if (!endpoint || !key || !deployment) {
     throw new Error('Azure OpenAI no configurado para resumen de voz');
@@ -22,7 +22,7 @@ async function callAzureForVoiceSummary(prompt: string): Promise<string> {
     ? `${endpoint}/chat/completions?api-version=${apiVersion}`
     : endpoint.includes('/api/projects/') || endpoint.endsWith('/models')
       ? `${endpoint}/chat/completions?api-version=${apiVersion}`
-      : `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+      : `${endpoint}/models/chat/completions?api-version=${apiVersion}`;
 
   const res = await fetch(url, {
     method: 'POST',
