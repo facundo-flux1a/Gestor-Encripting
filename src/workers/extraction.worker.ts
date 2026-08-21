@@ -251,10 +251,12 @@ async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): P
       if (currentTpm + estimatedTokens <= tpmBudget && currentRpm + 1 <= RPM_LIMIT) {
         // Reservar en Redis INMEDIATAMENTE antes de enviar la petición
         const newTpm = await redis.incrby(TPM_REDIS_KEY, estimatedTokens);
-        if (newTpm === estimatedTokens) await redis.expire(TPM_REDIS_KEY, 61);
+        const tpmTtl = await redis.ttl(TPM_REDIS_KEY);
+        if (tpmTtl <= 0) await redis.expire(TPM_REDIS_KEY, 61);
 
         const newRpm = await redis.incr(RPM_REDIS_KEY);
-        if (newRpm === 1) await redis.expire(RPM_REDIS_KEY, 61);
+        const rpmTtl = await redis.ttl(RPM_REDIS_KEY);
+        if (rpmTtl <= 0) await redis.expire(RPM_REDIS_KEY, 61);
 
         console.log(`[RateLimit] 🛡️ Pre-reserva: +${estimatedTokens} tokens | TPM: ${newTpm}/${TPM_LIMIT} | RPM: ${newRpm}/${RPM_LIMIT}`);
 
@@ -274,11 +276,19 @@ async function waitForTokenBudget(uploadId?: string, parentUploadId?: string): P
       let causa = '';
       if (currentRpm + 1 > RPM_LIMIT) {
         const ttl = await redis.ttl(RPM_REDIS_KEY);
-        waitMs = Math.max((ttl + 1) * 1000, 5000);
+        if (ttl <= 0) {
+          await redis.del(RPM_REDIS_KEY);
+          continue;
+        }
+        waitMs = Math.max(ttl * 1000, 1000);
         causa = 'RPM';
       } else {
         const ttl = await redis.ttl(TPM_REDIS_KEY);
-        waitMs = Math.max((ttl + 1) * 1000, 5000);
+        if (ttl <= 0) {
+          await redis.del(TPM_REDIS_KEY);
+          continue;
+        }
+        waitMs = Math.max(ttl * 1000, 1000);
         causa = 'TPM';
       }
 

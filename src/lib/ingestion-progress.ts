@@ -92,78 +92,84 @@ export async function updateIngestionProgress(
  * y (b) explícitamente desde el db-writer después de completar un hijo.
  */
 export async function updateParentProgress(parentUploadId: string): Promise<void> {
-  try {
-    const children = await prisma.actividad.findMany({
-      where: { parent_upload_id: parentUploadId },
-      select: { status: true, progress: true }
-    });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const children = await prisma.actividad.findMany({
+        where: { parent_upload_id: parentUploadId },
+        select: { status: true, progress: true }
+      });
 
-    if (children.length === 0) return;
+      if (children.length === 0) return;
 
-    const total      = children.length;
-    const completed  = children.filter((c: { status: string | null }) => c.status === 'completed' || c.status === 'Completado').length;
-    const failed     = children.filter((c: { status: string | null }) => c.status === 'failed'    || c.status === 'Fallido').length;
-    const paused     = children.filter((c: { status: string | null }) =>
-      c.status?.toLowerCase().includes('cuota') || c.status?.toLowerCase().includes('esperando')
-    ).length;
-    const inProgress = total - completed - failed;
+      const total      = children.length;
+      const completed  = children.filter((c: { status: string | null }) => c.status === 'completed' || c.status === 'Completado').length;
+      const failed     = children.filter((c: { status: string | null }) => c.status === 'failed'    || c.status === 'Fallido').length;
+      const paused     = children.filter((c: { status: string | null }) =>
+        c.status?.toLowerCase().includes('cuota') || c.status?.toLowerCase().includes('esperando')
+      ).length;
+      const inProgress = total - completed - failed;
 
-    // Progreso del padre = media ponderada del progreso de todos los hijos
-    const sumProgress    = children.reduce((sum: number, c: { progress: number | null }) => sum + (c.progress || 0), 0);
-    const parentProgress = Math.round(sumProgress / total);
+      // Progreso del padre = media ponderada del progreso de todos los hijos
+      const sumProgress    = children.reduce((sum: number, c: { progress: number | null }) => sum + (c.progress || 0), 0);
+      const parentProgress = Math.round(sumProgress / total);
 
+      const allCompleted = completed === total;
+      const allDone      = (completed + failed) === total;
 
-    const allCompleted = completed === total;
-    const allDone      = (completed + failed) === total;
+      let parentStatus: string;
+      let parentStep: string;
+      let parentMessage: string;
 
-    let parentStatus: string;
-    let parentStep: string;
-    let parentMessage: string;
+      if (allCompleted) {
+        parentStatus  = 'Completado';
+        parentStep    = 'Lote completado';
+        parentMessage = `✅ ${total} documentos procesados exitosamente`;
+      } else if (allDone && failed > 0) {
+        parentStatus  = 'procesando'; // algunos fallaron pero el lote terminó
+        parentStep    = 'Completado con errores';
+        parentMessage = `⚠️ ${completed} completados / ${failed} fallidos de ${total} documentos`;
+      } else {
+        parentStatus  = 'procesando';
+        parentStep    = `Procesando lote (${completed}/${total})`;
+        // Mensaje detallado para la UI
+        const parts: string[] = [`${completed} completados`];
+        if (inProgress > 0) parts.push(`${inProgress} en proceso`);
+        if (paused    > 0) parts.push(`${paused} pausados (cuota)`);
+        if (failed    > 0) parts.push(`${failed} fallidos`);
+        parentMessage = `📦 ${parts.join(' · ')} de ${total} documentos`;
+      }
 
-    if (allCompleted) {
-      parentStatus  = 'Completado';
-      parentStep    = 'Lote completado';
-      parentMessage = `✅ ${total} documentos procesados exitosamente`;
-    } else if (allDone && failed > 0) {
-      parentStatus  = 'procesando'; // algunos fallaron pero el lote terminó
-      parentStep    = 'Completado con errores';
-      parentMessage = `⚠️ ${completed} completados / ${failed} fallidos de ${total} documentos`;
-    } else {
-      parentStatus  = 'procesando';
-      parentStep    = `Procesando lote (${completed}/${total})`;
-      // Mensaje detallado para la UI
-      const parts: string[] = [`${completed} completados`];
-      if (inProgress > 0) parts.push(`${inProgress} en proceso`);
-      if (paused    > 0) parts.push(`${paused} pausados (cuota)`);
-      if (failed    > 0) parts.push(`${failed} fallidos`);
-      parentMessage = `📦 ${parts.join(' · ')} de ${total} documentos`;
+      await prisma.actividad.updateMany({
+        where: { upload_id: parentUploadId },
+        data: {
+          status: parentStatus,
+          step: parentStep,
+          progress: parentProgress,
+          mensaje: parentMessage,
+          updated_at: new Date(),
+          ...(allCompleted ? { completed_at: new Date() } : {}),
+        },
+      });
+
+      // Cascading: Si este padre tiene a su vez un padre (ej. es un PDF dentro de un ZIP),
+      // propagar el progreso hacia arriba.
+      const parentRecord = await prisma.actividad.findFirst({
+        where: { upload_id: parentUploadId },
+        select: { parent_upload_id: true }
+      });
+      
+      if (parentRecord?.parent_upload_id) {
+        await updateParentProgress(parentRecord.parent_upload_id);
+      }
+      return;
+    } catch (err: any) {
+      if ((err?.code === 'P2034' || err?.message?.includes('deadlock') || err?.message?.includes('write conflict')) && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 60 * (attempt + 1)));
+        continue;
+      }
+      console.error(`[IngestionProgress] Error actualizando padre ${parentUploadId}:`, err);
+      break;
     }
-
-    await prisma.actividad.updateMany({
-      where: { upload_id: parentUploadId },
-      data: {
-        status: parentStatus,
-        step: parentStep,
-        progress: parentProgress,
-        mensaje: parentMessage,
-        updated_at: new Date(),
-        ...(allCompleted ? { completed_at: new Date() } : {}),
-      },
-    });
-
-    // Cascading: Si este padre tiene a su vez un padre (ej. es un PDF dentro de un ZIP),
-    // propagar el progreso hacia arriba.
-    const parentRecord = await prisma.actividad.findFirst({
-      where: { upload_id: parentUploadId },
-      select: { parent_upload_id: true }
-    });
-    
-    if (parentRecord?.parent_upload_id) {
-      await updateParentProgress(parentRecord.parent_upload_id);
-    }
-
-  } catch (err) {
-    console.error(`[IngestionProgress] Error actualizando padre ${parentUploadId}:`, err);
   }
 }
 

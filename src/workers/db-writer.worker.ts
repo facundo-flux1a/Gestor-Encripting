@@ -53,7 +53,8 @@ export function startDbWriterWorker() {
   const worker = new Worker<DbWriterJobData>(
     DB_WRITER_QUEUE_NAME,
     async (job: Job<DbWriterJobData>) => {
-      const { ingestion, aiResult, fiscalStatus, fiscalRevisionReasons } = job.data;
+      const { ingestion, fiscalStatus, fiscalRevisionReasons } = job.data;
+      let aiResult = job.data.aiResult;
       const { uploadId, fileName, empresaId } = ingestion;
       const resolvedFiscalStatus =
         fiscalStatus === FiscalStatus.REVISION ? FiscalStatus.REVISION : FiscalStatus.VALIDADO;
@@ -70,26 +71,38 @@ export function startDbWriterWorker() {
         });
 
         // =====================================================================
-        // GUARDIA DE DATOS VACÍOS (anti-zombi)
+        // GUARDIA DE DATOS VACÍOS (FALTA TODO → Registrar en Revisión)
         // =====================================================================
-        const hasData = aiResult && (
+        const hasAnyData = aiResult && Boolean(
           aiResult.tipo_documento ||
           aiResult.empresa_emisora?.nombre ||
+          aiResult.empresa_emisora?.cif ||
           aiResult.empresa_receptora?.nombre ||
+          aiResult.empresa_receptora?.cif ||
           aiResult.cliente?.nombre ||
-          (aiResult.importe_total !== undefined) ||
-          (aiResult.documento?.importe_total !== undefined)
+          aiResult.cliente?.cif ||
+          aiResult.documento?.numero_documento ||
+          aiResult.numero_documento ||
+          (aiResult.importe_total && Number(aiResult.importe_total) > 0) ||
+          (aiResult.documento?.importe_total && Number(aiResult.documento?.importe_total) > 0) ||
+          (Array.isArray(aiResult.lineas) && aiResult.lineas.length > 0)
         );
 
-        if (!hasData) {
-          console.error(`[DbWriterWorker] 🚫 Job ${job.id} rechazado: aiResult vacío o sin datos reales. Job fantasma descartado.`);
-          await updateIngestionProgress(uploadId, {
-            status: 'Fallido',
-            step: 'Error de datos',
-            progress: 0,
-            mensaje: 'Error interno: el job llegó sin datos de extracción. Reintentar la subida.',
-          }).catch(() => {});
-          throw new Error('aiResult vacío — job fantasma descartado');
+        if (!hasAnyData) {
+          console.warn(`[DbWriterWorker] ⚠️ Sin datos utilizables para ${ingestion.fileName}. Guardando registro en Revisión por falta total de datos.`);
+          aiResult = {
+            es_facturable: Boolean(aiResult?.es_facturable),
+            es_multiple: false,
+            tipo_documento: 'DOCUMENTO SIN CLASIFICAR',
+            categoria_principal: 'General / Miscelánea',
+            subcategoria: 'Sin Clasificar',
+            incidencia: true,
+            descripcion_incidencia: 'El agente de IA no ha encontrado información legible para extraer en este archivo.',
+            tipos_incidencia: ['sin_informacion_extraible'],
+            empresa_emisora: { nombre: '', cif: '' },
+            cliente: { nombre: '', cif: '' },
+            documento: { numero_documento: '', importe_total: 0, importe_sin_iva: 0 }
+          };
         }
 
         // =====================================================================
