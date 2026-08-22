@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Info, AlertCircle, CheckCircle2, RotateCw, X, Eye, PlusCircle, History, Trash2, ShieldCheck, Sparkles as SparklesIcon } from 'lucide-react';
+import { Info, AlertCircle, CheckCircle2, RotateCw, X, Eye, PlusCircle, History, Trash2, ShieldCheck, Sparkles as SparklesIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DocumentView } from './document-view';
 import { FinancialDetailsCard } from './financial-details-card';
 import { EditableEntityCard } from './editable-entity-card';
@@ -27,6 +27,16 @@ interface AuditSplitViewProps {
     onHistoryUpdate: () => void;
     checkType?: string;
     motivo?: string;
+    navigation?: {
+        prevId: number | null;
+        nextId: number | null;
+        currentIndex: number | null;
+        totalCount: number | null;
+        onNavigatePrev: () => void;
+        onNavigateNext: () => void;
+        hasPrev: boolean;
+        hasNext: boolean;
+    };
 }
 
 export function AuditSplitView({
@@ -39,7 +49,8 @@ export function AuditSplitView({
     isSaving,
     onHistoryUpdate,
     checkType = 'MISMATCH_MATEMATICO',
-    motivo = ''
+    motivo = '',
+    navigation
 }: AuditSplitViewProps) {
     const { toast } = useToast();
     const [iframeKey, setIframeKey] = React.useState(0);
@@ -115,6 +126,45 @@ export function AuditSplitView({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {navigation && (
+                        <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg border border-border/60 shadow-sm mr-2">
+                            <button
+                                type="button"
+                                onClick={() => (navigation.onNavigatePrev ? navigation.onNavigatePrev() : navigation.navigateToPrev?.())}
+                                disabled={!navigation.hasPrev}
+                                title="Documento anterior (← / Alt+←)"
+                                className={cn(
+                                    'p-1.5 rounded-md transition-colors flex items-center justify-center',
+                                    navigation.hasPrev
+                                        ? 'hover:bg-accent text-foreground hover:text-foreground cursor-pointer'
+                                        : 'text-muted-foreground/30 cursor-not-allowed'
+                                )}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+
+                            <span className="text-[11px] font-bold px-2 text-muted-foreground font-mono select-none">
+                                {navigation.currentIndex && navigation.totalCount
+                                    ? `${navigation.currentIndex} / ${navigation.totalCount}`
+                                    : '—'}
+                            </span>
+
+                            <button
+                                type="button"
+                                onClick={() => (navigation.onNavigateNext ? navigation.onNavigateNext() : navigation.navigateToNext?.())}
+                                disabled={!navigation.hasNext}
+                                title="Documento siguiente (→ / Alt+→)"
+                                className={cn(
+                                    'p-1.5 rounded-md transition-colors flex items-center justify-center',
+                                    navigation.hasNext
+                                        ? 'hover:bg-accent text-foreground hover:text-foreground cursor-pointer'
+                                        : 'text-muted-foreground/30 cursor-not-allowed'
+                                )}
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
                     <Button
                         type="submit"
                         size="sm"

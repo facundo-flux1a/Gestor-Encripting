@@ -109,6 +109,14 @@ function DocumentsPageContent() {
         const data = await response.json();
         const docs = data.documents || data;
         setDocuments(docs);
+        if (Array.isArray(docs) && docs.length > 0) {
+          try {
+            const ids = docs.map((d: any) => d.id_documento).filter(Boolean);
+            sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+          } catch (e) {
+            console.warn('⚠️ [DocumentsPage] Error guardando navegación:', e);
+          }
+        }
         console.log(`⏱️ [PERF:client] DocumentsPage.fetch | ${Math.round(performance.now() - t0)}ms | docs=${Array.isArray(docs) ? docs.length : '?'} companies=${selectedCompanyIds.join(',')}`);
       } catch (err) {
         console.error('❌ [DocumentsPage] Error loading documents:', err);

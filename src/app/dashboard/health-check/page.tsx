@@ -92,6 +92,14 @@ export default function HealthCheckPage() {
             }
 
             setData(result);
+            if (result && Array.isArray(result.documents) && result.documents.length > 0) {
+                try {
+                    const ids = result.documents.map((d: any) => d.id_documento).filter(Boolean);
+                    sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+                } catch (e) {
+                    console.warn('⚠️ [HealthCheckPage] Error guardando navegación:', e);
+                }
+            }
 
             // Verificar si necesitamos activar el polling
             const needsPolling = result.documents.some((doc: any) =>

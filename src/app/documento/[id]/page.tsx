@@ -25,12 +25,21 @@ import { normalizeCIF } from '@/lib/utils';
 import { PreSaveIssue } from '@/lib/types';
 import { checkTipoMismatch, checkFieldChanges } from '@/lib/presave-validations';
 import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-confirm-dialog';
+import { useDocumentNavigation } from '@/hooks/useDocumentNavigation';
 
 
 function DocumentoPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  const docId = useMemo(() => {
+    const idParam = params?.id;
+    const rawId = Array.isArray(idParam) ? idParam[0] : idParam;
+    const parsed = parseInt(rawId as string, 10);
+    return isNaN(parsed) ? null : parsed;
+  }, [params]);
+
   const [doc, setDoc] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,6 +50,13 @@ function DocumentoPageContent() {
   const [isAuditMode, setIsAuditMode] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isPreSaveDialogOpen, setIsPreSaveDialogOpen] = useState(false);
+
+  const form = useForm<DocumentUpdatePayload>({
+    resolver: zodResolver(DocumentUpdateSchema),
+    defaultValues: { entidades: [], lineas: [], iva_details: [] }
+  });
+
+  const navState = useDocumentNavigation(docId, doc?.empresa_id, form.formState.isDirty);
   const [preSaveState, setPreSaveState] = useState<{
     pendingPayload: DocumentUpdatePayload;
     issues: PreSaveIssue[];
@@ -60,11 +76,6 @@ function DocumentoPageContent() {
 
   const { toast } = useToast();
   const lastDocIdRef = useRef<number | null>(null);
-
-  const form = useForm<DocumentUpdatePayload>({
-    resolver: zodResolver(DocumentUpdateSchema),
-    defaultValues: { entidades: [], lineas: [], iva_details: [] }
-  });
 
   // keep useFieldArray mounted so the form context is initialized
   useFieldArray({ control: form.control, name: 'entidades' });
@@ -119,12 +130,10 @@ function DocumentoPageContent() {
   }, [toast, resetFormWithDocData]);
 
   useEffect(() => {
-    const idParam = params.id;
-    const id = parseInt(Array.isArray(idParam) ? idParam[0] as string : idParam as string, 10);
-    if (isNaN(id)) { notFound(); return; }
-    fetchDocument(id);
-    getAuditHistory(id).then(setSuggestions).catch(console.error);
-  }, [params.id, fetchDocument]);
+    if (docId === null) { notFound(); return; }
+    fetchDocument(docId);
+    getAuditHistory(docId).then(setSuggestions).catch(console.error);
+  }, [docId, fetchDocument]);
 
   useEffect(() => {
     if (isAuditMode && doc) getAuditHistory(doc.id_documento).then(setSuggestions).catch(console.error);
@@ -566,6 +575,7 @@ function DocumentoPageContent() {
           onSubmit={onSubmit} isSaving={isSaving} onHistoryUpdate={refreshHistory}
           checkType={searchParams.get('checkType') || 'MISMATCH_MATEMATICO'}
           motivo={searchParams.get('motivo') || ''}
+          navigation={navState}
         />
         {preSaveState && (
           <UnifiedPreSaveDialog
@@ -592,6 +602,7 @@ function DocumentoPageContent() {
       onValidate={handleValidate}
       onAuditMode={() => setIsAuditMode(true)}
       onMarkDuplicate={handleMarkDuplicate}
+      navigation={navState}
     />
   );
 

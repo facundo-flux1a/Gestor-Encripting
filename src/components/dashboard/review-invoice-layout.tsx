@@ -64,9 +64,19 @@ interface Props {
   onEdit: () => void; onCancelEdit: () => void; onSave: () => void;
   onDelete: () => void; onValidate: () => void; onAuditMode: () => void;
   onMarkDuplicate: () => void;
+  navigation?: {
+    prevId: number | null;
+    nextId: number | null;
+    currentIndex: number | null;
+    totalCount: number | null;
+    onNavigatePrev: () => void;
+    onNavigateNext: () => void;
+    hasPrev: boolean;
+    hasNext: boolean;
+  };
 }
 
-export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting, isValidating, isEditable, onEdit, onCancelEdit, onSave, onDelete, onValidate, onAuditMode, onMarkDuplicate }: Props) {
+export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting, isValidating, isEditable, onEdit, onCancelEdit, onSave, onDelete, onValidate, onAuditMode, onMarkDuplicate, navigation }: Props) {
   const router = useRouter();
   const { setOpen, isMobile } = useSidebar();
   
@@ -152,16 +162,57 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
         {/* Top bar */}
         <div style={{ background: 'hsl(var(--card))', borderBottom: '1px solid hsl(var(--border))' }}
-          className="flex items-center px-4 py-3 shrink-0 gap-3">
+          className="flex items-center justify-between px-4 py-3 shrink-0 gap-3">
           <button onClick={() => router.back()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted text-foreground text-sm font-medium transition-colors shrink-0 border border-border shadow-sm">
             <ChevronLeft className="h-4 w-4" />Atrás
           </button>
-          <div className="flex-1 text-center min-w-0 overflow-hidden pr-12">
+          <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
             <p className="text-sm font-bold">Revisar factura</p>
             <p className="text-[11px] font-medium truncate mt-0.5" style={{ color: statusColor }}>
               {(provider?.nombre || '—').substring(0, 22)}{(provider?.nombre || '').length > 22 ? '…' : ''} · {statusLabel}
             </p>
           </div>
+
+          {/* Navigation controls */}
+          {navigation && (
+            <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg border border-border/60 shadow-sm shrink-0">
+              <button
+                type="button"
+                onClick={() => (navigation.onNavigatePrev ? navigation.onNavigatePrev() : navigation.navigateToPrev?.())}
+                disabled={!navigation.hasPrev}
+                title="Documento anterior (← / Alt+←)"
+                className={cn(
+                  'p-1.5 rounded-md transition-colors flex items-center justify-center',
+                  navigation.hasPrev
+                    ? 'hover:bg-accent text-foreground hover:text-foreground cursor-pointer'
+                    : 'text-muted-foreground/30 cursor-not-allowed'
+                )}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <span className="text-[11px] font-bold px-2 text-muted-foreground font-mono select-none">
+                {navigation.currentIndex && navigation.totalCount
+                  ? `${navigation.currentIndex} / ${navigation.totalCount}`
+                  : '—'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => (navigation.onNavigateNext ? navigation.onNavigateNext() : navigation.navigateToNext?.())}
+                disabled={!navigation.hasNext}
+                title="Documento siguiente (→ / Alt+→)"
+                className={cn(
+                  'p-1.5 rounded-md transition-colors flex items-center justify-center',
+                  navigation.hasNext
+                    ? 'hover:bg-accent text-foreground hover:text-foreground cursor-pointer'
+                    : 'text-muted-foreground/30 cursor-not-allowed'
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Scrollable form */}
