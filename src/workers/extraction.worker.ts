@@ -25,6 +25,7 @@ import {
 } from '@/services/ingestion/azure-di-map';
 import { resolveExtractRoute } from '@/services/ingestion/extract-route';
 import { resolvePreflight } from '@/services/ingestion/pdf-preflight';
+import { deriveSplitDocumentIdentity } from '@/services/ingestion/archive';
 import {
   recordLlmCall,
   callTypeFromJobType,
@@ -185,11 +186,24 @@ export function startExtractionWorker() {
   return worker;
 }
 
+/** Estado posterior a un enqueue: el trabajo existe, pero puede esperar mucho. */
+async function markWaitingForQueue(uploadId: string, step: string, mensaje: string, progress = 20) {
+  await updateIngestionProgress(uploadId, {
+    status: 'waiting',
+    step,
+    progress,
+    mensaje,
+  });
+}
+
 // ─── Helpers S3 / rate-limit ──────────────────────────────────────────────────
 
 async function getFileBufferFromS3(s3Path: string): Promise<Buffer> {
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
+  // No depender del hostname/ACL público para leer los bytes que ya están en
+  // almacenamiento. MINIO_INTERNAL_ENDPOINT permite usar la red privada del
+  // deployment; MINIO_PUBLIC_ENDPOINT queda para las URLs guardadas en DB.
+  const MINIO_ENDPOINT = process.env.MINIO_INTERNAL_ENDPOINT || process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
   
   const s3Client = new S3Client({
     region: process.env.MINIO_REGION || "us-east-1",
@@ -424,6 +438,7 @@ async function handleClassify(job: Job<ExtractionJobData>, _fileBuffer: Buffer) 
     { type: 'extract-facturable', ingestion },
     { jobId: `extract-facturable-${ingestion.uploadId}` }
   );
+  await markWaitingForQueue(ingestion.uploadId, 'En cola de extracción', 'Clasificación completada; esperando extracción.');
 }
 
 async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
@@ -485,17 +500,21 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
   console.log(`[ExtractionWorker] ⏱️ Delay entre hijos: ${INTER_JOB_DELAY_MS}ms (calculado: ${calculatedDelay}ms | tokens/doc: ${TOKENS_PER_DOC_ESTIMATE} | TPM: ${TPM_LIMIT})`);
 
   const childJobs = pages.map((pageData: any, idx: number) => {
-    // Generar uploadId individual (hash aleatorio de 8 caracteres)
-    const randomHash = crypto.randomBytes(4).toString('hex');
-    const subUploadId = `${ingestion.uploadId}_doc_${randomHash}`;
-    
-    // Generar file_hash único de 64 caracteres
-    let childFileHash = undefined;
-    if (ingestion.empresaId) {
-      const numeroDoc = pageData.numero || `DOC_${idx + 1}`;
-      const hashData = `${subUploadId}${numeroDoc}${ingestion.empresaId}`;
-      childFileHash = crypto.createHash('sha256').update(hashData).digest('hex');
+    const pageStart = Number(pageData.page_start);
+    const pageEnd = Number(pageData.page_end);
+    if (!Number.isInteger(pageStart) || !Number.isInteger(pageEnd) || pageStart < 1 || pageEnd < pageStart) {
+      throw new Error(`Paginador devolvió un rango inválido para el documento ${idx + 1}: ${pageData.page_start}-${pageData.page_end}`);
     }
+    const identity = deriveSplitDocumentIdentity({
+      parentUploadId: ingestion.uploadId,
+      parentFileHash: ingestion.fileHash,
+      empresaId: ingestion.empresaId,
+      pageStart,
+      pageEnd,
+      index: idx,
+    });
+    const subUploadId = identity.uploadId;
+    const childFileHash = identity.fileHash;
 
     return {
       name: `extract-facturable-${subUploadId}`,
@@ -509,11 +528,12 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
           totalDocumentos: pages.length,
           fileHash: childFileHash
         },
-        pageStart: pageData.page_start,
-        pageEnd: pageData.page_end,
+        pageStart,
+        pageEnd,
         numeroDocumento: pageData.numero
       },
       opts: {
+        jobId: `extract-facturable-${subUploadId}`,
         delay: idx * INTER_JOB_DELAY_MS, // escalonado: job 0 → 0ms, job 1 → 10s, job 2 → 20s...
       }
     };
@@ -531,9 +551,12 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
         uploadId: job.data.ingestion.uploadId,
         parentUploadId: job.data.ingestion.parentUploadId!,
         empresaId: BigInt(job.data.ingestion.empresaId),
-        documentoNombre: `${ingestion.fileName} - Pág ${job.data.pageStart}`,
-        fileHash: job.data.ingestion.fileHash,
-        origen: job.data.ingestion.origen as 'dashboard' | 'correo',
+          documentoNombre: `${ingestion.fileName} - Pág ${job.data.pageStart}`,
+          fileHash: job.data.ingestion.fileHash,
+          origen: job.data.ingestion.origen as 'dashboard' | 'correo',
+          // El job puede esperar su turno mucho más que el umbral de un
+          // worker activo. No debe reconciliarse como proceso perdido.
+          initialStatus: 'waiting',
       }).catch(err => {
         console.error(`[ExtractionWorker] ❌ Error creando actividad hijo ${job.data.ingestion.uploadId}:`, err);
       })
@@ -542,6 +565,13 @@ async function handlePaginate(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
 
   console.log(`[ExtractionWorker] 📦 Encolando ${childJobs.length} jobs con delay escalonado de ${INTER_JOB_DELAY_MS}ms...`);
   await extractionQueue.addBulk(childJobs);
+  // El PDF padre ya no consume un worker: sus hijos sí. Mantenerlo como
+  // espera de capacidad evita que parezca huérfano mientras el lote avanza.
+  await markWaitingForQueue(
+    ingestion.uploadId,
+    'Subdocumentos en cola',
+    `${childJobs.length} documento(s) individuales esperan extracción.`
+  );
 }
 
 async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: Buffer) {
@@ -550,7 +580,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
 
   // Fase 2: raíz sin recorte → preflight local. Alta confianza multi → paginate sin extract desechable.
   if (pageStart == null && pageEnd == null) {
-    const pre = resolvePreflight(fileBuffer, ingestion.mimeType);
+    const pre = resolvePreflight(fileBuffer, ingestion.mimeType, ingestion.fileName);
     wLog('ExtractionWorker', `🧭 Preflight ${ingestion.fileName}: ${pre.decision} (${pre.reason})`);
     if (pre.decision === 'paginate') {
       await updateIngestionProgress(ingestion.uploadId, {
@@ -563,6 +593,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
         type: 'paginate',
         ingestion,
       });
+      await markWaitingForQueue(ingestion.uploadId, 'En cola de paginación', 'Esperando análisis de rangos de páginas.');
       return;
     }
   }
@@ -766,6 +797,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
       type: 'extract-non-facturable',
       ingestion,
     });
+    await markWaitingForQueue(ingestion.uploadId, 'En cola de clasificación', 'Esperando extracción de documento no fiscal.');
     return;
   }
 
@@ -781,6 +813,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
       type: 'paginate',
       ingestion,
     });
+    await markWaitingForQueue(ingestion.uploadId, 'En cola de paginación', 'Esperando identificación de rangos de páginas.');
     return;
   }
 
@@ -790,11 +823,31 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
       type: 'extract-multiple-image',
       ingestion,
     });
+    await markWaitingForQueue(ingestion.uploadId, 'En cola de extracción', 'Esperando extracción de facturas de imagen.');
     return;
   }
 
   const normalized = normalizeDocumento(rawParsed);
   console.log(`[ExtractionWorker] ✅ Normalización completada. Ejecutando fiscal-guards...`);
+
+  // Un hijo ya recortado representa un único rango de páginas. Algunos
+  // extractores conservaban la advertencia del PDF padre ("múltiples
+  // documentos; se extrajo el primero") aunque los datos de la página fuesen
+  // correctos. Esa advertencia es falsa en un hijo paginado y no debe crear
+  // una incidencia ni activar reparaciones innecesarias.
+  const normalizedAny = normalized as any;
+  if (
+    pageStart != null &&
+    pageEnd != null &&
+    /múltiples documentos[\s\S]*se extrajeron solo los datos del primero/i.test(
+      String(normalizedAny.descripcion_incidencia || '')
+    )
+  ) {
+    normalizedAny.incidencia = false;
+    normalizedAny.descripcion_incidencia = '';
+    normalizedAny.tipos_incidencia = [];
+    wLog('Normalize', `🧹 Incidencia multipágina heredada descartada (${ingestion.fileName}, ${pageStart}-${pageEnd})`);
+  }
 
   // LOG: resultado normalizado antes de los guards
   wLog('Normalize', `🗂️ Resultado normalizado (${ingestion.fileName}):\n` +
@@ -811,7 +864,9 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     normalized,
     pageStart,
     pageEnd,
-    fileBuffer: ingestion.mimeType === 'application/pdf' ? fileBuffer : undefined,
+    // `finalBuffer` es el documento exacto que acabamos de extraer: para un
+    // hijo paginado ya contiene sólo su rango, nunca el PDF padre completo.
+    fileBuffer: ingestion.mimeType === 'application/pdf' ? finalBuffer : undefined,
     ocrText: ocrText,
   });
 }
@@ -947,6 +1002,10 @@ async function enqueueAfterFiscalGuards(params: {
       .replace(/\{\{RECARGO_EMPRESA\}\}/g, recargo);
 
     const visionResult = await doVisionFallback({
+      // Si el job corresponde a una página/rango de un PDF de lote,
+      // `fileBuffer` contiene el recorte recibido. Nunca se manda el padre
+      // completo al fallback: mezclaría facturas distintas y puede inventar
+      // una incidencia de "múltiples documentos" para una sola página.
       fileBuffer,
       ocrText,
       firstResult: normalized,
@@ -963,7 +1022,7 @@ async function enqueueAfterFiscalGuards(params: {
         mensaje: 'Extracción verificada con imagen. Validando...',
       });
       // Re-ejecutar guards con el resultado de visión (visionDone=true previene recursión)
-      return enqueueAfterFiscalGuards({ job, ingestion, normalized: visionResult, pageStart, pageEnd, visionDone: true });
+      return enqueueAfterFiscalGuards({ job, ingestion, normalized: visionResult, pageStart, pageEnd, fileBuffer, ocrText, visionDone: true });
     }
     // Si el fallback visual falló, continuar con el resultado original
     wLog('VisionFallback', '⚠️  Fallback visual falló, continuando con resultado OCR original', 'warn');
@@ -984,10 +1043,10 @@ async function enqueueAfterFiscalGuards(params: {
       }
     );
     await updateIngestionProgress(ingestion.uploadId, {
-      status: 'procesando',
+      status: 'waiting',
       step: 'Normalizado y validado',
       progress: 80,
-      mensaje: visionDone ? 'Extracción verificada con imagen. Guardando...' : 'Guards fiscales OK. Guardando en base de datos...',
+      mensaje: visionDone ? 'Extracción verificada; esperando guardado en base de datos.' : 'Guards fiscales OK; esperando guardado en base de datos.',
     });
     return;
   }
@@ -1023,6 +1082,12 @@ async function enqueueAfterFiscalGuards(params: {
         delay: 2000,
       }
     );
+    await markWaitingForQueue(
+      ingestion.uploadId,
+      `Reextracción en cola (${nextAttempt}/${MAX_EXTRACT_REPAIRS})`,
+      'Esperando reintento de extracción dirigido por validaciones fiscales.',
+      55
+    );
     return;
   }
 
@@ -1051,7 +1116,7 @@ async function enqueueAfterFiscalGuards(params: {
   );
 
   await updateIngestionProgress(ingestion.uploadId, {
-    status: 'procesando',
+    status: 'waiting',
     step: 'Encolado en revisión',
     progress: 80,
     mensaje:
@@ -1138,6 +1203,10 @@ Reglas de Reparación:
     normalized,
     pageStart,
     pageEnd,
+    // El repair también puede corresponder a una sola página de un lote.
+    // Conservamos el recorte exacto para que cualquier validación posterior
+    // jamás vuelva a analizar el PDF padre completo.
+    fileBuffer: ingestion.mimeType === 'application/pdf' ? finalBuffer : undefined,
   });
 }
 
@@ -1194,10 +1263,10 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
     });
     
     await updateIngestionProgress(ingestion.uploadId, {
-      status: 'procesando',
+      status: 'waiting',
       step: 'Encolado para DB',
       progress: 80,
-      mensaje: 'Guardando registro de documento interno...',
+      mensaje: 'Esperando guardado de documento interno...',
     });
   } else {
     // Si Gemini extrajo múltiples documentos de un solo archivo no-facturable
@@ -1242,7 +1311,7 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
     await dbWriterQueue.addBulk(dbJobs);
 
     await updateIngestionProgress(ingestion.uploadId, {
-      status: 'procesando',
+      status: 'waiting',
       step: 'Múltiples documentos internos encolados',
       progress: 80,
       mensaje: `Guardando ${docs.length} registros en la base de datos...`,
@@ -1389,7 +1458,7 @@ Extrae ÚNICAMENTE los documentos que aún NO aparecen en esa lista. Si no queda
   await dbWriterQueue.addBulk(dbJobs);
 
   await updateIngestionProgress(ingestion.uploadId, {
-    status: 'procesando',
+    status: 'waiting',
     step: `${allDocumentos.length} documentos encolados para DB`,
     progress: 80,
     mensaje: `Se extrajeron ${allDocumentos.length} documentos de la imagen. Guardando...`,

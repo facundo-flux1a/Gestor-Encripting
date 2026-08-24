@@ -24,6 +24,28 @@ Workers  →  progreso / Completado | Fallido | Duplicado
 
 Tras refresh: `resumeClientUploadQueue()` bombea IndexedDB de nuevo.
 
+## Contenedores ZIP/RAR
+
+El archivo comprimido es una actividad padre. El worker lo lee desde MinIO/S3
+con credenciales internas — nunca descargándolo por su URL pública — y crea un
+`upload_id` determinista por cada hijo. Por tanto, un retry no duplica hijos ni
+deja facturas fuera del lote.
+
+- Cada PDF, imagen o documento Office válido se guarda como objeto hijo aislado
+  por `empresaId / uploadId padre / uploadId hijo` y se encola individualmente.
+- Un hijo inválido, duplicado, vacío o no compatible queda como actividad hija
+  `Fallido` con el motivo; no bloquea las demás facturas.
+- Se ignoran únicamente metadatos de sistema (`__MACOSX`, `.DS_Store`, etc.).
+- Se admiten subcarpetas y contenedores anidados hasta `MAX_ARCHIVE_DEPTH`
+  (por defecto 2). Hay límites de seguridad configurables:
+  `MAX_ARCHIVE_ENTRIES=1000` y `MAX_ARCHIVE_UNCOMPRESSED_BYTES=262144000`.
+- El límite de subida es `MAX_UPLOAD_MB` en servidor y
+  `NEXT_PUBLIC_MAX_UPLOAD_MB` en la UI (100 MB por defecto). Si se configura
+  uno, se deben configurar ambos con el mismo valor.
+- `MINIO_INTERNAL_ENDPOINT` es opcional y tiene prioridad para las operaciones
+  S3 de los workers. `MINIO_PUBLIC_ENDPOINT` se usa exclusivamente para las
+  URLs de previsualización guardadas en la base.
+
 ## Estados terminales de `actividad`
 
 | Status | Significado |

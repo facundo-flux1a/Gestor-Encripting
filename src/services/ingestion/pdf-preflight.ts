@@ -14,6 +14,18 @@ export interface PreflightResult {
 }
 
 /**
+ * Los exportadores contables suelen nombrar explícitamente a sus paquetes
+ * ("lote_100_facturas", "grupo_50", "batch-invoices"). En PDFs escaneados la
+ * capa de texto puede estar comprimida y no es visible con el chequeo local;
+ * el nombre + más de una página es entonces una señal suficiente para enviar
+ * directo al paginador, sin pedir al extractor que trate 300 facturas como una.
+ */
+export function hasMultiDocumentFileNameSignal(fileName?: string | null): boolean {
+  if (!fileName) return false;
+  return /(?:^|[_\s.-])(?:lote|batch|grupo|facturas|invoices|remesa)(?:[_\s.-]|$)/i.test(fileName);
+}
+
+/**
  * Estima páginas en un PDF born-digital contando objetos /Type /Page.
  * Escaneos raros pueden fallar → null (tratar como duda → extract).
  */
@@ -49,7 +61,11 @@ export function countInvoiceHeaderHits(buffer: Buffer): number {
  * Alta confianza multi solo si hay señales fuertes.
  * Flag EXTRACT_ROUTE_V2=0 desactiva paginate-first (siempre extract).
  */
-export function resolvePreflight(buffer: Buffer, mimeType?: string | null): PreflightResult {
+export function resolvePreflight(
+  buffer: Buffer,
+  mimeType?: string | null,
+  fileName?: string | null
+): PreflightResult {
   const enabled = process.env.EXTRACT_ROUTE_V2 !== '0';
   if (!enabled) {
     return {
@@ -78,6 +94,18 @@ export function resolvePreflight(buffer: Buffer, mimeType?: string | null): Pref
 
   const pageCount = estimatePdfPageCount(buffer);
   const invoiceHeaderHits = countInvoiceHeaderHits(buffer);
+
+  // Lotes con nombre explícito: cubre PDFs escaneados o con streams de texto
+  // comprimidos, donde buscar "Factura" directamente en los bytes da 0 hits.
+  if (pageCount != null && pageCount >= 2 && hasMultiDocumentFileNameSignal(fileName)) {
+    return {
+      decision: 'paginate',
+      confidence: 'high',
+      pageCount,
+      invoiceHeaderHits,
+      reason: `filename_multi_signal pages=${pageCount}`,
+    };
+  }
 
   // Alta confianza: >=2 páginas Y >=2 cabeceras de factura/albarán distintas en el texto
   if (pageCount != null && pageCount >= 2 && invoiceHeaderHits >= 2) {

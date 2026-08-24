@@ -168,24 +168,67 @@ export async function createIngestionRecord(params: {
   parentUploadId?: string;
   empresaId: bigint;
   documentoNombre: string;
+  documentoTipo?: string;
   fileHash?: string;
+  filePath?: string;
   origen: 'dashboard' | 'correo';
+  /** Estado inicial para trabajo ya encolado, antes de que lo tome un worker. */
+  initialStatus?: IngestionStatus;
 }): Promise<void> {
-  await prisma.actividad.create({
-    data: {
+  // Los workers pueden reintentarse después de haber extraído el archivo pero
+  // antes de encolar todos sus hijos. El uploadId de cada hijo es determinista,
+  // por lo que este upsert hace la expansión de ZIP/RAR idempotente: nunca
+  // abortamos el lote por un P2002 ni generamos actividades huérfanas nuevas.
+  await prisma.actividad.upsert({
+    where: { upload_id: params.uploadId },
+    update: {
+      ...(params.parentUploadId !== undefined ? { parent_upload_id: params.parentUploadId } : {}),
+      id_de_empresa: params.empresaId,
+      documento_nombre: params.documentoNombre,
+      ...(params.documentoTipo !== undefined ? { documento_tipo: params.documentoTipo } : {}),
+      ...(params.fileHash !== undefined ? { file_hash: params.fileHash } : {}),
+      ...(params.filePath !== undefined ? { file_path: params.filePath } : {}),
+      dashboard_correo: params.origen,
+      updated_at: new Date(),
+    },
+    create: {
       upload_id: params.uploadId,
       parent_upload_id: params.parentUploadId ?? null,
       id_de_empresa: params.empresaId,
       documento_nombre: params.documentoNombre,
-      status: 'processing',
+      documento_tipo: params.documentoTipo ?? null,
+      status: params.initialStatus ?? 'processing',
       step: 'Recibiendo archivo',
       progress: 5,
       mensaje: 'Archivo recibido, iniciando procesamiento...',
       file_hash: params.fileHash ?? null,
+      file_path: params.filePath ?? null,
       dashboard_correo: params.origen,
       is_new: true,
     },
   });
+
+  // Un hijo determinista puede volver a aparecer al reintentar la expansión
+  // de un lote. Si todavía no produjo un documento, debe volver a la cola en
+  // vez de conservar un estado viejo de "procesando" que el reconciliador
+  // podría interpretar como un proceso interrumpido. Nunca se toca un hijo
+  // que ya tiene documento asociado.
+  if (params.initialStatus) {
+    await prisma.actividad.updateMany({
+      where: {
+        upload_id: params.uploadId,
+        documento_id: null,
+      },
+      data: {
+        status: params.initialStatus,
+        step: 'Recibiendo archivo',
+        progress: 5,
+        mensaje: 'Archivo en cola para procesamiento...',
+        error_detalle: null,
+        completed_at: null,
+      },
+    });
+  }
 }
 
 // ─── Estados predefinidos (los mismos de n8n, mapeados 1:1) ──────────────────

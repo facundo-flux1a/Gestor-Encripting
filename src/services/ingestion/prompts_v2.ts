@@ -590,8 +590,13 @@ Tu objetivo PRINCIPAL y OBLIGATORIO es determinar si cada documento es EMITIDA o
 \`\`\`
 ¿El documento fue clasificado como "TICKET"? → SÍ: saltar esta sección completa | NO: continuar
 
-1. ¿El documento dice "Abono", "Nota de crédito", "Rectificativa", "Credit Note", "Refund"?
-   SÍ → Es un ABONO | NO → Es una FACTURA
+1. ¿El documento dice "Abono", "Nota de crédito", "Credit Note" o "Refund"?
+   SÍ → Es un ABONO | NO → continuar
+
+   Una **factura rectificativa no es automáticamente un abono**:
+   - "rectificación por incremento", "aumento" o "cargo adicional" → es FACTURA y conserva importes POSITIVOS.
+   - "rectificación por abono", "decremento", "devolución" o importes negativos → es ABONO y sus importes son NEGATIVOS.
+   - si la rectificativa no permite determinar el sentido → marcar incidencia para revisión, sin inventar el signo.
 
 2. Extrae identificación fiscal y nombre de empresa_emisora del documento (búsqueda exhaustiva)
 3. Extrae identificación fiscal y nombre de cliente del documento (búsqueda exhaustiva)

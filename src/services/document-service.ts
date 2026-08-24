@@ -3408,29 +3408,12 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             WHERE 1=1
               AND (
@@ -3659,29 +3642,12 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
             WHERE i.tipo_impuesto NOT LIKE '%retencion%'
@@ -3745,29 +3711,12 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
             WHERE i.tipo_impuesto NOT LIKE '%retencion%'
@@ -3833,7 +3782,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE e.rol IN ('proveedor', 'emisor')
           AND COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal) NOT IN (${cifPlaceholders})
-          AND COALESCE(e.nombre_hash, e.id) NOT IN (${namePlaceholders})
+          AND COALESCE(e.nombre_hash, e.nombre) NOT IN (${namePlaceholders})
           AND d.importe_total > 0 -- Solo gastos positivos
           AND (
               (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -3844,7 +3793,7 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
-        GROUP BY COALESCE(e.identificador_fiscal_hash, e.nombre_hash, e.id)
+        GROUP BY COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal, e.nombre_hash, e.nombre, e.id)
         ORDER BY totalSpent DESC
         LIMIT 5
     `, [
@@ -3877,13 +3826,13 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
         JOIN entidades_documento e ON d.id = e.documento_id
         WHERE e.rol IN ('cliente', 'receptor')
           AND COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal) NOT IN (${cifPlaceholders})
-          AND COALESCE(e.nombre_hash, e.id) NOT IN (${namePlaceholders})
+          AND COALESCE(e.nombre_hash, e.nombre) NOT IN (${namePlaceholders})
           AND d.importe_total > 0
           AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
           AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
           ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
           ${wherePeriodFilter}
-        GROUP BY COALESCE(e.identificador_fiscal_hash, e.nombre_hash, e.id)
+        GROUP BY COALESCE(e.identificador_fiscal_hash, e.identificador_fiscal, e.nombre_hash, e.nombre, e.id)
         ORDER BY totalEarned DESC
         LIMIT 5
     `, [

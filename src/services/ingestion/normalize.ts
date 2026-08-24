@@ -221,6 +221,50 @@ export function detectTipoDocumento(tipoRaw: string | null | undefined): {
   };
 }
 
+/**
+ * Un total negativo es una señal contable determinista de abono/rectificativa.
+ * El extractor puede devolver "FACTURA" pese a conservar importes negativos;
+ * ese documento no debe persistirse como una factura ordinaria.
+ */
+export function normalizeNegativeAmountAsCreditNote(
+  tipoRaw: string | null | undefined,
+  importeTotal: unknown
+): string {
+  const tipo = String(tipoRaw ?? '').trim().toUpperCase() || 'SIN CLASIFICAR';
+  const total = Number(importeTotal);
+
+  if (!Number.isFinite(total) || total >= 0 || /ABONO|RECTIFICATIVA/.test(tipo)) {
+    return tipo;
+  }
+
+  if (tipo.includes('RECIBIDA') || tipo.includes('RECIBIDO')) return 'ABONO RECIBIDO';
+  if (tipo.includes('EMITIDA') || tipo.includes('EMITIDO')) return 'ABONO EMITIDO';
+  if (tipo.includes('FACTURA')) return 'ABONO';
+
+  return tipo;
+}
+
+/**
+ * Una factura rectificativa no es necesariamente un abono: una rectificación
+ * por incremento/aumento representa un cargo positivo. El tipo que devuelve
+ * el modelo puede decir "RECTIFICATIVA" o incluso "ABONO", por lo que se
+ * contrasta también el detalle extraído antes de aplicar la convención de
+ * signos de un abono.
+ */
+export function isPositiveRectificative(
+  tipoRaw: string | null | undefined,
+  extractedDocument: unknown
+): boolean {
+  const context = `${tipoRaw ?? ''} ${JSON.stringify(extractedDocument ?? {})}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  const isRectificative = /\bRECTIFIC/.test(context);
+  const isIncrease = /\b(INCREMENTO|AUMENTO|CARGO(?:\s+ADICIONAL)?|MAYOR\s+IMPORTE)\b/.test(context);
+  return isRectificative && isIncrease;
+}
+
 // ─── 6. validateMathBalance ───────────────────────────────────────────────────
 /**
  * Valida que los totales del documento cuadren matemáticamente.

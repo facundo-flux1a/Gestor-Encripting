@@ -1,6 +1,7 @@
 import {
   estimatePdfPageCount,
   countInvoiceHeaderHits,
+  hasMultiDocumentFileNameSignal,
   resolvePreflight,
 } from '@/services/ingestion/pdf-preflight';
 
@@ -40,6 +41,19 @@ describe('pdf-preflight', () => {
     const body = '%PDF-1.4\n/Type /Page\nFactura Nº 001\n';
     const r = resolvePreflight(Buffer.from(body), 'application/pdf');
     expect(r.decision).toBe('extract');
+  });
+
+  it('un lote nombrado se pagina aunque su texto PDF esté comprimido', () => {
+    process.env.EXTRACT_ROUTE_V2 = '1';
+    const body = '%PDF-1.4\n/Type /Page\n/Type /Page\n';
+    const r = resolvePreflight(Buffer.from(body), 'application/pdf', '02_lote_200_facturas.pdf');
+    expect(r.decision).toBe('paginate');
+    expect(r.reason).toBe('filename_multi_signal pages=2');
+  });
+
+  it('no pagina por nombre de factura común sin una señal de lote', () => {
+    expect(hasMultiDocumentFileNameSignal('Factura_2026_001.pdf')).toBe(false);
+    expect(hasMultiDocumentFileNameSignal('grupo_50_facturas.pdf')).toBe(true);
   });
 
   it('EXTRACT_ROUTE_V2=0 fuerza extract', () => {

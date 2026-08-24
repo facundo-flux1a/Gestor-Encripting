@@ -487,6 +487,15 @@ export function enrichPartyCifs(
     if (!outEmisor.nombre?.trim() || !nombreOk) {
       outEmisor.nombre = known.nombre;
     }
+
+    // En tickets de proveedores conocidos Azure suele identificar al vendedor,
+    // pero omite por completo al receptor. El contexto de empresa procede de la
+    // carga autenticada, así que es una fuente más fiable que inventar un CIF
+    // desde OCR. Sin este dato el guard fiscal convierte facturas correctas en
+    // REVISION por una discrepancia artificial.
+    if (!outCliente.cif && ours && outEmisor.cif !== ours) {
+      outCliente.cif = ours;
+    }
   }
 
   return { emisor: outEmisor, cliente: outCliente };

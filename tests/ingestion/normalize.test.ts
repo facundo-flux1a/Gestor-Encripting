@@ -13,6 +13,8 @@ import {
   toLowerCaseKeysDeep,
   normalizeCIF,
   detectTipoDocumento,
+  normalizeNegativeAmountAsCreditNote,
+  isPositiveRectificative,
   validateMathBalance,
   computeProgressForMultiple,
   GeminiParseError,
@@ -221,6 +223,22 @@ describe('detectTipoDocumento', () => {
     // Del golden dataset: el Analista devolvió "ABONO EMITIDO"
     const r = detectTipoDocumento('ABONO EMITIDO');
     expect(r.esEmitida).toBe(true);
+  });
+
+  it('convierte factura negativa a abono sin alterar facturas positivas', () => {
+    expect(normalizeNegativeAmountAsCreditNote('FACTURA RECIBIDA', -121)).toBe('ABONO RECIBIDO');
+    expect(normalizeNegativeAmountAsCreditNote('FACTURA EMITIDA', -121)).toBe('ABONO EMITIDO');
+    expect(normalizeNegativeAmountAsCreditNote('FACTURA RECIBIDA', 121)).toBe('FACTURA RECIBIDA');
+    expect(normalizeNegativeAmountAsCreditNote('ABONO RECIBIDO', -121)).toBe('ABONO RECIBIDO');
+  });
+
+  it('no trata una rectificativa por incremento como abono', () => {
+    expect(isPositiveRectificative('ABONO RECIBIDO', {
+      lineas: [{ descripcion: 'Rectificación de factura anterior (incremento)' }],
+    })).toBe(true);
+    expect(isPositiveRectificative('FACTURA RECTIFICATIVA RECIBIDA', {
+      lineas: [{ descripcion: 'Rectificación por devolución' }],
+    })).toBe(false);
   });
 
   it('detecta tipo INDETERMINADO', () => {

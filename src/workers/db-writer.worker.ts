@@ -36,7 +36,11 @@ import {
 } from '@/lib/document-fiscal-status';
 import { evaluarFechaContable } from '@/lib/fecha-contable-utils';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
-import { normalizeCIF } from '@/services/ingestion/normalize';
+import {
+  isPositiveRectificative,
+  normalizeCIF,
+  normalizeNegativeAmountAsCreditNote,
+} from '@/services/ingestion/normalize';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
@@ -49,10 +53,12 @@ function getSha256(text: string | null | undefined): string | null {
   return crypto.createHash('sha256').update(cleanText).digest('hex');
 }
 
-export function startDbWriterWorker() {
-  const worker = new Worker<DbWriterJobData>(
-    DB_WRITER_QUEUE_NAME,
-    async (job: Job<DbWriterJobData>) => {
+/**
+ * Persiste un resultado ya normalizado. Se exporta para reparaciones y
+ * auditorías controladas: comparten exactamente las mismas reglas y la misma
+ * transacción que el consumidor de BullMQ.
+ */
+export async function processDbWriterJob(job: Job<DbWriterJobData>) {
       const { ingestion, aiResult, fiscalStatus, fiscalRevisionReasons } = job.data;
       const { uploadId, fileName, empresaId } = ingestion;
       const resolvedFiscalStatus =
@@ -97,9 +103,17 @@ export function startDbWriterWorker() {
         // =====================================================================
 
         // 1. Tipo de documento y clasificación emitida/recibida
+        const docInfo = aiResult.documento || {};
+        const rawImporteTotal = docInfo.importe_total ?? aiResult.importe_total ?? 0;
+        const rawImporteSinIva = docInfo.importe_sin_iva ?? aiResult.importe_sin_impuestos ?? 0;
         const rawTipo = aiResult.tipo_documento || 'SIN CLASIFICAR';
-        let tipoDocumento = rawTipo.toString().toUpperCase();
-        const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
+        let tipoDocumento = normalizeNegativeAmountAsCreditNote(rawTipo.toString(), rawImporteTotal);
+        // Una rectificativa por incremento es un cargo positivo, no un abono.
+        // La regla se basa en el contenido extraído para no depender sólo de la
+        // etiqueta devuelta por el modelo.
+        const rectificativaPositiva = isPositiveRectificative(rawTipo.toString(), aiResult);
+        const isAbono = !rectificativaPositiva &&
+          (tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA'));
 
         // Normalización CIF/NIF/NIE (espacios, ES, paréntesis OCR, etc.)
         const cleanCif = (c: unknown): string => normalizeCIF(c == null ? null : String(c)) ?? '';
@@ -128,10 +142,6 @@ export function startDbWriterWorker() {
         const applySign = (n: number) => (isAbono ? forceAbonoSign(n) : n);
 
         // 2. Importes y Fechas (soportando anidado 'documento' o flat)
-        const docInfo = aiResult.documento || {};
-        const rawImporteTotal = docInfo.importe_total ?? aiResult.importe_total ?? 0;
-        const rawImporteSinIva = docInfo.importe_sin_iva ?? aiResult.importe_sin_impuestos ?? 0;
-        
         const importeTotal    = applySign(Number(rawImporteTotal) || 0);
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
         const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
@@ -450,6 +460,27 @@ export function startDbWriterWorker() {
           documentoId: savedDocumentoId ?? undefined,
         });
 
+        // La factura ya quedó confirmada en la transacción anterior. Si una
+        // actualización de progreso fue interrumpida justo después, recuperar
+        // de forma idempotente el vínculo actividad → documento: nunca debe
+        // existir una factura persistida sin su página de origen asociada.
+        if (savedDocumentoId) {
+          await prisma.actividad.updateMany({
+            where: { upload_id: uploadId, documento_id: null },
+            data: {
+              documento_id: savedDocumentoId,
+              status: 'Completado',
+              step: resolvedFiscalStatus === FiscalStatus.REVISION ? 'Guardado en revisión' : 'Guardado',
+              progress: 100,
+              mensaje:
+                resolvedFiscalStatus === FiscalStatus.REVISION
+                  ? 'Documento guardado en REVISIÓN (excluido de agregados hasta corregir).'
+                  : 'Documento procesado y validado correctamente.',
+              completed_at: new Date(),
+            },
+          });
+        }
+
         // Si este job es un hijo de un lote, propagar el progreso al padre.
         if (ingestion.parentUploadId) {
           await updateParentProgress(ingestion.parentUploadId).catch(() => {});
@@ -541,7 +572,12 @@ export function startDbWriterWorker() {
 
         throw error;
       }
-    },
+}
+
+export function startDbWriterWorker() {
+  const worker = new Worker<DbWriterJobData>(
+    DB_WRITER_QUEUE_NAME,
+    processDbWriterJob,
     {
       connection: redis,
       concurrency: DB_WRITER_CONCURRENCY,

@@ -16,7 +16,9 @@ interface UploadDialogProps {
   onUploadComplete?: () => void;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const configuredMaxUploadMb = Number.parseInt(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB || '', 10);
+const MAX_UPLOAD_MB = Number.isFinite(configuredMaxUploadMb) && configuredMaxUploadMb > 0 ? configuredMaxUploadMb : 100;
+const MAX_FILE_SIZE = MAX_UPLOAD_MB * 1024 * 1024;
 
 export function UploadDialog({
   isOpen,
@@ -37,7 +39,7 @@ export function UploadDialog({
     if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "❌ Archivo demasiado grande",
-        description: `"${file.name}" excede el límite de 10 MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        description: `"${file.name}" excede el límite de ${MAX_UPLOAD_MB} MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
         variant: "destructive",
       });
       return false;
@@ -65,13 +67,16 @@ export function UploadDialog({
     'image/jpeg',
     'image/jpg',
     'image/png',
+    'image/webp',
+    'image/tiff',
+    'image/bmp',
     'application/zip',
     'application/x-rar-compressed',
     'application/vnd.rar',
     'application/x-zip-compressed',
   ];
   const acceptedExts = new Set([
-    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar',
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'bmp', 'zip', 'rar',
   ]);
 
   const isAcceptedFile = (file: File) => {
@@ -292,7 +297,7 @@ export function UploadDialog({
     if (oversizedFiles.length > 0) {
       toast({
         title: "❌ Archivos demasiado grandes",
-        description: `${oversizedFiles.length} archivo(s) exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.`,
+        description: `${oversizedFiles.length} archivo(s) exceden el límite de ${MAX_UPLOAD_MB} MB. Por favor, elimínalos antes de continuar.`,
         variant: "destructive",
       });
       return;
@@ -388,7 +393,7 @@ export function UploadDialog({
               <Upload className="w-16 h-16 text-violet-600 dark:text-violet-400 animate-bounce" />
             </div>
             <p className="text-3xl font-bold text-violet-700 dark:text-violet-400 mb-2">Suelta tus archivos aquí</p>
-            <p className="text-gray-500 dark:text-gray-400">PDF, ZIP o imágenes (máx 10MB)</p>
+            <p className="text-gray-500 dark:text-gray-400">PDF, ZIP o imágenes (máx. {MAX_UPLOAD_MB} MB)</p>
           </div>
         </div>
       )}
@@ -476,7 +481,7 @@ export function UploadDialog({
               onChange={handleFileChange}
               className="hidden"
               id="file-upload"
-              accept=".pdf,.PDF,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar,application/pdf"
+              accept=".pdf,.PDF,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.tif,.tiff,.bmp,.zip,.rar,application/pdf"
             />
             <Button
               variant="outline"
@@ -487,7 +492,7 @@ export function UploadDialog({
               Seleccionar archivos
             </Button>
             <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
-              PDF - ZIP (máx. 10 MB por archivo)
+              PDF, ZIP, RAR, Office o imágenes (máx. {MAX_UPLOAD_MB} MB por archivo)
             </p>
           </div>
 
@@ -499,7 +504,7 @@ export function UploadDialog({
                   Archivos demasiado grandes detectados
                 </p>
                 <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-300 mt-0.5 sm:mt-1">
-                  Algunos archivos exceden el límite de 10 MB. Por favor, elimínalos antes de continuar.
+                  Algunos archivos exceden el límite de {MAX_UPLOAD_MB} MB. Por favor, elimínalos antes de continuar.
                 </p>
               </div>
             </div>
@@ -541,7 +546,7 @@ export function UploadDialog({
                               : 'text-gray-500'
                           )}>
                             {(file.size / 1024 / 1024).toFixed(2)} MB
-                            {isOversized && ' - Excede 10 MB'}
+                            {isOversized && ` - Excede ${MAX_UPLOAD_MB} MB`}
                           </span>
                         </div>
                       </div>

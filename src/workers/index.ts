@@ -18,7 +18,10 @@ import { EXTRACTION_QUEUE_NAME, extractionQueue } from '@/lib/queue';
 const HEARTBEAT_KEY = 'workers:heartbeat';
 const HEARTBEAT_TTL_SEC = 120;
 const HEARTBEAT_EVERY_MS = 15_000;
-const envPrefix = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
+const configuredQueuePrefix = process.env.QUEUE_PREFIX?.trim();
+const envPrefix = configuredQueuePrefix
+  ? configuredQueuePrefix.replace(/^\{/, '').replace(/\}$/, '')
+  : (process.env.NODE_ENV === 'production' ? 'prod' : 'dev');
 const WORKER_LOCK_KEY = `workers:${envPrefix}:singleton-lock`;
 const WORKER_LOCK_TTL_SEC = 60;
 const RECONCILE_EVERY_MS = 2 * 60 * 1000;
@@ -63,7 +66,11 @@ async function bootstrap() {
 
     // Migrar jobs huérfanos de la cola legacy `-gemini-extraction` → `-extraction`
     try {
-      const prefix = process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}';
+      const prefix = configuredQueuePrefix
+        ? (configuredQueuePrefix.startsWith('{') && configuredQueuePrefix.endsWith('}')
+            ? configuredQueuePrefix
+            : `{${configuredQueuePrefix}}`)
+        : (process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}');
       const legacyName = `${prefix}-gemini-extraction`;
       if (legacyName !== EXTRACTION_QUEUE_NAME) {
         const legacy = new Queue(legacyName, { connection: redis });

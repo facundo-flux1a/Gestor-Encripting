@@ -8,7 +8,8 @@ import { ingestionQueue, notificationQueue, IngestionJobData } from '@/lib/queue
 import { hashField } from '@/lib/encryption';
 
 // Configuración S3
-const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
+const MINIO_ENDPOINT = process.env.MINIO_INTERNAL_ENDPOINT || process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_ENDPOINT || MINIO_ENDPOINT;
 const s3Client = new S3Client({
   region: process.env.MINIO_REGION || 'us-east-1',
   endpoint: MINIO_ENDPOINT,
@@ -158,7 +159,9 @@ export async function POST(req: NextRequest) {
       const baseName = cleanFileName.includes('.') ? cleanFileName.substring(0, cleanFileName.lastIndexOf('.')) : cleanFileName;
       const ext = cleanFileName.includes('.') ? cleanFileName.substring(cleanFileName.lastIndexOf('.')) : '';
       const uniqueFileName = `${baseName}_${timestamp}${ext}`;
-      const filePath = `archivos/${uniqueFileName}`;
+      // Aislar por empresa y uploadId evita sobrescribir adjuntos que llegan
+      // en el mismo segundo con igual nombre (caso frecuente en correos/ZIP).
+      const filePath = `archivos/${empresaId}/${fileUploadId}/${uniqueFileName}`;
 
       // Subir a S3
       console.log(`[MailParser] ☁️ Subiendo ${filename} a MinIO...`);
@@ -170,13 +173,20 @@ export async function POST(req: NextRequest) {
         ACL: 'public-read',
       }));
 
-      const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+      const publicUrl = `${MINIO_PUBLIC_URL.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
       
       const fileExt = ext.replace('.', '').toLowerCase();
-      let normalizedFileType = fileExt;
-      if (!['zip', 'rar', 'pdf', 'jpeg', 'png', 'jpg'].includes(fileExt)) {
-        normalizedFileType = 'unknown';
-      }
+      const typeMap: Record<string, string> = {
+        zip: 'zip', rar: 'rar', pdf: 'pdf',
+        jpg: 'jpeg', jpeg: 'jpeg', png: 'png', webp: 'webp',
+        tif: 'tiff', tiff: 'tiff', bmp: 'bmp',
+        doc: 'word', docx: 'word', xls: 'excel', xlsx: 'excel',
+      };
+      const normalizedFileType = typeMap[fileExt] || 'unknown';
+      // Algunos proveedores de correo mandan un lote mixto (files[]) con un
+      // ZIP adjunto sin activar isZipContainer. La extensión/MIME sigue siendo
+      // la fuente de verdad para que ese adjunto también se expanda.
+      const isArchive = isCompressed || normalizedFileType === 'zip' || normalizedFileType === 'rar';
 
       // Crear actividad (INSERT IGNORE para ser idempotente en reintentos del MailParser)
       await connection.query(
@@ -200,7 +210,7 @@ export async function POST(req: NextRequest) {
         originalFileName: filename,
         fileSize: fileBuffer.length,
         publicUrl,
-        isCompressedFile: isCompressed,
+        isCompressedFile: isArchive,
         mimeType,
         normalizedFileType,
         fileExtension: fileExt,

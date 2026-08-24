@@ -8,8 +8,15 @@ import { redis } from './redis';
 
 const connection = redis;
 
-// Prefijo hash-tag para Redis Cluster / separar prod vs dev
-const queuePrefix = process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}';
+// Prefijo hash-tag para Redis Cluster / separar prod, dev y ejecuciones
+// aisladas. `QUEUE_PREFIX=cerp-test` se convierte en `{cerp-test}` para que
+// todas las claves BullMQ de esa ejecución queden en el mismo slot.
+const configuredQueuePrefix = process.env.QUEUE_PREFIX?.trim();
+const queuePrefix = configuredQueuePrefix
+  ? (configuredQueuePrefix.startsWith('{') && configuredQueuePrefix.endsWith('}')
+      ? configuredQueuePrefix
+      : `{${configuredQueuePrefix}}`)
+  : (process.env.NODE_ENV === 'production' ? '{prod}' : '{dev}');
 
 export const INGESTION_QUEUE_NAME = `${queuePrefix}-ingestion`;
 /** Nombre nuevo. Jobs viejos en `-gemini-extraction` hay que drenar/obliterar al migrar. */

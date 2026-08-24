@@ -58,10 +58,10 @@ describe('runFiscalGuards', () => {
     expect(r.failures.some((f) => f.code === 'CIF_EMISOR_AUSENTE')).toBe(true);
   });
 
-  it('isRepairable: math/IVA/emisor=receptor sí; CIF ausente no', () => {
+  it('isRepairable: los descuadres fiscales pasan a revisión; CIF ausente tampoco se repara', () => {
     expect(
       isRepairableGuardFailure([{ code: 'MATH_BALANCE', message: 'x' }])
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isRepairableGuardFailure([{ code: 'CIF_EMISOR_AUSENTE', message: 'x' }])
     ).toBe(false);

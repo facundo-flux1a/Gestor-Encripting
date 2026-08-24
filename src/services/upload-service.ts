@@ -39,34 +39,48 @@ function getNormalizedFileType(mimeType: string, extension?: string): string {
   const mime = mimeType.toLowerCase();
   const ext = extension?.toLowerCase() || '';
 
-  if (mime === 'application/zip' || ext === 'zip') return 'zip';
+  if (mime === 'application/zip' || mime === 'application/x-zip-compressed' || mime === 'multipart/x-zip' || ext === 'zip') return 'zip';
   if (mime === 'application/x-rar-compressed' || mime === 'application/vnd.rar' || mime === 'application/x-rar' || ext === 'rar') return 'rar';
   if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
   if (mime === 'image/jpeg' || mime === 'image/jpg' || ext === 'jpg' || ext === 'jpeg') return 'jpeg';
   if (mime === 'image/png' || ext === 'png') return 'png';
+  if (mime === 'image/webp' || ext === 'webp') return 'webp';
+  if (mime === 'image/tiff' || ext === 'tif' || ext === 'tiff') return 'tiff';
+  if (mime === 'image/bmp' || ext === 'bmp') return 'bmp';
   if (mime === 'application/msword' || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'doc' || ext === 'docx') return 'word';
   if (mime === 'application/vnd.ms-excel' || mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || ext === 'xls' || ext === 'xlsx') return 'excel';
 
   return ext || 'unknown';
 }
 
-/**
- * Retorna el MIME type correcto según la extensión del archivo hijo.
- */
 function getMimeTypeFromFileName(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
-    pdf:  'application/pdf',
-    jpg:  'image/jpeg',
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
-    png:  'image/png',
+    png: 'image/png',
     webp: 'image/webp',
-    doc:  'application/msword',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    bmp: 'image/bmp',
+    doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls:  'application/vnd.ms-excel',
+    xls: 'application/vnd.ms-excel',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   };
   return map[ext] || 'application/octet-stream';
+}
+
+function resolveFileMimeType(mimeType: string | null | undefined, fileName: string): string {
+  const mime = (mimeType || '').split(';')[0].trim().toLowerCase();
+  return !mime || mime === 'application/octet-stream' ? getMimeTypeFromFileName(fileName) : mime;
+}
+
+function maxUploadBytes(): number {
+  const configuredMb = Number.parseInt(process.env.MAX_UPLOAD_MB || process.env.NEXT_PUBLIC_MAX_UPLOAD_MB || '', 10);
+  const megabytes = Number.isFinite(configuredMb) && configuredMb > 0 ? configuredMb : 100;
+  return megabytes * 1024 * 1024;
 }
 
 // ─── Hash y duplicados ─────────────────────────────────────────────────────────
@@ -77,7 +91,13 @@ async function calculateFileHash(fileBuffer: ArrayBuffer): Promise<string> {
   return hash.digest('hex');
 }
 
-async function checkDuplicate(fileHash: string, empresaId: string): Promise<any> {
+export type DuplicateFileRecord = {
+  file_hash: string;
+  file_name: string;
+  uploaded_at: Date | string;
+};
+
+async function checkDuplicate(fileHash: string, empresaId: string): Promise<DuplicateFileRecord | null> {
   try {
     const [rows] = await connection.query(
       `SELECT file_hash, numero_documento as file_name, fecha_creacion as uploaded_at 
@@ -87,12 +107,59 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
        LIMIT 1`,
       [fileHash, empresaId]
     );
-    const results = rows as any[];
+    const results = rows as DuplicateFileRecord[];
     return results.length > 0 ? results[0] : null;
   } catch (error) {
     console.error(`[checkDuplicate] Error al verificar hash (empresa ${empresaId}):`, error);
     return null;
   }
+}
+
+/**
+ * Consulta duplicados por hash en bloques. La expansión de un ZIP/RAR usa esta
+ * función para que un hijo repetido sea rechazado de forma visible, sin frenar
+ * todas las demás facturas del lote.
+ */
+export async function findDuplicateFilesByHash(
+  fileHashes: string[],
+  empresaId: string
+): Promise<Map<string, DuplicateFileRecord>> {
+  const uniqueHashes = [...new Set(fileHashes.filter(Boolean))];
+  const found = new Map<string, DuplicateFileRecord>();
+  const chunkSize = 500;
+
+  try {
+    for (let start = 0; start < uniqueHashes.length; start += chunkSize) {
+      const chunk = uniqueHashes.slice(start, start + chunkSize);
+      const placeholders = chunk.map(() => '?').join(', ');
+      const [rows] = await connection.query(
+        `SELECT file_hash, file_name, uploaded_at
+         FROM (
+           SELECT file_hash, numero_documento as file_name, fecha_creacion as uploaded_at
+           FROM documentos
+           WHERE id_de_empresa = ? AND file_hash IN (${placeholders})
+
+           UNION ALL
+
+           SELECT file_hash, documento_nombre as file_name, created_at as uploaded_at
+           FROM ${dbName}.actividad
+           WHERE id_de_empresa = ?
+             AND file_hash IN (${placeholders})
+             AND COALESCE(status, '') NOT IN ('Fallido', 'failed', 'Duplicado')
+         ) AS hashes_en_uso`,
+        [empresaId, ...chunk, empresaId, ...chunk]
+      );
+      for (const row of rows as DuplicateFileRecord[]) {
+        if (row.file_hash) found.set(row.file_hash, row);
+      }
+    }
+  } catch (error) {
+    // La escritura conserva su propia barrera de integridad; no volvemos
+    // invisible un lote entero porque esta comprobación preventiva falle.
+    console.error(`[findDuplicateFilesByHash] Error verificando empresa ${empresaId}:`, error);
+  }
+
+  return found;
 }
 
 // ─── Extracción ZIP/RAR con subida individual a MinIO ─────────────────────────
@@ -412,8 +479,8 @@ async function notifyFrontendError(
 /**
  * Gestiona la subida de un documento a S3 con validación de duplicados.
  * Soporta PDF, imágenes (JPG/PNG), ZIP y RAR.
- * Para ZIP y RAR: extrae cada hijo en memoria, lo sube a MinIO individualmente
- * y encola un job por cada hijo con su propio S3 path.
+ * Los ZIP/RAR se guardan como padre y el worker los expande desde MinIO con
+ * credenciales internas; así el request HTTP nunca pierde hijos por timeout.
  */
 export async function uploadDocument(
   formData: FormData
@@ -433,6 +500,10 @@ export async function uploadDocument(
   if (!empresaId) throw new Error('No se ha proporcionado el ID de empresa.');
   if (!uploadId)  throw new Error('No se ha proporcionado el Upload ID.');
 
+  if (file.size > maxUploadBytes()) {
+    throw new Error(`El archivo supera el límite de ${Math.round(maxUploadBytes() / 1024 / 1024)} MB.`);
+  }
+
   const originalFileName  = file.name;
   const normalizedFileName = normalizeFileName(originalFileName);
 
@@ -441,7 +512,7 @@ export async function uploadDocument(
   }
 
   const fileSize          = file.size;
-  const fileMimeType      = file.type;
+  const fileMimeType      = resolveFileMimeType(file.type, normalizedFileName);
   const fileExtension     = normalizedFileName.toLowerCase().split('.').pop() || '';
   const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
 
@@ -449,7 +520,10 @@ export async function uploadDocument(
   console.log(`📤 [UploadService] MIME Type: ${fileMimeType}, Extensión: ${fileExtension}, Tipo: ${normalizedFileType}`);
 
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
+  // Las operaciones S3 usan la red interna; la URL pública solo se guarda para
+  // previsualización. Así una ACL/CDN pública no corta la ingesta en workers.
+  const MINIO_ENDPOINT = process.env.MINIO_INTERNAL_ENDPOINT || process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+  const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_ENDPOINT || MINIO_ENDPOINT;
 
   if (!MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
     console.error('Missing environment variables for upload service.');
@@ -546,7 +620,9 @@ export async function uploadDocument(
       : '';
 
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
-    const filePath = `archivos/${uniqueFileName}`;
+    // uploadId es reservado por archivo: evita que dos facturas con el mismo
+    // nombre recibidas en el mismo segundo se sobrescriban en MinIO.
+    const filePath = `archivos/${empresaId}/${uploadId}/${uniqueFileName}`;
 
     console.log(`[${normalizedFileName}] Subiendo a MinIO: ${filePath}`);
     await s3Client.send(new PutObjectCommand({
@@ -557,7 +633,7 @@ export async function uploadDocument(
       ACL: 'public-read',
     }));
 
-    const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+    const publicUrl = `${MINIO_PUBLIC_URL.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
     console.log(`[${normalizedFileName}] ✅ Subida completada → ${publicUrl}`);
 
     // Guardar datos de reintento
@@ -657,7 +733,8 @@ export async function uploadDocumentFromApi(
 ): Promise<void> {
   const MICROSERVICE_WEBHOOK_URL = process.env.MICROSERVICE_WEBHOOK_URL;
   const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
+  const MINIO_ENDPOINT = process.env.MINIO_INTERNAL_ENDPOINT || process.env.MINIO_ENDPOINT || process.env.MINIO_PUBLIC_ENDPOINT || 'https://minio.allbase.com.ar';
+  const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_ENDPOINT || MINIO_ENDPOINT;
 
   if (!MICROSERVICE_WEBHOOK_URL || !MINIO_ENDPOINT || !MINIO_ACCESS_KEY || !MINIO_SECRET_KEY || !MINIO_BUCKET_NAME) {
     console.error('❌ [UploadAPI] Configuración incompleta.');
@@ -697,9 +774,19 @@ export async function uploadDocumentFromApi(
     return;
   }
 
+  fileMimeType = resolveFileMimeType(fileMimeType, normalizedFileName);
   const fileSize          = fileBuffer.byteLength;
   const fileExtension     = normalizedFileName.toLowerCase().split('.').pop() || '';
   const normalizedFileType = getNormalizedFileType(fileMimeType, fileExtension);
+
+  if (fileSize > maxUploadBytes()) {
+    await markUploadAsFailed(
+      uploadId,
+      `El archivo supera el límite de ${Math.round(maxUploadBytes() / 1024 / 1024)} MB.`,
+      'Validación de tamaño'
+    );
+    return;
+  }
 
 
   try {
@@ -735,7 +822,9 @@ export async function uploadDocumentFromApi(
     const fileNameWithoutExt = normalizedFileName.includes('.') ? normalizedFileName.substring(0, normalizedFileName.lastIndexOf('.')) : normalizedFileName;
     const fileExt = normalizedFileName.includes('.') ? normalizedFileName.substring(normalizedFileName.lastIndexOf('.')) : '';
     const uniqueFileName = `${fileNameWithoutExt}_${timestamp}${fileExt}`;
-    const filePath = `archivos/${uniqueFileName}`;
+    // La API externa también puede recibir cargas concurrentes con el mismo
+    // filename; aislar por empresa/uploadId mantiene el objeto inmutable.
+    const filePath = `archivos/${empresaId}/${uploadId}/${uniqueFileName}`;
 
     const s3Client = new S3Client({
       region: process.env.MINIO_REGION || 'us-east-1',
@@ -752,7 +841,7 @@ export async function uploadDocumentFromApi(
       ACL: 'public-read',
     }));
 
-    const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+    const publicUrl = `${MINIO_PUBLIC_URL.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
 
     await connection.query(
       `UPDATE ${dbName}.actividad SET file_path = ?, file_hash = ?, cif = ? WHERE upload_id = ?`,
@@ -772,7 +861,7 @@ export async function uploadDocumentFromApi(
       originalFileName: normalizedFileName,
       fileSize,
       publicUrl,
-      isCompressedFile: false,
+      isCompressedFile: normalizedFileType === 'zip' || normalizedFileType === 'rar',
       mimeType: fileMimeType,
       normalizedFileType,
       fileExtension,

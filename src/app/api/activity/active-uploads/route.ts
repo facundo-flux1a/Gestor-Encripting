@@ -33,8 +33,10 @@ export async function GET(req: NextRequest) {
 
     const empresaBigs = empresaIds.map((id) => BigInt(id));
 
-    // Cerrar fantasmas/huérfanos antes de listar (contrato: no mentir "en proceso")
-    await reconcileStaleActividad({ empresaIds }).catch((e) => {
+    // La ruta HTTP puede correr en un proceso sin el prefijo BullMQ de una
+    // ingesta aislada. Sólo sanea subidas sin bytes; la comprobación de jobs
+    // activos pertenece al worker que sí comparte esa cola.
+    await reconcileStaleActividad({ empresaIds, reconcileProcessing: false }).catch((e) => {
       console.warn('[active-uploads] reconcile falló:', e);
     });
 
