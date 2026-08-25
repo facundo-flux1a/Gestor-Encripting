@@ -292,6 +292,9 @@ export async function GET(request: NextRequest) {
 
       const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
 
+      const baseImponible = doc.importe_sin_impuestos != null ? Number(doc.importe_sin_impuestos) : (Number(doc.importe_total) || 0);
+      const totalConImpuestos = Number(doc.importe_total) || 0;
+
       return {
         id: doc.id,
         file_hash: doc.file_hash,
@@ -300,8 +303,9 @@ export async function GET(request: NextRequest) {
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
         actualizado_en: fechaCreacionIso,
-        importe_total: Number(doc.importe_total) || 0,
-        importe_sin_impuestos: Number(doc.importe_sin_impuestos) || 0,
+        importe_total: baseImponible,
+        importe_sin_impuestos: baseImponible,
+        importe_con_impuestos: totalConImpuestos,
         moneda: doc.moneda,
         observaciones: doc.observaciones,
         datos_extra: doc.datos_extra,
