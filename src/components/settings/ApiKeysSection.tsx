@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useCompanyContext } from '@/context/CompanyProvider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,7 @@ interface ApiKeysSectionProps {
 
 export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
   const { toast } = useToast();
+  const { selectedCompanyIds } = useCompanyContext();
   const [keys, setKeys] = useState<ApiKey[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,13 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
   const [nombre, setNombre] = useState('');
   const [empresaId, setEmpresaId] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Auto-select company when dialog opens and only one is selected in sidebar
+  useEffect(() => {
+    if (dialogOpen && selectedCompanyIds.length === 1) {
+      setEmpresaId(String(selectedCompanyIds[0]));
+    }
+  }, [dialogOpen, selectedCompanyIds]);
 
   // Resultado de creación
   const [newRawKey, setNewRawKey] = useState<string | null>(null);

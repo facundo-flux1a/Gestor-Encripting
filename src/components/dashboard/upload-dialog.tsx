@@ -14,6 +14,7 @@ interface UploadDialogProps {
   onClose: () => void;
   companies: Array<{ id: number; nombre: string }>;
   onUploadComplete?: () => void;
+  defaultCompanyId?: string;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -22,7 +23,8 @@ export function UploadDialog({
   isOpen,
   onClose,
   companies,
-  onUploadComplete
+  onUploadComplete,
+  defaultCompanyId,
 }: UploadDialogProps) {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [files, setFiles] = useState<File[]>([]);
@@ -32,6 +34,14 @@ export function UploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { toast } = useToast();
+
+  // Auto-select company when modal opens and there is a single sidebar selection
+  useEffect(() => {
+    if (isOpen && defaultCompanyId) {
+      setSelectedCompanyId(defaultCompanyId);
+      setCompanyError(false);
+    }
+  }, [isOpen, defaultCompanyId]);
 
   const validateFileSize = (file: File): boolean => {
     if (file.size > MAX_FILE_SIZE) {

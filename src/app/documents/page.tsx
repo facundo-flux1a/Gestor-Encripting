@@ -551,6 +551,7 @@ function DocumentsPageContent() {
           onClose={() => setIsUploadOpen(false)}
           companies={companiesForUpload}
           onUploadComplete={handleUploadComplete}
+          defaultCompanyId={selectedCompanyIds.length === 1 ? String(selectedCompanyIds[0]) : undefined}
         />
       </>
     );
@@ -865,6 +866,7 @@ function DocumentsPageContent() {
         onClose={() => setIsUploadOpen(false)}
         companies={companiesForUpload}
         onUploadComplete={handleUploadComplete}
+        defaultCompanyId={selectedCompanyIds.length === 1 ? String(selectedCompanyIds[0]) : undefined}
       />
     </>
   );
