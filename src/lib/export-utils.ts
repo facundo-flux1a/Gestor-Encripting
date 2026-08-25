@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Document } from '@/lib/types';
 import { type Row } from '@tanstack/react-table';
+import { buildFileUrl, formatEntityData } from '@/lib/api-v1-helpers';
 
 // ==========================================
 // TIPOS
@@ -8,11 +9,13 @@ import { type Row } from '@tanstack/react-table';
 
 export type ExportFormat = 'excel' | 'csv' | 'json';
 
-interface ExportOptions {
+export interface ExportOptions {
     filename: string;
     format: ExportFormat;
-    includeSummary?: boolean; // Nuevo: incluir hoja de resumen IVA
-    trimestre?: number | null; // Nuevo: trimestre específico o null para todo el año
+    includeSummary?: boolean; // Incluir hoja de resumen IVA
+    includeFileUrls?: boolean; // Incluir columna de enlace al archivo original en MinIO
+    includeEntities?: boolean; // Incluir pestaña con el directorio completo de entidades
+    trimestre?: number | null; // Trimestre específico o null para todo el año
     exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
 }
 
@@ -80,6 +83,33 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
             const val = getRecargoFromDoc(item);
             return format === 'excel' ? val : formatCurrency(val);
         }
+    }
+
+    if (columnId === 'enlace_documento' || columnId === 'url_archivo' || columnId === 'archivo') {
+        const docObj = item?.original || item || {};
+        const rawPath = docObj.archivos?.[0]?.ruta_archivo
+            || docObj.url_archivo
+            || docObj.ruta_archivo
+            || docObj.archivo_ruta
+            || (typeof docObj.archivos === 'string' ? docObj.archivos : '');
+        return rawPath ? buildFileUrl(rawPath) : '';
+    }
+
+    if (columnId === '__entidad__') {
+        const docObj = item?.original || item || {};
+        const entidades = Array.isArray(docObj.entidades) ? docObj.entidades : [];
+        // Intentar extraer emisor/proveedor primero, luego receptor/cliente
+        const emisor = entidades.find((e: any) => e.rol === 'emisor' || e.rol === 'proveedor');
+        const receptor = entidades.find((e: any) => e.rol === 'receptor' || e.rol === 'cliente');
+        const relevant = emisor || receptor;
+        if (relevant) {
+            const formatted = formatEntityData(relevant);
+            const nombre = formatted.nombre || '';
+            const cif = formatted.cif || '';
+            return cif ? `${nombre} (${cif})` : nombre;
+        }
+        // Fallback a campos planos
+        return docObj.proveedor || docObj.empresa_emisora || docObj.cliente || '';
     }
 
     if (value instanceof Date) {
@@ -271,12 +301,22 @@ export const generateAdvancedExport = (
     const { filename, format } = options;
     const isExcel = format === 'excel';
 
+    // Determinar columnas efectivas agregando URL de archivo si fue solicitado
+    const effectiveColumns = [...columns];
+    if (options.includeEntities && !effectiveColumns.some(c => c.id === '__entidad__')) {
+        // Insertar columna Proveedor/Cliente justo después de la primera columna (ID/fecha)
+        effectiveColumns.splice(1, 0, { id: '__entidad__', header: 'Proveedor / Cliente' });
+    }
+    if (options.includeFileUrls && !effectiveColumns.some(c => c.id === 'enlace_documento' || c.id === 'url_archivo' || c.id === 'archivo')) {
+        effectiveColumns.push({ id: 'enlace_documento', header: 'Enlace Documento' });
+    }
+
     // Función interna para generar hoja de datos
     const generateDataSheet = (sheetData: any[]): XLSX.WorkSheet => {
         // 1. Preparar datos procesados
         const rows = sheetData.map(item => {
             const rowData: { [key: string]: any } = {};
-            columns.forEach(col => {
+            effectiveColumns.forEach(col => {
                 rowData[col.header] = getValueForExport(item, col.id, format);
             });
             return rowData;
@@ -284,10 +324,10 @@ export const generateAdvancedExport = (
 
         // 2. Calcular totales
         const totals: Record<string, number> = {};
-        columns.forEach(col => totals[col.id] = 0);
+        effectiveColumns.forEach(col => totals[col.id] = 0);
 
         sheetData.forEach(item => {
-            columns.forEach(col => {
+            effectiveColumns.forEach(col => {
                 const val = getNumericValue(item, col.id);
                 if (!isNaN(val)) {
                     totals[col.id] = (totals[col.id] || 0) + val;
@@ -298,9 +338,9 @@ export const generateAdvancedExport = (
         // 3. Agregar fila de totales
         if (rows.length > 0) {
             const totalRowData: { [key: string]: any } = {};
-            totalRowData[columns[0].header] = "TOTALES:";
+            totalRowData[effectiveColumns[0].header] = "TOTALES:";
 
-            columns.slice(1).forEach(col => {
+            effectiveColumns.slice(1).forEach(col => {
                 // Check heuristic for numeric column or tax column
                 const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad'].includes(col.id)
                     || col.id.startsWith('base_')
@@ -431,6 +471,14 @@ export const generateAdvancedExport = (
             }
         }
 
+        // 3. HOJA DE ENTIDADES (Directorio completo de Proveedores y Clientes si fue solicitado)
+        if (options.includeEntities) {
+            const entitiesSheet = generateEntitiesSheet(data);
+            applyExcelNumberFormat(entitiesSheet);
+            adjustColumnWidths(entitiesSheet);
+            XLSX.utils.book_append_sheet(workbook, entitiesSheet, 'Entidades');
+        }
+
         XLSX.writeFile(workbook, `${filename}.xlsx`);
     } else {
         // Para CSV/TXT, exportar todo junto (no soporta pestañas)
@@ -445,12 +493,20 @@ export const generateAdvancedExport = (
             csv += summaryCsv;
         }
 
+        if (options.includeEntities) {
+            const entitiesSheet = generateEntitiesSheet(data);
+            const entitiesCsv = XLSX.utils.sheet_to_csv(entitiesSheet);
+
+            csv += "\n\n\n--- ENTIDADES ---\n\n";
+            csv += entitiesCsv;
+        }
+
         if (format === 'csv') {
             downloadFile(csv, `${filename}.csv`, 'text/csv;charset=utf-8;');
         } else {
             const jsonRows = data.map(item => {
                 const obj: Record<string, any> = {};
-                columns.forEach(col => {
+                effectiveColumns.forEach(col => {
                     obj[col.header] = getValueForExport(item, col.id);
                 });
                 return obj;
@@ -459,6 +515,113 @@ export const generateAdvancedExport = (
             downloadFile(jsonContent, `${filename}.json`, 'application/json;charset=utf-8;');
         }
     }
+};
+
+// ==========================================
+// LÓGICA DIRECTORIO DE ENTIDADES (PROVEEDORES Y CLIENTES)
+// ==========================================
+
+const generateEntitiesSheet = (data: any[]): XLSX.WorkSheet => {
+    const entityMap = new Map<string, {
+        rol: string;
+        nombre: string;
+        cif: string;
+        direccion: string;
+        codigo_postal: string;
+        poblacion: string;
+        provincia: string;
+        telefono: string;
+        email: string;
+        iban: string;
+        totalFacturas: number;
+        importeTotal: number;
+    }>();
+
+    data.forEach(item => {
+        const doc = item.original || item;
+        const entidades = doc.entidades && Array.isArray(doc.entidades) ? doc.entidades : [];
+        const docTotal = Math.abs(Number(doc.importe_total || doc.total) || 0);
+
+        if (entidades.length > 0) {
+            entidades.forEach((ent: any) => {
+                const formatted = formatEntityData(ent);
+                const nombre = formatted.nombre || 'Sin nombre';
+                const cif = formatted.cif || '';
+                const key = `${ent.rol || 'desconocido'}_${cif}_${nombre}`.toLowerCase();
+
+                let existing = entityMap.get(key);
+                if (!existing) {
+                    const rolLabel = (ent.rol === 'emisor' || ent.rol === 'proveedor')
+                        ? 'Proveedor / Emisor'
+                        : (ent.rol === 'receptor' || ent.rol === 'cliente')
+                            ? 'Cliente / Receptor'
+                            : ent.rol || 'Otro';
+
+                    existing = {
+                        rol: rolLabel,
+                        nombre,
+                        cif,
+                        direccion: formatted.direccion || '',
+                        codigo_postal: formatted.codigo_postal || '',
+                        poblacion: formatted.poblacion || '',
+                        provincia: formatted.provincia || '',
+                        telefono: formatted.telefono || '',
+                        email: formatted.email || '',
+                        iban: formatted.iban || '',
+                        totalFacturas: 0,
+                        importeTotal: 0,
+                    };
+                    entityMap.set(key, existing);
+                }
+                existing.totalFacturas += 1;
+                existing.importeTotal += docTotal;
+            });
+        } else {
+            // Fallback si no hay entidades estructuradas
+            const provNombre = doc.proveedor || doc.empresa_emisora || '';
+            const provCif = doc.cif || doc.cif_emisor || '';
+            if (provNombre || provCif) {
+                const key = `proveedor_${provCif}_${provNombre}`.toLowerCase();
+                let existing = entityMap.get(key);
+                if (!existing) {
+                    existing = {
+                        rol: 'Proveedor / Emisor',
+                        nombre: provNombre,
+                        cif: provCif,
+                        direccion: doc.direccion_emisor || '',
+                        codigo_postal: '',
+                        poblacion: '',
+                        provincia: '',
+                        telefono: '',
+                        email: '',
+                        iban: '',
+                        totalFacturas: 0,
+                        importeTotal: 0,
+                    };
+                    entityMap.set(key, existing);
+                }
+                existing.totalFacturas += 1;
+                existing.importeTotal += docTotal;
+            }
+        }
+    });
+
+    const rows = Array.from(entityMap.values()).map(e => ({
+        'Rol': e.rol,
+        'Razón Social / Nombre': e.nombre,
+        'CIF / NIF': e.cif,
+        'Dirección': e.direccion,
+        'Código Postal': e.codigo_postal,
+        'Población': e.poblacion,
+        'Provincia': e.provincia,
+        'Teléfono': e.telefono,
+        'Email': e.email,
+        'IBAN': e.iban,
+        'Nº Facturas': e.totalFacturas,
+        'Total Facturado (€)': e.importeTotal
+    }));
+
+    return XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'Mensaje': 'No se encontraron entidades asociadas' }]);
 };
 
 

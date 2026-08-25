@@ -61,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText } from 'lucide-react';
+import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import {
@@ -486,6 +486,7 @@ export function DataTable<TData extends object, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [idFilterText, setIdFilterText] = React.useState('');
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
   // 🆕 PERSISTENCIA DE FILTROS DE TABLA (Trimestres, Años, Tipos, etc.)
@@ -592,8 +593,20 @@ export function DataTable<TData extends object, TValue>({
   }, [hiddenColumns, enableColumnPersistence, isLoadingColumnVisibility, savedColumnVisibility]);
 
 
+  // 🔍 Filtro por ID(s): acepta uno o más IDs separados por coma o espacio
+  const filteredByIdData = React.useMemo(() => {
+    const text = idFilterText.trim();
+    if (!text) return data;
+    const ids = text
+      .split(/[,\s]+/)
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n));
+    if (ids.length === 0) return data;
+    return data.filter(item => ids.includes((item as any).id_documento));
+  }, [data, idFilterText]);
+
   const table = useReactTable({
-    data,
+    data: filteredByIdData,
     columns,
     state: {
       sorting,
@@ -910,8 +923,8 @@ export function DataTable<TData extends object, TValue>({
     <div className="space-y-4">
       {/* Controls: Filter input and column visibility */}
       <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
-        <div className="flex-1 w-full sm:w-auto" data-tutorial="global-search">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-1 w-full sm:w-auto flex-wrap">
+          <div className="relative" data-tutorial="global-search">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder='Buscar en todas las columnas...'
@@ -919,6 +932,27 @@ export function DataTable<TData extends object, TValue>({
               onChange={(event) => setGlobalFilter(event.target.value)}
               className="h-10 pl-10 w-full max-w-sm rounded-xl border-border/50 bg-background/90 shadow-sm transition-all duration-300 ease-out hover:border-primary/30 hover:shadow-md focus:ring-2 focus:ring-primary/15"
             />
+          </div>
+          <div className="relative">
+            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder='IDs: 8409, 8410...'
+              value={idFilterText}
+              onChange={(event) => setIdFilterText(event.target.value)}
+              className={cn(
+                "h-10 pl-10 w-48 rounded-xl border-border/50 bg-background/90 shadow-sm transition-all duration-300 ease-out hover:border-primary/30 hover:shadow-md focus:ring-2 focus:ring-primary/15",
+                idFilterText.trim() && "border-primary/50 bg-primary/5"
+              )}
+            />
+            {idFilterText.trim() && (
+              <button
+                onClick={() => setIdFilterText('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors"
+                title="Limpiar filtro de IDs"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

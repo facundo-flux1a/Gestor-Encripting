@@ -113,6 +113,7 @@ function DocumentsPageContent() {
           try {
             const ids = docs.map((d: any) => d.id_documento).filter(Boolean);
             sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+            sessionStorage.setItem('document_origin_url', '/documents');
           } catch (e) {
             console.warn('⚠️ [DocumentsPage] Error guardando navegación:', e);
           }

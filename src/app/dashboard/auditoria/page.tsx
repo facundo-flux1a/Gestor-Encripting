@@ -150,6 +150,16 @@ export default function AuditoriaPage() {
             setData(result);
             setIncidentsAnalytics(analyticsData);
 
+            if (result && Array.isArray(result.documents) && result.documents.length > 0) {
+                try {
+                    const ids = result.documents.map((d: any) => d.id_documento || d.id).filter(Boolean);
+                    sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+                    sessionStorage.setItem('document_origin_url', '/dashboard/auditoria');
+                } catch (e) {
+                    console.warn('⚠️ [AuditoriaPage] Error guardando navegación:', e);
+                }
+            }
+
             // Verificar si necesitamos activar el polling
             const needsPolling = result.documents.some((doc: any) =>
                 (doc.mismatch_amount > 0.05 || doc.is_incident) && (!doc.ai_suggestions || doc.ai_suggestions.length === 0)
@@ -349,6 +359,19 @@ export default function AuditoriaPage() {
         : 100;
 
     const allIssuesCount = filteredDocs.length; // Usa el conteo real de la tabla para evitar confusión
+
+    // Sincronizar IDs de navegación activos con los documentos filtrados en pantalla
+    useEffect(() => {
+        if (filteredDocs.length > 0) {
+            try {
+                const ids = filteredDocs.map((d: any) => d.id_documento || d.id).filter(Boolean);
+                sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+                sessionStorage.setItem('document_origin_url', '/dashboard/auditoria');
+            } catch (e) {
+                console.warn('⚠️ [AuditoriaPage] Error guardando navegación filtrada:', e);
+            }
+        }
+    }, [filteredDocs]);
 
     // Polling Effect: Refresca los datos cada 5 segundos si hay diagnósticos en curso
     useEffect(() => {

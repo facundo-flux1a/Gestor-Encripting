@@ -3,8 +3,8 @@ import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
-import { hashField, normalizeEntityName } from '@/lib/encryption';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
+import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,11 @@ export const dynamic = 'force-dynamic';
  *   X-Api-Key: flux_xxxxx
  *
  * Query Parameters (opcionales):
- *   ?trimestre=3
- *   &año=2025
+ *   ?desde_id=8627                  (paginación por cursor incremental)
+ *   &modificados_desde=2026-08-24   (facturas modificadas desde fecha)
+ *   &limit=100                      (límite de resultados, por defecto 500, max 1000)
+ *   &trimestre=3
+ *   &año=2026
  *   &proveedor=García
  *   &cliente=Pérez
  *   &tipo=recibidas (emitidas | recibidas | todas)
@@ -48,12 +51,17 @@ export async function GET(request: NextRequest) {
 
     // 3. Leer filtros de la URL
     const searchParams = request.nextUrl.searchParams;
+    const desdeIdParam = searchParams.get('desde_id');
+    const modificadosDesdeParam = searchParams.get('modificados_desde') || searchParams.get('modificado_desde');
+    const limitParam = searchParams.get('limit');
     const trimestreParam = searchParams.get('trimestre');
     const añoParam = searchParams.get('año') ?? searchParams.get('ano');
     const proveedorParam = searchParams.get('proveedor');
     const clienteParam = searchParams.get('cliente');
     const tipoParam = searchParams.get('tipo') || 'todas';
 
+    const desdeId = desdeIdParam ? Number(desdeIdParam) : null;
+    const limit = Math.min(Math.max(limitParam ? Number(limitParam) : 500, 1), 1000);
     const trimestre = trimestreParam ? Number(trimestreParam) : null;
     const año = añoParam ? Number(añoParam) : null;
     const proveedor = proveedorParam?.trim() || null;
@@ -61,6 +69,9 @@ export async function GET(request: NextRequest) {
     const tipo = tipoParam.toLowerCase() as 'emitidas' | 'recibidas' | 'todas';
 
     // Validaciones básicas
+    if (desdeId !== null && (isNaN(desdeId) || desdeId < 0)) {
+      return NextResponse.json({ error: '"desde_id" debe ser un número entero positivo.' }, { status: 400 });
+    }
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
       return NextResponse.json({ error: '"trimestre" debe ser 1, 2, 3 o 4.' }, { status: 400 });
     }
@@ -85,7 +96,8 @@ export async function GET(request: NextRequest) {
         d.observaciones,
         d.año_trimestre,
         d.num_trimestre,
-        d.trimestre_cerrado
+        d.trimestre_cerrado,
+        d.fecha_creacion
       FROM documentos d
       WHERE d.id_de_empresa = ?
         AND (
@@ -102,6 +114,21 @@ export async function GET(request: NextRequest) {
     `;
     const params: any[] = [empresaId];
 
+    // Semáforo incremental: ?desde_id=
+    if (desdeId !== null) {
+      query += ` AND d.id > ?`;
+      params.push(desdeId);
+    }
+
+    // Filtro por modificación: ?modificados_desde=
+    if (modificadosDesdeParam) {
+      const modDate = parseFlexibleDate(modificadosDesdeParam);
+      if (modDate && !isNaN(modDate.getTime())) {
+        query += ` AND (d.fecha_creacion >= ? OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ?))`;
+        params.push(modDate, modDate);
+      }
+    }
+
     if (trimestre !== null) {
       query += ` AND d.num_trimestre = ?`;
       params.push(trimestre);
@@ -112,19 +139,19 @@ export async function GET(request: NextRequest) {
       params.push(Number(año));
     }
 
-
-
-    query += ` GROUP BY d.id ORDER BY d.fecha_emision DESC`;
+    // Ordenamiento por ID creciente para paginación por cursor fiable
+    query += ` GROUP BY d.id ORDER BY d.id ASC LIMIT ?`;
+    params.push(limit);
 
     const [documentos] = await db.query<RowDataPacket[]>(query, params);
 
     if (documentos.length === 0) {
-      return NextResponse.json({ data: [] }, { status: 200 });
+      return NextResponse.json({ total: 0, data: [] }, { status: 200 });
     }
 
     const docIds = documentos.map((d: any) => d.doc_id);
 
-    // 5. Cargar impuestos de todos los documentos en una sola query
+    // 5. Cargar impuestos de todos los documentos
     const [ivaRows] = await db.query<RowDataPacket[]>(
       `SELECT documento_id, tipo_impuesto, porcentaje, base_imponible, cuota
        FROM impuestos_documento WHERE documento_id IN (?)`,
@@ -137,9 +164,9 @@ export async function GET(request: NextRequest) {
       ivaByDoc[r.documento_id].push(r);
     });
 
-    // 6. Cargar líneas de todos los documentos en una sola query
+    // 6. Cargar líneas de todos los documentos
     const [lineasRows] = await db.query<RowDataPacket[]>(
-      `SELECT documento_id, descripcion, cantidad, precio_unitario, importe_linea
+      `SELECT id, documento_id, codigo, descripcion, cantidad, unidad, precio_unitario, descuento_porcentaje, precio_neto, importe_linea, datos_extra
        FROM lineas_documento WHERE documento_id IN (?)`,
       [docIds]
     );
@@ -147,32 +174,36 @@ export async function GET(request: NextRequest) {
     const lineasByDoc: Record<number, any[]> = {};
     lineasRows.forEach((r: any) => {
       if (!lineasByDoc[r.documento_id]) lineasByDoc[r.documento_id] = [];
-      lineasByDoc[r.documento_id].push({
-        descripcion: r.descripcion,
-        cantidad: Number(r.cantidad) || 0,
-        precio_unitario: Number(r.precio_unitario) || 0,
-        importe_total: Number(r.importe_linea) || 0,
-      });
+      const docImpuestos = ivaByDoc[r.documento_id] || [];
+      lineasByDoc[r.documento_id].push(formatDocumentLine(r, docImpuestos));
     });
 
-    // 6.5 Cargar entidades usando Prisma para garantizar desencriptación
+    // 6.5 Cargar entidades completas usando Prisma para desencriptación transparente
     const entidadesPrisma = await prisma.entidades_documento.findMany({
       where: { documento_id: { in: docIds } },
-      select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }
-    });
-
-    const entidadesByDoc: Record<number, Record<string, { nombre: string; cif: string }>> = {};
-    entidadesPrisma.forEach((ent) => {
-      if (!entidadesByDoc[ent.documento_id]) entidadesByDoc[ent.documento_id] = {};
-      if (ent.rol) {
-         entidadesByDoc[ent.documento_id][ent.rol] = {
-           nombre: ent.nombre || '',
-           cif: ent.identificador_fiscal || ''
-         };
+      select: {
+        documento_id: true,
+        rol: true,
+        nombre: true,
+        identificador_fiscal: true,
+        direccion: true,
+        telefono: true,
+        email: true,
+        cuenta_contable: true,
+        datos_extra: true
       }
     });
 
-    // 6.6 Cargar archivos usando Prisma para garantizar desencriptación
+    const entidadesByDoc: Record<number, Record<string, any>> = {};
+    entidadesPrisma.forEach((ent) => {
+      const docId = Number(ent.documento_id);
+      if (!entidadesByDoc[docId]) entidadesByDoc[docId] = {};
+      if (ent.rol) {
+        entidadesByDoc[docId][ent.rol] = formatEntityData(ent);
+      }
+    });
+
+    // 6.6 Cargar archivos usando Prisma
     const archivosPrisma = await prisma.archivos_documento.findMany({
       where: { documento_id: { in: docIds } },
       select: { documento_id: true, ruta_archivo: true }
@@ -181,11 +212,11 @@ export async function GET(request: NextRequest) {
     const archivoByDoc: Record<number, string> = {};
     archivosPrisma.forEach((archivo) => {
       if (archivo.ruta_archivo) {
-         archivoByDoc[Number(archivo.documento_id)] = archivo.ruta_archivo;
+        archivoByDoc[Number(archivo.documento_id)] = archivo.ruta_archivo;
       }
     });
 
-    // 6.7 Cargar empresa para saber si es emitida
+    // 6.7 Cargar empresa para calcular clasificación emitida / recibida
     const empresa = await prisma.empresas.findUnique({
       where: { id: empresaId },
       select: { CIF: true }
@@ -193,23 +224,19 @@ export async function GET(request: NextRequest) {
     const empresaCif = empresa?.CIF?.trim().toLowerCase() || '';
 
     // 7. Enriquecer documentos
-    const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
-    const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
-
     let enriched = documentos.map((doc: any) => {
       const entidades = entidadesByDoc[doc.doc_id] || {};
 
       const emisorCif = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim().toLowerCase();
       const isIssued = !!(empresaCif && emisorCif && emisorCif === empresaCif);
 
-      let publicUrl = null;
       const docRutaArchivo = archivoByDoc[doc.doc_id];
-      if (docRutaArchivo) {
-        publicUrl = `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${docRutaArchivo}`;
-      }
+      const publicUrl = buildFileUrl(docRutaArchivo);
 
       const impuestos = ivaByDoc[doc.doc_id] || [];
       const retencion = extractRetencionFromImpuestos(impuestos);
+
+      const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
 
       return {
         id: doc.doc_id,
@@ -217,6 +244,7 @@ export async function GET(request: NextRequest) {
         numero_documento: doc.numero_documento,
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
+        actualizado_en: fechaCreacionIso,
         importe_total: Number(doc.importe_total) || 0,
         importe_sin_impuestos: Number(doc.importe_sin_impuestos) || 0,
         moneda: doc.moneda,
@@ -225,7 +253,7 @@ export async function GET(request: NextRequest) {
         año: doc.año_trimestre,
         retencion,
         entidades: entidades,
-        is_issued: isIssued, // Factura emitida por la empresa
+        is_issued: isIssued,
         url_archivo: publicUrl,
         impuestos,
         lineas_detalle: lineasByDoc[doc.doc_id] || [],
@@ -239,7 +267,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 9. Filtrar en memoria por proveedor/cliente (partial match support over encrypted data)
+    // 9. Filtrar en memoria por proveedor/cliente (partial match)
     if (proveedor) {
       const term = proveedor.toLowerCase();
       enriched = enriched.filter((doc: any) => {

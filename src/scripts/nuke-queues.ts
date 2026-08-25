@@ -1,10 +1,10 @@
 import 'dotenv/config';
-import { ingestionQueue, geminiQueue, dbWriterQueue } from '../lib/queue';
+import { ingestionQueue, extractionQueue, dbWriterQueue, notificationQueue } from '../lib/queue';
 
 async function nukeAll() {
   console.log('💣 Limpieza total de todas las colas BullMQ...\n');
 
-  for (const q of [ingestionQueue, geminiQueue, dbWriterQueue]) {
+  for (const q of [ingestionQueue, extractionQueue, dbWriterQueue, notificationQueue]) {
     try {
       // pause queue first to stop workers from grabbing jobs while we nuke
       await q.pause(); 

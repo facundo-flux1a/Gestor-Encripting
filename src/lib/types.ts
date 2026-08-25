@@ -168,6 +168,7 @@ export type Document = {
   iva: number;
   total: number;
   is_new: number;
+  retencion_irpf?: number;
   entidades: DocumentEntity[];
   lineas: DocumentLine[];
   iva_details: IvaDetail[];

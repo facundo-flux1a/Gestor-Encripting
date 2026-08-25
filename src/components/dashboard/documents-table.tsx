@@ -294,6 +294,9 @@ const getColumns = (
 
     {
       id: 'select',
+      accessorFn: (row) => row.id_documento,
+      enableSorting: true,
+      sortingFn: 'basic',
       header: ({ table }) => {
         const checkboxContent = (
           <>
@@ -301,6 +304,7 @@ const getColumns = (
               checked={table.getIsAllPageRowsSelected()}
               onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
               aria-label="Select all"
+              onClick={(e) => e.stopPropagation()}
               className="transition-all duration-300 hover:scale-110"
             />
             <span className="font-medium">ID</span>

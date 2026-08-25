@@ -94,8 +94,9 @@ export default function HealthCheckPage() {
             setData(result);
             if (result && Array.isArray(result.documents) && result.documents.length > 0) {
                 try {
-                    const ids = result.documents.map((d: any) => d.id_documento).filter(Boolean);
+                    const ids = result.documents.map((d: any) => d.id_documento || d.id).filter(Boolean);
                     sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+                    sessionStorage.setItem('document_origin_url', '/dashboard/health-check');
                 } catch (e) {
                     console.warn('⚠️ [HealthCheckPage] Error guardando navegación:', e);
                 }
@@ -167,6 +168,19 @@ export default function HealthCheckPage() {
     const healthScore = data && data.summary.total > 0
         ? Math.round(((data.summary.total - totalIssues) / data.summary.total) * 100)
         : 100;
+
+    // Sincronizar IDs de navegación activos con los documentos filtrados en pantalla
+    useEffect(() => {
+        if (filteredDocs.length > 0) {
+            try {
+                const ids = filteredDocs.map((d: any) => d.id_documento || d.id).filter(Boolean);
+                sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+                sessionStorage.setItem('document_origin_url', '/dashboard/health-check');
+            } catch (e) {
+                console.warn('⚠️ [HealthCheckPage] Error guardando navegación filtrada:', e);
+            }
+        }
+    }, [filteredDocs]);
 
     // Polling Effect: Refresca los datos cada 5 segundos si hay diagnósticos en curso
     useEffect(() => {

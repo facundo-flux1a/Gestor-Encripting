@@ -3,8 +3,8 @@ import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
-import { hashField, normalizeEntityName } from '@/lib/encryption';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
+import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,10 @@ export const dynamic = 'force-dynamic';
  *   X-Api-Key: flux_xxxxx
  *
  * Query Parameters (opcionales):
- *   ?trimestre=3
+ *   ?desde_id=8627                  (cursor incremental)
+ *   &modificados_desde=2026-08-24   (modificados desde fecha)
+ *   &limit=500                      (máximo 1000)
+ *   &trimestre=3
  *   &año=2025
  *   &proveedor=García
  *   &cliente=Pérez
@@ -51,6 +54,9 @@ export async function GET(request: NextRequest) {
 
     // 3. Leer filtros de la URL
     const searchParams = request.nextUrl.searchParams;
+    const desdeIdParam = searchParams.get('desde_id');
+    const modificadosDesdeParam = searchParams.get('modificados_desde') || searchParams.get('modificado_desde');
+    const limitParam = searchParams.get('limit');
     const trimestreParam = searchParams.get('trimestre');
     const añoParam = searchParams.get('año') ?? searchParams.get('ano');
     const proveedorParam = searchParams.get('proveedor');
@@ -62,6 +68,8 @@ export async function GET(request: NextRequest) {
     const incluirSinVerificar = searchParams.get('incluir_sin_verificar') === 'true';
     const incluirSinConfirmar = searchParams.get('incluir_sin_confirmar') === 'true';
 
+    const desdeId = desdeIdParam ? Number(desdeIdParam) : null;
+    const limit = Math.min(Math.max(limitParam ? Number(limitParam) : 500, 1), 1000);
     const trimestre = trimestreParam ? Number(trimestreParam) : null;
     const año = añoParam ? Number(añoParam) : null;
     const proveedor = proveedorParam?.trim() || null;
@@ -69,6 +77,9 @@ export async function GET(request: NextRequest) {
     const tipo = tipoParam.toLowerCase() as 'emitidas' | 'recibidas' | 'todas';
 
     // Validaciones básicas
+    if (desdeId !== null && (isNaN(desdeId) || desdeId < 0)) {
+      return NextResponse.json({ error: '"desde_id" debe ser un número entero positivo.' }, { status: 400 });
+    }
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
       return NextResponse.json({ error: '"trimestre" debe ser 1, 2, 3 o 4.' }, { status: 400 });
     }
@@ -87,6 +98,21 @@ export async function GET(request: NextRequest) {
       WHERE d.id_de_empresa = ?
     `;
     const params: any[] = [empresaId];
+
+    // Semáforo incremental: ?desde_id=
+    if (desdeId !== null) {
+      query += ` AND d.id > ?`;
+      params.push(desdeId);
+    }
+
+    // Filtro por modificación: ?modificados_desde=
+    if (modificadosDesdeParam) {
+      const modDate = parseFlexibleDate(modificadosDesdeParam);
+      if (modDate && !isNaN(modDate.getTime())) {
+        query += ` AND (d.fecha_creacion >= ? OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ?))`;
+        params.push(modDate, modDate);
+      }
+    }
 
     // Aplicar filtros de tipo de documento
     if (incluirSinConfirmar) {
@@ -128,9 +154,8 @@ export async function GET(request: NextRequest) {
       params.push(año);
     }
 
-
-
-    query += ` ORDER BY d.fecha_emision DESC`;
+    query += ` ORDER BY d.id ASC LIMIT ?`;
+    params.push(limit);
 
     const [documentos] = await db.query<RowDataPacket[]>(query, params);
 
@@ -161,48 +186,17 @@ export async function GET(request: NextRequest) {
     ]);
     const empresaCifGlobal = empresaData?.CIF?.trim().toLowerCase() || '';
 
-    // 6. Agrupar entidades
+    // 6. Agrupar entidades con formateo estandarizado
     const entidadesByDoc: Record<number, Record<string, any>> = {};
     entidadesRows.forEach((r: any) => {
-      if (!entidadesByDoc[r.documento_id]) {
-        entidadesByDoc[r.documento_id] = {};
+      const docId = Number(r.documento_id);
+      if (!entidadesByDoc[docId]) {
+        entidadesByDoc[docId] = {};
       }
-      entidadesByDoc[r.documento_id][r.rol] = {
-        id: Number(r.id),
-        nombre: r.nombre,
-        identificador_fiscal: r.identificador_fiscal,
-        direccion: r.direccion,
-        telefono: r.telefono,
-        email: r.email,
-        cuenta_contable: r.cuenta_contable,
-        datos_extra: r.datos_extra,
-        fecha_creacion: r.fecha_creacion
-      };
+      entidadesByDoc[docId][r.rol] = formatEntityData(r);
     });
 
-    // 7. Agrupar líneas
-    const lineasByDoc: Record<number, any[]> = {};
-    lineasRows.forEach((r: any) => {
-      if (!lineasByDoc[r.documento_id]) {
-        lineasByDoc[r.documento_id] = [];
-      }
-      lineasByDoc[r.documento_id].push({
-        id: r.id,
-        codigo: r.codigo,
-        descripcion: r.descripcion,
-        cantidad: Number(r.cantidad) || 0,
-        unidad: r.unidad,
-        precio_unitario: Number(r.precio_unitario) || 0,
-        descuento_porcentaje: Number(r.descuento_porcentaje) || 0,
-        precio_neto: Number(r.precio_neto) || 0,
-        importe_linea: Number(r.importe_linea) || 0,
-        cuenta_contable: r.cuenta_contable,
-        datos_extra: r.datos_extra,
-        fecha_creacion: r.fecha_creacion
-      });
-    });
-
-    // 8. Agrupar impuestos
+    // 7. Agrupar impuestos
     const impuestosByDoc: Record<number, any[]> = {};
     impuestosRows.forEach((r: any) => {
       if (!impuestosByDoc[r.documento_id]) {
@@ -219,22 +213,27 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // 9. Agrupar archivos y generar enlaces públicos
-    const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
-    const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
+    // 8. Agrupar líneas con códigos e IVA
+    const lineasByDoc: Record<number, any[]> = {};
+    lineasRows.forEach((r: any) => {
+      if (!lineasByDoc[r.documento_id]) {
+        lineasByDoc[r.documento_id] = [];
+      }
+      const docImpuestos = impuestosByDoc[r.documento_id] || [];
+      lineasByDoc[r.documento_id].push(formatDocumentLine(r, docImpuestos));
+    });
 
+    // 9. Agrupar archivos y generar enlaces públicos sin prefijos duplicados
     const archivosByDoc: Record<number, any[]> = {};
     archivosRows.forEach((r: any) => {
-      if (!archivosByDoc[r.documento_id]) {
-        archivosByDoc[r.documento_id] = [];
+      const docId = Number(r.documento_id);
+      if (!archivosByDoc[docId]) {
+        archivosByDoc[docId] = [];
       }
 
-      let publicUrl = null;
-      if (r.ruta_archivo) {
-        publicUrl = `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${r.ruta_archivo}`;
-      }
+      const publicUrl = buildFileUrl(r.ruta_archivo);
 
-      archivosByDoc[r.documento_id].push({
+      archivosByDoc[docId].push({
         id: Number(r.id),
         tipo_archivo: r.tipo_archivo,
         nombre_archivo: r.nombre_archivo,
@@ -282,7 +281,7 @@ export async function GET(request: NextRequest) {
       const docId = doc.id;
       const entities = entidadesByDoc[docId] || {};
       
-      const emisorCif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().toLowerCase();
+      const emisorCif = (entities.emisor?.cif || entities.proveedor?.cif || '').trim().toLowerCase();
       const isIssued = !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
 
       const docArchivos = archivosByDoc[docId] || [];
@@ -291,6 +290,8 @@ export async function GET(request: NextRequest) {
       const impuestos = impuestosByDoc[docId] || [];
       const retencion = extractRetencionFromImpuestos(impuestos);
 
+      const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
+
       return {
         id: doc.id,
         file_hash: doc.file_hash,
@@ -298,6 +299,7 @@ export async function GET(request: NextRequest) {
         numero_documento: doc.numero_documento,
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
+        actualizado_en: fechaCreacionIso,
         importe_total: Number(doc.importe_total) || 0,
         importe_sin_impuestos: Number(doc.importe_sin_impuestos) || 0,
         moneda: doc.moneda,
@@ -331,7 +333,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filtrar en memoria por proveedor/cliente (partial match support over encrypted data)
+    // Filtrar en memoria por proveedor/cliente (partial match)
     if (proveedor) {
       const term = proveedor.toLowerCase();
       enriched = enriched.filter((doc: any) => {

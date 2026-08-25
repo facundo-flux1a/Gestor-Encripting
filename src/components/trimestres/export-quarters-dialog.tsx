@@ -51,6 +51,9 @@ export function ExportQuartersDialog({
   const [showEmpty, setShowEmpty] = React.useState(false);
   const [items, setItems] = React.useState<QuarterExportItem[]>([]);
   const [filterState, setFilterState] = React.useState<'all' | 'activo' | 'pausado' | 'cerrado'>('all');
+  // 🆕 Opciones de exportación
+  const [includeFileUrls, setIncludeFileUrls] = React.useState(false);
+  const [includeEntities, setIncludeEntities] = React.useState(false);
 
   // 🔄 Cargar todos los trimestres desde la BD
   React.useEffect(() => {
@@ -333,6 +336,8 @@ export function ExportQuartersDialog({
         format: 'excel',
         includeSummary: true,
         exportContext: 'trimestres',
+        ...(includeFileUrls ? { includeFileUrls: true } : {}),
+        ...(includeEntities ? { includeEntities: true } : {}),
       });
 
       toast({
@@ -414,6 +419,47 @@ export function ExportQuartersDialog({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Opciones de exportación */}
+            <div className="border rounded-lg p-3 bg-muted/20 space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Opciones de exportación</p>
+              <label
+                htmlFor="trim-export-file-urls"
+                className="flex items-start gap-2.5 py-1 cursor-pointer select-none"
+                onClick={e => e.stopPropagation()}
+              >
+                <Checkbox
+                  id="trim-export-file-urls"
+                  checked={includeFileUrls}
+                  onCheckedChange={v => setIncludeFileUrls(!!v)}
+                  className="mt-0.5 shrink-0"
+                />
+                <div>
+                  <p className="text-xs font-medium leading-tight">Incluir URL de archivos</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                    Agrega el enlace al documento original (MinIO) como columna extra
+                  </p>
+                </div>
+              </label>
+              <label
+                htmlFor="trim-export-entities"
+                className="flex items-start gap-2.5 py-1 cursor-pointer select-none"
+                onClick={e => e.stopPropagation()}
+              >
+                <Checkbox
+                  id="trim-export-entities"
+                  checked={includeEntities}
+                  onCheckedChange={v => setIncludeEntities(!!v)}
+                  className="mt-0.5 shrink-0"
+                />
+                <div>
+                  <p className="text-xs font-medium leading-tight">Incluir info de entidades</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                    Agrega pestaña de directorio completo de proveedores y clientes, y columna Proveedor/Cliente en la lista
+                  </p>
+                </div>
+              </label>
             </div>
 
             {/* Lista por Años */}

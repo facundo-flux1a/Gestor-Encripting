@@ -446,18 +446,9 @@ Un ticket (o "factura simplificada") es un comprobante de compra emitido por un 
 **POR QUÉ ESTO ES CRÍTICO:**
 Las líneas de productos son la base del sistema contable. Un error en la extracción de líneas genera errores en totales, IVA, recargos y declaraciones fiscales. NO hay margen de error aceptable.
 
-**PROCESO OBLIGATORIO PASO A PASO:**
-
-\`\`\`
-ANTES DE EXTRAER LÍNEAS:
-1. Localiza TODA la tabla/sección de productos (puede ocupar varias páginas)
-2. Cuenta el número total de filas/productos en el documento
-3. Verifica que tu extracción final tenga ESE MISMO número de líneas
-4. Si hay discrepancia → vuelve a extraer
-
-POR CADA LÍNEA:
+**PROCESO OBLIGATORIO POR CADA LÍNEA:**
 a. Lee la línea COMPLETA incluyendo líneas adicionales de descripción
-b. Extrae código (si existe, NUNCA lo omitas)
+b. Extrae código de producto/artículo (si existe en el documento, NUNCA lo inventes)
 c. Extrae descripción COMPLETA textualmente, sin resumir ni acortar
 d. Extrae cantidad (si no está, usa 1)
 e. Extrae precio unitario BRUTO (antes de descuento)
@@ -471,11 +462,13 @@ DESPUÉS DE EXTRAER TODAS LAS LÍNEAS:
 1. Suma todos los importe_linea
 2. Compara con el subtotal/base imponible del documento (solo para verificación interna)
 3. Si hay discrepancia importante → busca líneas que te hayas saltado y vuelve a extraer
-\`\`\`
 
 **INFORMACIÓN OBLIGATORIA POR LÍNEA:**
 
-1. **Código**: columnas "Código", "Ref.", "SKU", "Art.", "Item", "Cód.". Si existe en el documento, SIEMPRE extráelo
+1. **Código de artículo/producto**: columnas "Código", "Ref.", "SKU", "Art.", "Item", "Cód.", "EAN".
+   - Extrae ÚNICAMENTE si existe un código de producto, referencia de catálogo o SKU comercial del proveedor explícito en la línea.
+   - NUNCA inventes códigos, ni uses números correlativos/ordinales de fila (1, 2, 3...), ni números de aranceles notariales/registrales/tarifarios (ej. no pongas "1", "4", "5" como código de producto si son números de arancel o apartado), ni pongas "SUPLIDO" como código.
+   - Si el producto o servicio NO tiene código de catálogo/artículo explícito, deja el campo vacío: "" (cadena vacía).
 2. **Descripción**: COMPLETA textualmente, sin resumir ni acortar. Incluye especificaciones y notas adicionales
 3. **Cantidad**: Siempre > 0; si no está, usa 1
 4. **Precio unitario**: precio ANTES de descuento
@@ -494,7 +487,7 @@ DESPUÉS DE EXTRAER TODAS LAS LÍNEAS:
 Algunas facturas (especialmente de notarías, registros, colegios profesionales) presentan tablas con DOS columnas numéricas separadas: una de referencia del arancel (llamada "ARANCEL", "Nº Arancel", "Art.", "Apartado") y otra con las unidades facturables reales (llamada "UNIDADES", "Uds.", "Cantidad", "Nº Copias", "Nº Folios").
 
 **REGLA ABSOLUTA:**
-- La columna de referencia arancelaria (ARANCEL, Nº Arancel, Art., etc.) es un **código o número de referencia**, NO una cantidad. NUNCA la uses como cantidad.
+- La columna de referencia arancelaria (ARANCEL, Nº Arancel, Art., etc.) es un número de arancel o apartado tarifario legal, NO una cantidad y NO un código de producto comercial. NUNCA la uses como cantidad. Como no es un código de catálogo/artículo comercial, deja "codigo": "".
 - La columna de unidades facturables (UNIDADES, Uds., Cantidad, etc.) es la que debes usar como cantidad.
 - Si solo ves una columna numérica, usa esa como cantidad.
 
@@ -512,7 +505,7 @@ Los suplidos son gastos que el emisor (notario, gestor, abogado) adelantó en no
 
 **CÓMO EXTRAERLOS:**
 - Cada suplido va como una línea más dentro de \`lineas → articulos\`
-- codigo: "SUPLIDO"
+- codigo: "" (dejar vacío; el concepto se detalla en "descripcion")
 - descripcion: el nombre del suplido tal como aparece (ej: "Tramitacion o.l. y registro", "ANCERT (of.liq -serfides)", "Nota del registro")
 - cantidad: 1
 - precio_unitario: el importe del suplido

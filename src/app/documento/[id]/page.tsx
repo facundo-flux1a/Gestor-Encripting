@@ -104,8 +104,11 @@ function DocumentoPageContent() {
     const base = Number(fv.base_imponible ?? doc.base_imponible ?? 0);
     const total = Number(fv.total ?? doc.total ?? 0);
     const taxes = (fv.iva_details || doc.iva_details || []).reduce((acc: number, t: any) => acc + Number(t.cuota || 0), 0);
-    return Math.abs(total - (base + taxes)) <= 0.05;
-  }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details'), searchParams]);
+    const baseNS = Number((fv as any).base_no_sujeta ?? (doc as any).base_no_sujeta ?? 0);
+    const retencion = Number((fv as any).retencion_irpf ?? (doc as any).retencion_irpf ?? 0);
+    const descuento = Number((fv as any).descuento_global ?? (doc as any).descuento_global ?? 0);
+    return Math.abs(total - (base + baseNS + taxes - retencion - descuento)) <= 0.05;
+  }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details'), form.watch('retencion_irpf' as any), form.watch('base_no_sujeta' as any), form.watch('descuento_global' as any), searchParams]);
 
   useEffect(() => {
     if (searchParams.get('audit') === 'true') setIsAuditMode(true);

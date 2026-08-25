@@ -445,7 +445,10 @@ Un ticket es un comprobante de compra emitido por un establecimiento (restaurant
 
 **INFORMACIÓN OBLIGATORIA A EXTRAER POR LÍNEA:**
 
-1. **Código de artículo/producto:** Buscar en columnas "Código", "Ref.", "SKU", "Art.", "Item", "Cód.". Si existe, SIEMPRE extráelo.
+1. **Código de artículo/producto:** Buscar en columnas "Código", "Ref.", "SKU", "Art.", "Item", "Cód.", "EAN".
+   - Extrae ÚNICAMENTE si existe un código de producto, referencia de catálogo o SKU comercial del proveedor explícito en la línea.
+   - NUNCA inventes códigos, ni uses números correlativos/ordinales de fila (1, 2, 3...), ni números de aranceles notariales/registrales/tarifarios (ej. no pongas "1", "4", "5" como código de producto si son números de arancel o apartado), ni pongas "SUPLIDO" como código.
+   - Si el producto o servicio NO tiene código de catálogo/artículo explícito, deja el campo vacío: "" (cadena vacía).
 
 2. **Descripción:** COMPLETA textualmente, sin resumir ni acortar. Copia textualmente.
 

@@ -186,7 +186,14 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
     const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
-    const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
+    // Separar filas de IVA de filas de retención/recargo para evitar mezclarlas en iva_details
+    const isRetentionType = (tipo: string | null | undefined): boolean =>
+      !!tipo && /retencion|reten|irpf|recargo/i.test(tipo);
+
+    const ivaImpuestos = currentImpuestos.filter(i => !isRetentionType(i.tipo_impuesto));
+    const retentionImpuestos = currentImpuestos.filter(i => isRetentionType(i.tipo_impuesto));
+
+    const iva_details: IvaDetail[] = ivaImpuestos.map(i => ({
       id: i.id,
       tipo_impuesto: i.tipo_impuesto,
       porcentaje: i.porcentaje,
@@ -194,9 +201,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       cuota: i.cuota,
     }));
 
-    const total_iva = iva_details
-      .filter(tax => !tax.tipo_impuesto?.toLowerCase().includes('retencion'))
-      .reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+    const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
 
     const entidades: DocumentEntity[] = currentEntidades.map(e => ({
       id: e.id,
@@ -259,6 +264,12 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       datosExtra?.EMPRESA_EMISORA?.CIF ||
       datosExtra?.CLIENTE?.CIF;
 
+    // Unificar retencion_irpf: leer de filas RETENCION en impuestos_documento (canónico)
+    // o de datos_extra.retencion_irpf (legado/OCR previo).
+    const retFromImpuestos = retentionImpuestos.reduce((sum, r) => sum + Math.abs(Number(r.cuota) || 0), 0);
+    const retFromDatosExtra = Number(datosExtra?.retencion_irpf) || 0;
+    const computed_retencion_irpf = retFromImpuestos || retFromDatosExtra;
+
     return {
       id_documento: doc.id,
       numero_documento: doc.numero_documento,
@@ -275,6 +286,7 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       base_imponible: Number(doc.importe_sin_impuestos) || 0,
       iva: total_iva,
       total: Number(doc.importe_total) || 0,
+      retencion_irpf: computed_retencion_irpf,
       descuento_global: Number(datosExtra?.descuento_global) || 0,
       base_no_sujeta: Number(datosExtra?.base_no_sujeta) || 0,
       entidades: entidades,
@@ -978,6 +990,12 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
         hasDatosExtraUpdates = true;
       }
 
+      // Sincronizar retencion_irpf también en datos_extra (compatibilidad con queries SQL legacy)
+      if (data.retencion_irpf !== undefined) {
+        datosExtra.retencion_irpf = Number(data.retencion_irpf) || 0;
+        hasDatosExtraUpdates = true;
+      }
+
       // ✅ Al editar/guardar un documento, marcar fiscal_status como VALIDADO
       datosExtra.fiscal_status = 'VALIDADO';
       delete datosExtra.fiscal_revision_reasons;
@@ -1039,18 +1057,32 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       // PASO 6: Actualizar impuestos
       // ═══════════════════════════════════════════════════════════
       await tx.impuestos_documento.deleteMany({ where: { documento_id: BigInt(id) } });
-      if ((data.iva_details || []).length > 0) {
-        await tx.impuestos_documento.createMany({
-          data: (data.iva_details || []).map(iva => ({
-            documento_id: BigInt(id),
-            tipo_impuesto: iva.tipo_impuesto || 'IVA',
-            porcentaje: iva.porcentaje,
-            base_imponible: iva.base_imponible,
-            cuota: iva.cuota,
-            total_con_impuesto: iva.base_imponible + iva.cuota,
-            id_de_empresa: empresaId ? BigInt(empresaId) : null
-          }))
-        });
+      const ivaRowsToCreate = (data.iva_details || []).map(iva => ({
+        documento_id: BigInt(id),
+        tipo_impuesto: iva.tipo_impuesto || 'IVA',
+        porcentaje: Number(iva.porcentaje) || 0,
+        base_imponible: Number(iva.base_imponible) || 0,
+        cuota: Number(iva.cuota) || 0,
+        total_con_impuesto: (Number(iva.base_imponible) || 0) + (Number(iva.cuota) || 0),
+        id_de_empresa: empresaId ? BigInt(empresaId) : null,
+      }));
+
+      // Persistir la retención como fila RETENCION en impuestos_documento
+      // (así las queries SQL de resumen/trimestre también la contemplan)
+      const retencionIrpfAmount = Number(data.retencion_irpf) || 0;
+      const retencionRowToCreate = retencionIrpfAmount > 0 ? [{
+        documento_id: BigInt(id),
+        tipo_impuesto: 'RETENCION',
+        porcentaje: 0,
+        base_imponible: Number(data.base_imponible) || 0,
+        cuota: -retencionIrpfAmount,
+        total_con_impuesto: (Number(data.base_imponible) || 0) - retencionIrpfAmount,
+        id_de_empresa: empresaId ? BigInt(empresaId) : null,
+      }] : [];
+
+      const allImpuestosToCreate = [...ivaRowsToCreate, ...retencionRowToCreate];
+      if (allImpuestosToCreate.length > 0) {
+        await tx.impuestos_documento.createMany({ data: allImpuestosToCreate });
       }
 
       // ═══════════════════════════════════════════════════════════

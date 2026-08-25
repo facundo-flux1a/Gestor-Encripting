@@ -2,8 +2,18 @@
 
 import * as React from 'react';
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileText, FileSpreadsheet, FileType, FileJson } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Download, FileSpreadsheet, FileType, FileJson } from "lucide-react";
 import { type Column, type Row } from '@tanstack/react-table';
 import { generateAdvancedExport } from '@/lib/export-utils';
 
@@ -24,11 +34,12 @@ const getHeaderName = (col: Column<any, unknown>): string => {
 };
 
 export function ExportButton({ columns, data, filename, exportContext, includeSummary }: ExportButtonProps) {
+    const [includeFileUrls, setIncludeFileUrls] = React.useState(false);
+    const [includeEntities, setIncludeEntities] = React.useState(false);
 
     const handleExport = (format: 'excel' | 'csv' | 'json') => {
         const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
 
-        // Prepare columns for util
         const utilColumns = exportableColumns.map(col => ({
             id: col.id,
             header: getHeaderName(col)
@@ -39,8 +50,13 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
             format,
             ...(format === 'excel' && includeSummary ? { includeSummary: true } : {}),
             ...(format === 'excel' && exportContext ? { exportContext } : {}),
+            ...(format === 'excel' && includeFileUrls ? { includeFileUrls: true } : {}),
+            ...(format === 'excel' && includeEntities ? { includeEntities: true } : {}),
         });
     };
+
+    // Contexto soporta checkboxes solo en trimestres/documentos
+    const showExcelOptions = !exportContext || ['trimestres', 'documentos', 'documentos_emitidas', 'documentos_recibidas', 'otros'].includes(exportContext);
 
     return (
         <DropdownMenu>
@@ -54,14 +70,74 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
                     <span className="xs:hidden">Export</span>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 sm:w-48">
-                <DropdownMenuItem
-                    onClick={() => handleExport('excel')}
-                    className="text-xs sm:text-sm gap-2 cursor-pointer"
-                >
-                    <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                    <span>Excel (.xlsx)</span>
-                </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-52 sm:w-56">
+                {showExcelOptions ? (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-xs sm:text-sm gap-2 cursor-pointer">
+                            <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                            <span>Excel (.xlsx)</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-64 p-2">
+                            <p className="text-xs font-medium text-muted-foreground px-2 py-1 mb-1">
+                                Opciones de exportación
+                            </p>
+                            {/* Checkbox: URL de archivos */}
+                            <label
+                                htmlFor="export-file-urls"
+                                className="flex items-start gap-2.5 px-2 py-2 rounded-sm hover:bg-accent cursor-pointer select-none"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <Checkbox
+                                    id="export-file-urls"
+                                    checked={includeFileUrls}
+                                    onCheckedChange={v => setIncludeFileUrls(!!v)}
+                                    className="mt-0.5 shrink-0"
+                                />
+                                <div>
+                                    <p className="text-xs font-medium leading-tight">Incluir URL de archivos</p>
+                                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                        Agrega el enlace al documento original (MinIO) como columna extra
+                                    </p>
+                                </div>
+                            </label>
+                            {/* Checkbox: Información completa de entidades */}
+                            <label
+                                htmlFor="export-entities"
+                                className="flex items-start gap-2.5 px-2 py-2 rounded-sm hover:bg-accent cursor-pointer select-none"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <Checkbox
+                                    id="export-entities"
+                                    checked={includeEntities}
+                                    onCheckedChange={v => setIncludeEntities(!!v)}
+                                    className="mt-0.5 shrink-0"
+                                />
+                                <div>
+                                    <p className="text-xs font-medium leading-tight">Incluir info de entidades</p>
+                                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                        Agrega pestaña de directorio completo de proveedores y clientes, y columna Proveedor/Cliente en la lista
+                                    </p>
+                                </div>
+                            </label>
+                            <DropdownMenuSeparator className="my-1" />
+                            <DropdownMenuItem
+                                onClick={() => handleExport('excel')}
+                                className="text-xs sm:text-sm gap-2 cursor-pointer font-medium justify-center"
+                            >
+                                <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                Exportar Excel
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                ) : (
+                    <DropdownMenuItem
+                        onClick={() => handleExport('excel')}
+                        className="text-xs sm:text-sm gap-2 cursor-pointer"
+                    >
+                        <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                        <span>Excel (.xlsx)</span>
+                    </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                     onClick={() => handleExport('csv')}
                     className="text-xs sm:text-sm gap-2 cursor-pointer"

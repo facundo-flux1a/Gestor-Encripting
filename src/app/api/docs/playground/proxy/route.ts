@@ -15,6 +15,7 @@ import { getDashboardAnalytics, getHealthCheckAnalytics } from '@/services/docum
 import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
+import { parseFlexibleDate } from '@/lib/api-v1-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,19 +83,30 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Route to the correct handler
-    const normalizedPath = path.replace(/^\/api\/v1/, '').replace(/\/$/, '');
+    const urlObj = path.includes('?') ? new URL(`http://dummy${path}`) : null;
+    const urlQueryParams: Record<string, string> = {};
+    if (urlObj) {
+      urlObj.searchParams.forEach((val, key) => {
+        urlQueryParams[key] = val;
+      });
+    }
+    const mergedQueryParams = { ...urlQueryParams, ...queryParams };
+    const normalizedPath = path.split('?')[0].replace(/^\/api\/v1/, '').replace(/\/$/, '');
     let finalResponse: NextResponse | null = null;
 
-    // ── GET /documents/full ────────────────────────────────────────────────
+    // ── GET /documents/full y /documents ────────────────────────────────────────────────
     if (normalizedPath === '/documents/full' || normalizedPath === '/documents') {
-      const trimestre = queryParams.trimestre ? Number(queryParams.trimestre) : null;
-      const año = queryParams.año ? Number(queryParams.año) : null;
-      const proveedor = queryParams.proveedor?.trim() || null;
-      const cliente = queryParams.cliente?.trim() || null;
-      const tipo = (queryParams.tipo || 'todas').toLowerCase();
-      const incluirIncidencias = queryParams.incluir_incidencias === 'true';
-      const incluirSinVerificar = queryParams.incluir_sin_verificar === 'true';
-      const incluirSinConfirmar = queryParams.incluir_sin_confirmar === 'true';
+      const desdeId = mergedQueryParams.desde_id ? Number(mergedQueryParams.desde_id) : null;
+      const modificadosDesde = mergedQueryParams.modificados_desde || mergedQueryParams.modificado_desde || null;
+      const limit = Math.min(Math.max(mergedQueryParams.limit ? Number(mergedQueryParams.limit) : 500, 1), 1000);
+      const trimestre = mergedQueryParams.trimestre ? Number(mergedQueryParams.trimestre) : null;
+      const año = mergedQueryParams.año ? Number(mergedQueryParams.año) : null;
+      const proveedor = mergedQueryParams.proveedor?.trim() || null;
+      const cliente = mergedQueryParams.cliente?.trim() || null;
+      const tipo = (mergedQueryParams.tipo || 'todas').toLowerCase();
+      const incluirIncidencias = mergedQueryParams.incluir_incidencias === 'true';
+      const incluirSinVerificar = mergedQueryParams.incluir_sin_verificar === 'true';
+      const incluirSinConfirmar = mergedQueryParams.incluir_sin_confirmar === 'true';
 
       let query = `
         SELECT d.*
@@ -102,6 +114,19 @@ export async function POST(request: NextRequest) {
         WHERE d.id_de_empresa = ?
       `;
       const params: any[] = [empresaId];
+
+      if (desdeId !== null && !isNaN(desdeId)) {
+        query += ` AND d.id > ?`;
+        params.push(desdeId);
+      }
+
+      if (modificadosDesde) {
+        const modDate = parseFlexibleDate(modificadosDesde);
+        if (modDate && !isNaN(modDate.getTime())) {
+          query += ` AND (d.fecha_creacion >= ? OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ?))`;
+          params.push(modDate, modDate);
+        }
+      }
 
       if (incluirSinConfirmar) {
         query += ` AND (LOWER(d.tipo_documento) LIKE '%factura%' OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%nota%cr%dito%')`;
@@ -122,7 +147,8 @@ export async function POST(request: NextRequest) {
       if (trimestre) { query += ` AND d.num_trimestre = ?`; params.push(trimestre); }
       if (año) { query += ` AND d.año_trimestre = ?`; params.push(año); }
 
-      query += ` ORDER BY d.fecha_emision DESC`;
+      query += ` ORDER BY d.id ASC LIMIT ?`;
+      params.push(limit);
 
       const [documentos] = await db.query<RowDataPacket[]>(query, params);
       if (documentos.length === 0) {
@@ -135,36 +161,57 @@ export async function POST(request: NextRequest) {
         db.query<RowDataPacket[]>(`SELECT * FROM impuestos_documento WHERE documento_id IN (?)`, [docIds]),
       ]);
 
-      const [entidadesRows, empresaData] = await Promise.all([
+      const [entidadesRows, archivosRows, empresaData] = await Promise.all([
         prisma.entidades_documento.findMany({ where: { documento_id: { in: docIds } } }),
+        prisma.archivos_documento.findMany({ where: { documento_id: { in: docIds } } }),
         prisma.empresas.findUnique({ where: { id: empresaId }, select: { CIF: true } })
       ]);
       const empresaCifGlobal = empresaData?.CIF?.trim().toLowerCase() || '';
 
+      const { formatEntityData, buildFileUrl, formatDocumentLine } = await import('@/lib/api-v1-helpers');
+
       const entByDoc: Record<number, Record<string, any>> = {};
       entidadesRows.forEach((r: any) => {
-        if (!entByDoc[r.documento_id]) entByDoc[r.documento_id] = {};
-        entByDoc[r.documento_id][r.rol] = r;
+        const docId = Number(r.documento_id);
+        if (!entByDoc[docId]) entByDoc[docId] = {};
+        entByDoc[docId][r.rol] = formatEntityData(r);
       });
-      const linByDoc: Record<number, any[]> = {};
-      lineasRows.forEach((r: any) => { if (!linByDoc[r.documento_id]) linByDoc[r.documento_id] = []; linByDoc[r.documento_id].push(r); });
+
       const impByDoc: Record<number, any[]> = {};
       impuestosRows.forEach((r: any) => { if (!impByDoc[r.documento_id]) impByDoc[r.documento_id] = []; impByDoc[r.documento_id].push(r); });
 
+      const linByDoc: Record<number, any[]> = {};
+      lineasRows.forEach((r: any) => {
+        if (!linByDoc[r.documento_id]) linByDoc[r.documento_id] = [];
+        const docImpuestos = impByDoc[r.documento_id] || [];
+        linByDoc[r.documento_id].push(formatDocumentLine(r, docImpuestos));
+      });
+
+      const archByDoc: Record<number, string> = {};
+      archivosRows.forEach((a: any) => {
+        if (a.ruta_archivo) archByDoc[Number(a.documento_id)] = a.ruta_archivo;
+      });
+
       let enriched = documentos.map((doc: any) => {
         const entities = entByDoc[doc.id] || {};
-        const emisorCif = (entities.emisor?.identificador_fiscal || entities.proveedor?.identificador_fiscal || '').trim().toLowerCase();
+        const emisorCif = (entities.emisor?.cif || entities.proveedor?.cif || '').trim().toLowerCase();
+        const publicUrl = buildFileUrl(archByDoc[doc.id]);
+        const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
+
         return {
           id: doc.id,
           tipo_documento: doc.tipo_documento,
           numero_documento: doc.numero_documento,
           fecha_emision: doc.fecha_emision,
+          fecha_vencimiento: doc.fecha_vencimiento,
+          actualizado_en: fechaCreacionIso,
           importe_total: Number(doc.importe_total) || 0,
           importe_sin_impuestos: Number(doc.importe_sin_impuestos) || 0,
           moneda: doc.moneda,
           año: doc.año_trimestre,
           trimestre: doc.num_trimestre,
           is_issued: !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal),
+          url_archivo: publicUrl,
           entidades: entities,
           impuestos: impByDoc[doc.id] || [],
           lineas_detalle: linByDoc[doc.id] || [],
@@ -180,7 +227,7 @@ export async function POST(request: NextRequest) {
         enriched = enriched.filter((doc: any) => {
           const emisor = doc.entidades.emisor || doc.entidades.proveedor;
           if (!emisor) return false;
-          return (emisor.nombre?.toLowerCase().includes(term) || emisor.identificador_fiscal?.toLowerCase().includes(term));
+          return (emisor.nombre?.toLowerCase().includes(term) || emisor.cif?.toLowerCase().includes(term));
         });
       }
 
@@ -189,7 +236,7 @@ export async function POST(request: NextRequest) {
         enriched = enriched.filter((doc: any) => {
           const receptor = doc.entidades.receptor || doc.entidades.cliente;
           if (!receptor) return false;
-          return (receptor.nombre?.toLowerCase().includes(term) || receptor.identificador_fiscal?.toLowerCase().includes(term));
+          return (receptor.nombre?.toLowerCase().includes(term) || receptor.cif?.toLowerCase().includes(term));
         });
       }
 
@@ -207,13 +254,13 @@ export async function POST(request: NextRequest) {
         JOIN documentos d ON l.documento_id = d.id
         WHERE d.id_de_empresa = ?
       `;
-      if (queryParams.trimestre) { query += ` AND d.num_trimestre = ?`; params.push(Number(queryParams.trimestre)); }
-      if (queryParams.año) { query += ` AND d.año_trimestre = ?`; params.push(Number(queryParams.año)); }
-      if (queryParams.producto) { query += ` AND l.descripcion LIKE ?`; params.push(`%${queryParams.producto}%`); }
-      if (queryParams.proveedor) { 
-        const pHash = hashField(normalizeEntityName(queryParams.proveedor));
+      if (mergedQueryParams.trimestre) { query += ` AND d.num_trimestre = ?`; params.push(Number(mergedQueryParams.trimestre)); }
+      if (mergedQueryParams.año) { query += ` AND d.año_trimestre = ?`; params.push(Number(mergedQueryParams.año)); }
+      if (mergedQueryParams.producto) { query += ` AND l.descripcion LIKE ?`; params.push(`%${mergedQueryParams.producto}%`); }
+      if (mergedQueryParams.proveedor) { 
+        const pHash = hashField(normalizeEntityName(mergedQueryParams.proveedor));
         query += ` AND d.id IN (SELECT ent.documento_id FROM entidades_documento ent WHERE ent.rol IN ('emisor', 'proveedor') AND (ent.nombre_hash = ? OR ent.identificador_fiscal_hash = ? OR ent.nombre LIKE ? OR ent.identificador_fiscal LIKE ?))`; 
-        params.push(pHash, pHash, `%${queryParams.proveedor}%`, `%${queryParams.proveedor}%`); 
+        params.push(pHash, pHash, `%${mergedQueryParams.proveedor}%`, `%${mergedQueryParams.proveedor}%`); 
       }
       query += ` ORDER BY d.fecha_emision DESC LIMIT 1000`;
 
@@ -248,8 +295,8 @@ export async function POST(request: NextRequest) {
 
     // ── GET /analytics ─────────────────────────────────────────────────────
     if (normalizedPath === '/analytics') {
-      const trimestre = queryParams.trimestre ? Number(queryParams.trimestre) : undefined;
-      const año = queryParams.año ? Number(queryParams.año) : undefined;
+      const trimestre = mergedQueryParams.trimestre ? Number(mergedQueryParams.trimestre) : undefined;
+      const año = mergedQueryParams.año ? Number(mergedQueryParams.año) : undefined;
       const [dashboardData, healthCheckData] = await Promise.all([
         getDashboardAnalytics([empresaId], año, trimestre),
         getHealthCheckAnalytics([empresaId]),
@@ -283,7 +330,7 @@ export async function POST(request: NextRequest) {
 
     // ── GET /incidents ─────────────────────────────────────────────────────
     if (normalizedPath === '/incidents') {
-      const estado = queryParams.estado || 'pendientes';
+      const estado = mergedQueryParams.estado || 'pendientes';
       let estadoFilter = '';
       if (estado === 'pendientes') estadoFilter = 'AND i.validado = 0';
       else if (estado === 'validadas') estadoFilter = 'AND i.validado = 1';

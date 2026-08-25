@@ -140,8 +140,18 @@ export function InteractiveEndpoint({
       }
     }
 
+    // Función para censurar la API key en el ejemplo visual por seguridad y privacidad
+    const formatMaskedKey = (rawKey: string) => {
+      if (!rawKey) return 'TU_API_KEY_AQUI';
+      if (rawKey.startsWith('muvail_') || rawKey.startsWith('flux_')) {
+        const prefix = rawKey.slice(0, 10);
+        return `${prefix}••••••••••••••••••••••••••••••••`;
+      }
+      return rawKey.slice(0, 8) + '••••••••••••••••';
+    };
+
     // If using proxy mode (selectedKeyId), show a redacted placeholder — the key is never in the browser
-    const key = selectedKeyId ? '<CLAVE_GESTIONADA_POR_EL_SERVIDOR>' : (apiKey || 'TU_API_KEY_AQUI');
+    const key = selectedKeyId ? '<CLAVE_GESTIONADA_POR_EL_SERVIDOR>' : formatMaskedKey(apiKey);
 
     if (method === 'GET') {
       const qs = queryParams.map(p => `--data-urlencode "${p.key}=${p.value}"`).join(' \\\n     ');

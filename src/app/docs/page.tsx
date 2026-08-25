@@ -18,6 +18,27 @@ import { DocsTutorialMobile } from '@/components/tutorials/DocsTutorialMobile';
 
 const documentsFullParams: ParamDef[] = [
   {
+    key: 'desde_id',
+    label: 'Desde ID (Semáforo Incremental)',
+    description: 'Devuelve facturas con ID estrictamente mayor al especificado. Ideal para sincronizaciones incrementales.',
+    type: 'number',
+    defaultValue: '',
+  },
+  {
+    key: 'modificados_desde',
+    label: 'Modificados Desde',
+    description: 'Filtra facturas creadas o actualizadas a partir de una fecha (acepta DD/MM/AAAA, DD/MM/AA, YYYY-MM-DD o ISO 8601).',
+    type: 'text',
+    defaultValue: '',
+  },
+  {
+    key: 'limit',
+    label: 'Límite de resultados',
+    description: 'Número máximo de documentos a devolver (1-1000). Por defecto 500.',
+    type: 'number',
+    defaultValue: 100,
+  },
+  {
     key: 'trimestre',
     label: 'Trimestre',
     description: 'Filtra por trimestre fiscal (1, 2, 3 ó 4).',

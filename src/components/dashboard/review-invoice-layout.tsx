@@ -154,6 +154,21 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const statusLabel = doc.incidencia ? 'Revisión' : doc.verificado ? 'Validado' : 'Verificado';
   const statusColor = doc.incidencia ? '#f59e0b' : '#10b981';
 
+  const handleClose = () => {
+    if (form.formState.isDirty) {
+      const confirmLeave = window.confirm(
+        'Tienes cambios sin guardar en este documento. ¿Deseas salir de todos modos?'
+      );
+      if (!confirmLeave) return;
+    }
+    let originUrl = '/documents';
+    try {
+      const saved = sessionStorage.getItem('document_origin_url');
+      if (saved) originUrl = saved;
+    } catch {}
+    router.push(originUrl);
+  };
+
   return (
     <div className="flex overflow-hidden bg-background" style={{ height: '100vh', minHeight: 0 }}>
 
@@ -163,9 +178,24 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         {/* Top bar */}
         <div style={{ background: 'hsl(var(--card))', borderBottom: '1px solid hsl(var(--border))' }}
           className="flex items-center justify-between px-4 py-3 shrink-0 gap-3">
-          <button onClick={() => router.back()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted text-foreground text-sm font-medium transition-colors shrink-0 border border-border shadow-sm">
-            <ChevronLeft className="h-4 w-4" />Atrás
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted text-foreground text-sm font-medium transition-colors border border-border shadow-sm"
+              title="Volver al documento anterior en el historial"
+            >
+              <ChevronLeft className="h-4 w-4" />Atrás
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="p-1.5 rounded-md bg-muted/60 hover:bg-muted hover:text-destructive text-foreground text-sm font-medium transition-colors border border-border shadow-sm flex items-center justify-center"
+              title="Cerrar y volver a la sección principal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
           <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
             <p className="text-sm font-bold">Revisar factura</p>
             <p className="text-[11px] font-medium truncate mt-0.5" style={{ color: statusColor }}>
@@ -178,7 +208,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg border border-border/60 shadow-sm shrink-0">
               <button
                 type="button"
-                onClick={() => (navigation.onNavigatePrev ? navigation.onNavigatePrev() : navigation.navigateToPrev?.())}
+                onClick={() => navigation.onNavigatePrev?.()}
                 disabled={!navigation.hasPrev}
                 title="Documento anterior (← / Alt+←)"
                 className={cn(
@@ -199,7 +229,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
               <button
                 type="button"
-                onClick={() => (navigation.onNavigateNext ? navigation.onNavigateNext() : navigation.navigateToNext?.())}
+                onClick={() => navigation.onNavigateNext?.()}
                 disabled={!navigation.hasNext}
                 title="Documento siguiente (→ / Alt+→)"
                 className={cn(
