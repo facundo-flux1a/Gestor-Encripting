@@ -2916,7 +2916,16 @@ d.id,
   (SELECT COALESCE(identificador_fiscal_hash, identificador_fiscal) FROM entidades_documento WHERE documento_id = d.id AND(rol = 'proveedor' OR rol = 'emisor') LIMIT 1) as provider_cif,
     (SELECT COUNT(*) FROM lineas_documento WHERE documento_id = d.id) as line_count,
       (SELECT SUM(importe_linea) FROM lineas_documento WHERE documento_id = d.id) as sum_line_items,
-        (SELECT SUM(cuota) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota_iva
+        (SELECT SUM(
+          CASE 
+            WHEN (LOWER(tipo_impuesto) LIKE '%retencion%' OR LOWER(tipo_impuesto) LIKE '%reten%' OR LOWER(tipo_impuesto) LIKE '%irpf%') 
+                 AND (LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%' OR d.importe_total < 0 OR d.importe_sin_impuestos < 0) 
+            THEN ABS(cuota)
+            WHEN (LOWER(tipo_impuesto) LIKE '%retencion%' OR LOWER(tipo_impuesto) LIKE '%reten%' OR LOWER(tipo_impuesto) LIKE '%irpf%')
+            THEN -ABS(cuota)
+            ELSE cuota
+          END
+        ) FROM impuestos_documento WHERE documento_id = d.id) as sum_cuota_iva
             FROM documentos d
             WHERE d.id IN(?)
         `, [docIds]);

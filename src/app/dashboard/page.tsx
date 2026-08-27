@@ -14,6 +14,8 @@ import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { DashboardTutorialRouter } from '@/components/dashboard/DashboardTutorialRouter';
 import { getDashboardAnalytics } from '@/services/document-service';
 import { type DashboardAnalytics } from '@/lib/types';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_DASHBOARD_ANALYTICS } from '@/lib/demo-data';
 import {
   Dialog,
   DialogContent,
@@ -97,6 +99,8 @@ import { TopClients } from '@/components/dashboard/top-clients';
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
   const { refreshKey } = useDataRefresh();
+  const { isDemoMode } = useDemoMode();
+
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +117,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadAnalytics() {
+      if (isDemoMode) {
+        setAnalytics(DEMO_DASHBOARD_ANALYTICS);
+        setIsLoading(false);
+        return;
+      }
+
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
         setAnalytics(null);
         setIsLoading(false);
@@ -140,7 +150,7 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey]);
+  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey, isDemoMode]);
 
   const handleExport = async () => {
     if (!dashboardRef.current) return;

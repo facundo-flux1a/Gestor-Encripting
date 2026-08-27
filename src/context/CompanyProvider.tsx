@@ -2,6 +2,9 @@
 import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback, ReactNode } from 'react';
 import type { Company } from '@/lib/types';
 
+import { useDemoMode } from './DemoModeContext';
+import { DEMO_COMPANIES } from '@/lib/demo-data';
+
 type CompanyContextType = {
   companies: Company[];
   setCompanies: (companies: Company[] | ((prev: Company[]) => Company[])) => void;
@@ -15,9 +18,14 @@ type CompanyContextType = {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export const CompanyProvider = ({ children }: { children: ReactNode }) => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
+  const { isDemoMode } = useDemoMode();
+  const [realCompanies, setCompanies] = useState<Company[]>([]);
+  const [realSelectedIds, setSelectedCompanyIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Computed state considering Demo Mode
+  const companies = isDemoMode ? DEMO_COMPANIES : realCompanies;
+  const selectedCompanyIds = isDemoMode ? (realSelectedIds.length > 0 ? realSelectedIds.filter(id => DEMO_COMPANIES.some(c => c.id === id)) : [9991]) : realSelectedIds;
 
   // Debounce ref for saving selection to Redis
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

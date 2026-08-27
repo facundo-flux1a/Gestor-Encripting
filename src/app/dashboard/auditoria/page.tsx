@@ -52,10 +52,13 @@ import { toast } from '@/hooks/use-toast';
 import { HealthCheckProvider } from '@/context/HealthCheckProvider';
 import { HealthCheckTutorialRouter } from '@/components/tutorials/HealthCheckTutorialRouter';
 import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-confirm-dialog';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_AUDITORIA_DATA, DEMO_INCIDENTS_ANALYTICS } from '@/lib/demo-data';
 
 export default function AuditoriaPage() {
     const router = useRouter(); // Initialize router
     const { selectedCompanyIds } = useCompanyContext();
+    const { isDemoMode } = useDemoMode();
     const [data, setData] = useState<{
         summary: { total: number; mismatches: number; logic_checks: number };
         documents: Document[];
@@ -79,6 +82,13 @@ export default function AuditoriaPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const loadHealthData = async (silent = false) => {
+        if (isDemoMode) {
+            setData(DEMO_AUDITORIA_DATA as any);
+            setIncidentsAnalytics(DEMO_INCIDENTS_ANALYTICS);
+            setIsLoading(false);
+            return;
+        }
+
         if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
             setData(null);
             setIsLoading(false);
@@ -389,7 +399,7 @@ export default function AuditoriaPage() {
 
     useEffect(() => {
         loadHealthData();
-    }, [selectedCompanyIds]);
+    }, [selectedCompanyIds, isDemoMode]);
 
 
 

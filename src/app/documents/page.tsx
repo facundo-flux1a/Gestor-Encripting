@@ -21,6 +21,8 @@ import { useTutorial } from '@/context/tutorial-context'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Suspense } from 'react'
+import { useDemoMode } from '@/context/DemoModeContext'
+import { DEMO_DOCUMENTS } from '@/lib/demo-data'
 
 function DocumentsPageContent() {
   const { selectedCompanyIds, companies } = useCompanyContext();
@@ -69,8 +71,16 @@ function DocumentsPageContent() {
     return () => window.removeEventListener('documentUploaded', handleGlobalUpload);
   }, []);
 
+  const { isDemoMode } = useDemoMode();
+
   React.useEffect(() => {
     async function loadDocuments() {
+      if (isDemoMode) {
+        setDocuments(DEMO_DOCUMENTS);
+        setLoading(false);
+        return;
+      }
+
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
         console.log('📭 [DocumentsPage] Sin empresas seleccionadas — lista vacía');
         setDocuments([]);
@@ -129,7 +139,7 @@ function DocumentsPageContent() {
     }
 
     loadDocuments();
-  }, [selectedCompanyIds, key, refreshKey]);
+  }, [selectedCompanyIds, key, refreshKey, isDemoMode]);
 
   // ✅ CLASIFICACIÓN CORREGIDA: Validación de CIF para abonos
   const { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {

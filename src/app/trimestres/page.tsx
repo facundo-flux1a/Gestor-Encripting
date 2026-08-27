@@ -47,6 +47,8 @@ import { generateAdvancedExport } from '@/lib/export-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrimestresFilterBar, type TrimestresFilterState } from '@/components/trimestres/trimestres-filter-bar';
 import { calculateFinancials } from '@/lib/financial-engine';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_TRIMESTRES, DEMO_DOCUMENTS } from '@/lib/demo-data';
 
 // Valor inicial de filtros — declarado fuera del componente para ser estable
 const EMPTY_FILTERS: TrimestresFilterState = {
@@ -69,6 +71,7 @@ function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
   const { refreshKey } = useDataRefresh();
   const { isTutorialActive, currentStep, mostrarVacios, setMostrarVacios } = useTrimestres();
+  const { isDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const formatNumber = (num: number | string): string => {
@@ -350,6 +353,11 @@ function TrimestresPageContent() {
     try {
       setIsLoading(true);
 
+      if (isDemoMode) {
+        setTrimestres(DEMO_TRIMESTRES);
+        return;
+      }
+
       if (selectedCompanyIds.length === 0) {
         setTrimestres([]);
         return;
@@ -419,6 +427,11 @@ function TrimestresPageContent() {
     try {
       setIsLoadingDocs(true);
       setDocumentos([]);
+
+      if (isDemoMode) {
+        setDocumentos(DEMO_DOCUMENTS);
+        return;
+      }
 
       if (selectedCompanyIds.length === 0) {
         return;

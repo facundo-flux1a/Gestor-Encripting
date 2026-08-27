@@ -12,9 +12,13 @@ import { ProveedoresProvider } from "@/context/ProveedoresProvider";
 import { ProveedoresTutorialRouter } from "@/components/proveedores/ProveedoresTutorialRouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { useDemoMode } from "@/context/DemoModeContext";
+import { DEMO_PROVEEDORES } from "@/lib/demo-data";
+
 function ProveedoresPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
     const { refreshKey } = useDataRefresh();
+    const { isDemoMode } = useDemoMode();
     const [providers, setProviders] = useState<ProviderWithStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'proveedores' | 'clientes'>('proveedores');
@@ -23,6 +27,12 @@ function ProveedoresPageContent() {
 
     // ✅ Carga proveedores o clientes según el tab activo
     const fetchData = async (tab: 'proveedores' | 'clientes') => {
+        if (isDemoMode) {
+            setProviders(DEMO_PROVEEDORES);
+            setIsLoading(false);
+            return;
+        }
+
         if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
             setProviders([]);
             setIsLoading(false);
@@ -109,7 +119,7 @@ function ProveedoresPageContent() {
 
     useEffect(() => {
         fetchData(activeTab);
-    }, [selectedCompanyIds, activeTab, refreshKey]);
+    }, [selectedCompanyIds, activeTab, refreshKey, isDemoMode]);
 
     const tabSelector = (
         <div

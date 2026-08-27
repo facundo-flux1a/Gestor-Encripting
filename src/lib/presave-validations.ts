@@ -74,6 +74,7 @@ export function checkMathBalance(input: CheckMathBalanceInput): PreSaveIssue | n
   const declaredTotal = Number(input.total ?? 0);
   const base = Number(input.baseImponible ?? 0);
   const ivaDetails = input.ivaDetails || [];
+  const isAbono = declaredTotal < 0 || base < 0;
 
   const totalIva = ivaDetails.reduce((sum, item) => {
     const isRet = (item.tipo_impuesto || '').toLowerCase().includes('retencion');
@@ -85,7 +86,8 @@ export function checkMathBalance(input: CheckMathBalanceInput): PreSaveIssue | n
     return isRet ? sum + Math.abs(Number(item.cuota || 0)) : sum;
   }, 0);
 
-  const calculatedTotal = base + totalIva - totalRet;
+  const retentionEffect = isAbono ? totalRet : -totalRet;
+  const calculatedTotal = base + totalIva + retentionEffect;
   const mathDiff = Math.abs(declaredTotal - calculatedTotal);
 
   if (mathDiff > 0.05) {

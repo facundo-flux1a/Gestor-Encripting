@@ -9,6 +9,8 @@ import { PageHeader } from '@/components/layout/page-header';
 import { Loader2, CheckCircle, XCircle, Upload, Send, FileText, ArrowLeft, MoveRight, Database, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_DOCUMENTS } from '@/lib/demo-data';
 
 interface TestResult {
   success: boolean;
@@ -75,6 +77,7 @@ export default function SIIPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
+  const { isDemoMode } = useDemoMode();
 
   const [testing, setTesting] = useState(false);
   const [sending, setSending] = useState(false);
@@ -91,12 +94,12 @@ export default function SIIPage() {
   const [delsolInfo, setDelsolInfo] = useState<{ clienteCode?: string; baseDatos?: string } | null>(null);
 
   useEffect(() => {
-    const año = searchParams.get('año');
-    const trimestre = searchParams.get('trimestre');
+    const año = searchParams.get('año') || '2026';
+    const trimestre = searchParams.get('trimestre') || '3';
     const empresaId = searchParams.get('empresa_id');
-    if (año && trimestre) cargarDocumentos(año, trimestre, empresaId);
-    if (empresaId && empresaId !== 'all') verificarDelsol(empresaId);
-  }, [searchParams]);
+    cargarDocumentos(año, trimestre, empresaId);
+    if (!isDemoMode && empresaId && empresaId !== 'all') verificarDelsol(empresaId);
+  }, [searchParams, isDemoMode]);
 
   const verificarDelsol = async (empresaId: string) => {
     try {
@@ -120,6 +123,26 @@ export default function SIIPage() {
   const cargarDocumentos = async (año: string, trimestre: string, empresaId: string | null) => {
     try {
       setLoading(true);
+
+      if (isDemoMode) {
+        const demoDocs: DocumentoSII[] = DEMO_DOCUMENTS.map(d => ({
+          id: d.id_documento,
+          num_factura: d.numero_documento,
+          fecha_factura: d.fecha_emision,
+          descripcion: d.observaciones || d.tipo_documento,
+          nombre_empresa: d.empresa_nombre || 'Innovatech Solutions S.L.',
+          nombre_cliente: d.proveedor || 'Cliente Demo',
+          base_imponible: (d.base_imponible || 0).toString(),
+          cuota_iva: (d.iva || 0).toString(),
+          tipo_documento: d.tipo_documento,
+          empresa_id: d.empresa_id
+        }));
+        setDocumentos(demoDocs);
+        setTrimestreInfo({ año, trimestre, total: demoDocs.length });
+        setHasDelsol(true);
+        setDelsolInfo({ clienteCode: 'DEMO-87654', baseDatos: 'F2026' });
+        return;
+      }
       const params = new URLSearchParams({ año, trimestre });
       if (empresaId && empresaId !== 'all') params.append('empresa_id', empresaId);
 

@@ -10,17 +10,38 @@ import {
 } from "@/services/document-service";
 import { useCompanyContext } from "@/context/CompanyProvider";
 import { useSearchParams } from "next/navigation";
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_PROVEEDORES, DEMO_DOCUMENTS } from '@/lib/demo-data';
 
 function ProveedorDetailInner({ name }: { name: string }) {
     const searchParams = useSearchParams();
     const isClient = searchParams.get('type') === 'cliente';
 
     const { selectedCompanyIds, companies } = useCompanyContext();
+    const { isDemoMode } = useDemoMode();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function loadData() {
+            if (isDemoMode) {
+                const prov = DEMO_PROVEEDORES[0];
+                const docs = DEMO_DOCUMENTS;
+                const prods = [
+                    { id: 1, codigo: 'AWS-EC2', descripcion: 'Compute Instance Usage (EC2 & Lambda)', totalSpent: 950.00, count: 1 }
+                ];
+                const analytics = {
+                    monthlyTrend: [
+                        { month: 'Jun', total: 1200 },
+                        { month: 'Jul', total: 1500 },
+                        { month: 'Ago', total: 1754.50 }
+                    ]
+                };
+                setData({ prov, docs, prods, analytics, allProds: prods });
+                setLoading(false);
+                return;
+            }
+
             const fiscalId = decodeURIComponent(name);
 
             const empresaIds = selectedCompanyIds.length > 0

@@ -16,10 +16,13 @@ import { Separator } from "@/components/ui/separator";
 import { AlertTriangle } from "lucide-react";
 import { IncidenciasProvider } from "@/context/IncidenciasProvider";
 import { IncidenciasTutorialRouter } from "@/components/incidencias/IncidenciasTutorialRouter";
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_DOCUMENTS, DEMO_INCIDENTS_ANALYTICS } from '@/lib/demo-data';
 
 function IncidentsPageContent() {
     const { selectedCompanyIds } = useCompanyContext();
     const { refreshKey } = useDataRefresh();
+    const { isDemoMode } = useDemoMode();
     const [docs, setDocs] = useState<Document[]>([]);
     const [analyticsData, setAnalyticsData] = useState<IncidentsAnalyticsData>({
         totalOpen: 0,
@@ -57,6 +60,12 @@ function IncidentsPageContent() {
     const fetchIncidents = async () => {
         try {
             setIsLoading(true);
+            if (isDemoMode) {
+                setDocs(DEMO_DOCUMENTS.filter(d => d.incidencia || d.is_new === 1));
+                setAnalyticsData(DEMO_INCIDENTS_ANALYTICS as any);
+                return;
+            }
+
             console.log('🔄 [IncidentsPage] Fetching con empresas:', selectedCompanyIds);
 
             const params = new URLSearchParams();
@@ -91,7 +100,7 @@ function IncidentsPageContent() {
 
     useEffect(() => {
         fetchIncidents();
-    }, [selectedCompanyIds, refreshKey]);
+    }, [selectedCompanyIds, refreshKey, isDemoMode]);
 
     const handleAnalysisComplete = async () => {
         console.log('🔄 [IncidentsPage] Análisis completado, recargando...');

@@ -19,7 +19,7 @@ const HEARTBEAT_KEY = 'workers:heartbeat';
 const HEARTBEAT_TTL_SEC = 120;
 const HEARTBEAT_EVERY_MS = 15_000;
 const envPrefix = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
-const WORKER_LOCK_KEY = `workers:${envPrefix}:singleton-lock`;
+const WORKER_LOCK_KEY = process.env.WORKER_LOCK_KEY || `workers:${envPrefix}:singleton-lock`;
 const WORKER_LOCK_TTL_SEC = 60;
 const RECONCILE_EVERY_MS = 2 * 60 * 1000;
 
@@ -43,7 +43,7 @@ async function acquireSingletonLock(): Promise<boolean> {
 
 async function renewSingletonLock(): Promise<boolean> {
   const current = await redis.get(WORKER_LOCK_KEY);
-  if (current && current !== String(process.pid)) return false;
+  if (!current || current !== String(process.pid)) return false;
   await redis.set(WORKER_LOCK_KEY, String(process.pid), 'EX', WORKER_LOCK_TTL_SEC);
   return true;
 }

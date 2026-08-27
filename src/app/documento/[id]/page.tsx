@@ -26,12 +26,15 @@ import { PreSaveIssue } from '@/lib/types';
 import { checkTipoMismatch, checkFieldChanges } from '@/lib/presave-validations';
 import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-confirm-dialog';
 import { useDocumentNavigation } from '@/hooks/useDocumentNavigation';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { DEMO_DOCUMENTS } from '@/lib/demo-data';
 
 
 function DocumentoPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { isDemoMode } = useDemoMode();
 
   const docId = useMemo(() => {
     const idParam = params?.id;
@@ -107,7 +110,9 @@ function DocumentoPageContent() {
     const baseNS = Number((fv as any).base_no_sujeta ?? (doc as any).base_no_sujeta ?? 0);
     const retencion = Number((fv as any).retencion_irpf ?? (doc as any).retencion_irpf ?? 0);
     const descuento = Number((fv as any).descuento_global ?? (doc as any).descuento_global ?? 0);
-    return Math.abs(total - (base + baseNS + taxes - retencion - descuento)) <= 0.05;
+    const isAbono = total < 0 || base < 0 || String(doc?.tipo_documento ?? '').toUpperCase().includes('ABONO') || String(doc?.tipo_documento ?? '').toUpperCase().includes('RECTIFICATIVA');
+    const retencionEfectiva = isAbono ? Math.abs(retencion) : -Math.abs(retencion);
+    return Math.abs(total - (base + baseNS + taxes + retencionEfectiva - descuento)) <= 0.05;
   }, [doc, form.watch('total'), form.watch('base_imponible'), form.watch('iva_details'), form.watch('retencion_irpf' as any), form.watch('base_no_sujeta' as any), form.watch('descuento_global' as any), searchParams]);
 
   useEffect(() => {
@@ -117,6 +122,18 @@ function DocumentoPageContent() {
   const fetchDocument = useCallback(async (id: number) => {
     try {
       setIsLoading(true);
+
+      if (isDemoMode) {
+        const found = DEMO_DOCUMENTS.find(d => d.id_documento === id) || DEMO_DOCUMENTS[0];
+        setDoc(found);
+        if (lastDocIdRef.current !== found.id_documento) {
+          resetFormWithDocData(found);
+          lastDocIdRef.current = found.id_documento;
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const res = await fetch(`/api/documents/${id}`, { method: 'GET', cache: 'no-store' });
       if (!res.ok) { if (res.status === 404) notFound(); throw new Error(`Error ${res.status}`); }
       const fetchedDoc = await res.json();
@@ -130,7 +147,7 @@ function DocumentoPageContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, resetFormWithDocData]);
+  }, [toast, resetFormWithDocData, isDemoMode]);
 
   useEffect(() => {
     if (docId === null) { notFound(); return; }

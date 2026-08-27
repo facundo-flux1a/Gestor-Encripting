@@ -238,7 +238,26 @@ export function validateMathBalance(
   tolerancia = 2,
   baseNoSujeta = 0
 ): ValidationResult {
-  const sumaCuotas = impuestos.reduce((acc, i) => acc + (i.cuota_iva ?? 0), 0);
+  const esAbono = importeTotal < 0 || importeSinImpuestos < 0;
+
+  const sumaCuotas = impuestos.reduce((acc, i) => {
+    const tipo = String(i.tipo_iva ?? (i as any).tipo_impuesto ?? '').toUpperCase();
+    const esRetencion =
+      tipo === 'RETENCION' ||
+      tipo === 'RETENCIÓN' ||
+      tipo === 'IRPF' ||
+      tipo.includes('RET');
+
+    const cuota = Number(i.cuota_iva ?? (i as any).cuota ?? 0);
+
+    if (esRetencion) {
+      const cuotaAjustada = esAbono ? Math.abs(cuota) : -Math.abs(cuota);
+      return acc + cuotaAjustada;
+    }
+
+    return acc + cuota;
+  }, 0);
+
   const totalCalculado = importeSinImpuestos + sumaCuotas + baseNoSujeta;
   const diferencia = Math.abs(importeTotal - totalCalculado);
 

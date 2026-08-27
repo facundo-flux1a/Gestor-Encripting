@@ -11,6 +11,7 @@ import { UploadQueueProvider } from '@/context/UploadQueueProvider';
 import { UploadQueueTutorialProvider } from '@/context/UploadQueueTutorialProvider';
 import { UploadQueueTutorialRouter } from '@/components/tutorials/UploadQueueTutorialRouter';
 import { DataRefreshProvider } from '@/context/DataRefreshProvider';
+import { DemoModeProvider } from '@/context/DemoModeContext';
 import { UploadQueuePanel } from '@/components/upload/upload-queue-panel';
 import { cookies } from 'next/headers';
 import { getSession } from '@/services/auth-service';
@@ -42,8 +43,9 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* ✅ KEY CRÍTICO: Remonta el Provider cuando cambia el usuario */}
-          <CompanyProvider key={userId || 'anonymous'}>
+          <DemoModeProvider>
+            {/* ✅ KEY CRÍTICO: Remonta el Provider cuando cambia el usuario */}
+            <CompanyProvider key={userId || 'anonymous'}>
             <PreferencesProvider>
               <TutorialProvider>
                 <UploadQueueProvider>
@@ -79,7 +81,8 @@ export default async function RootLayout({
               </TutorialProvider>
             </PreferencesProvider>
           </CompanyProvider>
-        </ThemeProvider>
+        </DemoModeProvider>
+      </ThemeProvider>
       </body>
     </html>
   );
