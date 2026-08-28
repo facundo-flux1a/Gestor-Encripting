@@ -185,7 +185,7 @@ export function TrimestresTutorialMobile() {
                         element: '[data-tutorial="trimestres-table"]',
                         popover: {
                             title: '📋 Tabla de Documentos',
-                            description: 'Aquí ves todos los documentos del trimestre seleccionado. Podés buscar, filtrar y editar documentos.',
+                            description: 'Aquí ves todos los documentos del trimestre seleccionado. Puedes buscar, filtrar y editar documentos.',
                             side: 'top', align: 'center',
                         },
                     },

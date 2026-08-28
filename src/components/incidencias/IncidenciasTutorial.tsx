@@ -209,7 +209,7 @@ export function IncidenciasTutorial() {
         pointer-events: none !important;
       }
       
-      /* 🔥 Elementos highlighted NO son clickeables */
+      /* 🔥 Elementos highlighted NO se pueden abrir */
       .driver-active-element,
       .driver-active-element *,
       .driver-active-element button,

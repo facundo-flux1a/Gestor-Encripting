@@ -168,23 +168,23 @@ export function DocumentosTutorialMobile() {
             const finalSteps = [
                 {
                     element: 'body',
-                    popover: { title: '📄 ¡Bienvenido! (1/10)', description: 'Te guiaremos por las funciones principales de esta sección.', side: 'bottom', align: 'center' } as any
+                    popover: { title: 'Documentos en Muvail (1/10)', description: 'Un flujo claro para incorporar, revisar y encontrar información.', side: 'bottom', align: 'center' } as any
                 },
                 {
                     element: '[data-tutorial="company-selector"]',
-                    popover: { title: '🏢 Empresa (2/10)', description: 'Selecciona al menos una empresa para continuar.', side: 'bottom', align: 'start' }
+                    popover: { title: 'Contexto (2/10)', description: 'Selecciona una empresa para trabajar con la información correcta.', side: 'bottom', align: 'start' }
                 },
                 {
                     element: '[data-sidebar="trigger"]',
-                    popover: { title: '📱 Menú (3/10)', description: 'Utiliza el menú lateral para navegar entre las distintas secciones.', side: 'bottom', align: 'start' }
+                    popover: { title: 'Espacio de trabajo (3/10)', description: 'El menú reúne los espacios clave de la operación.', side: 'bottom', align: 'start' }
                 },
                 {
                     element: '[data-tutorial="upload-button"]',
-                    popover: { title: '📤 Subir (4/10)', description: 'Toca aquí para seleccionar archivos. Los documentos con inconsistencias irán a Incidencias.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Incorporar (4/10)', description: 'Toca aquí para incorporar archivos. Si algo necesita revisión, Muvail lo va a señalizar.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: 'body',
-                    popover: { title: '⚠️ ¿No ves tu documento? (5/10)', description: 'Si el documento no aparece aquí, puede tener una incidencia. Encuéntralo en la sección de Incidencias.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Señales de revisión (5/10)', description: 'Si el documento no aparece aquí, revisa el Centro de seguridad para conocer el motivo.', side: 'bottom', align: 'center' }
                 },
                 {
                     element: '[data-tutorial="tabs-filters"]',
@@ -204,7 +204,7 @@ export function DocumentosTutorialMobile() {
                 },
                 {
                     element: 'body',
-                    popover: { title: '✨ ¡Listo! (10/10)', description: 'Ya conoces cómo gestionar tus documentos en mobile.', side: 'bottom', align: 'center' }
+                    popover: { title: 'Todo listo (10/10)', description: 'Ya conoces el flujo de documentos de Muvail.', side: 'bottom', align: 'center' }
                 }
             ];
 
@@ -399,7 +399,7 @@ export function DocumentosTutorialMobile() {
       }
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.95) !important;
+        background-color: rgba(7, 31, 29, 0.96) !important;
         border-radius: 12px !important; color: white !important;
         box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
       }

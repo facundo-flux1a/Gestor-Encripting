@@ -277,7 +277,7 @@ export function PauseQuartersDialog({
             Gestionar Estado de Trimestres
           </DialogTitle>
           <DialogDescription>
-            Cambiá el estado de los períodos a Activo, Pausado o Cerrado, o reabrí trimestres pasados.
+            Cambia el estado de los períodos a Activo, Pausado o Cerrado, o reabre trimestres pasados.
           </DialogDescription>
         </DialogHeader>
 
@@ -334,7 +334,7 @@ export function PauseQuartersDialog({
               <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground border rounded-md">
                 <FileText className="h-8 w-8 opacity-30" />
                 <p className="text-center text-xs">
-                  No hay trimestres con facturas o estados especiales. Activá &quot;Mostrar vacíos&quot; para desplegar todos desde 2024.
+                  No hay trimestres con facturas o estados especiales. Activa &quot;Mostrar vacíos&quot; para desplegar todos desde 2024.
                 </p>
               </div>
             ) : (

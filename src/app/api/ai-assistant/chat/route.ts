@@ -13,7 +13,7 @@ export const maxDuration = 60;
 const UNAVAILABLE =
   'El asistente no está disponible en este momento. Prueba más tarde.';
 const CONNECTION_ERROR =
-  'No pudimos procesar tu consulta. Intentá de nuevo.';
+  'No pudimos procesar tu consulta. Inténtalo de nuevo.';
 
 /** Chat unificado: FAQ + documentos del usuario (mismo endpoint para todo). */
 export async function POST(req: NextRequest) {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json(
-      { error: 'No pudimos leer tu mensaje. Intentá de nuevo.' },
+      { error: 'No pudimos leer tu mensaje. Inténtalo de nuevo.' },
       { status: 400 },
     );
   }
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const message = body.message?.trim();
   if (!message) {
     return NextResponse.json(
-      { error: 'Escribí un mensaje para continuar.' },
+      { error: 'Escribe un mensaje para continuar.' },
       { status: 400 },
     );
   }

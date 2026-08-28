@@ -271,8 +271,8 @@ export const INGESTION_ERRORS = {
   GEMINI_PARSE_ERROR:  'No se pudo interpretar la respuesta del análisis. Se registró una incidencia automática.',
   DUPLICATE_DOCUMENT:  'Documento duplicado: ya existe un archivo idéntico para esta empresa.',
   PDFTOOLS_ERROR:      'Error al dividir el PDF. El sistema reintentará automáticamente.',
-  RAR_EXTRACTOR_ERROR: 'No se pudo extraer el archivo RAR. Verificá que no esté corrupto o protegido.',
-  UNREADABLE_FILE:     'El archivo no pudo ser leído. Verificá que sea un documento válido.',
+  RAR_EXTRACTOR_ERROR: 'No se pudo extraer el archivo RAR. Verifica que no esté corrupto o protegido.',
+  UNREADABLE_FILE:     'El archivo no pudo ser leído. Verifica que sea un documento válido.',
   LLM_RATE_LIMIT:   'Límite de análisis alcanzado. El sistema reintentará en unos momentos.',
   /** @deprecated alias */
   GEMINI_RATE_LIMIT:   'Límite de análisis alcanzado. El sistema reintentará en unos momentos.',

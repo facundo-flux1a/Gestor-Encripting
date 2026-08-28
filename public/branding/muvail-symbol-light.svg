@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 112" role="img" aria-label="Símbolo Muvail">
+  <defs>
+    <linearGradient id="face" x1="32" y1="20" x2="82" y2="91" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B8E766"/>
+      <stop offset=".42" stop-color="#1CBD86"/>
+      <stop offset="1" stop-color="#00655E"/>
+    </linearGradient>
+    <linearGradient id="circuit" x1="18" y1="28" x2="68" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#008E78"/>
+      <stop offset="1" stop-color="#D5F06D"/>
+    </linearGradient>
+    <clipPath id="headClip">
+      <path d="M44 12C57 8 72 13 79 23c6 9 6 20 2 28 2 1 5 2 7 4 1 1 1 2 0 3-2 1-4 1-6 1-2 1-3 1-4 2 2 1 4 2 4 3 0 2-2 3-5 3 0 3-1 5-3 7-4 4-9 5-15 4-6-1-10-4-13-8-2 13-9 25-24 35 7-13 10-24 8-36-6-8-8-19-6-32 1-12 5-20 15-24Z"/>
+    </clipPath>
+  </defs>
+
+  <g fill="#17AF78" opacity=".82">
+    <rect x="7" y="23" width="6" height="6" rx="1"/>
+    <rect x="17" y="16" width="5" height="5" rx="1"/>
+    <rect x="18" y="37" width="7" height="7" rx="1"/>
+    <rect x="8" y="49" width="4" height="4" rx="1"/>
+    <rect x="18" y="60" width="5" height="5" rx="1"/>
+  </g>
+  <g fill="#9BDD67" opacity=".94">
+    <circle cx="9" cy="35" r="1.6"/>
+    <circle cx="23" cy="28" r="1.5"/>
+    <circle cx="12" cy="69" r="1.8"/>
+    <circle cx="29" cy="19" r="1.25"/>
+  </g>
+
+  <path d="M44 12C57 8 72 13 79 23c6 9 6 20 2 28 2 1 5 2 7 4 1 1 1 2 0 3-2 1-4 1-6 1-2 1-3 1-4 2 2 1 4 2 4 3 0 2-2 3-5 3 0 3-1 5-3 7-4 4-9 5-15 4-6-1-10-4-13-8-2 13-9 25-24 35 7-13 10-24 8-36-6-8-8-19-6-32 1-12 5-20 15-24Z" fill="url(#face)"/>
+  <path d="M43 12c12-6 26-2 34 8 5 6 8 14 8 22-9-10-20-15-33-15-7 0-13 1-19 4 1-8 4-14 10-19Z" fill="#CBEA68" opacity=".72"/>
+  <path d="M35 68c5 5 11 6 17 0-2 13-10 26-25 36 7-13 10-24 8-36Z" fill="#005D58" opacity=".9"/>
+  <path d="M81 51c2 1 5 2 7 4 1 1 1 2 0 3-2 1-4 1-6 1-2 1-3 1-4 2 2 1 4 2 4 3 0 2-2 3-5 3 0 3-1 5-3 7-4 4-9 5-15 4" fill="none" stroke="#00786B" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" opacity=".58"/>
+
+  <g fill="none" stroke="url(#circuit)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2">
+    <path d="M8 31h17v-7h18v9h13"/>
+    <path d="M14 45h14v7h18v-11h15"/>
+    <path d="M10 56h15v10h15v12"/>
+    <path d="M21 70h13v-8h14v15"/>
+  </g>
+  <g clip-path="url(#headClip)" fill="none" stroke="#D7F178" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+    <path d="M31 35h11v-7h11v10h9"/>
+    <path d="M30 47h12v9h9v-13h12"/>
+    <path d="M34 60h8v9h10v-10h10"/>
+    <path d="M41 75V62h-7"/>
+  </g>
+  <g fill="#E6F68B" stroke="#0A856F" stroke-width="1.5">
+    <circle cx="25" cy="31" r="3.2"/>
+    <circle cx="43" cy="24" r="3.1"/>
+    <circle cx="28" cy="45" r="3.1"/>
+    <circle cx="46" cy="52" r="3.2"/>
+    <circle cx="61" cy="41" r="3"/>
+    <circle cx="25" cy="56" r="3.1"/>
+    <circle cx="40" cy="76" r="3.1"/>
+    <circle cx="42" cy="69" r="3"/>
+    <circle cx="54" cy="69" r="3"/>
+  </g>
+  <path d="M70 43c1.6-1.2 3.7-1.2 5.2 0" fill="none" stroke="#00786B" stroke-linecap="round" stroke-width="1.5" opacity=".7"/>
+</svg>

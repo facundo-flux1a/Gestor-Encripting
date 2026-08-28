@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  HelpCircle,
   X,
   Send,
   Loader2,
@@ -14,16 +13,18 @@ import {
   Pencil,
   Search,
   Volume2,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AssistantMessageBubble } from './assistant-message-bubble';
 import { useAssistantVoice } from '@/hooks/use-assistant-voice';
+import { useCompanyContext } from '@/context/CompanyProvider';
 
 const HIDDEN_PREFIXES = ['/auth', '/landing'];
 
 const WELCOME =
-  '¡Hola! Soy tu **asistente de Gestor Documental Muvail**. Pregúntame cómo usar la plataforma, sobre tus facturas, trimestres, proveedores o incidencias.';
+  'Puedes consultar documentos, períodos, proveedores o incidencias. Describe qué necesitas revisar.';
 
 const GENERIC_ERROR =
   'No pudimos conectar con el asistente. Prueba de nuevo en unos instantes.';
@@ -98,18 +99,20 @@ function formatSessionDate(iso: string): string {
 
 type SupportChatWidgetProps = {
   enabled?: boolean;
+  placement?: 'floating' | 'sidebar';
+  className?: string;
 };
 
 function toUserFacingError(message: string): string {
   const safePrefixes = [
-    'Tenés que iniciar sesión',
+    'Tienes que iniciar sesión',
     'El asistente no está disponible',
     'Hay muchas consultas',
     'No pudimos procesar',
     'No pudimos conectar',
     'No pudimos enviar',
     'No pudimos leer',
-    'Escribí un mensaje',
+    'Escribe un mensaje',
     'Conversación inválida',
     'No tienes empresas',
   ];
@@ -121,9 +124,14 @@ function welcomeOnly(): ChatMessage[] {
   return [{ id: 'welcome', role: 'assistant', content: WELCOME }];
 }
 
-export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
+export function SupportChatWidget({
+  enabled = true,
+  placement = 'floating',
+  className,
+}: SupportChatWidgetProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(true);
+  const { companies, selectedCompanyIds } = useCompanyContext();
+  const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -332,6 +340,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
   if (pathname === '/') return null;
   if (HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
 
+  const isSidebarPlacement = placement === 'sidebar';
+
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -348,7 +358,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'No pudimos enviar tu mensaje. Intentá de nuevo.');
+      if (!res.ok) throw new Error(data.error ?? 'No pudimos enviar tu mensaje. Inténtalo de nuevo.');
 
       if (data.conversationId) setConversationId(data.conversationId);
 
@@ -481,9 +491,25 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
 
   const activeTitle =
     sessions.find((s) => s.id === conversationId)?.title ?? 'Nueva conversación';
+  const activeCompanyNames = companies
+    .filter((company) => selectedCompanyIds.includes(company.id))
+    .map((company) => company.name);
+  const assistantContext =
+    activeCompanyNames.length === 0
+      ? 'Contexto general de tu cuenta'
+      : activeCompanyNames.length === 1
+        ? `Contexto activo · ${activeCompanyNames[0]}`
+        : `Contexto activo · ${activeCompanyNames.length} empresas`;
 
   return (
-    <div className="pointer-events-none fixed inset-y-0 right-24 z-[70] flex flex-col items-end">
+    <div
+      className={cn(
+        isSidebarPlacement
+          ? 'relative z-[70] flex w-full flex-col items-stretch'
+          : 'pointer-events-none fixed bottom-3 right-3 z-[70] flex flex-col items-end sm:bottom-6 sm:right-6',
+        className,
+      )}
+    >
       <AnimatePresence>
         {open && (
           <motion.div
@@ -492,20 +518,24 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 24 }}
             transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
-            className="pointer-events-auto flex h-full w-[min(calc(100vw-1.5rem),440px)] flex-col overflow-hidden border-l border-violet-500/25 bg-card/95 shadow-2xl shadow-violet-950/20 backdrop-blur-md"
+            className={cn(
+              'pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-2xl shadow-primary/15',
+              isSidebarPlacement
+                ? 'bottom-[calc(100%+0.75rem)] left-0 h-[min(560px,calc(100dvh-7rem))] w-[420px]'
+                : 'bottom-16 right-0 h-[min(760px,calc(100dvh-5rem))] w-[calc(100vw-1.5rem)] sm:h-[min(760px,calc(100dvh-5rem))] sm:w-[500px]',
+            )}
           >
-            <div className="flex shrink-0 items-center justify-between bg-gradient-to-r from-[#6600A3] to-[#7c3aed] px-5 py-4 text-white">
-              <div className="min-w-0 pr-2">
-                <p className="text-base font-semibold tracking-tight">Asistente Muvail</p>
-                <p className="truncate text-xs text-violet-100/90" title={activeTitle}>
-                  {activeTitle}
-                  {sessions.length > 0 && (
-                    <span className="text-violet-200/80">
-                      {' '}
-                      · {sessions.length}/{MAX_SESSIONS} conversaciones
-                    </span>
-                  )}
-                </p>
+            <div className="flex shrink-0 items-center justify-between bg-[#073f39] px-5 py-4 text-white">
+              <div className="flex min-w-0 items-center gap-3 pr-2">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                  <Sparkles className="h-5 w-5" strokeWidth={2.1} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-base font-bold tracking-tight">Asistente Muvail</p>
+                  <p className="truncate text-xs text-[#c8ddd7]" title={assistantContext}>
+                    {assistantContext}
+                  </p>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {conversationId && (
@@ -557,14 +587,25 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
               </div>
             </div>
 
+            <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-secondary/45 px-5 py-2.5">
+              <p className="truncate text-xs font-semibold text-foreground" title={activeTitle}>
+                {activeTitle}
+              </p>
+              {sessions.length > 0 && (
+                <span className="ml-3 shrink-0 text-[11px] text-muted-foreground">
+                  {sessions.length}/{MAX_SESSIONS} conversaciones
+                </span>
+              )}
+            </div>
+
             {voiceEnabled && (
-              <div className="shrink-0 space-y-2 border-b border-violet-500/15 bg-violet-950/10 px-5 py-2.5">
+              <div className="shrink-0 space-y-2 border-b border-primary/15 bg-muted/50 px-4 py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-xs text-violet-100/95">
+                  <div className="flex items-center gap-2 text-xs text-foreground">
                     <Volume2 className="h-3.5 w-3.5 shrink-0" />
                     <span>Escuchar respuestas</span>
                     {activeVoiceName && (
-                      <span className="text-violet-300/70">· {activeVoiceName}</span>
+                      <span className="text-muted-foreground">· {activeVoiceName}</span>
                     )}
                   </div>
                   <button
@@ -574,8 +615,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                     onClick={toggleVoiceAutoMode}
                     className={cn(
                       'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-                      voiceAutoMode ? 'bg-violet-500' : 'bg-violet-900/40',
-                      isSpeaking && 'ring-2 ring-violet-300/50',
+                      voiceAutoMode ? 'bg-primary' : 'bg-muted-foreground/40',
+                      isSpeaking && 'ring-2 ring-primary/30',
                     )}
                   >
                     <span
@@ -588,8 +629,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                 </div>
                 {(voiceOptions.male || voiceOptions.female) && (
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-violet-200/80">Voz:</span>
-                    <div className="inline-flex rounded-lg border border-violet-500/25 bg-violet-950/30 p-0.5">
+                    <span className="text-[11px] text-muted-foreground">Voz:</span>
+                    <div className="inline-flex rounded-lg border border-primary/20 bg-background p-0.5">
                       {voiceOptions.female && (
                         <button
                           type="button"
@@ -597,8 +638,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                           className={cn(
                             'rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
                             voiceGender === 'female'
-                              ? 'bg-violet-500 text-white'
-                              : 'text-violet-200/80 hover:text-white',
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground',
                           )}
                         >
                           Femenina
@@ -611,8 +652,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                           className={cn(
                             'rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
                             voiceGender === 'male'
-                              ? 'bg-violet-500 text-white'
-                              : 'text-violet-200/80 hover:text-white',
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground',
                           )}
                         >
                           Masculina
@@ -639,7 +680,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                         value={historySearch}
                         onChange={(e) => setHistorySearch(e.target.value)}
                         placeholder="Buscar conversación…"
-                        className="w-full rounded-lg border border-border/60 bg-background py-1.5 pl-8 pr-2 text-xs outline-none focus:ring-2 focus:ring-violet-500/30"
+                        className="w-full rounded-lg border border-border/60 bg-background py-1.5 pl-8 pr-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
                       />
                     </div>
                   </div>
@@ -659,7 +700,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                             <div
                               className={cn(
                                 'flex items-center gap-1 rounded-lg px-2 py-1.5',
-                                session.id === conversationId && 'bg-violet-500/10',
+                                session.id === conversationId && 'bg-primary/10',
                               )}
                             >
                               {editingSessionId === session.id ? (
@@ -672,7 +713,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                                     if (e.key === 'Escape') cancelRename();
                                   }}
                                   onBlur={() => void saveRename()}
-                                  className="min-w-0 flex-1 rounded border border-violet-500/40 bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-violet-500/30"
+                                  className="min-w-0 flex-1 rounded border border-primary/40 bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/30"
                                   maxLength={80}
                                 />
                               ) : (
@@ -696,7 +737,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                                   <button
                                     type="button"
                                     onClick={() => startRename(session)}
-                                    className="rounded p-1 text-muted-foreground hover:bg-violet-500/10 hover:text-violet-600"
+                                    className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary"
                                     aria-label={`Renombrar ${session.title}`}
                                     title="Renombrar"
                                   >
@@ -744,7 +785,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                     ) : !msg.spokenText ? (
                       <div className="max-w-[92%] rounded-2xl border border-border/60 bg-muted/80 px-4 py-3">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                           Preparando respuesta…
                         </div>
                       </div>
@@ -761,7 +802,7 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                       />
                     )
                   ) : (
-                    <div className="ml-auto max-w-[92%] rounded-2xl bg-[#6600A3] px-4 py-3 text-white shadow-md shadow-violet-900/20">
+                    <div className="ml-auto max-w-[92%] rounded-2xl bg-primary px-4 py-3 text-primary-foreground shadow-md shadow-primary/20">
                       <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     </div>
                   )}
@@ -773,8 +814,8 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                   animate={{ opacity: 1 }}
                   className="flex items-center gap-2 px-1 text-xs text-muted-foreground"
                 >
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
-                  Pensando…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  Revisando…
                 </motion.div>
               )}
             </div>
@@ -785,15 +826,15 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send()}
-                  placeholder="Ej: ¿Cómo subo facturas? ¿Cuánto gasté en T3?"
-                  className="flex-1 rounded-xl border border-border/80 bg-background px-4 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-violet-500/35"
+                  placeholder="Pregunta por documentos, períodos, incidencias o tu situación fiscal…"
+                  className="flex-1 rounded-xl border border-border/80 bg-background px-4 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-primary/35"
                   disabled={loading}
                 />
                 <Button
                   size="icon"
                   onClick={send}
                   disabled={loading || !input.trim()}
-                  className="h-11 w-11 shrink-0 rounded-xl bg-[#6600A3] hover:bg-[#7c3aed]"
+                  className="h-11 w-11 shrink-0 rounded-xl bg-primary hover:bg-primary/90"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -806,15 +847,22 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
       <motion.button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        whileHover={{ scale: 1.06 }}
-        whileTap={{ scale: 0.94 }}
+        whileHover={{ scale: 1.035 }}
+        whileTap={{ scale: 0.96 }}
         className={cn(
-          'pointer-events-auto absolute bottom-6 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition-colors duration-300',
+          'pointer-events-auto flex h-12 items-center justify-center border shadow-[0_12px_28px_-14px_rgba(2,79,67,0.5)] transition-all duration-200',
           open
-            ? 'border-2 border-violet-600 bg-background text-violet-600'
-            : 'bg-[#6600A3] text-white hover:bg-[#7c3aed]',
+            ? cn(
+                'border-primary/25 bg-card text-primary hover:bg-accent',
+                isSidebarPlacement ? 'w-full rounded-xl' : 'w-12 rounded-2xl',
+              )
+            : cn(
+                'border-primary/20 bg-card p-1.5 text-foreground hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_16px_32px_-14px_rgba(2,79,67,0.5)]',
+                isSidebarPlacement ? 'w-full justify-start rounded-xl' : 'w-12 rounded-2xl',
+              ),
         )}
         aria-label={open ? 'Cerrar asistente' : 'Abrir asistente'}
+        title={open ? 'Cerrar asistente' : 'Abrir Asistente Muvail'}
         aria-expanded={open}
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -826,17 +874,24 @@ export function SupportChatWidget({ enabled = true }: SupportChatWidgetProps) {
               exit={{ opacity: 0, rotate: 90, scale: 0.6 }}
               transition={{ duration: 0.18 }}
             >
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             </motion.span>
           ) : (
             <motion.span
               key="help"
-              initial={{ opacity: 0, rotate: 90, scale: 0.6 }}
-              animate={{ opacity: 1, rotate: 0, scale: 1 }}
-              exit={{ opacity: 0, rotate: -90, scale: 0.6 }}
+              initial={{ opacity: 0, y: 4, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.94 }}
               transition={{ duration: 0.18 }}
+              className="flex items-center"
             >
-              <HelpCircle className="h-7 w-7" strokeWidth={2.25} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <Sparkles className="h-[19px] w-[19px]" strokeWidth={2.2} />
+              </span>
+              <span className={cn('min-w-[94px] flex-col px-2.5 text-left', isSidebarPlacement ? 'flex' : 'hidden')}>
+                <span className="text-xs font-extrabold tracking-[0.01em] text-foreground">Ayuda</span>
+                <span className="mt-0.5 text-[10px] font-medium leading-none text-muted-foreground">Consultas y guía</span>
+              </span>
             </motion.span>
           )}
         </AnimatePresence>

@@ -39,9 +39,9 @@ export async function summarizeDocument(input: SummarizeDocumentInput): Promise<
   assertAzureOpenAiConfigured();
   const parsed = SummarizeDocumentInputSchema.parse(input);
 
-  const prompt = `Eres un asistente financiero experto. Resumí el siguiente documento JSON en español de forma concisa.
-Incluí: emisor/proveedor, receptor/cliente, importe total, fecha de emisión y vencimiento.
-Respondé SOLO JSON: {"summary":"..."}.
+  const prompt = `Eres un asistente financiero experto. Resume el siguiente documento JSON en español de forma concisa.
+Incluye: emisor/proveedor, receptor/cliente, importe total, fecha de emisión y vencimiento.
+Responde SOLO JSON: {"summary":"..."}.
 
 Documento:
 \`\`\`json

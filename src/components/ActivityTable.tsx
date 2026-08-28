@@ -1588,7 +1588,7 @@ export default function ActivityTable({
               <p className="text-base sm:text-lg font-medium">No hay actividad registrada</p>
               <p className="text-sm text-muted-foreground mt-2">
                 {activeFiltersCount > 0
-                  ? 'No hay resultados con los filtros actuales. Probá ampliar la búsqueda o ver todo el historial.'
+                  ? 'No hay resultados con los filtros actuales. Prueba ampliar la búsqueda o ver todo el historial.'
                   : 'No se encontraron subidas ni procesamientos para la empresa seleccionada.'}
               </p>
               {activeFiltersCount > 0 && (

@@ -78,12 +78,13 @@ export function clearUploadStorage() {
 }
 
 interface UploadProgressManagerProps {
-  userId: number | null;
+  userId?: number | null;
 }
 
-export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
+export function UploadProgressManager({ userId = null }: UploadProgressManagerProps) {
   const { toast } = useToast();
   const { refresh } = useDataRefresh();
+  const [activeUserId, setActiveUserId] = useState<number | null>(userId);
   const [batches, setBatches] = useState<BatchState[]>(() => loadBatches(userId));
   const [panelOpen, setPanelOpen] = useState(true);
   const batchesRef = useRef(batches);
@@ -94,12 +95,33 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
   batchesRef.current = batches;
 
   useEffect(() => {
-    setBatches(loadBatches(userId));
+    if (userId !== null) {
+      setActiveUserId(userId);
+      return;
+    }
+
+    let cancelled = false;
+    fetch('/api/auth/me')
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!cancelled) setActiveUserId(data?.loggedIn ? Number(data.user?.id) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveUserId(null);
+      });
+
+    return () => { cancelled = true; };
   }, [userId]);
 
   useEffect(() => {
-    saveBatches(userId, batches);
-  }, [batches, userId]);
+    const restoredBatches = loadBatches(activeUserId);
+    prevAllDoneRef.current = restoredBatches.every((batch) => batch.done);
+    setBatches(restoredBatches);
+  }, [activeUserId]);
+
+  useEffect(() => {
+    saveBatches(activeUserId, batches);
+  }, [activeUserId, batches]);
 
   // Auto-refresh de datos cuando el lote termina (transicion false→true solamente)
   const allDoneForEffect = batches.length > 0 && batches.every((b) => b.done);
@@ -348,7 +370,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
           <CardContent className="px-3 pb-3 space-y-3 bg-card">
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{allDone ? 'Terminado — cerrá con la X cuando quieras' : 'Procesando documentos…'}</span>
+                <span>{allDone ? 'Terminado — ciérralo con la X cuando quieras' : 'Procesando documentos…'}</span>
                 <span className="font-medium tabular-nums">{percent}%</span>
               </div>
               <Progress

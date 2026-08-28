@@ -199,7 +199,7 @@ export function ExportQuartersDialog({
     if (selectedItems.length === 0) {
       toast({
         title: 'Sin selección',
-        description: 'Por favor seleccioná al menos un trimestre para exportar.',
+        description: 'Por favor selecciona al menos un trimestre para exportar.',
         variant: 'destructive',
       });
       return;
@@ -364,7 +364,7 @@ export function ExportQuartersDialog({
             Exportación Personalizada de Trimestres
           </DialogTitle>
           <DialogDescription>
-            Elegí exactamente qué trimestres y ejercicios querés incluir en el archivo Excel.
+            Elige exactamente qué trimestres y ejercicios quieres incluir en el archivo Excel.
           </DialogDescription>
         </DialogHeader>
 

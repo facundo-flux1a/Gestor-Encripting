@@ -18,7 +18,7 @@ export function getAssistantKnowledgeBase(): string {
     return cachedKb;
   } catch {
     cachedKb =
-      'Gestor Documental Muvail: subí PDF/imágenes en Documentos, revisá incidencias en Centro de Seguridad (/dashboard/auditoria), seguí subidas en la Cola de Subidas del sidebar, cerrá trimestres Q1-Q4, API con X-Api-Key en Ajustes. La página Actividad ya no existe.';
+      'Gestor Documental Muvail: sube PDF/imágenes en Documentos, revisa incidencias en Centro de Seguridad (/dashboard/auditoria), sigue subidas en la Cola de Subidas del sidebar, cierra trimestres Q1-Q4, API con X-Api-Key en Ajustes. La página Actividad ya no existe.';
     return cachedKb;
   }
 }

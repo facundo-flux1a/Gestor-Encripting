@@ -313,7 +313,7 @@ export function TeamManagement({
                                     <DialogHeader>
                                         <DialogTitle>Invitar al Equipo</DialogTitle>
                                         <DialogDescription>
-                                            Enviá una invitación por email para que un colaborador se una a una de tus empresas.
+                                            Envía una invitación por email para que un colaborador se una a una de tus empresas.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4 py-4">
@@ -562,7 +562,7 @@ export function TeamManagement({
                             <DialogTitle className="text-lg">Eliminar Invitación</DialogTitle>
                         </div>
                         <DialogDescription className="text-sm text-muted-foreground">
-                            ¿Estás seguro que querés eliminar permanentemente este registro? Esta acción no se puede deshacer.
+                            ¿Seguro que quieres eliminar permanentemente este registro? Esta acción no se puede deshacer.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2 pt-2">
@@ -595,7 +595,7 @@ export function TeamManagement({
                             <DialogTitle className="text-lg">Remover Miembro</DialogTitle>
                         </div>
                         <DialogDescription className="text-sm text-muted-foreground">
-                            ¿Estás seguro que querés remover a <strong>{removeMemberConfirm?.member.nombre}</strong> de esta empresa? Perderá el acceso instantáneamente.
+                            ¿Seguro que quieres quitar a <strong>{removeMemberConfirm?.member.nombre}</strong> de esta empresa? Perderá el acceso instantáneamente.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2 pt-2">

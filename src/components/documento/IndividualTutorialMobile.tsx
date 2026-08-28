@@ -120,7 +120,7 @@ export function IndividualTutorialMobile() {
                 element: '[data-tutorial="documento-auditoria"]',
                 popover: {
                     title: '🔍 Modo Auditoría',
-                    description: 'Compará el documento original con los datos extraídos en vista dividida y usá la IA para corregir errores automáticamente.',
+                    description: 'Compara el documento original con los datos extraídos en vista dividida y usa la IA para corregir errores automáticamente.',
                     side: 'bottom' as const, align: 'center' as const,
                 },
             },
@@ -139,7 +139,7 @@ export function IndividualTutorialMobile() {
                 element: '[data-tutorial="documento-incidencias"]',
                 popover: {
                     title: '⚠️ Incidencias',
-                    description: 'Este documento tiene avisos sin resolver. Podés validarlas si ya las revisaste.',
+                    description: 'Este documento tiene avisos sin resolver. Puedes validarlas si ya las revisaste.',
                     side: 'left' as const, align: 'start' as const,
                 },
             });
@@ -187,7 +187,7 @@ export function IndividualTutorialMobile() {
             element: '[data-tutorial="documento-header"]',
             popover: {
                 title: '🎉 ¡Tutorial Completado!',
-                description: '¡Listo! Ya podés gestionar tus documentos de forma avanzada.',
+                description: '¡Listo! Ya puedes gestionar tus documentos de forma avanzada.',
                 side: 'over' as const, align: 'center' as const,
             },
         });

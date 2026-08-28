@@ -148,7 +148,7 @@ function ForgotPasswordDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button type="button" className="text-xs font-medium text-primary hover:underline">
+        <button type="button" className="text-xs font-semibold text-[#5ce5cc] hover:text-white hover:underline">
           ¿Olvidaste tu contraseña?
         </button>
       </DialogTrigger>
@@ -198,9 +198,9 @@ function LoginFooter() {
     : '/auth/register';
 
   return (
-    <p className="mt-6 text-center text-sm text-muted-foreground">
+    <p className="mt-6 text-center text-sm text-[#badad4]">
       ¿No tienes una cuenta?{' '}
-      <Link href={registerUrl} className="font-medium text-primary hover:underline">
+      <Link href={registerUrl} className="font-semibold text-[#5ce5cc] hover:text-white hover:underline">
         Regístrate
       </Link>
     </p>
@@ -242,7 +242,7 @@ function LoginForm() {
       {inviteToken && <input type="hidden" name="invite_token" value={inviteToken} />}
 
       <div className="space-y-2">
-        <Label htmlFor="email">Correo electrónico</Label>
+        <Label htmlFor="email" className="font-semibold text-[#f4fffc]">Correo electrónico</Label>
         <Input
           id="email"
           name="email"
@@ -253,7 +253,9 @@ function LoginForm() {
           readOnly={emailLocked}
           autoComplete="username"
           list={recientes.length > 0 ? 'correos-recientes' : undefined}
-          className={emailLocked ? 'h-11 bg-muted cursor-not-allowed' : 'h-11'}
+          className={emailLocked
+            ? 'h-11 cursor-not-allowed border-[#2c6b63] bg-[#0a3532] text-[#f4fffc] opacity-70'
+            : 'h-11 border-[#2c6b63] bg-[#0a3532] text-[#f4fffc] placeholder:text-[#8db5ad] focus-visible:ring-[#5ce5cc]'}
           required
         />
         {recientes.length > 0 && (
@@ -267,7 +269,7 @@ function LoginForm() {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="password">Contraseña</Label>
+          <Label htmlFor="password" className="font-semibold text-[#f4fffc]">Contraseña</Label>
           <ForgotPasswordDialog />
         </div>
         <Input
@@ -275,7 +277,7 @@ function LoginForm() {
           name="password"
           type="password"
           autoComplete="current-password"
-          className="h-11"
+          className="h-11 border-[#2c6b63] bg-[#0a3532] text-[#f4fffc] placeholder:text-[#8db5ad] focus-visible:ring-[#5ce5cc]"
           required
         />
       </div>
@@ -286,7 +288,7 @@ function LoginForm() {
         <button
           type="button"
           onClick={olvidar}
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+          className="w-full text-center text-xs text-[#badad4] hover:text-white hover:underline"
         >
           Olvidar los correos guardados en este equipo
         </button>
@@ -299,22 +301,23 @@ export default function LoginPage() {
   const anio = new Date().getFullYear();
 
   return (
-    <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
+    <main className="min-h-screen bg-[#062b29] lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(480px,0.9fr)]">
       <Suspense fallback={null}>
         <LogoutDetector />
       </Suspense>
 
-      <AuthBrandPanel titular="La gestión fiscal de tus empresas, ordenada y sin trabajo manual." />
+      <AuthBrandPanel titular="Revisa documentos y períodos con el contexto de cada empresa." />
 
       {/* ---- Mitad derecha: formulario ---- */}
-      <section className="flex min-h-screen flex-col items-center justify-center px-6 py-12 lg:min-h-0">
-        <div className="w-full max-w-[380px]">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-[#062b29] px-6 py-12 sm:px-10 lg:min-h-0 lg:px-16 xl:px-20">
+        <div className="w-full max-w-[430px]">
           <AuthBrandMobile />
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-semibold tracking-tight">Iniciar sesión</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Ingresá tus credenciales para acceder a tu cuenta.
+          <div className="mb-10">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[#5ce5cc]">Acceso</p>
+            <h2 className="font-display text-3xl font-extrabold tracking-[-0.04em] text-[#f4fffc]">Iniciar sesión</h2>
+            <p className="mt-3 text-sm leading-6 text-[#badad4]">
+              Accede para continuar con el trabajo de tus empresas.
             </p>
           </div>
 
@@ -328,8 +331,8 @@ export default function LoginPage() {
 
           <Suspense
             fallback={
-              <p className="mt-6 text-center text-sm text-muted-foreground">
-                ¿No tienes una cuenta? <span className="text-primary">Regístrate</span>
+              <p className="mt-6 text-center text-sm text-[#badad4]">
+                ¿No tienes una cuenta? <span className="text-[#5ce5cc]">Regístrate</span>
               </p>
             }
           >

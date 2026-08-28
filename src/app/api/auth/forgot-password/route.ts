@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (!success) {
-            return NextResponse.json({ error: 'Error al enviar el correo. Verificá la configuración SMTP.' }, { status: 500 });
+            return NextResponse.json({ error: 'Error al enviar el correo. Verifica la configuración SMTP.' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, message: 'Instrucciones enviadas con éxito' });

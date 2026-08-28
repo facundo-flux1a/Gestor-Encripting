@@ -913,7 +913,7 @@ FALLBACK DE VISIÓN — VERIFICACIÓN CON DOCUMENTO ORIGINAL
 El OCR extrajo este documento pero el sistema detectó problemas de legibilidad
 (tabla fiscal ambigua, total no localizado, o cuadre incorrecto).
 
-USÁ EL DOCUMENTO adjunto para verificar y corregir la extracción.
+USA EL DOCUMENTO adjunto para verificar y corregir la extracción.
 El OCR es orientativo; si hay contradicción, prevalece lo que VES en el documento.
 
 Lo que extrajo el OCR en el intento anterior:
@@ -1154,7 +1154,7 @@ CORRECCIÓN OBLIGATORIA (extract-repair)
 La extracción anterior falló estas validaciones duras:
 ${failureText || '(sin detalle)'}
 
-JSON anterior (corregí SOLO lo necesario para pasar esas validaciones; no inventes importes):
+JSON anterior (corrige SOLO lo necesario para pasar esas validaciones; no inventes importes):
 ${JSON.stringify(previousAiResult || {}, null, 2)}
 
 Reglas de Reparación:
@@ -1163,7 +1163,7 @@ Reglas de Reparación:
 - NUNCA inventes números (descuentos, bases, totales) para forzar que las fórmulas matemáticas cuadren.
 - Si las validaciones matemáticas fallaron, busca los valores REALES impresos en el documento y corrígelos. 
 - Si los números impresos en el documento REALMENTE no cuadran, extráelos TAL CUAL están impresos, con el error matemático original de la factura.
-- Devolvé un único objeto JSON completo del documento (mismo schema).
+- Devuelve un único objeto JSON completo del documento (mismo schema).
 ═══════════════════════════════════════════════════════════════════`;
 
   let finalBuffer = fileBuffer;

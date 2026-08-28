@@ -146,7 +146,7 @@ export function IndividualTutorial() {
         element: '[data-tutorial="documento-archivo"]',
         popover: {
           title: '📎 Archivo Original',
-          description: 'Puedes hacer click en "Ver" para abrir el PDF original del documento en una vista previa.',
+          description: 'Puedes hacer clic en "Ver" para abrir el PDF original del documento en una vista previa.',
           side: 'bottom' as const,
           align: 'center' as const,
         },
@@ -251,7 +251,7 @@ export function IndividualTutorial() {
         pointer-events: none !important;
       }
       
-      /* 🔥 Elementos highlighted NO son clickeables */
+      /* 🔥 Elementos highlighted NO se pueden abrir */
       .driver-active-element,
       .driver-active-element *,
       .driver-active-element button,

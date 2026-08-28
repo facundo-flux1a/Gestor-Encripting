@@ -287,7 +287,7 @@ export function UploadDialog({
     if (files.length === 0) {
       toast({
         title: "⚠️ Sin archivos",
-        description: "Agregá al menos un archivo para subir",
+        description: "Añade al menos un archivo para subir",
         variant: "destructive",
       });
       return;
@@ -314,7 +314,7 @@ export function UploadDialog({
 
     toast({
       title: '⏳ Carga en curso',
-      description: `${filesToUpload.length} archivo(s). Podés navegar; si recargás, se reanuda sola.`,
+      description: `${filesToUpload.length} archivo(s). Puedes navegar; si recargas, se reanuda sola.`,
     });
 
     (async () => {
@@ -447,7 +447,7 @@ export function UploadDialog({
             {companyError && (
               <p className="mt-1.5 text-xs text-destructive flex items-center gap-1" role="alert">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Debés elegir una empresa para poder subir
+                Debes elegir una empresa para poder subir
               </p>
             )}
           </div>

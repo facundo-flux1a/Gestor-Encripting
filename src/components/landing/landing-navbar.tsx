@@ -4,21 +4,21 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { LogIn, LayoutDashboard } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
+import { MuvailLogo } from '@/components/brand/muvail-logo';
 
 export function LandingNavbar({ user }: { user: any }) {
     return (
-        <nav className="fixed top-0 w-full z-50 border-b bg-background/80 backdrop-blur-md">
-            <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                <Link href="/" className="hover:opacity-80 transition-opacity">
-                    <span className="text-xl font-bold bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent">
-                        Gestor Documental Muvail
-                    </span>
+        <nav className="fixed top-0 z-50 w-full border-b border-border bg-background">
+            <div className="container mx-auto flex h-[4.5rem] items-center justify-between px-4">
+                <Link href="/" className="rounded-lg transition-opacity hover:opacity-80" aria-label="Ir al inicio de Muvail">
+                    <MuvailLogo />
                 </Link>
 
-                <div className="hidden md:flex items-center gap-8">
-                    <Link href="#features" className="text-sm font-medium hover:text-primary transition-colors">Funcionalidades</Link>
-                    {/* <Link href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">Planes</Link> */}
-                    <Link href="#about" className="text-sm font-medium hover:text-primary transition-colors">Nosotros</Link>
+                <div className="hidden items-center gap-7 md:flex">
+                    <Link href="#como-funciona" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Cómo funciona</Link>
+                    <Link href="#producto" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Producto</Link>
+                    <Link href="#para-quien" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Para quién</Link>
+                    <Link href="#contacto" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Contacto</Link>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -28,7 +28,7 @@ export function LandingNavbar({ user }: { user: any }) {
                             <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
                                 <Link href="/auth/login">Iniciar Sesión</Link>
                             </Button>
-                            <Button size="sm" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                            <Button size="sm" asChild className="h-9 rounded-lg bg-primary px-4 font-semibold text-primary-foreground hover:bg-primary/90">
                                 <Link href="/auth/login" className="flex items-center gap-2">
                                     <LogIn className="h-4 w-4" />
                                     <span>Acceder</span>
@@ -36,7 +36,7 @@ export function LandingNavbar({ user }: { user: any }) {
                             </Button>
                         </>
                     ) : (
-                        <Button size="sm" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                        <Button size="sm" asChild className="h-9 rounded-lg bg-primary px-4 font-semibold text-primary-foreground hover:bg-primary/90">
                             <Link href="/dashboard" className="flex items-center gap-2">
                                 <LayoutDashboard className="h-4 w-4" />
                                 <span>Ir al Dashboard</span>

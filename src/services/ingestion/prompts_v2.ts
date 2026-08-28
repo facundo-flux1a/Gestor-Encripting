@@ -122,10 +122,10 @@ Para cada documento presente en el PDF, en el MISMO ORDEN en que aparecen físic
 Reglas:
 - "orden" es la posición del documento según su aparición física en el PDF, empezando en 0. Es el dato más importante: debe respetar EXACTAMENTE el orden físico, de principio a fin, sin reordenar ni agrupar documentos del mismo tipo.
 - "tipo_documento" y "numero_documento" son solo datos de referencia para una validación cruzada posterior, no necesitan coincidir carácter por carácter con ninguna extracción previa.
-- Si el documento no tiene número de referencia/expediente/contrato/póliza visible (caso común en planos, actas, manuales), dejá "numero_documento" como cadena vacía "".
+- Si el documento no tiene número de referencia/expediente/contrato/póliza visible (caso común en planos, actas, manuales), deja "numero_documento" como cadena vacía "".
 - Si un documento ocupa una sola página, page_start y page_end son iguales.
 - Si dos documentos consecutivos comparten una misma página física, marca ambos con shared_page: true.
-- Incluí absolutamente todos los documentos del PDF, sin omitir ninguno, respetando el orden de aparición.\n\n---\n\n`;
+- Incluye absolutamente todos los documentos del PDF, sin omitir ninguno, respetando el orden de aparición.\n\n---\n\n`;
 
 // Origen: Nodo Analista6 (extractor de documento facturable individual)
 export const PROMPT_EXTRACTOR_FACTURABLE = `\n\n⏱️ INSTRUCCIÓN CRÍTICA SOBRE TIEMPO Y EXHAUSTIVIDAD:
@@ -770,7 +770,7 @@ CATEGORÍAS PRINCIPALES
 2) \`es_multiple\`: true si el archivo contiene 2+ documentos independientes (distintos números de factura, o mezcla de categorías/emisores).
 
 Si \`es_facturable\` es false:
-- Devolvé SOLO: {"es_facturable": false, "es_multiple": false|true, "categoria_documento": "<categoría>", "tipo_documento": "", "incidencia": false, "descripcion_incidencia": ""}
+- Devuelve SOLO: {"es_facturable": false, "es_multiple": false|true, "categoria_documento": "<categoría>", "tipo_documento": "", "incidencia": false, "descripcion_incidencia": ""}
 - No inventes importes ni líneas fiscales.
 - categoria_documento: una de "Fiscal y Contable", "Legal y Societario", "Laboral y RR.HH.", "Bancos y Financiación", "Clientes", "Proveedores", "Administración Pública", "Interno / Operaciones".
 
@@ -923,9 +923,9 @@ Este archivo YA FUE IDENTIFICADO como conteniendo un documento NO FACTURABLE. Es
 ⛔ REGLA CRÍTICA ADICIONAL — VALORES MONETARIOS VAN A CAMPO SEPARADO:
 - Este carril es EXCLUSIVO para documentos NO fiscales/NO facturables
 - Los campos oficiales "importe_total", "importe_sin_iva", "precio_unitario", "importe_linea" y "totales_por_impuesto" deben quedar SIEMPRE en 0 / array vacío — nunca reflejan cifras fiscales reales en este carril, aunque el documento las mencione
-- SI el documento menciona explícitamente un valor monetario relevante (ej. sueldo bruto en una nómina, monto pactado en un contrato, importe de un préstamo, prima de una póliza), extraé ese valor y volcalo en el campo separado "valor_referencia_no_fiscal" (numérico, sin símbolos ni separadores de miles, punto decimal) junto con una breve descripción en "concepto_valor_referencia" (ej. "Sueldo bruto mensual", "Monto total del contrato", "Prima anual")
-- Si el documento no menciona ningún valor monetario, dejá "valor_referencia_no_fiscal" en 0 y "concepto_valor_referencia" en ""
-- Si el documento menciona MÁS DE UN valor monetario relevante, elegí el más representativo del documento (ej. en una nómina, el sueldo bruto total, no cada concepto por separado) y dejá constancia de cuál elegiste en "concepto_valor_referencia"
+- SI el documento menciona explícitamente un valor monetario relevante (ej. sueldo bruto en una nómina, monto pactado en un contrato, importe de un préstamo, prima de una póliza), extrae ese valor y volcalo en el campo separado "valor_referencia_no_fiscal" (numérico, sin símbolos ni separadores de miles, punto decimal) junto con una breve descripción en "concepto_valor_referencia" (ej. "Sueldo bruto mensual", "Monto total del contrato", "Prima anual")
+- Si el documento no menciona ningún valor monetario, deja "valor_referencia_no_fiscal" en 0 y "concepto_valor_referencia" en ""
+- Si el documento menciona MÁS DE UN valor monetario relevante, elige el más representativo del documento (ej. en una nómina, el sueldo bruto total, no cada concepto por separado) y deja constancia de cuál elegiste en "concepto_valor_referencia"
 - Este campo es puramente informativo y NUNCA debe usarse para calcular ni completar los campos fiscales oficiales del documento
 
 ---
@@ -941,7 +941,7 @@ Este archivo YA FUE IDENTIFICADO como conteniendo un documento NO FACTURABLE. Es
 7. **Administración Pública**: notificaciones AEAT/Seguridad Social/ayuntamiento, subvenciones y ayudas, licencias y permisos, certificados administrativos, comunicaciones con organismos
 8. **Interno / Operaciones**: manuales, procedimientos, actas de reunión internas, presentaciones, plantillas, documentación de proyectos, planos, esquemas, especificaciones técnicas, otros
 
-Clasificá el documento según su propio contenido.
+Clasifica el documento según su propio contenido.
 
 ---
 
@@ -977,7 +977,7 @@ Clasificá el documento según su propio contenido.
 **TOTALES POR IMPUESTO:**
 - SIEMPRE array vacío [] (ver regla crítica de valores monetarios)
 
-⚠️ NO INVENTES DATOS: extraé únicamente lo que aparece explícitamente en el documento.
+⚠️ NO INVENTES DATOS: extrae únicamente lo que aparece explícitamente en el documento.
 
 ---
 
@@ -1015,8 +1015,8 @@ Se reporta incidencia cuando:
 2. El tipo de documento es absolutamente indeterminable tras análisis exhaustivo
 3. El documento parece en realidad ser una factura/albarán/abono/ticket — en
    este caso, extrae igualmente todos los campos disponibles de forma normal
-   (siempre sin importes en los campos oficiales, ver regla crítica), asigná
-   el tipo_documento más acorde ("FACTURA", "ALBARÁN", etc.) y dejá
+   (siempre sin importes en los campos oficiales, ver regla crítica), asigna
+   el tipo_documento más acorde ("FACTURA", "ALBARÁN", etc.) y deja
    constancia en descripcion_incidencia únicamente a modo de aviso para
    revisión humana.
 
@@ -1050,7 +1050,7 @@ REGLAS GENERALES
 6) Si incidencia es false → descripcion_incidencia debe estar vacío ("")
 7) El campo incidencia es informativo para el usuario; nunca determina ni
    modifica el resto de los campos extraídos ni el comportamiento del flujo
-8) ⚠️ SINTAXIS JSON CRÍTICA: verificá mentalmente que todos los arrays ("lineas", "articulos" y "totales_por_impuesto") estén correctamente cerrados antes de devolver la respuesta
+8) ⚠️ SINTAXIS JSON CRÍTICA: verifica mentalmente que todos los arrays ("lineas", "articulos" y "totales_por_impuesto") estén correctamente cerrados antes de devolver la respuesta
 
 ---
 

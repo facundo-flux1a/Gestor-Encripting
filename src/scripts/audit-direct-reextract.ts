@@ -187,7 +187,7 @@ async function main() {
       .replace(/\{\{NOMBRE_EMPRESA\}\}/g, COMPANY_NAME)
       .replace(/\{\{RECARGO_EMPRESA\}\}/g, 'false')}
 
-AUDITORÍA DE REEXTRACCIÓN: analiza únicamente esta página recortada. Extraé sólo los valores impresos en ella; no reutilices datos de otras facturas. Devuelve el JSON completo.`;
+AUDITORÍA DE REEXTRACCIÓN: analiza únicamente esta página recortada. Extrae sólo los valores impresos en ella; no reutilices datos de otras facturas. Devuelve el JSON completo.`;
     const llm = await callAzureOpenAiChat({ prompt, fileBuffer: buffer, mimeType: 'application/pdf' });
     const normalized = normalizeDocumento(parseLlmJson(llm.text));
     const guard = runFiscalGuards(normalized, { empresaCif: COMPANY_CIF });

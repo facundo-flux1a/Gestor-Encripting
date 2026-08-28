@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/layout/theme-provider';
@@ -10,38 +10,38 @@ import { RetryMonitor } from '@/components/upload/retry-monitor';
 import { UploadQueueProvider } from '@/context/UploadQueueProvider';
 import { DataRefreshProvider } from '@/context/DataRefreshProvider';
 import { UploadQueuePanel } from '@/components/upload/upload-queue-panel';
-import { cookies } from 'next/headers';
-import { getSession } from '@/services/auth-service';
 
 export const metadata: Metadata = {
-  title: 'Gestor Documental',
-  description: 'Intelligent Document Management',
+  title: 'Muvail | Gestión documental inteligente',
+  description: 'Gestión documental y control financiero inteligente para empresas.',
+  manifest: '/site.webmanifest',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.ico',
+    apple: '/apple-icon.png',
+  },
 };
 
-export default async function RootLayout({
+export const viewport: Viewport = {
+  themeColor: '#073f39',
+  colorScheme: 'light dark',
+};
+
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSession();
-  const userId = session?.userId ?? null;
-
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased bg-background min-h-screen w-full overflow-x-hidden text-sm">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {/* ✅ KEY CRÍTICO: Remonta el Provider cuando cambia el usuario */}
-          <CompanyProvider key={userId || 'anonymous'}>
+        <ThemeProvider defaultTheme="light" enableSystem={false}>
+          <CompanyProvider>
             <PreferencesProvider>
               <TutorialProvider>
                 <UploadQueueProvider>
@@ -63,7 +63,7 @@ export default async function RootLayout({
 
                 {/* Upload Progress Manager - siempre en primer plano */}
                 <div className="relative z-50">
-                  <UploadProgressManager userId={userId} />
+                  <UploadProgressManager />
                   {/* <RetryMonitor userId={userId} /> - Desactivado: BullMQ ahora maneja los reintentos nativamente */}
                 </div>
 

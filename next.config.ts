@@ -21,12 +21,8 @@ const nextConfig: NextConfig = {
       path.join(root, 'node_modules'),
       ...(config.resolve.modules || ['node_modules']),
     ];
-    // Force all packages to use the same React instance (prevents createContext errors)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      react: path.resolve(path.join(root, 'node_modules/react')),
-      'react-dom': path.resolve(path.join(root, 'node_modules/react-dom')),
-    };
+    // No se fuerzan aliases de React: Next debe resolver sus entradas
+    // `react-server` y cliente según el contexto de cada componente.
     return config;
   },
   images: {

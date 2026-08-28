@@ -54,3 +54,7 @@ firestore-debug.log
 .env.development.local
 .env.test.local
 .env.production.local
+# Copias de seguridad del .env: llevan las claves completas y el patrón de arriba
+# no las cubre, así que se colaban como archivos sin trackear.
+.env.bak*
+.env.*.bak

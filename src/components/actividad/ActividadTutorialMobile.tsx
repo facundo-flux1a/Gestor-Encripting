@@ -140,7 +140,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-table"]',
                     popover: {
                         title: '📋 Tabla de Actividades',
-                        description: 'Esta tabla muestra todas tus actividades. Cada fila representa un documento subido. Podés tocar documentos completados para verlos en detalle.',
+                        description: 'Esta tabla muestra todas tus actividades. Cada fila representa un documento subido. Puedes tocar documentos completados para verlos en detalle.',
                         side: 'top' as const, align: 'center' as const,
                     },
                 },
@@ -156,7 +156,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-zip"]',
                     popover: {
                         title: '📁 Archivos ZIP/RAR',
-                        description: 'Los archivos ZIP/RAR se muestran como carpetas. Tocá cualquier fila ZIP para expandir y ver los documentos contenidos.',
+                        description: 'Los archivos ZIP/RAR se muestran como carpetas. Toca cualquier fila ZIP para expandir y ver los documentos contenidos.',
                         side: 'right' as const, align: 'start' as const,
                     },
                 }] : []),
@@ -164,7 +164,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-mark-read"]',
                     popover: {
                         title: '✅ Marcar como Leídos',
-                        description: 'Con este botón podés marcar todas las actividades como leídas de una vez.',
+                        description: 'Con este botón puedes marcar todas las actividades como leídas de una vez.',
                         side: 'bottom' as const, align: 'end' as const,
                     },
                 },
@@ -172,7 +172,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-filters"]',
                     popover: {
                         title: '🔍 Filtros',
-                        description: 'Usá los filtros para buscar actividades específicas por estado, fecha, o texto.',
+                        description: 'Usa los filtros para buscar actividades específicas por estado, fecha, o texto.',
                         side: 'bottom' as const, align: 'end' as const,
                     },
                 },
@@ -180,7 +180,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-autorefresh"]',
                     popover: {
                         title: '🔄 Actualización Automática',
-                        description: 'Activá el auto-refresh para que la tabla se actualice automáticamente mientras procesás documentos.',
+                        description: 'Activa el auto-refresh para que la tabla se actualice automáticamente mientras procesás documentos.',
                         side: 'bottom' as const, align: 'end' as const,
                     },
                 },
@@ -196,7 +196,7 @@ export function ActividadTutorialMobile() {
                     element: '[data-tutorial="actividad-welcome"]',
                     popover: {
                         title: '🎉 ¡Tutorial Completado!',
-                        description: '¡Perfecto! Ahora podés gestionar todo tu historial de documentos.',
+                        description: '¡Perfecto! Ahora puedes gestionar todo tu historial de documentos.',
                         align: 'center' as const,
                     },
                 },

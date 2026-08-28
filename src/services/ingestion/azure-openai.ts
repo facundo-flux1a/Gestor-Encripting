@@ -48,7 +48,7 @@ export function isAzureOpenAiConfigured(): boolean {
 export function getLlmProvider(): 'azure-openai' {
   if (!isAzureOpenAiConfigured()) {
     throw new Error(
-      'Azure OpenAI no configurado. Definí AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY y AZURE_OPENAI_DEPLOYMENT.'
+      'Azure OpenAI no configurado. Define AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY y AZURE_OPENAI_DEPLOYMENT.'
     );
   }
   return 'azure-openai';

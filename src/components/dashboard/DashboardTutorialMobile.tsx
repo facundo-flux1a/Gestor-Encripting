@@ -259,8 +259,8 @@ export function DashboardTutorialMobile() {
                     {
                         element: 'body', // Use body for welcome step like PC version
                         popover: {
-                            title: '¡Bienvenido a tu Gestor Documental! 🎉',
-                            description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
+                            title: 'Bienvenido a Muvail',
+                            description: 'Conoce la nueva vista de control: lo importante primero y una acción clara en cada paso.',
                             side: 'bottom' as any, align: 'center' as any
                         }
                     },
@@ -279,24 +279,24 @@ export function DashboardTutorialMobile() {
                     {
                         element: '[data-sidebar="sidebar"], [data-sidebar="content"]',
                         popover: {
-                            title: 'Menú de navegación 🗂️',
-                            description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Entidades.',
+                            title: 'Tu espacio de trabajo',
+                            description: 'Desde este menú accedés a Documentos, Centro de seguridad, Trimestres y Entidades.',
                             side: 'right' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="kpis"]',
                         popover: {
-                            title: 'Métricas principales 📊',
-                            description: 'Estas tarjetas muestran las métricas clave: ingresos, gastos, beneficio bruto, resultado de IVA y total de documentos procesados.',
+                            title: 'Vista general',
+                            description: 'Estas tarjetas concentran las métricas relevantes de la empresa seleccionada.',
                             side: 'bottom' as any, align: 'center' as any
                         }
                     },
                     {
                         element: '[data-tutorial="financial-summary"]',
                         popover: {
-                            title: 'Resumen Financiero 📈',
-                            description: 'Este gráfico muestra la evolución trimestral de tus ingresos (ventas) y gastos.',
+                            title: 'Evolución financiera',
+                            description: 'Revisa la evolución de ingresos y gastos por período.',
                             side: 'top' as any, align: 'center' as any
                         }
                     },
@@ -327,10 +327,10 @@ export function DashboardTutorialMobile() {
                     {
                         element: 'body',
                         popover: {
-                            title: '¡Todo listo! ✨',
+                            title: 'Todo listo',
                             description: `
-                <p>Ya conoces las funciones principales del dashboard. ¡Empieza a explorar!</p>
-                <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
+                <p>Ya conoces las áreas principales de Muvail. Elige una empresa y empieza a revisar.</p>
+                <p class="mt-2">El espacio Documentos te guía para continuar el flujo.</p>
               `,
                             side: 'bottom' as any, align: 'center' as any
                         }
@@ -399,7 +399,7 @@ export function DashboardTutorialMobile() {
       /* FIX #5: No backdrop-filter - broken stacking context on Android */
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.95) !important;
+        background-color: rgba(7, 31, 29, 0.96) !important;
         /* backdrop-filter intentionally removed */
         border-radius: 12px !important; color: white !important;
         box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
@@ -422,7 +422,7 @@ export function DashboardTutorialMobile() {
         color: rgba(255,255,255,0.5) !important; touch-action: manipulation !important;
         min-height: 44px !important; min-width: 44px !important;
       }
-      .driver-popover-arrow { border-bottom-color: rgba(15,23,42,0.95) !important; border-top-color: rgba(15,23,42,0.95) !important; }
+      .driver-popover-arrow { border-bottom-color: rgba(7,31,29,0.96) !important; border-top-color: rgba(7,31,29,0.96) !important; }
     `;
         document.head.appendChild(style);
         return () => { const el = document.getElementById('dashboard-tutorial-mobile-styles'); if (el) el.remove(); };

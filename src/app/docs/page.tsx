@@ -458,7 +458,7 @@ export default function DocsPage() {
             <InteractiveEndpoint
               method="GET"
               path="/api/v1/documents/[id]/thumbnail"
-              description="Seleccioná un documento de la lista. Al ejecutar, verás la miniatura renderizada directamente debajo."
+              description="Selecciona un documento de la lista. Al ejecutar, verás la miniatura renderizada directamente debajo."
               params={thumbnailParams}
               apiKey={apiKey}
               selectedKeyId={selectedKeyId}
@@ -696,7 +696,7 @@ export default function DocsPage() {
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Verificación de Firma HMAC SHA-256</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Cada petición incluye el header <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono text-pink-600 dark:text-pink-400">X-Muvail-Signature</code> generado con HMAC SHA-256 usando el secreto único del webhook. <strong className="text-slate-700 dark:text-slate-200">Siempre verificá la firma</strong> antes de procesar.
+              Cada petición incluye el header <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono text-pink-600 dark:text-pink-400">X-Muvail-Signature</code> generado con HMAC SHA-256 usando el secreto único del webhook. <strong className="text-slate-700 dark:text-slate-200">Siempre verifica la firma</strong> antes de procesar.
             </p>
             <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed">
 {`import crypto from 'crypto';
@@ -718,7 +718,7 @@ export async function POST(req: Request) {
   }
   
   const event = JSON.parse(body);
-  // Procesá el evento según event.evento
+  // Procesa el evento según event.evento
   return Response.json({ ok: true });
 }`}
             </pre>

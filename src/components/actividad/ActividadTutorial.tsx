@@ -87,7 +87,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-table"]',
           popover: {
             title: '📋 Tabla de Actividades',
-            description: 'Esta tabla muestra todas tus actividades. Cada fila representa un documento subido. Podés hacer click en documentos completados para verlos en detalle.',
+            description: 'Esta tabla muestra todas tus actividades. Cada fila representa un documento subido. Puedes hacer clic en documentos completados para verlos en detalle.',
             side: 'top' as const,
             align: 'center' as const,
           },
@@ -113,7 +113,7 @@ export function ActividadTutorial() {
               element: '[data-tutorial="actividad-zip"]',
               popover: {
                 title: '📁 Archivos ZIP/RAR',
-                description: 'Los archivos ZIP/RAR se muestran como carpetas. Hacé click en cualquier fila ZIP para expandir y ver los documentos contenidos.',
+                description: 'Los archivos ZIP/RAR se muestran como carpetas. Haz clic en cualquier fila ZIP para expandir y ver los documentos contenidos.',
                 side: 'right' as const,
                 align: 'start' as const,
               },
@@ -125,7 +125,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-mark-read"]',
           popover: {
             title: '✅ Marcar como Leídos',
-            description: 'Con este botón podés marcar todas las actividades como leídas de una vez, limpiando los badges "✨ Nuevo" y "⚠️ Alerta".',
+            description: 'Con este botón puedes marcar todas las actividades como leídas de una vez, limpiando los badges "✨ Nuevo" y "⚠️ Alerta".',
             side: 'bottom' as const,
             align: 'end' as const,
           },
@@ -135,7 +135,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-filters"]',
           popover: {
             title: '🔍 Filtros',
-            description: 'Usá los filtros para buscar actividades específicas por estado, fecha, o texto (Predeterminadamente, los filtros mostrarán actividad fallidas para su pronta revisión). El contador muestra cuántos filtros están activos.',
+            description: 'Usa los filtros para buscar actividades específicas por estado, fecha, o texto (Predeterminadamente, los filtros mostrarán actividad fallidas para su pronta revisión). El contador muestra cuántos filtros están activos.',
             side: 'bottom' as const,
             align: 'end' as const,
           },
@@ -145,7 +145,7 @@ export function ActividadTutorial() {
           element: '[data-tutorial="actividad-autorefresh"]',
           popover: {
             title: '🔄 Actualización Automática',
-            description: 'Activá el auto-refresh para que la tabla se actualice automáticamente cada pocos segundos mientras procesás documentos.',
+            description: 'Activa el auto-refresh para que la tabla se actualice automáticamente cada pocos segundos mientras procesás documentos.',
             side: 'bottom' as const,
             align: 'end' as const,
           },
@@ -157,7 +157,7 @@ export function ActividadTutorial() {
               element: '[data-tutorial="actividad-actions"]',
               popover: {
                 title: '⚡ Acciones Disponibles',
-                description: 'Cada fila tiene acciones: ✅ Marcar leído, 🔄 Reintentar (si falló), 🗑️ Eliminar (Ésta acción solo eliminará el registro de actividad, no el documento asociado). También podés ver el origen (Dashboard/Correo) del documento.',
+                description: 'Cada fila tiene acciones: ✅ Marcar leído, 🔄 Reintentar (si falló), 🗑️ Eliminar (Ésta acción solo eliminará el registro de actividad, no el documento asociado). También puedes ver el origen (Dashboard/Correo) del documento.',
                 side: 'left' as const,
                 align: 'center' as const,
               },
@@ -169,7 +169,7 @@ export function ActividadTutorial() {
           element: 'body',
           popover: {
             title: '🎉 ¡Tutorial Completado!',
-            description: '¡Perfecto! Ahora podés gestionar todo tu historial de documentos. Los documentos completados son clickeables para verlos en detalle. Los fallidos o interrumpidos muestran detalles del error al hacer click.',
+            description: '¡Perfecto! Ahora puedes gestionar todo tu historial de documentos. Los documentos completados se pueden abrir para verlos en detalle. Los fallidos o interrumpidos muestran detalles del error al hacer click.',
             // side: 'center' as const,
             align: 'center' as const,
           },
@@ -260,7 +260,7 @@ export function ActividadTutorial() {
         pointer-events: none !important;
       }
       
-      /* 🔥 Elementos highlighted NO son clickeables */
+      /* 🔥 Elementos highlighted NO se pueden abrir */
       .driver-active-element,
       .driver-active-element *,
       .driver-active-element button,

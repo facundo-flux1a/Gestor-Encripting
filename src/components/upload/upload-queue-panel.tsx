@@ -816,7 +816,7 @@ export function UploadQueuePanel() {
             {selectedCompanyIds.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground px-4">
                 <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
-                <p className="text-sm font-medium">Seleccioná una empresa</p>
+                <p className="text-sm font-medium">Selecciona una empresa</p>
                 <p className="text-xs mt-1">La cola muestra subidas de las empresas activas en el selector.</p>
               </div>
             ) : isLoading ? (

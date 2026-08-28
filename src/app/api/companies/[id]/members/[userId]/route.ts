@@ -35,7 +35,7 @@ export async function DELETE(
 
         // 🛡️ Seguridad: No permitir que un usuario se elimine a sí mismo (evitar lockouts)
         if (Number(targetUserId) === session.userId) {
-            return NextResponse.json({ error: 'No podés eliminarte a vos mismo de la empresa.' }, { status: 400 });
+            return NextResponse.json({ error: 'No puedes eliminarte a ti mismo de la empresa.' }, { status: 400 });
         }
 
         let userIds: any[] = [];

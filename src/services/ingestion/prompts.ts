@@ -122,10 +122,10 @@ Para cada documento presente en el PDF, en el MISMO ORDEN en que aparecen físic
 Reglas:
 - "orden" es la posición del documento según su aparición física en el PDF, empezando en 0. Es el dato más importante: debe respetar EXACTAMENTE el orden físico, de principio a fin, sin reordenar ni agrupar documentos del mismo tipo.
 - "tipo_documento" y "numero_documento" son solo datos de referencia para una validación cruzada posterior, no necesitan coincidir carácter por carácter con ninguna extracción previa.
-- Si el documento no tiene número de referencia/expediente/contrato/póliza visible (caso común en planos, actas, manuales), dejá "numero_documento" como cadena vacía "".
+- Si el documento no tiene número de referencia/expediente/contrato/póliza visible (caso común en planos, actas, manuales), deja "numero_documento" como cadena vacía "".
 - Si un documento ocupa una sola página, page_start y page_end son iguales.
 - Si dos documentos consecutivos comparten una misma página física, marca ambos con shared_page: true.
-- Incluí absolutamente todos los documentos del PDF, sin omitir ninguno, respetando el orden de aparición.`;
+- Incluye absolutamente todos los documentos del PDF, sin omitir ninguno, respetando el orden de aparición.`;
 
 // Origen: Nodo "Analista" (extractor de documento facturable individual - flujo principal)
 export const PROMPT_EXTRACTOR_FACTURABLE = `⏱️ INSTRUCCIÓN CRÍTICA SOBRE TIEMPO Y EXHAUSTIVIDAD:

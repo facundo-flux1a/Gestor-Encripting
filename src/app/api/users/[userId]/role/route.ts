@@ -44,7 +44,7 @@ export async function PATCH(
 
         // 🛡️ Seguridad: No permitir que un ADMIN se quite el rango a sí mismo para evitar el bloqueo total de la empresa
         if (Number(userId) === session.userId && rol !== 'ADMIN') {
-            return NextResponse.json({ error: 'No podés cambiarte el rol a vos mismo para evitar bloqueos.' }, { status: 400 });
+            return NextResponse.json({ error: 'No puedes cambiarte el rol a ti mismo para evitar bloqueos.' }, { status: 400 });
         }
 
         // Actualizar en el JSON de la empresa usando JSON_SET

@@ -147,7 +147,7 @@ export function IncidenciasTutorialMobile() {
                 element: '[data-tutorial="incidencias-header"]',
                 popover: {
                     title: '🎉 ¡Tutorial Completado!',
-                    description: '¡Listo! Ya podés gestionar todas las incidencias de tu sistema.',
+                    description: '¡Listo! Ya puedes gestionar todas las incidencias de tu sistema.',
                     side: 'over' as const, align: 'center' as const,
                 },
             },

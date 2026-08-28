@@ -11,10 +11,52 @@ export default {
     extend: {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        headline: ['Manrope', 'Inter', 'sans-serif'],
+        display: ['Manrope', 'Inter', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
+        // Alias de migración: evita que los componentes heredados vuelvan a
+        // introducir violeta/púrpura mientras se los lleva al sistema Muvail.
+        muvail: {
+          50: '#effaf6',
+          100: '#d6f3ea',
+          200: '#aee6d5',
+          300: '#78d2ba',
+          400: '#3bbe9d',
+          500: '#0e9a7b',
+          600: '#087a64',
+          700: '#006b5e',
+          800: '#075246',
+          900: '#0b3d36',
+          950: '#062722',
+        },
+        violet: {
+          50: '#effaf6',
+          100: '#d6f3ea',
+          200: '#aee6d5',
+          300: '#78d2ba',
+          400: '#3bbe9d',
+          500: '#0e9a7b',
+          600: '#087a64',
+          700: '#006b5e',
+          800: '#075246',
+          900: '#0b3d36',
+          950: '#062722',
+        },
+        purple: {
+          50: '#effaf6',
+          100: '#d6f3ea',
+          200: '#aee6d5',
+          300: '#78d2ba',
+          400: '#3bbe9d',
+          500: '#0e9a7b',
+          600: '#087a64',
+          700: '#006b5e',
+          800: '#075246',
+          900: '#0b3d36',
+          950: '#062722',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

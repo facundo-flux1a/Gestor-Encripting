@@ -138,72 +138,72 @@ export function DocumentosTutorial() {
         {
           element: 'body',
           popover: {
-            title: '📄 ¡Bienvenido a Documentos!',
-            description: 'Te guiaremos por las funciones principales de esta sección.',
+            title: 'Tu espacio de documentos',
+            description: 'Muvail organiza este flujo para que sepas qué cargar, qué revisar y cuál es el siguiente paso.',
             side: 'bottom', align: 'center'
           } as any
         },
         {
           element: '[data-tutorial="company-selector"]',
           popover: {
-            title: '🏢 Paso 1: Selecciona una empresa',
-            description: 'Selecciona al menos una empresa para continuar. Si ya tienes facturas registradas verás un resumen organizado por tipos.',
+            title: '1. Elige el contexto',
+            description: 'Selecciona al menos una empresa. La vista se actualiza para mostrar solo la información que corresponde a esa operación.',
             side: 'right', align: 'start'
           }
         },
         {
           element: '[data-tutorial="upload-button"]',
           popover: {
-            title: '📤 Paso 2: Sube un documento',
-            description: 'Ahora sube al menos un documento para continuar. Arrastra tus archivos o haz clic para seleccionarlos. **Nota:** Si el documento tiene alguna inconsistencia, será enviado a la sección de **Incidencias**.',
+            title: '2. Incorpora un documento',
+            description: 'Arrastra archivos o selecciónalos desde tu equipo. Si hace falta una revisión, Muvail lo señaliza en el Centro de seguridad.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: 'body',
           popover: {
-            title: '⚠️ ¿No ves tu documento?',
-            description: 'Si después de subir un documento no aparece aquí, es probable que tenga una **incidencia**. Podrás encontrarlo y corregirlo en la sección de Incidencias del menú lateral. Por ahora, sigamos conociendo esta sección.',
+            title: 'Una señal de revisión no es un callejón sin salida',
+            description: 'Si el documento no aparece en esta lista, revisa el Centro de seguridad. Ahí vas a encontrar el contexto necesario para resolverlo.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: '[data-tutorial="tabs-filters"]',
           popover: {
-            title: '🔍 Filtros y Categorías',
-            description: 'Organiza tus documentos. Filtra entre facturas recibidas, emitidas, otros tipos, y **documentos sin confirmar** (aquellos que el sistema no pudo clasificar y requieren tu revisión manual).',
+            title: 'Encuentra lo que necesitas',
+            description: 'Usa categorías y filtros para pasar de una vista general a una revisión puntual, sin perder el contexto de la empresa.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: '[data-tutorial="export-pdf"]',
           popover: {
-            title: '📑 Exportar información',
-            description: '¿Necesitas un reporte? Puedes exportar la información de tus documentos filtrados directamente a PDF.',
+            title: 'Comparte la información',
+            description: 'Cuando la vista ya tiene el contexto correcto, exporta el resultado para continuar el trabajo fuera de Muvail.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: '[data-tutorial="documents-table"]',
           popover: {
-            title: '📋 Tabla de documentos',
-            description: 'Aquí verás todos los documentos procesados correctamente. Puedes ordenarlos, buscar y ver detalles. Si subiste un documento y no lo ves aquí, recuerda revisar la sección de **Incidencias**. ¡También puedes exportar en Excel, CSV y más!',
+            title: 'La información, a la vista',
+            description: 'Ordena, busca o abre cada documento para profundizar. Los estados hacen visible qué está listo y qué requiere atención.',
             side: 'top', align: 'center'
           }
         },
         {
           element: 'body',
           popover: {
-            title: '🔍 Detalle del Documento',
-            description: 'Al hacer clic en cualquier fila, entrarás al detalle del documento. Allí encontrarás otra tabla con todos los datos extraídos línea por línea (bases por producto, impuestos, etc.) para un control total.',
+            title: 'Profundiza solo cuando haga falta',
+            description: 'Al abrir una fila encontrás el detalle extraído línea por línea para validar la información con control.',
             side: 'bottom', align: 'center'
           }
         },
         {
           element: 'body',
           popover: {
-            title: '✨ ¡Listo para empezar!',
-            description: 'Ya conoces cómo gestionar tus documentos, facturas y abonos.',
+            title: 'Todo listo',
+            description: 'Ya conoces el flujo: elige contexto, incorpora documentos y revisa las señales que necesitan tu atención.',
             side: 'bottom', align: 'center'
           }
         }
@@ -395,7 +395,7 @@ export function DocumentosTutorial() {
 
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.8) !important;
+        background-color: rgba(7, 31, 29, 0.92) !important;
         backdrop-filter: blur(12px) !important;
         border-radius: 12px !important;
         color: white !important;

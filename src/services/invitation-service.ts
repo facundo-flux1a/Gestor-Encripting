@@ -44,7 +44,7 @@ export async function createInvitation(empresaId: string, email: string, rol: st
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);">
         <tr><td style="background:linear-gradient(135deg,#0070f3 0%,#0050c8 100%);padding:36px 40px;text-align:center;">
           <p style="margin:0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.75);letter-spacing:2px;text-transform:uppercase;">Gestor Documental</p>
-          <h1 style="margin:12px 0 0;font-size:26px;font-weight:700;color:#ffffff;line-height:1.3;">Tenés una invitación</h1>
+          <h1 style="margin:12px 0 0;font-size:26px;font-weight:700;color:#ffffff;line-height:1.3;">Tienes una invitación</h1>
         </td></tr>
         <tr><td style="padding:40px;">
           <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
@@ -65,7 +65,7 @@ export async function createInvitation(empresaId: string, email: string, rol: st
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;">
             <tr><td style="padding:16px 20px;">
               <p style="margin:0;font-size:13px;color:#6b7280;">🕐 Este enlace expirará en <strong>7 días</strong>.</p>
-              <p style="margin:8px 0 0;font-size:13px;color:#6b7280;">🔒 Si no esperabas esta invitación, ignorá este mensaje.</p>
+              <p style="margin:8px 0 0;font-size:13px;color:#6b7280;">🔒 Si no esperabas esta invitación, ignora este mensaje.</p>
             </td></tr>
           </table>
         </td></tr>
@@ -80,7 +80,7 @@ export async function createInvitation(empresaId: string, email: string, rol: st
     });
 
     if (!success) {
-      throw new Error('No se pudo enviar el mail de invitación. Revisá la configuración SMTP.');
+      throw new Error('No se pudo enviar el mail de invitación. Revisa la configuración SMTP.');
     }
 
     return { success: true, id: Number(inv.id), token };
@@ -262,7 +262,7 @@ export async function resendInvitation(invitationId: string) {
     });
 
     if (!success) {
-      throw new Error('Error al re-enviar el mail. Revisá la configuración SMTP.');
+      throw new Error('Error al re-enviar el mail. Revisa la configuración SMTP.');
     }
 
     return { success: true };

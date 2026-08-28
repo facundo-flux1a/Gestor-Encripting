@@ -24,7 +24,7 @@ export function formatSessionContextForPrompt(ctx: AssistantSessionContext | nul
     parts.push(
       'ÚLTIMO LISTADO MOSTRADO AL USUARIO (orden preservado):\n' +
         lines.join('\n') +
-        '\nSi dice "la primera", "la segunda", "esa", "el detalle de la primera" → usá get_document_detail con el documentId correspondiente. NO preguntes de qué listado.',
+        '\nSi dice "la primera", "la segunda", "esa", "el detalle de la primera" → usa get_document_detail con el documentId correspondiente. NO preguntes de qué listado.',
     );
   }
 

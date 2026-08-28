@@ -57,7 +57,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
       const formData = new FormData(e.currentTarget);
       const eventos = formData.getAll('eventos');
       if (eventos.length === 0) {
-        setErrorMsg('Seleccioná al menos un evento para continuar.');
+        setErrorMsg('Selecciona al menos un evento para continuar.');
         setIsSubmitting(false);
         return;
       }
@@ -217,7 +217,7 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
           {webhooks.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-gray-400 text-sm mb-1">Todavía no hay webhooks configurados.</p>
-              <p className="text-gray-500 text-xs mb-4">Creá uno para empezar a recibir notificaciones en tu ERP.</p>
+              <p className="text-gray-500 text-xs mb-4">Crea uno para empezar a recibir notificaciones en tu ERP.</p>
               <button 
                 onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
                 className="inline-flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"

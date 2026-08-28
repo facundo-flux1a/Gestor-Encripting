@@ -22,12 +22,15 @@ type StatsCardProps = {
 
 export function StatsCard({ title, value, icon: Icon, description, breakdown }: StatsCardProps) {
   const cardContent = (
-    <Card className="transition-all duration-200 hover:shadow-lg cursor-pointer">
+    <Card className="group relative overflow-hidden border-border/80 bg-card/90 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg cursor-pointer">
+      <div className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-primary transition-transform duration-300 group-hover:scale-x-100" />
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 px-3 sm:px-6 py-3 sm:py-6">
         <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2" title={title}>
           {title}
         </CardTitle>
-        <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+        <div className="rounded-lg bg-primary/10 p-1.5">
+          <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0" />
+        </div>
       </CardHeader>
       <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="text-lg sm:text-xl lg:text-2xl font-bold truncate tabular-nums" title={value}>

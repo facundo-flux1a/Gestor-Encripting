@@ -10,21 +10,21 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const CONNECTION_ERROR =
-  'No pudimos conectar con el asistente. Verificá tu conexión e intentá de nuevo.';
+  'No pudimos conectar con el asistente. Verifica tu conexión e inténtalo de nuevo.';
 
 /** @deprecated Usar /api/ai-assistant/chat — redirige al asistente unificado. */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.userId) {
     return NextResponse.json(
-      { error: 'Tenés que iniciar sesión para usar el asistente.' },
+      { error: 'Tienes que iniciar sesión para usar el asistente.' },
       { status: 401 },
     );
   }
 
   if (!isAssistantAvailable()) {
     return NextResponse.json(
-      { error: 'El asistente no está disponible en este momento. Probá más tarde.' },
+      { error: 'El asistente no está disponible en este momento. Prueba más tarde.' },
       { status: 503 },
     );
   }
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json(
-      { error: 'No pudimos leer tu mensaje. Intentá de nuevo.' },
+      { error: 'No pudimos leer tu mensaje. Inténtalo de nuevo.' },
       { status: 400 },
     );
   }
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const message = body.message?.trim();
   if (!message) {
     return NextResponse.json(
-      { error: 'Escribí un mensaje para continuar.' },
+      { error: 'Escribe un mensaje para continuar.' },
       { status: 400 },
     );
   }

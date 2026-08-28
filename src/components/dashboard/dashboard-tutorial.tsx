@@ -251,8 +251,8 @@ export function DashboardTutorial() {
           {
             element: 'body',
             popover: {
-              title: '¡Bienvenido a tu Gestor Documental! 🎉',
-              description: 'Te guiaremos en un recorrido rápido por las funciones principales de la sección "Dashboard".',
+              title: 'Bienvenido a Muvail',
+              description: 'En este recorrido vas a conocer el nuevo espacio de control: menos ruido, más contexto y acciones claras.',
               side: 'bottom' as any,
               align: 'center' as any
             }
@@ -273,8 +273,8 @@ export function DashboardTutorial() {
           {
             element: '[data-sidebar="sidebar"], [data-sidebar="content"]',
             popover: {
-              title: 'Menú de navegación 🗂️',
-              description: 'Desde este menú lateral puedes acceder a las diferentes secciones: Documentos, Trimestres, Actividad, Incidencias y Entidades.',
+              title: 'Tu espacio de trabajo',
+              description: 'Esta navegación reúne Documentos, Centro de seguridad, Trimestres y Entidades. El acceso activo siempre marca dónde estás.',
               side: 'right' as any,
               align: 'center' as any
             }
@@ -282,8 +282,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="kpis"]',
             popover: {
-              title: 'Métricas principales 📊',
-              description: 'Estas tarjetas muestran las métricas clave: ingresos, gastos, beneficio bruto, resultado de IVA y total de documentos procesados.',
+              title: 'Vista general',
+              description: 'Estas tarjetas concentran las métricas relevantes de la empresa seleccionada: ingresos, gastos, IVA y documentos.',
               side: 'bottom' as any,
               align: 'center' as any
             }
@@ -291,8 +291,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="financial-summary"]',
             popover: {
-              title: 'Resumen Financiero 📈',
-              description: 'Este gráfico muestra la evolución trimestral de tus ingresos (ventas) y gastos.',
+              title: 'Evolución financiera',
+              description: 'Leé la evolución de ingresos y gastos antes de profundizar en cada documento.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -300,8 +300,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="distribution-chart"]',
             popover: {
-              title: 'Distribución de Documentos 🥧',
-              description: 'Aquí ves la distribución de tus documentos: facturas de ingreso, facturas de gasto, albaranes, abonos, etc.',
+              title: 'Distribución documental',
+              description: 'Esta vista muestra cómo se compone la información disponible: ingresos, gastos, abonos y otros documentos.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -309,8 +309,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="iva-chart"]',
             popover: {
-              title: 'Resumen de IVA 💰',
-              description: 'Este gráfico te muestra el IVA repercutido y soportado por trimestre para que controles tu situación fiscal.',
+              title: 'Control de IVA',
+              description: 'Revisa el IVA repercutido y soportado por período desde la misma vista de trabajo.',
               side: 'top' as any,
               align: 'center' as any
             }
@@ -318,8 +318,8 @@ export function DashboardTutorial() {
           {
             element: '[data-tutorial="filters"]',
             popover: {
-              title: 'Filtros de análisis 🔍',
-              description: 'Usa estos filtros para analizar períodos específicos. Selecciona un año y un trimestre para datos más detallados.',
+              title: 'Contexto del análisis',
+              description: 'Usa estos filtros para acotar el período que quieres revisar y mantener las métricas en contexto.',
               side: 'bottom' as any,
               align: 'start' as any
             }
@@ -327,10 +327,10 @@ export function DashboardTutorial() {
           {
             element: 'body',
             popover: {
-              title: '¡Todo listo! ✨',
+              title: 'Todo listo',
               description: `
-                <p>Ya conoces las funciones principales del dashboard. Empieza a explorar y descubrir las funciones de tu gestor!</p>
-                <p class="mt-2">Nos vemos en el tutorial de la sección "Documentos". ¡Éxitos!</p>
+                <p>Ya conoces las áreas principales de Muvail. Elige una empresa y empieza por la información que necesitas resolver.</p>
+                <p class="mt-2">Cuando quieras, el espacio Documentos te guía para continuar el flujo.</p>
               `,
               side: 'bottom' as any,
               align: 'center' as any
@@ -434,7 +434,7 @@ export function DashboardTutorial() {
       
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
-        background-color: rgba(15, 23, 42, 0.8) !important;
+        background-color: rgba(7, 31, 29, 0.92) !important;
         backdrop-filter: blur(12px) !important;
         border-radius: 12px !important;
         color: white !important;
@@ -495,8 +495,8 @@ export function DashboardTutorial() {
       }
 
       .driver-popover-arrow {
-        border-bottom-color: rgba(15, 23, 42, 0.8) !important;
-        border-top-color: rgba(15, 23, 42, 0.8) !important;
+        border-bottom-color: rgba(7, 31, 29, 0.92) !important;
+        border-top-color: rgba(7, 31, 29, 0.92) !important;
       }
       
       #tutorial-sidebar-blocker {

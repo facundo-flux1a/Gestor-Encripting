@@ -162,7 +162,7 @@ export async function reconcileStaleActividad(opts?: {
       step: 'Subida interrumpida',
       progress: 0,
       mensaje:
-        'No llegaron los bytes del archivo (cliente cortado o cola local vacía). Volvé a subir.',
+        'No llegaron los bytes del archivo (cliente cortado o cola local vacía). Vuelve a subir.',
       completed_at: new Date(),
       is_new: true,
     },
@@ -200,7 +200,7 @@ export async function reconcileStaleActividad(opts?: {
           step: 'Proceso interrumpido',
           progress: 0,
           mensaje:
-            'Sin avance en cola/workers (job perdido o worker caído). Volvé a subir si hace falta.',
+            'Sin avance en cola/workers (job perdido o worker caído). Vuelve a subir si hace falta.',
           completed_at: new Date(),
           is_new: true,
         },
@@ -220,7 +220,7 @@ export async function reconcileStaleActividad(opts?: {
       status: 'Fallido',
       step: 'Proceso interrumpido',
       progress: 0,
-      mensaje: 'Archivo recibido pero el job no avanzó. Volvé a subir o reintentá desde Actividad.',
+      mensaje: 'Archivo recibido pero el job no avanzó. Vuelve a subir o reinténtalo desde Actividad.',
       completed_at: new Date(),
       is_new: true,
     },

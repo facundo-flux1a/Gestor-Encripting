@@ -109,7 +109,7 @@ export function ProveedoresTutorialMobile() {
                     element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: 'Tabla de Entidades 📊',
-                        description: 'La tabla principal muestra un listado de todos tus proveedores o clientes con información básica: nombre, total operado, cantidad de documentos y productos únicos. Podés ordenar, filtrar y buscar entidades.',
+                        description: 'La tabla principal muestra un listado de todos tus proveedores o clientes con información básica: nombre, total operado, cantidad de documentos y productos únicos. Puedes ordenar, filtrar y buscar entidades.',
                         side: 'bottom' as const,
                     },
                 },
@@ -125,7 +125,7 @@ export function ProveedoresTutorialMobile() {
                     element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: '¡Tutorial Completado! 🎉',
-                        description: '¡Seleccioná empresas y empezá a gestionar tus entidades de forma inteligente!\n\n✔️ Tabla con listado y métricas\n✔️ Pestañas Proveedores/Clientes\n✔️ Vista de detalle con tres pestañas\n✔️ Análiticas completas',
+                        description: '¡Selecciona empresas y empieza a gestionar tus entidades de forma inteligente!\n\n✔️ Tabla con listado y métricas\n✔️ Pestañas Proveedores/Clientes\n✔️ Vista de detalle con tres pestañas\n✔️ Análiticas completas',
                         side: 'bottom' as const,
                     },
                 },
@@ -204,7 +204,7 @@ export function ProveedoresTutorialMobile() {
                     element: '[data-tutorial="proveedores-header"]',
                     popover: {
                         title: '¡Bienvenido a Entidades! 🏢',
-                        description: 'Aquí podés gestionar todos tus proveedores y clientes, analizar gastos e ingresos, ver documentos y explorar productos.',
+                        description: 'Aquí puedes gestionar todos tus proveedores y clientes, analizar gastos e ingresos, ver documentos y explorar productos.',
                         side: 'bottom' as const, align: 'start' as const,
                     },
                 },
@@ -212,7 +212,7 @@ export function ProveedoresTutorialMobile() {
                     element: '[data-tutorial="proveedores-tabs"]',
                     popover: {
                         title: 'Proveedores y Clientes 🔄',
-                        description: 'Usá estas pestañas para cambiar entre el listado de Proveedores (gastos) y Clientes (ingresos).',
+                        description: 'Usa estas pestañas para cambiar entre el listado de Proveedores (gastos) y Clientes (ingresos).',
                         side: 'bottom' as const, align: 'end' as const,
                     },
                 },
@@ -220,7 +220,7 @@ export function ProveedoresTutorialMobile() {
                     element: '[data-tutorial="proveedores-tabla"]',
                     popover: {
                         title: 'Tabla de Entidades 📊',
-                        description: 'La tabla muestra todas tus entidades con: nombre, total operado, documentos y productos únicos. Tocá cualquier fila para entrar al detalle.',
+                        description: 'La tabla muestra todas tus entidades con: nombre, total operado, documentos y productos únicos. Toca cualquier fila para entrar al detalle.',
                         side: 'top' as const, align: 'start' as const,
                     },
                 },
@@ -230,7 +230,7 @@ export function ProveedoresTutorialMobile() {
                 { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Pestaña Productos 📦', description: 'Catálogo completo de productos con historial de precios o ventas y frecuencias.', side: 'bottom' as const } },
                 { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Detalle de Producto 🎯', description: 'Al tocar un producto verás estadísticas completas: promedio, evolución y alertas.', side: 'bottom' as const } },
                 { element: '[data-tutorial="proveedores-header"]', popover: { title: 'Alertas Inteligentes 🚨', description: 'El sistema detecta automáticamente anomalías como cambios bruscos de precios o cantidades.', side: 'bottom' as const } },
-                { element: '[data-tutorial="proveedores-header"]', popover: { title: '¡Tutorial Completado! 🎉', description: '✔️ Pestañas Proveedores/Clientes\n✔️ Tabla con listado y métricas\n✔️ Detalle con tres pestañas\n✔️ Analíticas completas\n✔️ Detección de anomalías\n\n¡Empezá a gestionar tus entidades de forma inteligente!', side: 'bottom' as const } },
+                { element: '[data-tutorial="proveedores-header"]', popover: { title: '¡Tutorial Completado! 🎉', description: '✔️ Pestañas Proveedores/Clientes\n✔️ Tabla con listado y métricas\n✔️ Detalle con tres pestañas\n✔️ Analíticas completas\n✔️ Detección de anomalías\n\n¡Empieza a gestionar tus entidades de forma inteligente!', side: 'bottom' as const } },
             ];
 
             const driverObj = driver({
