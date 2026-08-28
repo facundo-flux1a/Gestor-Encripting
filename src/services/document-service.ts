@@ -1070,13 +1070,18 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       // Persistir la retención como fila RETENCION en impuestos_documento
       // (así las queries SQL de resumen/trimestre también la contemplan)
       const retencionIrpfAmount = Number(data.retencion_irpf) || 0;
+      const targetTipoDoc = (data.tipo_documento || doc.tipo_documento || '').toUpperCase();
+      const targetTotal = data.total !== undefined ? Number(data.total) : Number(doc.importe_total);
+      const isAbonoDoc = targetTipoDoc.includes('ABONO') || targetTipoDoc.includes('RECTIFICATIVA') || targetTotal < 0;
+      const retencionCuota = isAbonoDoc ? Math.abs(retencionIrpfAmount) : -Math.abs(retencionIrpfAmount);
+
       const retencionRowToCreate = retencionIrpfAmount > 0 ? [{
         documento_id: BigInt(id),
         tipo_impuesto: 'RETENCION',
         porcentaje: 0,
         base_imponible: Number(data.base_imponible) || 0,
-        cuota: -retencionIrpfAmount,
-        total_con_impuesto: (Number(data.base_imponible) || 0) - retencionIrpfAmount,
+        cuota: retencionCuota,
+        total_con_impuesto: (Number(data.base_imponible) || 0) + retencionCuota,
         id_de_empresa: empresaId ? BigInt(empresaId) : null,
       }] : [];
 
@@ -3283,17 +3288,12 @@ OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 4) < 1), 0) as b4,
                 COALESCE((SELECT SUM(di.base_imponible) FROM impuestos_documento di WHERE di.documento_id = d.id AND ABS(di.porcentaje - 15) < 1), 0) as b15,
 
-                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€) — incluye base_no_sujeta, descuento_global y corrige retenciones en abonos
+                -- ✅ DETECCIÓN DE DESCUADRE (Diferencia > 0.05€) — incluye base_no_sujeta, descuento_global e impuestos
                 (CASE WHEN ABS(d.importe_total - (
                     d.importe_sin_impuestos +
                     COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
                     COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-                    COALESCE((SELECT SUM(
-                        CASE 
-                            WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
-                            ELSE di2.cuota
-                        END
-                    ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+                    COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
                 )) > 0.05 THEN 1 ELSE 0 END) as doc_mismatch
             FROM documentos d
             WHERE 1=1 ${whereDocType}

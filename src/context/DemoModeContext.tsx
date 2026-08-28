@@ -11,42 +11,26 @@ interface DemoModeContextType {
 
 const DemoModeContext = createContext<DemoModeContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'gestor_demo_mode_active';
+const LOCAL_STORAGE_KEY = 'gestor_demo_mode_v2';
 
 export function DemoModeProvider({ children }: { children: ReactNode }) {
-  // Default to true for presentation video requirements
-  const [isDemoMode, setIsDemoModeState] = useState<boolean>(true);
+  // Demo mode is completely disabled — strictly real database data
+  const [isDemoMode] = useState<boolean>(false);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored === 'false') {
-        setIsDemoModeState(false);
-      } else {
-        // Default to true if not explicitly disabled
-        setIsDemoModeState(true);
-        localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
-      }
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem('gestor_demo_mode');
     } catch (e) {
-      console.warn('⚠️ [DemoModeProvider] LocalStorage read failed:', e);
+      // ignore
     }
   }, []);
 
-  const setIsDemoMode = (active: boolean) => {
-    setIsDemoModeState(active);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, active ? 'true' : 'false');
-    } catch (e) {
-      console.warn('⚠️ [DemoModeProvider] LocalStorage write failed:', e);
-    }
-  };
-
-  const toggleDemoMode = () => {
-    setIsDemoMode(!isDemoMode);
-  };
+  const setIsDemoMode = () => {};
+  const toggleDemoMode = () => {};
 
   return (
-    <DemoModeContext.Provider value={{ isDemoMode, setIsDemoMode, toggleDemoMode }}>
+    <DemoModeContext.Provider value={{ isDemoMode: false, setIsDemoMode, toggleDemoMode }}>
       {children}
     </DemoModeContext.Provider>
   );

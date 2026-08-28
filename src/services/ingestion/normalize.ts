@@ -121,7 +121,7 @@ export const GeminiParseError = LlmParseError;
  * Regla de negocio: IRPF, RETENCION, RETENCIÓN, o cualquier tipo que contenga
  * "RET" se trata como retención → cuota_iva siempre negativa.
  */
-export function validateRetenciones(impuestos: Impuesto[]): Impuesto[] {
+export function validateRetenciones(impuestos: Impuesto[], esAbono: boolean = false): Impuesto[] {
   return impuestos.map((impuesto) => {
     const tipo = String(impuesto.tipo_iva ?? '').toUpperCase();
     const esRetencion =
@@ -134,7 +134,7 @@ export function validateRetenciones(impuestos: Impuesto[]): Impuesto[] {
       return {
         ...impuesto,
         tipo_iva: 'RETENCION', // Normalizar siempre a este valor
-        cuota_iva: -Math.abs(impuesto.cuota_iva), // Forzar negativo
+        cuota_iva: esAbono ? Math.abs(impuesto.cuota_iva) : impuesto.cuota_iva, // Si es abono fuerza positivo, si es normal no se toca
       };
     }
     return impuesto;
@@ -294,11 +294,15 @@ export function computeProgressForMultiple(
 export function normalizeDocumento(doc: DocumentoExtraido, empresaCif?: string): DocumentoExtraido {
   let normalized = toLowerCaseKeysDeep(doc);
 
+  const rawTipo = String(normalized.tipo_documento || (normalized.documento as any)?.tipo_documento || '').toUpperCase();
+  const rawTotal = Number(normalized.importe_total ?? (normalized.documento as any)?.importe_total ?? 0);
+  const esAbono = Boolean(normalized.es_abono) || rawTipo.includes('ABONO') || rawTipo.includes('RECTIFICATIVA') || rawTotal < 0;
+
   if (normalized.desglose_iva && Array.isArray(normalized.desglose_iva)) {
-    normalized.desglose_iva = validateRetenciones(normalized.desglose_iva as Impuesto[]);
+    normalized.desglose_iva = validateRetenciones(normalized.desglose_iva as Impuesto[], esAbono);
   }
   if (normalized.totales_por_impuesto && Array.isArray(normalized.totales_por_impuesto)) {
-    normalized.totales_por_impuesto = validateRetenciones(normalized.totales_por_impuesto as Impuesto[]);
+    normalized.totales_por_impuesto = validateRetenciones(normalized.totales_por_impuesto as Impuesto[], esAbono);
   }
 
   // Auditar consistencia de CIFs y enriquecer el motivo en descripcion_incidencia

@@ -369,11 +369,12 @@ export function startDbWriterWorker() {
           if (totales && Array.isArray(totales)) {
             const impuestosToInsert = totales.map((imp: any) => {
               const tipo   = (imp.tipo_iva || 'IVA').toString().toUpperCase();
-              // Retenciones siempre negativas
+              // Retenciones: en abonos fuerza positivo (+), en facturas normales no se toca
               const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
+              const cuotaRaw = Number(imp.cuota_iva) || 0;
               const cuota  = esRet
-                ? -Math.abs(Number(imp.cuota_iva) || 0)
-                : applySign(Number(imp.cuota_iva) || 0);
+                ? (isAbono ? Math.abs(cuotaRaw) : cuotaRaw)
+                : applySign(cuotaRaw);
               const base   = esRet
                 ? (Number(imp.base_imponible) || 0)
                 : applySign(Number(imp.base_imponible) || 0);
