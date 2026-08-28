@@ -14,8 +14,6 @@ import { InsightsWidget } from '@/components/dashboard/insights-widget';
 import { DashboardTutorialRouter } from '@/components/dashboard/DashboardTutorialRouter';
 import { getDashboardAnalytics } from '@/services/document-service';
 import { type DashboardAnalytics } from '@/lib/types';
-import { useDemoMode } from '@/context/DemoModeContext';
-import { DEMO_DASHBOARD_ANALYTICS } from '@/lib/demo-data';
 import {
   Dialog,
   DialogContent,
@@ -99,8 +97,6 @@ import { TopClients } from '@/components/dashboard/top-clients';
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
   const { refreshKey } = useDataRefresh();
-  const { isDemoMode } = useDemoMode();
-
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,12 +113,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadAnalytics() {
-      if (isDemoMode) {
-        setAnalytics(DEMO_DASHBOARD_ANALYTICS);
-        setIsLoading(false);
-        return;
-      }
-
       if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
         setAnalytics(null);
         setIsLoading(false);
@@ -150,7 +140,7 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey, isDemoMode]);
+  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey]);
 
   const handleExport = async () => {
     if (!dashboardRef.current) return;
@@ -159,7 +149,7 @@ export default function DashboardPage() {
     toast({
       title: '📄 Generando reporte...',
       description: 'Preparando datos financieros. Listo en segundos.',
-      className: 'bg-gradient-to-br from-violet-600 to-indigo-700 text-white',
+      className: 'bg-primary text-primary-foreground',
     });
 
     setTimeout(async () => {
@@ -182,9 +172,9 @@ export default function DashboardPage() {
         const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 
         // ── Helpers ────────────────────────────────────────────────
-        const BG   = [11, 11, 20]   as [number, number, number];
-        const CARD = [22, 22, 38]   as [number, number, number];
-        const VIO  = [124, 58, 237] as [number, number, number];
+        const BG   = [7, 31, 29]    as [number, number, number];
+        const CARD = [13, 44, 41]   as [number, number, number];
+        const VIO  = [0, 107, 94]   as [number, number, number];
         const GREEN= [34, 197, 94]  as [number, number, number];
         const RED  = [239, 68, 68]  as [number, number, number];
         const MUTED= [120, 120, 160]as [number, number, number];
@@ -219,7 +209,7 @@ export default function DashboardPage() {
         // ════════════════════════════════════════════════════════════
         fillPage(BG);
 
-        // violet top bar
+        // barra de identidad Muvail
         pdf.setFillColor(...VIO);
         pdf.rect(0, 0, W, 3, 'F');
 
@@ -239,7 +229,7 @@ export default function DashboardPage() {
         txt(`Generado el ${dateStr}`, 12, 44, 8, MUTED);
         txt(`${kpis.totalDocs} documentos procesados`, W - 14, 44, 8, MUTED, 'normal', 'right');
 
-        // violet line
+        // línea de identidad Muvail
         pdf.setFillColor(...VIO);
         pdf.rect(3, 55, W - 3, 0.5, 'F');
 
@@ -676,7 +666,7 @@ export default function DashboardPage() {
               {/* Company selector */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-zinc-200">Seleccioná las empresas</Label>
+                  <Label className="text-sm font-semibold text-zinc-200">Selecciona las empresas</Label>
                   <div className="flex gap-1">
                     <button
                       onClick={() => setSelectedToClean(companies.map(c => c.id))}
@@ -744,7 +734,7 @@ export default function DashboardPage() {
               {selectedToClean.length > 0 && (
                 <div className="space-y-2 pt-1 border-t border-white/5">
                   <Label htmlFor="confirm-input" className="text-xs text-zinc-400">
-                    Escribí{' '}
+                    Escribe{' '}
                     <span className="font-mono font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
                       CONFIRMAR
                     </span>{' '}
@@ -1183,7 +1173,7 @@ export default function DashboardPage() {
             transform: translateY(0);
           }
         }
-        
+
         .animate-fade-in {
           animation: fade-in 0.5s ease-out forwards;
           opacity: 0;

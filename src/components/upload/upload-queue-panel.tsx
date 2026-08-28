@@ -225,7 +225,7 @@ function JobCard({ job, onDelete, onDismiss, onRemoveLocally, onNavigate }: { jo
                   {job.batchId && (
                     <>
                       <span>•</span>
-                      <span className="font-mono text-violet-500/90" title={job.batchId}>
+                      <span className="font-mono text-primary/90" title={job.batchId}>
                         lote {job.batchId.split('_').pop()?.slice(0, 8)}
                       </span>
                     </>
@@ -643,7 +643,7 @@ export function UploadQueuePanel() {
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {etaSeconds > 0 && (
-                  <span className="text-[10px] text-violet-500 font-semibold bg-violet-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+                  <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
                     <Clock className="w-3 h-3" />
                     ~{Math.ceil(etaSeconds / 60)} min
                   </span>

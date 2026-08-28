@@ -297,7 +297,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
           onClick={() => setPanelOpen(true)}
           className={cn(
             'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 shadow-lg',
-            'bg-card border-violet-700 hover:ring-1 hover:ring-primary/40 text-left'
+            'border-primary/60 bg-card text-left hover:ring-1 hover:ring-primary/40'
           )}
         >
           {allDone && failed === 0 ? (
@@ -305,19 +305,19 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
           ) : failed > 0 && allDone ? (
             <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
           ) : (
-            <Loader2 className="h-4 w-4 animate-spin text-violet-600 shrink-0" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
           )}
           <div className="flex-1 min-w-0 space-y-1">
             <span className="text-sm font-medium block truncate">{chipLabel}</span>
             <Progress
               value={percent}
               className="h-1.5"
-              indicatorClassName={failed > 0 && allDone ? 'bg-red-500' : allDone ? 'bg-green-500' : 'bg-violet-600'}
+              indicatorClassName={failed > 0 && allDone ? 'bg-red-500' : allDone ? 'bg-green-500' : 'bg-primary'}
             />
           </div>
         </button>
       ) : (
-        <Card className="shadow-lg border-2 border-violet-200 dark:border-violet-700 bg-card">
+        <Card className="border-2 border-primary/20 bg-card shadow-lg dark:border-primary/50">
           <CardHeader className="pb-2 pt-3 px-3">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -354,7 +354,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
               <Progress
                 value={percent}
                 className="h-2.5"
-                indicatorClassName={failed > 0 && allDone ? 'bg-red-500' : allDone ? 'bg-green-500' : 'bg-violet-600'}
+                indicatorClassName={failed > 0 && allDone ? 'bg-red-500' : allDone ? 'bg-green-500' : 'bg-primary'}
               />
               <p className="text-xs text-muted-foreground">
                 {softWarn
@@ -364,7 +364,7 @@ export function UploadProgressManager({ userId }: UploadProgressManagerProps) {
             </div>
 
             {names.length > 0 && (
-              <div className="max-h-36 overflow-y-auto text-[11px] text-muted-foreground space-y-0.5 border border-violet-200/60 dark:border-violet-800 rounded-md p-2 bg-background">
+              <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-md border border-primary/15 bg-background p-2 text-[11px] text-muted-foreground dark:border-primary/40">
                 {names.map((n) => (
                   <div key={n} className="truncate">
                     {n}

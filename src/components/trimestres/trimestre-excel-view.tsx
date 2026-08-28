@@ -385,7 +385,7 @@ const calculateAnnualSummary = (data: Document[], selectedPeriodos?: Set<string>
 export function TrimestreExcelView({ documents, isLoading, año, selectedTrimestre, selectedPeriodos }: TrimestreExcelViewProps) {
     const { toast } = useToast();
     const [isExpanded, setIsExpanded] = useState(true);
-    const [viewType, setViewType] = useState<'separate' | 'unified'>('separate');
+    const [viewType, setViewType] = useState<'separate' | 'unified'>('unified');
 
     // 🧪 NUCLEAR DEBUG: Log data to console for the user
     React.useEffect(() => {
@@ -825,32 +825,32 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
 
         toast({
             title: "Traces detallados generados",
-            description: "Revisá la consola (F12) para ver el desglose matemático por documento.",
+            description: "Revisa la consola (F12) para ver el desglose matemático por documento.",
         });
     }, [gridData, toast]);
 
     if (isLoading) {
         return (
-            <Card className="w-full mb-6 bg-slate-900 border-slate-800">
-                <CardHeader><Skeleton className="h-4 w-48 bg-slate-800" /></CardHeader>
-                <CardContent><Skeleton className="h-[400px] w-full bg-slate-800" /></CardContent>
+            <Card className="mb-6 w-full border-border bg-card">
+                <CardHeader><Skeleton className="h-4 w-48" /></CardHeader>
+                <CardContent><Skeleton className="h-[400px] w-full" /></CardContent>
             </Card>
         );
     }
 
     return (
-        <Card className="w-full mb-8 overflow-hidden border-slate-800 bg-slate-900 shadow-2xl transition-all duration-300" data-tutorial="trimestres-excel-view">
+        <Card className="mb-8 w-full overflow-hidden border-border bg-card shadow-sm transition-shadow duration-300 hover:shadow-md" data-tutorial="trimestres-excel-view">
             <CardHeader
-                className="bg-slate-950/80 border-b border-slate-800 py-4 px-6 flex flex-row items-center justify-between space-y-0 cursor-pointer hover:bg-slate-900/40 transition-colors"
+                className="flex cursor-pointer flex-row items-center justify-between space-y-0 border-b border-border bg-muted/35 px-6 py-4 transition-colors hover:bg-muted/55"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                <CardTitle className="text-base font-bold flex items-center gap-3 text-slate-100">
-                    <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
+                <CardTitle className="flex items-center gap-3 text-base font-bold text-foreground">
+                    <div className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
                         <LayoutGrid className="h-5 w-5" />
                     </div>
-                    Cuadro de Mando Interactivo AG Grid {año}
+                    Resumen fiscal · {año}
                 </CardTitle>
-                <button className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                <button aria-label={isExpanded ? 'Contraer resumen fiscal' : 'Expandir resumen fiscal'} className={`rounded-full p-2 transition-all duration-300 ${isExpanded ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                     {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
             </CardHeader>
@@ -864,29 +864,29 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                     >
                         <CardContent className="p-0">
                             {/* Control Bar: Legend + Toggle */}
-                            <div className="bg-slate-950 p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800">
+                            <div className="flex flex-col items-start justify-between gap-5 border-b border-border bg-card p-6 lg:flex-row lg:items-center">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                                    <div className="text-xs text-slate-400">
-                                        Bases + IVA + Recargos - Retenciones = <span className="text-blue-500 font-bold text-sm">TOTAL</span>
+                                    <div className="text-xs text-muted-foreground">
+                                        Base imponible + IVA + recargos − retenciones = <span className="text-primary font-bold text-sm">total del período</span>
                                     </div>
 
 
                                 </div>
 
-                                <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800 px-4">
+                                <div className="flex items-center space-x-3 rounded-lg border border-border bg-muted/35 p-2 px-4">
                                     <Switch
                                         id="view-mode"
                                         checked={viewType === 'unified'}
                                         onCheckedChange={(checked) => setViewType(checked ? 'unified' : 'separate')}
                                     />
-                                    <Label htmlFor="view-mode" className="text-sm font-bold text-slate-300 cursor-pointer select-none">
-                                        {viewType === 'unified' ? 'Vista Unificada' : 'Vista en Tablas'}
+                                    <Label htmlFor="view-mode" className="cursor-pointer select-none text-sm font-bold text-foreground">
+                                        {viewType === 'unified' ? 'Vista consolidada' : 'Vista por registro'}
                                     </Label>
                                 </div>
                             </div>
 
                             {/* AG Grids */}
-                            <div className="flex flex-col gap-8 p-6 bg-[#0f172a]" data-tutorial="trimestres-excel-grid">
+                            <div className="flex flex-col gap-8 bg-muted/20 p-6" data-tutorial="trimestres-excel-grid">
                                 <AnimatePresence mode="wait">
                                     {viewType === 'unified' ? (
                                         <motion.div
@@ -896,11 +896,11 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                             exit={{ opacity: 0, x: -20 }}
                                             className="space-y-2"
                                         >
-                                            <h3 className="text-sm font-bold text-blue-400 mb-2 uppercase tracking-tight flex items-center gap-2">
-                                                <div className="p-1.5 bg-blue-500/20 rounded text-blue-400"><LayoutGrid size={14} /></div>
-                                                VISTA UNIFICADA (ANÁLISIS GLOBAL)
+                                            <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-tight text-primary">
+                                                <div className="rounded bg-primary/10 p-1.5 text-primary"><LayoutGrid size={14} /></div>
+                                                Consolidado anual
                                             </h3>
-                                            <div className="w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800">
+                                            <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                 <AgGridReact
                                                     domLayout="autoHeight"
                                                     theme={darkTheme}
@@ -925,8 +925,8 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                             className="flex flex-col gap-8"
                                         >
                                             <div className="space-y-2">
-                                                <h3 className="text-sm font-bold text-emerald-500 mb-2 uppercase tracking-tight">Recaudación de Ingresos (Emitidas)</h3>
-                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <h3 className="mb-2 text-sm font-bold uppercase tracking-tight text-primary">Ingresos emitidos</h3>
+                                                <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
                                                         theme={darkTheme}
@@ -939,8 +939,8 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                             </div>
 
                                             <div className="space-y-2">
-                                                <h3 className="text-sm font-bold text-rose-500 mb-2 uppercase tracking-tight">Registro de Gastos (Recibidas)</h3>
-                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <h3 className="mb-2 text-sm font-bold uppercase tracking-tight text-foreground">Gastos recibidos</h3>
+                                                <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
                                                         theme={darkTheme}
@@ -953,8 +953,8 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                             </div>
 
                                             <div className="space-y-2">
-                                                <h3 className="text-sm font-bold text-blue-500 mb-2 uppercase tracking-tight">Balance Neto Anual</h3>
-                                                <div className="w-full rounded-xl overflow-hidden shadow-xl border border-slate-800">
+                                                <h3 className="mb-2 text-sm font-bold uppercase tracking-tight text-primary">Resultado anual</h3>
+                                                <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
                                                         theme={darkTheme}
@@ -975,21 +975,21 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             </AnimatePresence>
             <style jsx global>{`
                 .ag-theme-quartz-dark {
-                    --ag-background-color: #0f172a;
-                    --ag-header-background-color: #1e293b;
-                    --ag-odd-row-background-color: #1e293b55;
-                    --ag-header-foreground-color: #f8fafc;
-                    --ag-foreground-color: #cbd5e1;
-                    --ag-border-color: #334155;
-                    --ag-row-hover-color: #33415588;
-                    --ag-selected-row-background-color: #3b82f633;
-                    --ag-font-family: 'Inter', sans-serif;
+                    --ag-background-color: hsl(var(--card));
+                    --ag-header-background-color: hsl(var(--muted));
+                    --ag-odd-row-background-color: hsl(var(--muted) / 0.35);
+                    --ag-header-foreground-color: hsl(var(--foreground));
+                    --ag-foreground-color: hsl(var(--foreground));
+                    --ag-border-color: hsl(var(--border));
+                    --ag-row-hover-color: hsl(var(--primary) / 0.08);
+                    --ag-selected-row-background-color: hsl(var(--primary) / 0.15);
+                    --ag-font-family: 'Manrope', sans-serif;
                     --ag-font-size: 13px;
                 }
                 .ag-tooltip-custom {
-                    background-color: #1e293b !important;
-                    color: #f8fafc !important;
-                    border: 1px solid #475569 !important;
+                    background-color: hsl(var(--popover)) !important;
+                    color: hsl(var(--popover-foreground)) !important;
+                    border: 1px solid hsl(var(--border)) !important;
                     border-radius: 6px !important;
                     padding: 8px !important;
                     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;

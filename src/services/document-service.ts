@@ -5472,6 +5472,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
 }> {
   if (companyIds.length === 0) return { summary: { total: 0, mismatches: 0, logic_checks: 0 }, documents: [] };
 
+  // Las cuotas se persisten con su signo fiscal; una retención de abono ya es positiva.
   const [rows] = await db.query<RowDataPacket[]>(`
     SELECT 
       COUNT(*) as total,
@@ -5484,12 +5485,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
               d.importe_sin_impuestos +
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-              COALESCE((SELECT SUM(
-                  CASE 
-                      WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
-                      ELSE di2.cuota
-                  END
-              ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+              COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
           )) > 0.05)
       ) THEN 1 ELSE 0 END) as mismatches
     FROM documentos d
@@ -5562,6 +5558,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
   }
 
   // ─── FASE 2: Fetch documents with mismatches OR pending confirmation (verified = 0) ───
+  // Misma convención para el detalle que alimenta y limpia health_check_status.
   const [docRows] = await db.query<DocumentPacket[]>(`
     SELECT 
       d.*,
@@ -5575,12 +5572,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
             d.importe_sin_impuestos +
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-            COALESCE((SELECT SUM(
-                CASE 
-                    WHEN di2.tipo_impuesto LIKE '%RET%' AND (d.tipo_documento LIKE '%ABONO%' OR d.tipo_documento LIKE '%RECTIFICATIVA%') THEN -di2.cuota
-                    ELSE di2.cuota
-                END
-            ) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+            COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
         )))
         ELSE 0
       END) as mismatch_amount,

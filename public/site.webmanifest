@@ -1,0 +1,23 @@
+{
+  "name": "Muvail",
+  "short_name": "Muvail",
+  "description": "Gestión documental con IA y control operativo.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#073f39",
+  "theme_color": "#073f39",
+  "icons": [
+    {
+      "src": "/branding/muvail-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/muvail-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -47,8 +47,6 @@ import { generateAdvancedExport } from '@/lib/export-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrimestresFilterBar, type TrimestresFilterState } from '@/components/trimestres/trimestres-filter-bar';
 import { calculateFinancials } from '@/lib/financial-engine';
-import { useDemoMode } from '@/context/DemoModeContext';
-import { DEMO_TRIMESTRES, DEMO_DOCUMENTS } from '@/lib/demo-data';
 
 // Valor inicial de filtros — declarado fuera del componente para ser estable
 const EMPTY_FILTERS: TrimestresFilterState = {
@@ -71,7 +69,6 @@ function TrimestresPageContent() {
   const { selectedCompanyIds, isLoading: isLoadingCompanies } = useCompanyContext();
   const { refreshKey } = useDataRefresh();
   const { isTutorialActive, currentStep, mostrarVacios, setMostrarVacios } = useTrimestres();
-  const { isDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const formatNumber = (num: number | string): string => {
@@ -353,11 +350,6 @@ function TrimestresPageContent() {
     try {
       setIsLoading(true);
 
-      if (isDemoMode) {
-        setTrimestres(DEMO_TRIMESTRES);
-        return;
-      }
-
       if (selectedCompanyIds.length === 0) {
         setTrimestres([]);
         return;
@@ -427,11 +419,6 @@ function TrimestresPageContent() {
     try {
       setIsLoadingDocs(true);
       setDocumentos([]);
-
-      if (isDemoMode) {
-        setDocumentos(DEMO_DOCUMENTS);
-        return;
-      }
 
       if (selectedCompanyIds.length === 0) {
         return;
@@ -912,6 +899,8 @@ function TrimestresPageContent() {
   const beneficioBaseCard = totIngresosBaseCard - totGastosBaseCard;
   const ivaNetoCard = ivaRepCard - ivaSopCard;
 
+  // Durante el tutorial mantenemos un período de referencia aunque todavía no
+  // haya datos cargados para que los objetivos del recorrido sigan existiendo.
   const trimestreParaVista = React.useMemo(() => {
     if (trimestreAgregado) return trimestreAgregado;
     if (!isTutorialActive) return null;
@@ -931,44 +920,41 @@ function TrimestresPageContent() {
       <MainLayout>
         <PageHeader
           title="Gestión de Trimestres"
+          mobileTitle="Trimestres"
           icon={Calendar}
-          badgeCount={0}
+          badgeCount={0} // Opcional, o null si no se necesita
           data-tutorial="trimestres-welcome"
         >
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex items-center space-x-2" data-tutorial="trimestres-toggle">
-              <Switch
-                id="mostrar-vacios"
-                checked={mostrarVacios}
-                onCheckedChange={setMostrarVacios}
-              />
-              <Label htmlFor="mostrar-vacios" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
-                Mostrar vacíos
-              </Label>
-            </div>
-
-            {/* Toggle: Cards dinámicas por filtro */}
-            <div className="flex items-center space-x-2" data-tutorial="trimestres-dynamic-cards">
-              <Switch
-                id="dinamizar-cards"
-                checked={dinamizarCards}
-                onCheckedChange={setDinamizarCards}
-              />
-              <Label htmlFor="dinamizar-cards" className="text-xs sm:text-sm whitespace-nowrap cursor-pointer">
-                Cards dinámicas
-              </Label>
-            </div>
-
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="hidden text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground md:block">Empresa</div>
             <div className="w-[200px]" data-tutorial="trimestres-company-selector">
               <CompaniesHeaderSelector />
             </div>
+            <details className="group relative">
+              <summary className="cursor-pointer list-none rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                Vista
+              </summary>
+              <div className="absolute right-0 top-8 z-20 w-56 space-y-3 rounded-xl border border-border bg-popover p-3 shadow-lg">
+                <div className="flex items-center justify-between gap-3" data-tutorial="trimestres-toggle">
+                  <Label htmlFor="mostrar-vacios" className="text-xs cursor-pointer">Mostrar períodos vacíos</Label>
+                  <Switch id="mostrar-vacios" checked={mostrarVacios} onCheckedChange={setMostrarVacios} />
+                </div>
+                <div className="flex items-center justify-between gap-3" data-tutorial="trimestres-dynamic-cards">
+                  <Label htmlFor="dinamizar-cards" className="text-xs cursor-pointer">Actualizar tarjetas con filtros</Label>
+                  <Switch id="dinamizar-cards" checked={dinamizarCards} onCheckedChange={setDinamizarCards} />
+                </div>
+              </div>
+            </details>
           </div>
         </PageHeader>
 
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
 
           {isLoading ? (
-            <Skeleton className="h-12 sm:h-16 w-full" />
+            <div className="flex min-h-16 items-center gap-3 rounded-xl border border-border bg-card px-4 text-sm text-muted-foreground" role="status" aria-live="polite">
+              <Calendar className="h-4 w-4 animate-pulse text-primary" />
+              Cargando el período seleccionado…
+            </div>
           ) : selectedCompanyIds.length > 0 ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="w-full sm:flex-1 sm:min-w-0" data-tutorial="trimestres-selector">
@@ -984,12 +970,11 @@ function TrimestresPageContent() {
                 />
               </div>
 
-              {selectedCompanyIds.length > 0 && (
+              {trimestreAgregado && (
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  {trimestreAgregado && (
-                    <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
-                  )}
+                  <QuarterBadge cerrado={trimestreAgregado.cerrado_estado ?? trimestreAgregado.cerrado} />
 
+                  {/* ✅ NUEVO: Botón que abre el modal de gestión de estados de trimestres */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -1003,10 +988,10 @@ function TrimestresPageContent() {
                   </Button>
 
                   {puedeCerrarse && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="gap-2 text-xs sm:text-sm h-8 sm:h-9"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive text-xs sm:text-sm h-8 sm:h-9"
                       data-tutorial="trimestres-close-button"
                       onClick={() => {
                         if (isTutorialActive && currentStep === TRIMESTRES_CLOSE_STEP_INDEX) {
@@ -1038,11 +1023,11 @@ function TrimestresPageContent() {
                     <span className="xs:hidden">Export</span>
                   </Button>
 
-                  {puedeEnviarAlSII && trimestreAgregado && (
+                  {puedeEnviarAlSII && (
                     <Button
                       variant="default"
                       size="sm"
-                      className="gap-2 text-xs sm:text-sm h-8 sm:h-9 bg-blue-600 hover:bg-blue-700"
+                      className="gap-2 text-xs sm:text-sm h-8 sm:h-9 bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={() => {
                         const params = new URLSearchParams({
                           año: selectedAño.toString(),
@@ -1065,7 +1050,7 @@ function TrimestresPageContent() {
 
           {/* CONTINUACIÓN EN PARTE 2 */}{/* ✅ MODIFICADO: Ahora con 7 cards CON BREAKDOWN que muestra CON IVA + SIN IVA */}
           {isLoading ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7">
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-7" aria-hidden="true">
               {[...Array(7)].map((_, i) => (
                 <Skeleton key={i} className="h-24 sm:h-28 lg:h-32" />
               ))}
@@ -1265,7 +1250,7 @@ function TrimestresPageContent() {
           ) : selectedCompanyIds.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 sm:p-12 text-center bg-muted/20">
               <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center mb-4">
-                <Building2 className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+                <Building2 className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-base sm:text-lg font-semibold mb-2">
                 Selecciona una empresa
@@ -1280,9 +1265,9 @@ function TrimestresPageContent() {
                   const selector = document.querySelector('[data-tutorial="trimestres-company-selector"]');
                   selector?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-                  selector?.classList.add('ring-2', 'ring-violet-500', 'ring-offset-2');
+                  selector?.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
                   setTimeout(() => {
-                    selector?.classList.remove('ring-2', 'ring-violet-500', 'ring-offset-2');
+                    selector?.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
                   }, 2000);
                 }}
                 className="gap-2"
@@ -1309,8 +1294,8 @@ function TrimestresPageContent() {
                   onClick={() => setIsTableExpanded(!isTableExpanded)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-violet-100 dark:bg-violet-900/20 rounded-lg">
-                      <FileText className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                    <div className="rounded-lg bg-primary/10 p-2">
+                      <FileText className="h-5 w-5 text-primary" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold">Listado de Documentos</h3>

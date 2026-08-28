@@ -1,491 +1,268 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  AlertTriangle,
+  Check,
+  FileInput,
+  FileCheck2,
+  FileSpreadsheet,
+  LayoutDashboard,
+  ScanSearch,
+  ShieldCheck,
+} from 'lucide-react';
 import { getSession } from '@/services/auth-service';
+import { MuvailLogo } from '@/components/brand/muvail-logo';
 import { LandingNavbar } from '@/components/landing/landing-navbar';
 import { LandingFooter } from '@/components/landing/landing-footer';
-import { FeatureCard } from '@/components/landing/feature-card';
-import { PricingCard } from '@/components/landing/pricing-card';
 import { AppScreenshotCarousel } from '@/components/landing/app-screenshot-carousel';
-import { LandingLoader } from '@/components/landing/landing-loader';
 import { Button } from '@/components/ui/button';
-import {
-  Building2,
-  BarChart3,
-  PackageSearch,
-  FileCheck2,
-  ShieldCheck,
-  Clock,
-  ArrowRight,
-  CheckCircle2,
-  LayoutDashboard,
-  Loader2,
-  TrendingUp,
-  Mail
-} from 'lucide-react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
+
+const workflow = [
+  {
+    number: '01',
+    title: 'Cómo llegan los documentos',
+    description: 'Cada empresa tiene dentro de Muvail su propia dirección de correo. El cliente reenvía ahí lo que le llega y el documento entra ya asignado. También se arrastran a la ventana, o se suelta un ZIP con el mes entero.',
+    icon: FileInput,
+  },
+  {
+    number: '02',
+    title: 'Qué lee',
+    description: 'Emisor y CIF, fecha de emisión y de vencimiento, base imponible, cada tipo de impuesto con su cuota, las retenciones de IRPF y las líneas de detalle.',
+    icon: ScanSearch,
+  },
+  {
+    number: '03',
+    title: 'Qué comprueba',
+    description: 'Antes de guardar nada rehace la cuenta. Si el total no coincide con la suma de sus partes, la factura no entra en el trimestre.',
+    icon: AlertTriangle,
+  },
+  {
+    number: '04',
+    title: 'El cierre del trimestre',
+    description: 'El resumen del período reúne el IVA repercutido y el soportado. Cuando el trimestre se presenta, queda bloqueado.',
+    icon: FileSpreadsheet,
+  },
+];
+
+const checks = [
+  {
+    title: 'Descuadre matemático',
+    description: 'El total del documento no coincide con la suma de sus partes.',
+  },
+  {
+    title: 'Fecha anómala',
+    description: 'La fecha de emisión no encaja con el período asignado.',
+  },
+  {
+    title: 'Entidad duplicada',
+    description: 'El mismo CIF figura a la vez como emisor y como receptor.',
+  },
+];
+
+const audiences = [
+  {
+    title: 'Asesorías y gestorías',
+    points: [
+      'Una dirección de correo por cliente para que los documentos entren solos.',
+      'Los descuadres aparecen antes del cierre, no después de presentar.',
+      'El mismo criterio de revisión aplicado a todas las carteras.',
+    ],
+  },
+  {
+    title: 'Empresas',
+    points: [
+      'Proveedores, gastos e IVA reunidos por período.',
+      'Nadie vuelve a teclear una factura a mano.',
+      'El trimestre presentado queda bloqueado ante cualquier cambio.',
+    ],
+  },
+];
 
 export default function RootPage() {
   const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isContentReady, setIsContentReady] = useState(false);
 
   useEffect(() => {
-    async function loadSession() {
-      try {
-        const session = await getSession();
-        setUser(session);
-      } catch (err) {
-        console.error('Error loading session:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadSession();
+    getSession()
+      .then(setUser)
+      .catch((error) => console.error('Error loading session:', error));
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-background to-muted">
-        <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground animate-pulse">Cargando...</p>
-        </div>
-      </div>
-    );
-  }
+  const mainCta = user ? '/dashboard' : 'mailto:documentos@muvail.com?subject=Consulta%20sobre%20Muvail';
+  const mainLabel = user ? 'Abrir mi espacio' : 'Solicitar información';
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body">
-      {/* Loading screen - desaparece cuando las imágenes estén listas */}
-      {!isContentReady && !isLoading && (
-        <LandingLoader onReady={() => setIsContentReady(true)} />
-      )}
+    <div className="min-h-screen overflow-hidden bg-background text-foreground">
+      <LandingNavbar user={user} />
 
-      <div className={cn('transition-opacity duration-500', isContentReady ? 'opacity-100' : 'opacity-0')}>
-        <LandingNavbar user={user} />
+      <main>
+          <section className="border-b border-border px-4 pb-16 pt-32 sm:pb-24 sm:pt-40">
+            <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[0.93fr_1.07fr] lg:gap-16">
+              <div className="max-w-2xl">
+                <h1 className="font-display text-5xl font-extrabold leading-[0.98] tracking-[-0.055em] text-foreground sm:text-6xl lg:text-7xl">
+                  Este es Muvail.
+                  <span className="block text-primary">El software por defecto para tus documentos.</span>
+                </h1>
 
-        <main>
-          {/* Hero Section */}
-          <section className="relative pt-32 pb-20 overflow-hidden">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-gradient-to-b from-primary/10 to-transparent -z-10 blur-3xl opacity-50" />
+                <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
+                  Muvail recibe las facturas, las lee, comprueba que cuadren y las deja colocadas en la empresa y el trimestre que les corresponden.
+                </p>
 
-            <div className="container mx-auto px-4 text-center">
-
-              <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-in">
-                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Gestor Documental </span>
-                <span className="bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-transparent">Muvail</span>
-              </h1>
-
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-                La solución inteligente para la gestión documental de PYMEs y autónomos. Ahorro de tiempo, orden multiempresarial y validaciones automáticas mediante IA.
-              </p>
-
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                {!user ? (
-                  <Button size="lg" className="px-8 py-6 text-lg rounded-full shadow-lg hover:shadow-primary/20 transition-all font-bold group" asChild>
-                    <Link href="/auth/login">
-                      Empezar Ahora
-                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Button size="lg" className="h-12 rounded-lg px-6 font-semibold" asChild>
+                    <Link href={mainCta}>
+                      {mainLabel}
+                      {user ? <LayoutDashboard className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
                     </Link>
                   </Button>
-                ) : (
-                  <Button size="lg" className="px-8 py-6 text-lg rounded-full shadow-lg hover:shadow-primary/20 transition-all font-bold group" asChild>
-                    <Link href="/dashboard">
-                      Ir al Dashboard
-                      <LayoutDashboard className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                    </Link>
+                  <Button variant="outline" size="lg" className="h-12 rounded-lg border-border bg-background px-6 font-semibold" asChild>
+                    <Link href="#como-funciona">Ver el flujo</Link>
                   </Button>
-                )}
-                <Button variant="outline" size="lg" className="px-8 py-6 text-lg rounded-full transition-all" asChild>
-                  <Link href="#features">Ver Funcionalidades</Link>
-                </Button>
+                </div>
+
+                <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Suma base, cuotas y retenciones</span>
+                  <span className="inline-flex items-center gap-2"><FileCheck2 className="h-4 w-4 text-primary" /> Aparta lo que necesita criterio</span>
+                </div>
               </div>
 
-              {/* Real App Screenshots Carousel */}
-              <div className="mt-16 relative max-w-5xl mx-auto animate-slide-in-bottom">
+              <div className="mx-auto w-full max-w-2xl lg:max-w-none">
                 <AppScreenshotCarousel />
-                <div className="absolute -z-10 inset-0 bg-primary/20 blur-[120px] rounded-full scale-75" />
               </div>
             </div>
           </section>
 
-          {/* Features Section */}
-          <section id="features" className="py-24 bg-muted/30">
-            <div className="container mx-auto px-4">
-              <div className="text-center max-w-3xl mx-auto mb-16">
-                <h2 className="text-3xl md:text-4xl font-bold mb-4">Todo lo que necesitas para escalar tu negocio</h2>
-                <p className="text-muted-foreground text-lg">
-                  Gestor Documental Muvail combina automatización avanzada con analíticas profundas para que te olvides del papeleo.
+          <section id="como-funciona" className="border-b border-border bg-muted/35 px-4 py-20 sm:py-28">
+            <div className="mx-auto max-w-7xl">
+              <div className="mb-12 max-w-2xl sm:mb-16">
+                <p className="text-sm font-semibold text-muted-foreground">Cómo funciona</p>
+                <h2 className="mt-4 font-display text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">
+                  De la bandeja de entrada al trimestre cerrado.
+                </h2>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
+                  Un documento recorre cuatro pasos dentro de Muvail. Entra, se lee, se comprueba y se cierra con su período.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                <FeatureCard
-                  title="Gestor Inteligente"
-                  description="Clasificación automática de facturas y documentos mediante inteligencia artificial entrenada para el mercado español."
-                  icon={FileCheck2}
-                  delay="0.1s"
-                />
-                <FeatureCard
-                  title="Medidor de Analíticas"
-                  description="Visualiza tus ingresos, gastos y beneficios reales en tiempo real con dashboards interactivos y detallados."
-                  icon={BarChart3}
-                  delay="0.2s"
-                />
-                <FeatureCard
-                  title="Medidor de Productos"
-                  description="Tracking exhaustivo de líneas de productos, variaciones de precios de proveedores y tendencias de stock."
-                  icon={PackageSearch}
-                  delay="0.3s"
-                />
-                <FeatureCard
-                  title="Evolución de Precios"
-                  description="Control de fluctuación de precios de proveedores en tiempo real, garantizando los mejores márgenes de compra."
-                  icon={TrendingUp}
-                  delay="0.4s"
-                />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {workflow.map(({ number, title, description, icon: Icon }) => (
+                  <article key={number} className="rounded-xl border border-border bg-background p-6 transition-colors hover:border-primary/40">
+                    <div className="flex items-start justify-between">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <span className="font-display text-sm font-extrabold tracking-wide text-primary/55">{number}</span>
+                    </div>
+                    <h3 className="mt-8 font-display text-xl font-bold tracking-[-0.025em]">{title}</h3>
+                    <p className="mt-3 leading-7 text-muted-foreground">{description}</p>
+                  </article>
+                ))}
               </div>
             </div>
           </section>
 
-          {/* Benefits Section */}
-          <section className="py-24 overflow-hidden">
-            <div className="container mx-auto px-4">
-              <div className="flex flex-col lg:flex-row items-center gap-16">
-                <div className="lg:w-1/2 space-y-8">
-                  <h2 className="text-3xl md:text-5xl font-bold leading-tight">
-                    Diseñado para el desorden multiempresarial
-                  </h2>
-                  <div className="space-y-6">
-                    <div className="flex gap-4">
-                      <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Clock className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold mb-1">Ahorro drástico de tiempo</h3>
-                        <p className="text-muted-foreground">Reduce hasta en un 80% el tiempo dedicado a la carga y organización de documentos fiscales.</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Building2 className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold mb-1">Orden Multiempresarial</h3>
-                        <p className="text-muted-foreground">Gestiona múltiples CIFs desde un único perfil, manteniendo todo separado y perfectamente organizado.</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <CheckCircle2 className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold mb-1">Validaciones Inteligentes</h3>
-                        <p className="text-muted-foreground">La IA detecta duplicados, discrepancias de IVA y errores en los datos antes de que sea un problema.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="lg:w-1/2 relative">
-                  <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/10">
-                    <img
-                      src="/api/images/gestor-documental/dashland.png"
-                      alt="Dashboard de analíticas"
-                      className="w-full h-auto object-cover"
-                    />
-                  </div>
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-primary/5 rounded-full blur-[100px] -z-10" />
-                </div>
-              </div>
-            </div>
-          </section>
+          <section id="producto" className="px-4 py-20 sm:py-28">
+            <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2 lg:gap-20">
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground">Comprobación</p>
+                <h2 className="mt-4 max-w-xl font-display text-3xl font-extrabold tracking-[-0.04em] sm:text-5xl">
+                  Muvail rehace la cuenta antes de guardar nada.
+                </h2>
+                <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+                  Suma la base imponible, la cuota de cada impuesto, las bases no sujetas y los descuentos, y compara el resultado con el total que trae el documento. Si la diferencia pasa de cinco céntimos, la factura no entra en el trimestre.
+                </p>
 
-          {/* Email Integration Section */}
-          <section className="py-24 bg-muted/20 border-y">
-            <div className="container mx-auto px-4">
-              <div className="flex flex-col md:flex-row items-center gap-12 max-w-5xl mx-auto">
-                <div className="md:w-1/2 space-y-6">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    <Mail className="h-4 w-4" />
-                    <span>Carga sin fricción</span>
-                  </div>
-                  <h2 className="text-3xl md:text-4xl font-bold">Tus facturas al buzón, y directo al Dashboard</h2>
-                  <p className="text-muted-foreground text-lg leading-relaxed">
-                    Olvídate de subir archivos manualmente. Desde la configuración de tu empresa, definís un correo autorizado como emisor. Luego, simplemente enviás tus PDFs a <span className="font-semibold text-foreground">documentos@muvail.com</span> y nuestro sistema se encarga del resto.
-                  </p>
-                  <ul className="space-y-3">
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
-                      <span>Clasificación automática por IA.</span>
+                <ul className="mt-8 space-y-5">
+                  {checks.map((check) => (
+                    <li key={check.title} className="flex gap-3">
+                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Check className="h-3.5 w-3.5" /></span>
+                      <span>
+                        <span className="block text-sm font-bold">{check.title}</span>
+                        <span className="mt-1 block text-sm leading-6 text-muted-foreground">{check.description}</span>
+                      </span>
                     </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
-                      <span>Detección de proveedor y montos (IVA, base, total).</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
-                      <span>Organización multi-empresa automática certificada.</span>
-                    </li>
-                  </ul>
-                </div>
-                <div className="md:w-1/2">
-                  <div className="bg-card border rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-center min-h-[300px]">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl opacity-50" />
-                    <div className="absolute bottom-0 left-0 w-32 h-32 bg-violet-400/10 rounded-full blur-3xl opacity-50" />
+                  ))}
+                </ul>
 
-                    <div className="flex items-center gap-4 border-b pb-4 mb-4 relative z-10">
-                      <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                        <Mail className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-semibold">Nuevo documento recibido</p>
-                        <p className="text-xs text-muted-foreground truncate w-full">documentos@muvail.com</p>
-                      </div>
-                    </div>
-                    <div className="space-y-3 relative z-10 flex-1 flex flex-col justify-center">
-                      <div className="h-20 bg-muted/30 rounded-lg border border-dashed border-primary/30 flex flex-col items-center justify-center space-y-2 mt-4 p-4 text-center">
-                        <FileCheck2 className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">factura_marzo_proveedor.pdf</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-4 bg-primary/5 p-3 rounded-lg border border-primary/10">
-                        <div className="flex items-center gap-2 text-sm text-green-600 font-bold">
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>Procesado por IA</span>
-                        </div>
-                        <span className="text-xs font-semibold px-2 py-1 bg-green-500/20 text-green-700 dark:text-green-400 rounded-full border border-green-500/30">
-                          Extraído con éxito
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Pricing Section */}
-          {false && (
-            <section id="pricing" className="py-24 bg-muted/30">
-            <div className="container mx-auto px-4">
-              <div className="text-center max-w-3xl mx-auto mb-16">
-                <h2 className="text-3xl md:text-5xl font-bold mb-4">Planes que crecen contigo</h2>
-                <p className="text-muted-foreground text-lg">
-                  Comienza gratis y escala a medida que tu gestión documental se vuelve más compleja.
+                <p className="mt-8 max-w-xl leading-7 text-muted-foreground">
+                  Lo que no pasa una comprobación queda en la bandeja de revisión, con la diferencia ya calculada.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                <PricingCard
-                  name="Start"
-                  price="0€"
-                  description="Para autónomos que están empezando."
-                  features={[
-                    "1 Empresa",
-                    "Hasta 15 documentos/mes",
-                    "Clasificación básica",
-                    "Almacenamiento en la nube",
-                    "Soporte por comunidad"
-                  ]}
-                  buttonText={user ? "Ya eres parte" : "Empezar Gratis"}
-                />
-                <PricingCard
-                  name="Business"
-                  price="49€"
-                  description="La solución completa para PYMEs."
-                  features={[
-                    "Hasta 5 Empresas",
-                    "Hasta 200 documentos/mes",
-                    "Analíticas completas",
-                    "Conexión SII AEAT",
-                    "Validación IA Standard",
-                    "Soporte por Email"
-                  ]}
-                  buttonText={user ? "Tu plan actual?" : "Prueba 14 días"}
-                  highlighted
-                />
-                <PricingCard
-                  name="Premium"
-                  price="99€"
-                  description="Gestión total sin límites."
-                  features={[
-                    "Empresas Ilimitadas",
-                    "Documentos Ilimitados",
-                    "IA Avanzada / Insights",
-                    "SII con soporte técnico",
-                    "API personalizada",
-                    "Soporte Prioritario 24/7"
-                  ]}
-                  buttonText="Contactar Ventas"
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-[#073f39] p-6 text-[#effaf6] sm:col-span-2">
+                  <ShieldCheck className="h-8 w-8 text-[#b5de57]" />
+                  <p className="mt-8 text-sm font-bold text-[#b5de57]">La empresa jamás pierde el control</p>
+                  <p className="mt-2 text-lg font-semibold leading-7">
+                    Después de que la inteligencia artificial lo ha revisado todo, la última palabra sigue siendo de la empresa. Muvail no corrige por su cuenta ni da por bueno lo que no cuadra.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-6">
+                  <AlertTriangle className="h-7 w-7 text-primary" />
+                  <p className="mt-8 text-sm font-bold">Bandeja de revisión</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">Aparta lo que necesita criterio profesional y deja el resto preparado.</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-6">
+                  <FileCheck2 className="h-7 w-7 text-primary" />
+                  <p className="mt-8 text-sm font-bold">Registro de decisiones</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">Cada decisión queda junto al documento, con quién la tomó y cuándo.</p>
+                </div>
               </div>
             </div>
           </section>
-          )}
-          {/* Feature Showcase Sections */}
-          <section id="showcase" className="py-20">
-            <div className="container mx-auto px-4 space-y-32">
 
-              {/* Dashboard */}
-              <div className="flex flex-col lg:flex-row items-center gap-12">
-                <div className="lg:w-2/5 space-y-4">
-                  <span className="text-xs font-bold tracking-widest text-primary uppercase">Analíticas financieras</span>
-                  <h2 className="text-3xl md:text-4xl font-bold">Dashboard en tiempo real</h2>
-                  <p className="text-muted-foreground text-lg leading-relaxed">
-                    Visualizá ingresos, gastos, IVA neto y beneficio bruto en un vistazo. Gráficos interactivos con navegación histórica y proyecciones futuras.
-                  </p>
-                </div>
-                <div className="lg:w-3/5">
-                  <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                    <img src="/api/images/gestor-documental/dashland.png" alt="Dashboard" className="w-full h-auto" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Trimestres */}
-              <div className="flex flex-col lg:flex-row-reverse items-center gap-12">
-                <div className="lg:w-2/5 space-y-4">
-                  <span className="text-xs font-bold tracking-widest text-primary uppercase">Gestión fiscal</span>
-                  <h2 className="text-3xl md:text-4xl font-bold">Cuadro de mando trimestral</h2>
-                  <p className="text-muted-foreground text-lg leading-relaxed">
-                    Bases, IVA, recargos y sanciones organizados por trimestre. Exportación directa para tu asesor o envío al SII de la AEAT con un clic.
-                  </p>
-                </div>
-                <div className="lg:w-3/5">
-                  <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                    <img src="/api/images/gestor-documental/triland.png" alt="Trimestres" className="w-full h-auto" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Documentos */}
-              <div className="flex flex-col lg:flex-row items-center gap-12">
-                <div className="lg:w-2/5 space-y-4">
-                  <span className="text-xs font-bold tracking-widest text-primary uppercase">Gestión documental</span>
-                  <h2 className="text-3xl md:text-4xl font-bold">Todos tus documentos, organizados</h2>
-                  <p className="text-muted-foreground text-lg leading-relaxed">
-                    Facturas recibidas y emitidas clasificadas automáticamente. Filtros avanzados, agrupación por carpetas y búsqueda instantánea.
-                  </p>
-                </div>
-                <div className="lg:w-3/5">
-                  <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                    <img src="/api/images/gestor-documental/docland.png" alt="Documentos" className="w-full h-auto" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Productos */}
-              <div className="flex flex-col lg:flex-row-reverse items-center gap-12">
-                <div className="lg:w-2/5 space-y-4">
-                  <span className="text-xs font-bold tracking-widest text-primary uppercase">Análisis de proveedores</span>
-                  <h2 className="text-3xl md:text-4xl font-bold">Tracking de productos por proveedor</h2>
-                  <p className="text-muted-foreground text-lg leading-relaxed">
-                    Seguimiento de precios unitarios, variaciones históricas y totales por línea de producto. Detección automática de cambios de precio.
-                  </p>
-                </div>
-                <div className="lg:w-3/5">
-                  <div className="rounded-2xl overflow-hidden border border-primary/20 shadow-2xl shadow-primary/5">
-                    <img src="/api/images/gestor-documental/prodland.png" alt="Productos" className="w-full h-auto" />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </section>
-
-
-          {/* FAQ Section */}
-          <section id="faq" className="py-24">
-            <div className="container mx-auto px-4 max-w-4xl">
-              <div className="text-center mb-16">
-                <h2 className="text-3xl md:text-5xl font-bold mb-4">Preguntas Frecuentes</h2>
-                <p className="text-muted-foreground text-lg">
-                  Resolvemos tus dudas sobre el funcionamiento y la seguridad de Muvail.
+          <section id="para-quien" className="border-y border-border bg-muted/35 px-4 py-20 sm:py-28">
+            <div className="mx-auto max-w-7xl">
+              <div className="max-w-2xl">
+                <p className="text-sm font-semibold text-muted-foreground">Asesorías y empresas</p>
+                <h2 className="mt-4 font-display text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">
+                  Varias empresas a la vez.
+                </h2>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
+                  Una asesoría lleva muchos clientes. En Muvail se cambia de empresa sin cambiar de sesión, y cada documento conserva de quién es, quién lo revisó y cuándo. Cuando corresponde, sale hacia el SII.
                 </p>
               </div>
-              <div className="grid gap-6">
-                <div className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-xl font-bold mb-2">¿Puedo configurar los importes de alerta del IVA?</h3>
-                  <p className="text-muted-foreground">Sí (actualmente en fase beta). Puedes definir nuevos importes de IVA de uso común, y dárselos como instrucción a la Inteligencia Artificial para que realice comprobaciones e identifique discrepancias automáticamente.</p>
-                </div>
-                <div className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-xl font-bold mb-2">¿Dónde se almacenan mis datos?</h3>
-                  <p className="text-muted-foreground">La seguridad de tu información fiscal es primordial. Todos los documentos, bases de datos y configuraciones se resguardan de manera estrictamente <span className="font-semibold text-foreground">encriptada</span> y aislada, garantizando privacidad absoluta.</p>
-                </div>
-                <div className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-xl font-bold mb-2">¿Qué pasa si llego al límite de mi plan gratuito?</h3>
-                  <p className="text-muted-foreground">Si alcanzas el límite, el sistema dejará de subir documentos nuevos y algunas funciones avanzadas quedarán limitadas (como el envío a Hacienda o las segundas comprobaciones de IA interactiva). La información de cliente cargada se mantiene intacta por un lapso máximo de 90 días, o hasta que decidas prescindir de ella.</p>
-                </div>
+
+              <div className="mt-10 grid gap-4 lg:grid-cols-2">
+                {audiences.map((audience) => (
+                  <article key={audience.title} className="rounded-xl border border-border bg-background p-7 sm:p-8">
+                    <h3 className="font-display text-2xl font-bold tracking-[-0.03em]">{audience.title}</h3>
+                    <ul className="mt-6 space-y-3">
+                      {audience.points.map((point) => (
+                        <li key={point} className="flex gap-3 text-sm leading-6 text-muted-foreground">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
               </div>
             </div>
           </section>
 
-          {/* CTA Section */}
-          <section className="py-32 relative overflow-hidden bg-muted/20">
-            {/* Radial glow */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px]" />
-            </div>
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-
-            <div className="container mx-auto px-4 relative z-10 text-center">
-              <p className="text-xs font-bold tracking-widest text-primary uppercase mb-4">Empezá hoy</p>
-              <h2 className="text-4xl md:text-6xl font-bold mb-6 max-w-3xl mx-auto leading-tight">
-                ¿Listo para que tu gestión{' '}
-                <span className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent">
-                  trabaje sola?
-                </span>
+          <section id="contacto" className="border-y border-[#0d5b52] bg-[#073f39] px-4 py-20 text-[#effaf6] sm:py-28">
+            <div className="mx-auto max-w-3xl text-center">
+              <MuvailLogo onDark className="justify-center" />
+              <h2 className="mt-7 font-display text-4xl font-extrabold tracking-[-0.05em] sm:text-5xl">
+                Empieza por las facturas de un cliente.
               </h2>
-              <p className="text-muted-foreground text-lg max-w-xl mx-auto mb-10">
-                Más de 100 empresas ya digitalizaron su gestión documental. Configuración en minutos, sin tarjeta de crédito.
+              <p className="mx-auto mt-5 max-w-xl text-lg leading-8 text-[#c8ddd7]">
+                Muvail está disponible para asesorías y para empresas que llevan su propia contabilidad.
               </p>
-
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-                {!user ? (
-                  <Button size="lg" className="px-10 py-6 text-lg rounded-full shadow-lg shadow-primary/20 font-bold group" asChild>
-                    <Link href="/auth/login">
-                      Crear cuenta gratis
-                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button size="lg" className="px-10 py-6 text-lg rounded-full shadow-lg shadow-primary/20 font-bold group" asChild>
-                    <Link href="/dashboard">
-                      Ir al Dashboard
-                      <LayoutDashboard className="ml-2 h-5 w-5" />
-                    </Link>
-                  </Button>
-                )}
-                <Button variant="outline" size="lg" className="px-10 py-6 text-lg rounded-full" asChild>
-                  <Link href="#features">Ver funcionalidades</Link>
-                </Button>
-              </div>
-
-              {/* Stats */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-10 text-center">
-                <div>
-                  <p className="text-3xl font-bold text-foreground">100+</p>
-                  <p className="text-sm text-muted-foreground mt-1">Empresas activas</p>
-                </div>
-                <div className="hidden sm:block w-px h-10 bg-border" />
-                <div>
-                  <p className="text-3xl font-bold text-foreground">80%</p>
-                  <p className="text-sm text-muted-foreground mt-1">Reducción de tiempo</p>
-                </div>
-                <div className="hidden sm:block w-px h-10 bg-border" />
-                <div>
-                  <p className="text-3xl font-bold text-foreground">0€</p>
-                  <p className="text-sm text-muted-foreground mt-1">Para empezar</p>
-                </div>
-              </div>
+              <Button size="lg" className="mt-9 h-12 rounded-lg bg-[#b5de57] px-6 font-bold text-[#073f39] hover:bg-[#c8e878]" asChild>
+                <Link href={mainCta}>
+                  {mainLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           </section>
-        </main>
+      </main>
 
-        <LandingFooter />
-      </div>
+      <LandingFooter />
     </div>
   );
 }

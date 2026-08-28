@@ -30,6 +30,7 @@ import {
   Calendar,
   Webhook,
   BookOpen,
+  Building2,
   UploadCloud,
 } from "lucide-react";
 import Link from 'next/link';
@@ -54,24 +55,21 @@ import { Separator } from '@/components/ui/separator';
 import { CompaniesSelector } from '../companies-selector';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { usePreferences } from '@/contexts/preferences-context';
-import { SuggestionBox } from '../suggestions/SuggestionBox';
 import { SupportChatWidget } from '../support/support-chat-widget';
 import { QueueTracker } from './queue-tracker';
 import { GlobalUploadTracker } from '@/components/upload/global-upload-tracker';
 import { useUploadQueueOptional } from '@/context/UploadQueueProvider';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { MuvailLogo } from '@/components/brand/muvail-logo';
 
 function AppLogo() {
   const { state } = useSidebar();
   return (
-    <div className="flex items-center gap-2.5">
-      <h1 className={cn(
-        "text-base sm:text-lg font-bold text-primary truncate transition-all",
-        state === 'collapsed' && 'sr-only'
-      )}>
-        Gestor Documental
-      </h1>
-    </div>
+    <MuvailLogo
+      compact={state === 'collapsed'}
+      className="min-w-0 transition-all duration-200"
+      label="Muvail, gestión documental inteligente"
+    />
   )
 }
 
@@ -93,7 +91,7 @@ const UserProfile = React.memo(function UserProfile({ user }: { user: User | nul
   if (!user) {
     return (
       <Button variant="ghost" className="flex items-center gap-2 p-2 h-auto text-left w-full justify-start" asChild>
-        <Link 
+        <Link
           href="/auth/login?force=true"
           onClick={() => {
             document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
@@ -172,7 +170,7 @@ export function MainLayoutHeader({ children, className, hideSidebarTrigger = fal
 
   return (
     <header className={cn(
-      "flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50",
+      "flex h-16 items-center gap-4 border-b border-border/80 bg-background/85 backdrop-blur-sm sticky top-0 z-50",
       "px-3 sm:px-4 lg:px-6",
       className
     )}>
@@ -338,11 +336,11 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
   return (
     <SidebarProvider defaultOpen={!noPadding}>
       <SidebarAutoCollapser noPadding={noPadding} />
-      <Sidebar collapsible={noPadding ? "offcanvas" : "icon"}>
-        <SidebarHeader className="p-3">
-          <div className="flex items-center justify-between">
+      <Sidebar collapsible={noPadding ? "offcanvas" : "icon"} className="border-sidebar-border bg-sidebar">
+        <SidebarHeader className="p-3.5 group-data-[collapsible=icon]:p-2">
+          <div className="flex items-center justify-between group-data-[collapsible=icon]:justify-center">
             <AppLogo />
-            <div className="hidden md:block">
+            <div className="hidden md:block group-data-[collapsible=icon]:hidden">
               <SidebarToggle />
             </div>
           </div>
@@ -350,11 +348,12 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
 
         <SidebarContent>
           {/* 🎯 Selector de empresas CON data-tutorial */}
-          <div className="px-2" data-tutorial="company-selector">
+          <div className="px-2 group-data-[collapsible=icon]:hidden" data-tutorial="company-selector">
             <CompaniesSelector />
           </div>
+          <CollapsedCompanyControl />
 
-          <Separator className="mx-2 my-2" />
+          <Separator className="mx-3 my-2 group-data-[collapsible=icon]:mx-2" />
 
           {/* Menú de navegación */}
           <SidebarMenu>
@@ -401,7 +400,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
                       "ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium group-data-[collapsible=icon]:hidden",
                       unreadActivity.hasErrors
                         ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                        : "bg-violet-500/20 text-violet-400 border border-violet-500/30"
+                        : "bg-primary/10 text-primary border border-primary/20"
                     )}
                   >
                     {unreadActivity.hasErrors ? (
@@ -415,28 +414,49 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          
-          <QueueTracker />
-          <GlobalUploadTracker />
+
+          <div className="group-data-[collapsible=icon]:hidden">
+            <QueueTracker />
+            <GlobalUploadTracker />
+          </div>
         </SidebarContent>
 
-        <SidebarFooter>
-          <div className="p-2 border-t">
+        <SidebarFooter className="group-data-[collapsible=icon]:p-1">
+          <div className="m-2 rounded-xl border border-sidebar-border bg-sidebar-accent/40 p-1.5 group-data-[collapsible=icon]:m-0 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
             <UserProfile user={user} />
           </div>
         </SidebarFooter>
       </Sidebar>
 
       {/* 🔥 FIX CRÍTICO: SidebarInset con overflow controlado */}
-      <SidebarInset id="main-sidebar-inset" className="overflow-x-hidden">
+      <SidebarInset id="main-sidebar-inset" className={cn("overflow-x-hidden", !noPadding && "pb-20")}>
         <div className={cn("flex flex-col w-full", noPadding ? "h-[calc(100vh-0px)] overflow-hidden" : "min-h-screen")}>
           {children}
         </div>
       </SidebarInset>
 
-      {/* Global Suggestion Box (derecha) + Asistente (a su izquierda, no tapa perfil) */}
-      <SuggestionBox />
+      {/* Una única puerta de ayuda contextual; no compite con un segundo flotante. */}
       <SupportChatWidget />
     </SidebarProvider>
+  );
+}
+
+function CollapsedCompanyControl() {
+  const { toggleSidebar } = useSidebar();
+
+  return (
+    <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          type="button"
+          tooltip="Empresas"
+          onClick={toggleSidebar}
+          aria-label="Abrir selector de empresas"
+        >
+          <Building2 className="h-4 w-4" />
+          <span className="group-data-[collapsible=icon]:hidden">Empresas</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

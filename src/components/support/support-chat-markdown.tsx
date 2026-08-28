@@ -24,7 +24,7 @@ export function SupportChatMarkdown({ content }: { content: string }) {
 
         if (isOrderedList) {
           return (
-            <ol key={bi} className="ml-1 list-decimal space-y-1.5 pl-4 marker:text-violet-400">
+            <ol key={bi} className="ml-1 list-decimal space-y-1.5 pl-4 marker:text-primary">
               {lines.map((line, li) => {
                 const item = line.replace(/^\d+\.\s*/, '');
                 return (

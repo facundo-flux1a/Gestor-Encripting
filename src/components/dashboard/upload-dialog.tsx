@@ -387,17 +387,17 @@ export function UploadDialog({
       {/* Overlay de arrastre: captura drops en toda el área (incluido el modal) */}
       {isDragging && isOpen && (
         <div
-          className="fixed inset-0 z-[100] bg-violet-500/10 backdrop-blur-sm border-4 border-dashed border-violet-500 flex items-center justify-center transition-all duration-200"
+          className="fixed inset-0 z-[100] border-4 border-dashed border-primary bg-primary/10 backdrop-blur-sm flex items-center justify-center transition-all duration-200"
           onDragEnter={handleZoneDragEnter}
           onDragOver={handleZoneDragOver}
           onDragLeave={handleZoneDragLeave}
           onDrop={handleZoneDrop}
         >
           <div className="bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-2xl p-10 flex flex-col items-center pointer-events-none transform scale-105 transition-transform duration-200">
-            <div className="bg-violet-100 dark:bg-violet-900/50 p-6 rounded-full mb-6">
-              <Upload className="w-16 h-16 text-violet-600 dark:text-violet-400 animate-bounce" />
+            <div className="mb-6 rounded-full bg-primary/10 p-6 dark:bg-primary/20">
+              <Upload className="h-16 w-16 animate-bounce text-primary" />
             </div>
-            <p className="text-3xl font-bold text-violet-700 dark:text-violet-400 mb-2">Suelta tus archivos aquí</p>
+            <p className="mb-2 text-3xl font-bold text-primary">Suelta tus archivos aquí</p>
             <p className="text-gray-500 dark:text-gray-400">PDF, ZIP o imágenes (máx 10MB)</p>
           </div>
         </div>
@@ -466,13 +466,13 @@ export function UploadDialog({
             className={cn(
               'border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors',
               isDragging
-                ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20'
+                ? 'border-primary bg-primary/5 dark:bg-primary/10'
                 : 'border-gray-300 dark:border-gray-700'
             )}
           >
             <Upload className={cn(
               'mx-auto h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mb-2 sm:mb-3 lg:mb-4 transition-colors',
-              isDragging ? 'text-violet-500' : 'text-gray-400'
+              isDragging ? 'text-primary' : 'text-gray-400'
             )} />
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2 px-2">
               {isDragging

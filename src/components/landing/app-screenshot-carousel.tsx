@@ -1,102 +1,129 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
+import { CalendarRange, LayoutDashboard, PlayCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const SCREENSHOTS = [
-    {
-        src: '/api/images/gestor-documental/dashland.png',
-        label: 'Dashboard',
-        description: 'Analíticas financieras en tiempo real',
-    },
-    {
-        src: '/api/images/gestor-documental/triland.png',
-        label: 'Trimestres',
-        description: 'Cuadro de mando fiscal interactivo',
-    },
-    {
-        src: '/api/images/gestor-documental/docland.png',
-        label: 'Documentos',
-        description: 'Gestión completa de facturas y documentos',
-    },
-    {
-        src: '/api/images/gestor-documental/prodland.png',
-        label: 'Productos',
-        description: 'Tracking de líneas de producto por proveedor',
-    },
-];
+const PRODUCT_VIEWS = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    description: 'Indicadores, evolución y entidades en una misma vista.',
+    image: '/landing/dashboard-real.png',
+    alt: 'Dashboard de Muvail con indicadores financieros y distribución de documentos',
+    icon: LayoutDashboard,
+  },
+  {
+    id: 'trimestres',
+    label: 'Trimestres',
+    description: 'El cierre fiscal con sus importes y el consolidado del período.',
+    image: '/landing/trimestres-real.png',
+    alt: 'Gestión de trimestres de Muvail con resumen fiscal y consolidado',
+    icon: CalendarRange,
+  },
+] as const;
 
 export function AppScreenshotCarousel() {
-    const [active, setActive] = useState(0);
+  const [activeId, setActiveId] = useState<'tour' | (typeof PRODUCT_VIEWS)[number]['id']>('tour');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const active = PRODUCT_VIEWS.find((view) => view.id === activeId) ?? PRODUCT_VIEWS[0];
+  const isTour = activeId === 'tour';
+  const heading = isTour ? 'Demo guiada' : active.label;
+  const description = isTour
+    ? 'Dos facturas entran juntas. Una cuadra y sigue sola; la otra no, y Muvail la aparta antes del cierre.'
+    : active.description;
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setActive((prev) => (prev + 1) % SCREENSHOTS.length);
-        }, 4000);
-        return () => clearInterval(timer);
-    }, []);
+  const selectView = (id: 'tour' | (typeof PRODUCT_VIEWS)[number]['id']) => {
+    if (id !== 'tour') videoRef.current?.pause();
+    setActiveId(id);
+  };
 
-    return (
-        <div className="rounded-2xl border border-primary/20 bg-card/50 backdrop-blur-sm shadow-2xl overflow-hidden">
-            {/* Browser chrome */}
-            <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border/50">
-                <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
-                    <div className="w-3 h-3 rounded-full bg-amber-500/40 border border-amber-500/60" />
-                    <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
-                </div>
-                {/* Tabs */}
-                <div className="flex items-center gap-1 ml-4">
-                    {SCREENSHOTS.map((s, i) => (
-                        <button
-                            key={i}
-                            onClick={() => setActive(i)}
-                            className={cn(
-                                'px-3 py-1 rounded-md text-xs font-medium transition-all duration-200',
-                                i === active
-                                    ? 'bg-primary/20 text-primary border border-primary/30'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                            )}
-                        >
-                            {s.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Screenshot */}
-            <div className="relative aspect-[16/9] overflow-hidden bg-black/20">
-                {SCREENSHOTS.map((s, i) => (
-                    <img
-                        key={i}
-                        src={s.src}
-                        alt={s.label}
-                        className={cn(
-                            'absolute inset-0 w-full h-full object-cover transition-opacity duration-700',
-                            i === active ? 'opacity-100' : 'opacity-0'
-                        )}
-                    />
-                ))}
-
-                {/* Label overlay */}
-                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                    <p className="text-white text-sm font-semibold">{SCREENSHOTS[active].description}</p>
-                </div>
-            </div>
-
-            {/* Dot indicators */}
-            <div className="flex items-center justify-center gap-2 py-3 bg-muted/30 border-t border-border/30">
-                {SCREENSHOTS.map((_, i) => (
-                    <button
-                        key={i}
-                        onClick={() => setActive(i)}
-                        className={cn(
-                            'rounded-full transition-all duration-300',
-                            i === active ? 'w-6 h-2 bg-primary' : 'w-2 h-2 bg-muted-foreground/40 hover:bg-muted-foreground/70'
-                        )}
-                    />
-                ))}
-            </div>
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex h-10 items-center gap-2 border-b border-border/80 bg-muted/40 px-3 sm:px-4">
+        <div className="flex gap-1.5" aria-hidden="true">
+          <span className="h-2 w-2 rounded-full bg-[#d97471]" />
+          <span className="h-2 w-2 rounded-full bg-[#dfba5c]" />
+          <span className="h-2 w-2 rounded-full bg-[#61ae87]" />
         </div>
-    );
+        <span className="ml-2 min-w-0 truncate text-[10px] font-medium text-muted-foreground">app.muvail.com</span>
+        <span className="ml-auto hidden text-[10px] font-semibold text-primary sm:block">Producto en uso</span>
+      </div>
+
+      <div className="border-b border-border/70 bg-background px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:px-5">
+        <div className="mb-3 min-w-0 sm:mb-0">
+          <p className="text-sm font-semibold text-foreground">{heading}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex shrink-0 gap-1.5" role="tablist" aria-label="Vistas del producto">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isTour}
+            onClick={() => selectView('tour')}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition-colors',
+              isTour ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <PlayCircle className="h-3.5 w-3.5" />
+            Demo guiada
+          </button>
+          {PRODUCT_VIEWS.map((view) => {
+            const Icon = view.icon;
+            const isActive = activeId === view.id;
+
+            return (
+              <button
+                key={view.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => selectView(view.id)}
+                className={cn(
+                  'inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition-colors',
+                  isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {view.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-[#051f1c] p-1.5 sm:p-2">
+        {isTour ? (
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-white/5 bg-[#061f1c] animate-in fade-in duration-300">
+            {/*
+              Antes era un loop mudo de 18 s que hacía de portada animada. Este dura minuto
+              y medio y lo que explica el producto lo explica la VOZ: en bucle y en silencio
+              se perdería justo eso. Lo arranca el visitante, con sonido y con controles.
+            */}
+            <video
+              ref={videoRef}
+              className="absolute inset-0 block h-full w-full"
+              controls
+              playsInline
+              preload="metadata"
+              poster="/product-tour/muvail-tutorial.jpg"
+              aria-label="Demo guiada de Muvail: dos facturas entran juntas, una cuadra y sigue sola, la otra queda retenida antes del cierre"
+            >
+              <source src="/product-tour/muvail-tutorial.mp4" type="video/mp4" />
+              Tu navegador no puede reproducir este video.
+            </video>
+          </div>
+        ) : (
+          <img
+            key={active.id}
+            src={active.image}
+            alt={active.alt}
+            className="block aspect-video w-full rounded-lg border border-white/5 object-cover object-top animate-in fade-in duration-300"
+            loading="lazy"
+          />
+        )}
+      </div>
+    </div>
+  );
 }
