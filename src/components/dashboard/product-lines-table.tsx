@@ -106,6 +106,12 @@ function ProductLineGroup({
     const [manualAccount, setManualAccount] = useState('');
     const [isSavingManual, setIsSavingManual] = useState(false);
 
+    const isAbonoLine = (item: DocumentLine) => {
+        const imp = Number(item.importe_linea) || 0;
+        const qty = Number(item.cantidad) || 0;
+        return imp < 0 || qty < 0;
+    };
+
     const sortedGroup = [...group].sort((a, b) => {
         // Usar getTime() en vez de localeCompare para manejar correctamente
         // tanto Date objects (devueltos por MySQL) como strings ISO
@@ -113,26 +119,36 @@ function ProductLineGroup({
         const db = b.fecha_emision ? new Date(b.fecha_emision).getTime() : 0;
         return db - da; // descendente: el más reciente primero
     });
-    const line = sortedGroup[0];
+
+    const comprasGroup = sortedGroup.filter(item => !isAbonoLine(item));
+    const devolucionesGroup = sortedGroup.filter(item => isAbonoLine(item));
+
+    const line = comprasGroup.length > 0 ? comprasGroup[0] : sortedGroup[0];
     const totalQty = group.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
     const totalLineAmount = group.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
-    const numberOfPurchases = group.length;
+    const numberOfPurchases = comprasGroup.length;
+    const numberOfDevoluciones = devolucionesGroup.length;
+    const devolucionesTotalAmount = devolucionesGroup.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
+
+    const comprasQty = comprasGroup.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
+    const comprasAmount = comprasGroup.reduce((acc, curr) => acc + (Number(curr.importe_linea) || 0), 0);
+    const avgUnitPrice = comprasQty > 0 ? comprasAmount / comprasQty : (totalQty !== 0 ? totalLineAmount / totalQty : 0);
 
     let priceVariationVsAvg = 0;
     let priceVariationVsPrev: number | null = null;
-    const isPriceVariation = sortedGroup.length > 1;
+    const isPriceVariation = comprasGroup.length > 1;
 
     if (isPriceVariation) {
-        const newestPrice = Number(sortedGroup[0].precio_unitario) || 0;
-        const prevPrice = Number(sortedGroup[1].precio_unitario) || 0;
+        const newestPrice = Number(comprasGroup[0].precio_unitario) || 0;
+        const prevPrice = Number(comprasGroup[1].precio_unitario) || 0;
 
-        // Variación vs el precio inmediatamente anterior
+        // Variación vs el precio inmediatamente anterior (solo entre facturas ordinarias de compra)
         if (prevPrice > 0) {
             priceVariationVsPrev = ((newestPrice - prevPrice) / prevPrice) * 100;
         }
 
-        // Variación vs el promedio histórico (excluyendo el precio más reciente)
-        const historicalPrices = sortedGroup
+        // Variación vs el promedio histórico (excluyendo la última compra)
+        const historicalPrices = comprasGroup
             .slice(1)
             .map(item => Number(item.precio_unitario))
             .filter(price => !isNaN(price) && price > 0);
@@ -417,6 +433,7 @@ function ProductLineGroup({
     );
 
     if (group.length === 1) {
+        const isSingleAbono = isAbonoLine(line);
         return (
             <TableRow className="hover:bg-muted/50 transition-colors group/row">
                 <ModalSection />
@@ -425,12 +442,19 @@ function ProductLineGroup({
                 </TableCell>
                 <TableCell className="max-w-[400px]" title={line.descripcion || ''}>
                     {line.fecha_emision && <span className="text-[10px] text-muted-foreground block mb-0.5">({formatDate(line.fecha_emision)})</span>}
-                    <span className="font-semibold">{line.descripcion || '-'}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold">{line.descripcion || '-'}</span>
+                        {isSingleAbono && (
+                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                                Devolución / Abono
+                            </span>
+                        )}
+                    </div>
                 </TableCell>
                 <TableCell className="text-center w-[120px]"><AccountCell /></TableCell>
                 <TableCell className="text-right tabular-nums">{Number(line.cantidad) || 0}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(line.precio_unitario)}</TableCell>
-                <TableCell className="text-right tabular-nums font-bold text-primary">{formatCurrency(line.importe_linea)}</TableCell>
+                <TableCell className={cn("text-right tabular-nums font-bold", isSingleAbono ? "text-amber-600 dark:text-amber-400" : "text-primary")}>{formatCurrency(line.importe_linea)}</TableCell>
                 <TableCell className="text-center"><ViewDetailButton /></TableCell>
             </TableRow>
         );
@@ -477,7 +501,23 @@ function ProductLineGroup({
                             </div>
                         </div>
                         <div className="flex flex-col min-w-0 flex-1">
-                            <span className="truncate group-hover/row:text-primary transition-colors">{line.descripcion || '-'}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="truncate group-hover/row:text-primary transition-colors">{line.descripcion || '-'}</span>
+                                {numberOfDevoluciones > 0 && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-sm whitespace-nowrap">
+                                                    {numberOfDevoluciones} {numberOfDevoluciones === 1 ? 'devolución' : 'devoluciones'} ({formatCurrency(devolucionesTotalAmount)})
+                                                </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p className="text-xs">Incluye {numberOfDevoluciones} abono(s) por un total de {formatCurrency(devolucionesTotalAmount)}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                            </div>
                             {line.codigo && <span className="text-[10px] text-muted-foreground font-mono opacity-60">{line.codigo}</span>}
                         </div>
                         {isOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground opacity-50" /> : <ChevronRight className="w-4 h-4 text-muted-foreground opacity-50" />}
@@ -487,7 +527,7 @@ function ProductLineGroup({
                 <TableCell className="text-right tabular-nums font-bold text-base">{totalQty.toLocaleString('es-ES')}</TableCell>
                 <TableCell className="text-right">
                     <div className="flex flex-col items-end justify-center gap-1">
-                        <span className="tabular-nums font-semibold">{formatCurrency(totalQty > 0 ? totalLineAmount / totalQty : 0)}</span>
+                        <span className="tabular-nums font-semibold">{formatCurrency(avgUnitPrice)}</span>
                         {isPriceVariation && (
                             <div className="flex flex-col items-end gap-1 mt-0.5">
                                 {/* Badge vs precio inmediatamente anterior */}
@@ -525,22 +565,30 @@ function ProductLineGroup({
                 <TableCell className="text-right tabular-nums font-black text-primary text-lg">{formatCurrency(totalLineAmount)}</TableCell>
                 <TableCell className="text-center"><ViewDetailButton /></TableCell>
             </TableRow>
-            {isOpen && sortedGroup.map((child, idx) => (
-                <TableRow key={child.id || idx} className="bg-muted/5 hover:bg-muted/10 border-l-2 border-primary/30">
-                    <TableCell className="pl-12 text-xs py-3" colSpan={3}>
-                        <div className="flex items-center gap-3">
-                            <span className="text-foreground font-medium">{formatDate(child.fecha_emision)}</span>
-                            <span className="text-muted-foreground opacity-30">|</span>
-                            <span className="text-muted-foreground font-mono text-[10px]">{child.numero_documento || '-'}</span>
-                            <span className="text-muted-foreground truncate opacity-70 italic max-w-[250px]">- {child.descripcion}</span>
-                        </div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-bold text-xs text-foreground/80">{Number(child.cantidad).toLocaleString('es-ES')}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium text-xs text-muted-foreground">{formatCurrency(child.precio_unitario)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold text-xs text-foreground/80">{formatCurrency(child.importe_linea)}</TableCell>
-                    <TableCell />
-                </TableRow>
-            ))}
+            {isOpen && sortedGroup.map((child, idx) => {
+                const isAbono = isAbonoLine(child);
+                return (
+                    <TableRow key={child.id || idx} className={cn("bg-muted/5 hover:bg-muted/10 border-l-2", isAbono ? "border-amber-500/50 bg-amber-500/5" : "border-primary/30")}>
+                        <TableCell className="pl-12 text-xs py-3" colSpan={3}>
+                            <div className="flex items-center gap-3">
+                                <span className="text-foreground font-medium">{formatDate(child.fecha_emision)}</span>
+                                <span className="text-muted-foreground opacity-30">|</span>
+                                <span className="text-muted-foreground font-mono text-[10px]">{child.numero_documento || '-'}</span>
+                                <span className="text-muted-foreground truncate opacity-70 italic max-w-[250px]">- {child.descripcion}</span>
+                                {isAbono && (
+                                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-sm">
+                                        Devolución / Abono
+                                    </span>
+                                )}
+                            </div>
+                        </TableCell>
+                        <TableCell className={cn("text-right tabular-nums font-bold text-xs", isAbono ? "text-amber-600 dark:text-amber-400" : "text-foreground/80")}>{Number(child.cantidad).toLocaleString('es-ES')}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium text-xs text-muted-foreground">{formatCurrency(child.precio_unitario)}</TableCell>
+                        <TableCell className={cn("text-right tabular-nums font-semibold text-xs", isAbono ? "text-amber-600 dark:text-amber-400" : "text-foreground/80")}>{formatCurrency(child.importe_linea)}</TableCell>
+                        <TableCell />
+                    </TableRow>
+                );
+            })}
 
             {isAi && aiSuggestion && (
                 <AIPredictionModal

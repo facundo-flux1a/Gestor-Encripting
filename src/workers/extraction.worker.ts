@@ -811,11 +811,12 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
   let finalBuffer = fileBuffer;
   let fileUrlForDb = ingestion.publicUrl;
   
-  // Las imágenes NO pueden ser recortadas con pdftools.
-  // Si viene pageStart/pageEnd pero es una imagen, ignoramos el recorte y procesamos la imagen completa.
+  // Las imágenes y archivos no-PDF (Excel, CSV, etc.) NO pueden ser recortados con pdftools.
+  // Si viene pageStart/pageEnd pero el archivo no es un PDF, ignoramos el recorte y procesamos el archivo completo.
   const isImage = ingestion.mimeType?.startsWith('image/');
+  const isPdf = ingestion.mimeType === 'application/pdf' || /\.pdf$/i.test(ingestion.fileName || '');
 
-  if (pageStart && pageEnd && !isImage) {
+  if (pageStart && pageEnd && isPdf) {
     try {
       const { buffer, croppedUrl } = await splitPdfWithTools(ingestion.publicUrl, pageStart, pageEnd, `doc_${ingestion.uploadId}`);
       finalBuffer = buffer;
@@ -827,6 +828,8 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     }
   } else if (pageStart && pageEnd && isImage) {
     console.log(`[ExtractionWorker] 🖼️  Imagen con rango de páginas indicado — ignorando recorte (no aplica a imágenes).`);
+  } else if (pageStart && pageEnd && !isPdf) {
+    console.log(`[ExtractionWorker] 📊 Archivo no-PDF (${ingestion.mimeType}) con rango de páginas indicado — ignorando recorte pdftools, procesando archivo completo con contexto de número de documento.`);
   }
 
   // Primario: Azure DI (prebuilt-invoice o azure-di-hybrid). Azure OpenAI = fallback.

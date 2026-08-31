@@ -2415,7 +2415,7 @@ export async function getProductsByProviderName(
                         WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
                         ELSE descripcion 
                     END) 
-                    ORDER BY fecha_emision DESC
+                    ORDER BY (CASE WHEN cantidad > 0 AND importe_linea > 0 THEN 0 ELSE 1 END) ASC, fecha_emision DESC
     ) as rn
             FROM FilteredLines
   )
@@ -5861,7 +5861,7 @@ export async function getProductsByClientName(
                         WHEN codigo IS NOT NULL AND codigo != '' THEN codigo 
                         ELSE descripcion 
                     END) 
-                    ORDER BY fecha_emision DESC
+                    ORDER BY (CASE WHEN cantidad > 0 AND importe_linea > 0 THEN 0 ELSE 1 END) ASC, fecha_emision DESC
     ) as rn
             FROM FilteredLines
   )
