@@ -90,7 +90,7 @@ export default function RootPage() {
       .catch((error) => console.error('Error loading session:', error));
   }, []);
 
-  const mainCta = user ? '/dashboard' : 'mailto:documentos@muvail.com?subject=Consulta%20sobre%20Muvail';
+  const mainCta = user ? '/dashboard' : 'mailto:administracion@muvail.com?subject=Consulta%20sobre%20Muvail';
   const mainLabel = user ? 'Abrir mi espacio' : 'Solicitar información';
 
   return (

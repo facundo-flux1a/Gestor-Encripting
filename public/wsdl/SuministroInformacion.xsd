@@ -121,7 +121,7 @@
 			<documentation xml:lang="es"> Información básica que contienen los registros del suministro de información </documentation>
 		</annotation>
 		<sequence>
-			<element name="PeriodoImpositivo">
+			<element name="PeriodoLiquidacion">
 				<complexType>
 					<annotation>
 						<documentation xml:lang="es"> Período al que corresponden los apuntes. todos los apuntes deben corresponder al mismo período impositivo </documentation>

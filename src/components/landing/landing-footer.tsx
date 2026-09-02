@@ -14,7 +14,7 @@ export function LandingFooter() {
                         </p>
                         <div className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors cursor-pointer group">
                             <Mail className="h-5 w-5" />
-                            <a href="mailto:documentos@muvail.com" className="font-medium">documentos@muvail.com</a>
+                            <a href="mailto:administracion@muvail.com" className="font-medium">administracion@muvail.com</a>
                         </div>
                     </div>
                     <div>
@@ -37,7 +37,7 @@ export function LandingFooter() {
                     <div>
                         <h4 className="font-bold mb-6">Contacto</h4>
                         <ul className="space-y-4 text-sm text-muted-foreground">
-                            <li><a href="mailto:documentos@muvail.com" className="hover:text-primary transition-colors">Solicitar información</a></li>
+                            <li><a href="mailto:administracion@muvail.com" className="hover:text-primary transition-colors">Solicitar información</a></li>
                             <li><Link href="/#contacto" className="hover:text-primary transition-colors">Conocer Muvail</Link></li>
                         </ul>
                     </div>

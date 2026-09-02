@@ -108,6 +108,11 @@ export function AuditSplitView({
                         </h2>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">Muvail AI · Auditoría Inteligente</span>
+                            {((doc as any)?.datos_extra?.canal_origen === 'api' || (doc as any)?.dashboard_correo === 'api') && (
+                                <Badge variant="secondary" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-[10px] py-0 h-4 uppercase font-bold tracking-tighter font-mono">
+                                    API
+                                </Badge>
+                            )}
                             {isFixed ? (
                                 <Badge variant="secondary" className="bg-green-500/10 text-green-500 border-none text-[10px] py-0 h-4 uppercase font-bold tracking-tighter">
                                     <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Documento Cuadrado
@@ -346,26 +351,40 @@ export function AuditSplitView({
                     </ScrollArea>
                 </div>
 
-                {/* Right Panel: Document Viewer (PDF) */}
+                {/* Right Panel: Document Viewer (PDF / Image) */}
                 <div className="w-7/12 bg-muted/10 relative group">
                     {documentUrl ? (
                         <>
-                            <object
-                                key={iframeKey}
-                                data={pdfViewerUrl}
-                                type="application/pdf"
-                                className="w-full h-full border-0"
-                                title="Document Preview"
-                            >
-                                {/* Fallback si el browser no soporta object embed */}
-                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
-                                    <Eye className="h-10 w-10 opacity-20" />
-                                    <p className="text-sm">El visor no pudo cargar el PDF.</p>
-                                    <Button variant="outline" size="sm" onClick={() => window.open(rawDocumentUrl, '_blank')}>
-                                        Abrir en nueva pestaña
-                                    </Button>
-                                </div>
-                            </object>
+                            {(() => {
+                                const cleanUrl = (documentUrl || '').split('?')[0].toLowerCase();
+                                const tipoArch = (doc?.archivos?.[0]?.tipo_archivo || '').toLowerCase();
+                                const isImage = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].some(ext => cleanUrl.endsWith('.' + ext) || tipoArch === ext || tipoArch.includes('image'));
+                                if (isImage) {
+                                    return (
+                                        <div className="w-full h-full flex items-center justify-center p-4 overflow-auto bg-black/40">
+                                            <img src={rawDocumentUrl} alt={documentName} className="max-w-full max-h-full object-contain rounded shadow-lg" />
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <object
+                                        key={iframeKey}
+                                        data={pdfViewerUrl}
+                                        type="application/pdf"
+                                        className="w-full h-full border-0"
+                                        title="Document Preview"
+                                    >
+                                        {/* Fallback si el browser no soporta object embed */}
+                                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+                                            <Eye className="h-10 w-10 opacity-20" />
+                                            <p className="text-sm">El visor no pudo cargar el PDF.</p>
+                                            <Button variant="outline" size="sm" onClick={() => window.open(rawDocumentUrl, '_blank')}>
+                                                Abrir en nueva pestaña
+                                            </Button>
+                                        </div>
+                                    </object>
+                                );
+                            })()}
                             {/* Toolbar panel derecho */}
                             <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button

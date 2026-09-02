@@ -1,0 +1,64 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "LOTE-A-001",
+      "serie": "LOTE",
+      "fecha_emision": "2026-09-01",
+      "is_issued": true,
+      "importe_sin_impuestos": 500.00,
+      "importe_total": 605.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Empresa Alfa S.L.", "cif": "B10000001" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 500.00, "cuota": 105.00 }
+      ]
+    },
+    {
+      "numero_documento": "LOTE-R-001",
+      "serie": "LOTE",
+      "fecha_emision": "2026-09-01",
+      "is_issued": false,
+      "importe_sin_impuestos": 200.00,
+      "importe_total": 220.00,
+      "entidades": {
+        "emisor": { "nombre": "Proveedor Beta S.L.", "cif": "B20000002" },
+        "cliente": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 10.0, "base": 200.00, "cuota": 20.00 }
+      ]
+    },
+    {
+      "numero_documento": "LOTE-ABONO-001",
+      "serie": "ABONO",
+      "fecha_emision": "2026-09-01",
+      "is_issued": true,
+      "observaciones": "Abono parcial de LOTE-A-001",
+      "importe_sin_impuestos": -100.00,
+      "importe_total": -121.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Empresa Alfa S.L.", "cif": "B10000001" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": -100.00, "cuota": -21.00 }
+      ]
+    },
+    {
+      "numero_documento": "LOTE-TIQUET-001",
+      "fecha_emision": "2026-09-01",
+      "is_issued": false,
+      "observaciones": "Taxi aeropuerto - Justificante",
+      "base_no_sujeta": 18.00,
+      "importe_sin_impuestos": 0.00,
+      "importe_total": 18.00,
+      "entidades": {
+        "emisor": { "nombre": "Taxi Rápido Madrid S.L.", "cif": "B77777777" },
+        "cliente": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" }
+      },
+      "impuestos": []
+    }
+  ]
+}

@@ -70,6 +70,7 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
 
   // Form
   const [nombre, setNombre] = useState('');
@@ -143,6 +144,39 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
       toast({ variant: 'destructive', title: 'Error de red al crear la clave' });
     } finally {
       setCreating(false);
+    }
+  };
+
+  // ── Regenerar clave ────────────────────────────────────────────────────────
+  const handleRegenerate = async (key: ApiKey) => {
+    setRegeneratingId(key.id);
+    try {
+      // 1. Revocar la actual
+      const delRes = await fetch(`/api/user/api-keys/${key.id}`, { method: 'DELETE' });
+      if (!delRes.ok) {
+        toast({ variant: 'destructive', title: 'Error al revocar la clave anterior' });
+        return;
+      }
+      // 2. Crear una nueva con el mismo nombre y empresa
+      const createRes = await fetch('/api/user/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: key.nombre, empresa_id: key.empresa_id }),
+      });
+      const data = await createRes.json();
+      if (!createRes.ok) {
+        toast({ variant: 'destructive', title: 'Error al generar la nueva clave', description: data.error });
+        return;
+      }
+      setNewRawKey(data.raw_key);
+      setShowKey(false);
+      setCopied(false);
+      setNewKeyDialogOpen(true);
+      fetchKeys();
+    } catch {
+      toast({ variant: 'destructive', title: 'Error de red al regenerar' });
+    } finally {
+      setRegeneratingId(null);
     }
   };
 
@@ -295,30 +329,43 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
                     </div>
                   </div>
 
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive shrink-0 ml-2">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>¿Revocar clave &quot;{key.nombre}&quot;?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta acción desactivará la clave de forma permanente. Cualquier integración que la use dejará de funcionar.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleRevoke(key.id)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Revocar
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-primary"
+                      title="Regenerar clave (revoca la actual y genera una nueva)"
+                      disabled={regeneratingId === key.id}
+                      onClick={() => handleRegenerate(key)}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${regeneratingId === key.id ? 'animate-spin' : ''}`} />
+                    </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Revocar clave &quot;{key.nombre}&quot;?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta acción desactivará la clave de forma permanente. Cualquier integración que la use dejará de funcionar.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleRevoke(key.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Revocar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
               ))}
             </div>

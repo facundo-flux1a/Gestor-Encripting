@@ -1,0 +1,49 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "F-2024-HISTORICA",
+      "serie": "F2024",
+      "fecha_emision": "2024-03-15",
+      "is_issued": true,
+      "observaciones": "Factura de fecha histórica (2024) - edge case",
+      "importe_sin_impuestos": 300.00,
+      "importe_total": 363.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Cliente Histórico S.L.", "cif": "B55667788" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 300.00, "cuota": 63.00 }
+      ]
+    },
+    {
+      "numero_documento": "F-2027-FUTURA",
+      "serie": "F2027",
+      "fecha_emision": "2027-01-10",
+      "is_issued": true,
+      "observaciones": "Factura de fecha futura (2027) - edge case",
+      "importe_sin_impuestos": 400.00,
+      "importe_total": 484.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Cliente Futuro S.A.", "cif": "A11223344" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 400.00, "cuota": 84.00 }
+      ]
+    },
+    {
+      "numero_documento": "ERR-SIN-FECHA",
+      "is_issued": true,
+      "importe_sin_impuestos": 100.00,
+      "importe_total": 121.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Cliente Error S.L.", "cif": "B00000001" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 100.00, "cuota": 21.00 }
+      ]
+    }
+  ]
+}

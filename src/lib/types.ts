@@ -489,5 +489,5 @@ export interface Activity {
   empresa_emisora?: string;
   cliente?: string;
   is_new?: number;
-  'dashboard-correo'?: 'dashboard' | 'correo' | null;
+  'dashboard-correo'?: 'dashboard' | 'correo' | 'api' | null;
 }

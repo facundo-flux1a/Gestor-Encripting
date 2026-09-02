@@ -1,0 +1,18 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "TIQUET-9941",
+      "fecha_emision": "2026-09-02",
+      "is_issued": false,
+      "observaciones": "Justificante de peaje y aparcamiento - Viaje comercial Madrid",
+      "base_no_sujeta": 45.50,
+      "importe_sin_impuestos": 0.00,
+      "importe_total": 45.50,
+      "entidades": {
+        "emisor": { "nombre": "Aparcamientos Estación S.A.", "cif": "A99887766" },
+        "cliente": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" }
+      },
+      "impuestos": []
+    }
+  ]
+}

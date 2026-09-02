@@ -65,6 +65,7 @@ interface ActiveUpload {
   createdAt: string;
   childrenSummary: ChildSummary | null;
   isNew?: boolean;
+  origen?: string | null;
 }
 
 type StatusFilter = 'all' | 'active' | 'completed' | 'failed' | 'paused';
@@ -236,6 +237,19 @@ function JobCard({ job, onDelete, onDismiss, onRemoveLocally, onNavigate }: { jo
                     <>
                       <span>•</span>
                       <span className="font-medium text-foreground/80">{duration}</span>
+                    </>
+                  )}
+                  {job.origen && job.origen !== 'dashboard' && (
+                    <>
+                      <span>•</span>
+                      <span className={cn(
+                        'inline-flex items-center rounded-full px-1.5 py-0.5 font-semibold',
+                        job.origen === 'api'
+                          ? 'bg-purple-500/15 text-purple-400'
+                          : 'bg-green-500/15 text-green-400'
+                      )}>
+                        {job.origen === 'api' ? 'API' : 'Correo'}
+                      </span>
                     </>
                   )}
                 </div>

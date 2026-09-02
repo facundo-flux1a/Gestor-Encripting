@@ -1,0 +1,34 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "F-2026-MULTI-01",
+      "fecha_emision": "2026-09-02",
+      "is_issued": true,
+      "importe_sin_impuestos": 1500.00,
+      "importe_total": 1615.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Comercial Hostelería S.L.", "cif": "B99887766" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 1000.00, "cuota": 210.00 },
+        { "tipo": "IVA", "porcentaje": 10.0, "base": 500.00, "cuota": 50.00 },
+        { "tipo": "IRPF", "porcentaje": 15.0, "base": 1000.00, "cuota": 150.00 }
+      ],
+      "lineas": [
+        {
+          "descripcion": "Licencias de software profesional (IVA 21%)",
+          "cantidad": 1,
+          "precio_unitario": 1000.00,
+          "importe_total": 1000.00
+        },
+        {
+          "descripcion": "Servicio de catering evento (IVA 10%)",
+          "cantidad": 1,
+          "precio_unitario": 500.00,
+          "importe_total": 500.00
+        }
+      ]
+    }
+  ]
+}

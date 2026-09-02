@@ -40,7 +40,7 @@ export default function PrivacyPage() {
 
                 <h2 className="text-2xl font-semibold mt-8 mb-4">4. Tus derechos</h2>
                 <p>
-                    Puedes ejercer tus derechos de acceso, rectificación, cancelación y oposición enviando un correo a <strong>documentos@muvail.com</strong>.
+                    Puedes ejercer tus derechos de acceso, rectificación, cancelación y oposición enviando un correo a <strong>administracion@muvail.com</strong>.
                 </p>
             </section>
         </article>

@@ -32,6 +32,7 @@ import {
   BookOpen,
   Building2,
   UploadCloud,
+  Landmark,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -328,6 +329,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
     { href: '/documents', label: 'Documentos', icon: FileText },
     { href: '/dashboard/auditoria', label: 'Centro de Seguridad', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
+    { href: '/dashboard/sii', label: 'SII AEAT', icon: Landmark },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
     { href: '/docs', label: 'Docs', icon: BookOpen },

@@ -14,6 +14,11 @@
 			<documentation>Servicio de consulta de Facturas Emitidas</documentation>
 		</annotation>
 	</element>
+	<element name="RespuestaConsultaLLAA" type="siiLRRC:RespuestaConsultaLRFacturasEmitidasType">
+		<annotation>
+			<documentation>Servicio de respuesta de consulta de Libros Agregados (LLAA)</documentation>
+		</annotation>
+	</element>
 	<element name="RespuestaConsultaLRBienesInversion" type="siiLRRC:RespuestaConsultaLRBienesInversionType">
 		<annotation>
 			<documentation>Servicio de consulta de Bienes de Inversion</documentation>

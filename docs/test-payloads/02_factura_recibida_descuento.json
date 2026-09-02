@@ -1,0 +1,30 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "PROV-88412",
+      "serie": "INV",
+      "fecha_emision": "2026-08-28",
+      "is_issued": false,
+      "moneda": "EUR",
+      "descuento_global": 50.00,
+      "base_no_sujeta": 120.00,
+      "importe_sin_impuestos": 950.00,
+      "importe_total": 1109.50,
+      "entidades": {
+        "emisor": {
+          "nombre": "Suministros Industriales Iberia S.L.",
+          "cif": "B12345678",
+          "direccion": "Polígono Industrial Norte, Nave 4, Valencia"
+        },
+        "cliente": {
+          "nombre": "Muvail Systems S.L.",
+          "cif": "B25926494"
+        }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 430.00, "cuota": 90.30 },
+        { "tipo": "IVA", "porcentaje": 10.0, "base": 470.00, "cuota": 47.00 }
+      ]
+    }
+  ]
+}

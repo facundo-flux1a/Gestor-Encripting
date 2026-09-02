@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { siiService } from '@/services/sii-services';
 
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -29,7 +30,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Mapear campos del frontend al formato esperado
+    const baseImponible = parseFloat(facturaRaw.base_imponible || facturaRaw.baseImponible || '0');
+    const cuotaIVA = parseFloat(facturaRaw.cuota_iva || facturaRaw.cuotaIVA || '0');
+
     const factura = {
       nifEmisor: facturaRaw.nif_empresa || facturaRaw.nifEmisor,
       numeroFactura: facturaRaw.num_factura || facturaRaw.numeroFactura,
@@ -37,16 +40,14 @@ export async function POST(request: NextRequest) {
       tipoFactura: facturaRaw.tipo_factura || facturaRaw.tipoFactura || 'F1',
       claveRegimen: facturaRaw.clave_regimen || facturaRaw.claveRegimen || '01',
       descripcion: facturaRaw.descripcion || 'Venta de servicios/productos',
-      baseImponible: parseFloat(facturaRaw.base_imponible || facturaRaw.baseImponible || '0'),
+      baseImponible,
       tipoImpositivo: parseFloat(facturaRaw.tipo_iva || facturaRaw.tipoImpositivo || '21'),
-      cuotaIVA: parseFloat(facturaRaw.cuota_iva || facturaRaw.cuotaIVA || '0'),
+      cuotaIVA,
+      importeTotal: parseFloat(facturaRaw.total || facturaRaw.importe_total || (baseImponible + cuotaIVA)),
       nifCliente: facturaRaw.nif_cliente || facturaRaw.nifCliente,
       nombreCliente: facturaRaw.nombre_cliente || facturaRaw.nombreCliente,
       paisCliente: facturaRaw.pais_cliente || facturaRaw.paisCliente || 'ES',
     };
-
-    // Calcular total
-    factura.importeTotal = factura.baseImponible + factura.cuotaIVA;
 
     console.log('📋 [API-ENVIAR-FACTURA] Factura mapeada:', JSON.stringify(factura, null, 2));
 
@@ -66,33 +67,58 @@ export async function POST(request: NextRequest) {
     const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
     const ejercicio = fecha.getFullYear();
 
-    // Estructurar los datos según el formato que espera siiService.enviarFacturasEmitidas
-    const payload = {
-      ejercicio: ejercicio,
-      periodo: mes,
-      empresa_nif: factura.nifEmisor,
-      empresa_nombre: facturaRaw.nombre_empresa || facturaRaw.nombreEmisor || 'Empresa Test',
-      facturas_emitidas: [{
-        numero: factura.numeroFactura,
-        fecha: factura.fechaExpedicion,
-        nif_emisor: factura.nifEmisor,
-        nif_receptor: factura.nifCliente || undefined,
-        base_imponible: factura.baseImponible,
-        tipo_iva: factura.tipoImpositivo,
-        cuota_iva: factura.cuotaIVA,
-        total: factura.importeTotal,
-        descripcion: factura.descripcion
-      }]
-    };
+    const tipoDocLower = String(facturaRaw.descripcion || facturaRaw.tipo_documento || '').toLowerCase();
+    const esRecibida = tipoDocLower.includes('recibid') || tipoDocLower.includes('gasto') || tipoDocLower.includes('compra') || facturaRaw.es_recibida === true;
 
-    console.log('📤 [API-ENVIAR-FACTURA] Enviando al SII:', JSON.stringify(payload, null, 2));
+    let resultado: any;
 
-    // Enviar al SII usando el servicio
-    const resultado = await siiService.enviarFacturasEmitidas(
-      payload,
-      certificate,
-      password
-    );
+    if (esRecibida) {
+      const payloadRecibidas = {
+        ejercicio,
+        periodo: mes,
+        empresa_nif: factura.nifEmisor,
+        empresa_nombre: facturaRaw.nombre_empresa || facturaRaw.nombreEmisor || 'Empresa Test',
+        facturas_recibidas: [{
+          numero: factura.numeroFactura,
+          fecha: factura.fechaExpedicion,
+          nif_emisor: factura.nifCliente || factura.nifEmisor,
+          nombre_emisor: facturaRaw.nombre_cliente || 'Proveedor',
+          base_imponible: factura.baseImponible,
+          tipo_iva: factura.tipoImpositivo,
+          cuota_iva: factura.cuotaIVA,
+          total: factura.importeTotal,
+          descripcion: factura.descripcion || 'Factura Recibida / Gasto',
+          tipo_factura: factura.tipoFactura || 'F1',
+          clave_regimen: factura.claveRegimen || '01',
+        }]
+      };
+      console.log('📤 [API-ENVIAR-FACTURA] Enviando FACTURA RECIBIDA al SII:', JSON.stringify(payloadRecibidas, null, 2));
+      resultado = await siiService.enviarFacturasRecibidas(payloadRecibidas, certificate, password);
+    } else {
+      const payloadEmitidas = {
+        ejercicio,
+        periodo: mes,
+        empresa_nif: factura.nifEmisor,
+        empresa_nombre: facturaRaw.nombre_empresa || facturaRaw.nombreEmisor || 'Empresa Test',
+        facturas_emitidas: [{
+          numero: factura.numeroFactura,
+          fecha: factura.fechaExpedicion,
+          nif_emisor: factura.nifEmisor,
+          nif_receptor: factura.nifCliente || undefined,
+          nombre_receptor: factura.nombreCliente || undefined,
+          pais_receptor: factura.paisCliente || 'ES',
+          base_imponible: factura.baseImponible,
+          tipo_iva: factura.tipoImpositivo,
+          cuota_iva: factura.cuotaIVA,
+          total: factura.importeTotal,
+          descripcion: factura.descripcion,
+          tipo_factura: factura.tipoFactura || 'F1',
+          clave_regimen: factura.claveRegimen || '01',
+        }]
+      };
+      console.log('📤 [API-ENVIAR-FACTURA] Enviando FACTURA EMITIDA al SII:', JSON.stringify(payloadEmitidas, null, 2));
+      resultado = await siiService.enviarFacturasEmitidas(payloadEmitidas, certificate, password);
+    }
 
     console.log('✅ [API-ENVIAR-FACTURA] Respuesta del SII:', JSON.stringify(resultado, null, 2));
 
@@ -130,9 +156,11 @@ export async function POST(request: NextRequest) {
         estado: resultado.estado,
         facturasAceptadas: resultado.facturas_aceptadas,
         facturasRechazadas: resultado.facturas_rechazadas,
-        detalles: resultado.detalles.map(d => ({
+        detalles: (resultado.detalles || []).map((d: any) => ({
           numeroFactura: d.numero_factura,
           estado: d.estado,
+          codigoError: d.codigo_error,
+          descripcionError: d.descripcion_error,
           errores: d.errores
         }))
       },

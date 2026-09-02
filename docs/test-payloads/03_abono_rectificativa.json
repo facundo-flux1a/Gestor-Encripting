@@ -1,0 +1,32 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "REC-2026-0012",
+      "serie": "RECT",
+      "fecha_emision": "2026-09-02",
+      "is_issued": true,
+      "observaciones": "Abono de 2 licencias devueltas por el cliente",
+      "importe_sin_impuestos": -200.00,
+      "importe_total": -212.00,
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Cliente Ejemplo S.A.", "cif": "A87654321" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": -200.00, "cuota": -42.00 },
+        {
+          "_comentario": "IRPF va en POSITIVO en abonos aunque el resto sea negativo",
+          "tipo": "IRPF", "porcentaje": 15.0, "base": -200.00, "cuota": 30.00
+        }
+      ],
+      "lineas": [
+        {
+          "descripcion": "Devolución Licencias Software",
+          "cantidad": 2,
+          "precio_unitario": -100.00,
+          "importe_total": -200.00
+        }
+      ]
+    }
+  ]
+}

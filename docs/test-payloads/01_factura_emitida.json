@@ -1,0 +1,44 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "F-2026-00892",
+      "serie": "F2026",
+      "fecha_emision": "2026-09-01",
+      "fecha_vencimiento": "2026-10-01",
+      "is_issued": true,
+      "moneda": "EUR",
+      "forma_pago": "TRANSFERENCIA_BANCARIA",
+      "observaciones": "Desarrollo de software - Septiembre 2026",
+      "importe_sin_impuestos": 1000.00,
+      "importe_total": 1060.00,
+      "entidades": {
+        "emisor": {
+          "nombre": "Muvail Systems S.L.",
+          "cif": "B25926494",
+          "direccion": "Calle Gran Vía 45, Madrid",
+          "email": "facturacion@muvail.com"
+        },
+        "cliente": {
+          "nombre": "Cliente Ejemplo S.A.",
+          "cif": "A87654321",
+          "direccion": "Av. Diagonal 123, Barcelona",
+          "email": "admin@clienteejemplo.com"
+        }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 1000.00, "cuota": 210.00 },
+        { "tipo": "IRPF", "porcentaje": 15.0, "base": 1000.00, "cuota": 150.00 }
+      ],
+      "lineas": [
+        {
+          "codigo_proveedor": "DEV-01",
+          "descripcion": "Consultoría y Desarrollo Fullstack API v1",
+          "cantidad": 10,
+          "precio_unitario": 100.00,
+          "descuento_porcentaje": 0,
+          "importe_total": 1000.00
+        }
+      ]
+    }
+  ]
+}

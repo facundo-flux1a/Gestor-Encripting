@@ -89,6 +89,11 @@ export default function SIIPage() {
   const [trimestreInfo, setTrimestreInfo] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  // User & Company Fiscal Info
+  const [userInfo, setUserInfo] = useState<{ nombre?: string; email?: string } | null>(null);
+  const [companyInfo, setCompanyInfo] = useState<{ id: number; nombre: string; cif: string } | null>(null);
+  const [siiStats, setSiiStats] = useState<{ pendientes: number; enviados: number; total: number } | null>(null);
+
   // Estado DELSOL
   const [hasDelsol, setHasDelsol] = useState<boolean | null>(null);
   const [delsolInfo, setDelsolInfo] = useState<{ clienteCode?: string; baseDatos?: string } | null>(null);
@@ -98,8 +103,33 @@ export default function SIIPage() {
     const trimestre = searchParams.get('trimestre') || '3';
     const empresaId = searchParams.get('empresa_id');
     cargarDocumentos(año, trimestre, empresaId);
+    cargarUserInfo(empresaId);
     if (!isDemoMode && empresaId && empresaId !== 'all') verificarDelsol(empresaId);
   }, [searchParams, isDemoMode]);
+
+  const cargarUserInfo = async (empresaId: string | null) => {
+    try {
+      const params = new URLSearchParams();
+      if (empresaId && empresaId !== 'all') params.append('empresa_id', empresaId);
+      const res = await fetch(`/api/sii/user-info?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserInfo(data.usuario);
+          setSiiStats(data.estadisticas);
+          if (data.empresas && data.empresas.length > 0) {
+            setCompanyInfo({
+              id: data.empresas[0].id,
+              nombre: data.empresas[0].nombre_fiscal || data.empresas[0].nombre_de_empresa,
+              cif: data.empresas[0].cif,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar info de usuario para SII:', err);
+    }
+  };
 
   const verificarDelsol = async (empresaId: string) => {
     try {
@@ -258,9 +288,9 @@ export default function SIIPage() {
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950">
       <div className="container max-w-6xl mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
         <PageHeader
-          title={hasDelsol ? "Envío a Software DELSOL" : "Envío al SII (AEAT)"}
-          icon={hasDelsol ? Database : Send}
-          description={hasDelsol ? "Transmisión directa por API a FactuSOL / Software DELSOL" : "Sistema de Suministro Inmediato de Información (SII)"}
+          title="Gestor SII (AEAT - Hacienda)"
+          icon={Send}
+          description="Modulo exclusivo para Suministro Inmediato de Información con la Agencia Tributaria"
           hideSidebarTrigger
         >
           <Button onClick={() => router.push('/trimestres')} variant="outline" size="sm" className="group">
@@ -269,55 +299,89 @@ export default function SIIPage() {
           </Button>
         </PageHeader>
 
-        {/* Panel Canal Activo */}
-        {hasDelsol ? (
-          <Card className="animate-in fade-in border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-lg sm:text-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
-                <ShieldCheck className="h-6 w-6 text-emerald-600" />
-                <span>Conexión Directa con Software DELSOL Activa</span>
+        {/* Panel de Datos Fiscales del Usuario y Empresa */}
+        {(userInfo || companyInfo) && (
+          <Card className="animate-in fade-in bg-gradient-to-r from-slate-900 to-indigo-950 text-white border-violet-500/30">
+            <CardHeader className="p-4 sm:p-6 pb-2">
+              <CardTitle className="text-lg sm:text-xl flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="h-6 w-6 text-violet-400" />
+                  <span>Información Fiscal de Usuario & Empresa</span>
+                </span>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  Entorno: AEAT Pruebas
+                </span>
               </CardTitle>
-              <CardDescription className="text-emerald-700 dark:text-emerald-400">
-                Cliente API: <strong>{delsolInfo?.clienteCode}</strong> | Base de datos: <strong>{delsolInfo?.baseDatos}</strong>
-              </CardDescription>
             </CardHeader>
-            <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6 text-xs sm:text-sm text-emerald-700 dark:text-emerald-400">
-              Las facturas de este trimestre se sincronizarán directamente con tu ERP FactuSOL mediante la API de DELSOL sin necesidad de certificado digital manual.
+            <CardContent className="p-4 sm:p-6 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm">
+                <div>
+                  <p className="text-gray-400 font-medium">👤 Usuario</p>
+                  <p className="font-bold text-white text-base">{userInfo?.nombre || 'Cargando...'}</p>
+                  <p className="text-gray-300">{userInfo?.email || ''}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">🏢 Empresa Seleccionada</p>
+                  <p className="font-bold text-white text-base">{companyInfo?.nombre || 'Todas las Empresas'}</p>
+                  {companyInfo?.cif && <p className="text-gray-300">NIF/CIF: {companyInfo.cif}</p>}
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">📊 Estado Documentación SII</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-amber-400 font-bold text-sm">⏳ {siiStats?.pendientes ?? 0} Pendientes</span>
+                    <span className="text-emerald-400 font-bold text-sm">✅ {siiStats?.enviados ?? 0} Presentados</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <Card className="animate-in fade-in">
-            <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950 dark:to-indigo-950 border-b p-4 sm:p-6">
-              <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
-                <span className="text-2xl">🧪</span>
-                <span className="bg-gradient-to-r from-violet-700 to-indigo-700 bg-clip-text text-transparent">Conexión con AEAT (SII Fallback)</span>
-              </CardTitle>
-              <CardDescription>Valida tu certificado digital para el envío al SII</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6 p-4 sm:p-6">
-              <CertificateUpload onFileChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onload = (event) => {
-                    const base64 = event.target?.result?.toString().split(',')[1];
-                    if (base64) setCertificado(base64);
-                  };
-                  reader.readAsDataURL(file);
-                }
-              }} certificado={certificado} password={password} onPasswordChange={setPassword} />
+        )}
 
-              <Button onClick={testConnection} disabled={testing || !certificado || !password} className="w-full py-4 sm:py-6 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700">
-                {testing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Probando...</> : <><Upload className="mr-2 h-4 w-4" />Probar Conexión AEAT</>}
-              </Button>
+        {/* Informar si DELSOL está también disponible */}
+        {hasDelsol && (
+          <Card className="animate-in fade-in border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20">
+            <CardContent className="p-3 sm:p-4 flex items-center justify-between text-xs sm:text-sm text-emerald-800 dark:text-emerald-300">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Integración con Software DELSOL activa (Cliente: <strong>{delsolInfo?.clienteCode}</strong>, BD: <strong>{delsolInfo?.baseDatos}</strong>). Puedes usar DELSOL o probar la conexión SII directamente abajo.</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-              {result && (
-                <Alert variant={result.success ? 'default' : 'destructive'} className="border-2">
-                  {result.success ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-                  <AlertDescription>
-                    <div className="space-y-1">
-                      <p className="font-bold">{result.success ? '✅ Conexión exitosa' : '❌ Error'}</p>
-                      <p><strong>Entorno:</strong> {result.entorno}</p>
+        {/* Panel de Certificado Digital y Emulación SII (SIEMPRE DISPONIBLE) */}
+        <Card className="animate-in fade-in">
+          <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950 dark:to-indigo-950 border-b p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+              <span className="text-2xl">🧪</span>
+              <span className="bg-gradient-to-r from-violet-700 to-indigo-700 bg-clip-text text-transparent">Certificado Digital y Conexión SII (AEAT)</span>
+            </CardTitle>
+            <CardDescription>Carga tu certificado digital (.p12 / .pfx) para probar la conexión mTLS y emular respuestas de Hacienda</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6 p-4 sm:p-6">
+            <CertificateUpload onFileChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  const base64 = event.target?.result?.toString().split(',')[1];
+                  if (base64) setCertificado(base64);
+                };
+                reader.readAsDataURL(file);
+              }
+            }} certificado={certificado} password={password} onPasswordChange={setPassword} />
+
+            <Button onClick={testConnection} disabled={testing || !certificado || !password} className="w-full py-4 sm:py-6 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700">
+              {testing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Probando conexión con SII...</> : <><Upload className="mr-2 h-4 w-4" />Probar Conexión AEAT (Emulador SII)</>}
+            </Button>
+
+            {result && (
+              <Alert variant={result.success ? 'default' : 'destructive'} className="border-2">
+                {result.success ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <p className="font-bold">{result.success ? '✅ Conexión exitosa con el SII' : '❌ Error de Conexión'}</p>
+                    <p><strong>Entorno:</strong> {result.entorno}</p>
                       <p>{result.mensaje}</p>
                     </div>
                   </AlertDescription>
@@ -325,7 +389,6 @@ export default function SIIPage() {
               )}
             </CardContent>
           </Card>
-        )}
 
         {trimestreInfo && (
           <Card className="animate-in fade-in border-2 border-violet-300 dark:border-violet-700">

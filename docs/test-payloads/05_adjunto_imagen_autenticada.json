@@ -1,0 +1,24 @@
+{
+  "documentos": [
+    {
+      "numero_documento": "F-2026-9901",
+      "serie": "F2026",
+      "fecha_emision": "2026-09-02",
+      "is_issued": true,
+      "importe_sin_impuestos": 250.00,
+      "importe_total": 302.50,
+      "url_archivo": "https://storage.proveedor-externo.com/facturas/2026/F-2026-9901.png?X-Amz-Expires=3600",
+      "url_archivo_auth": {
+        "tipo": "bearer",
+        "token": "PON_AQUI_TU_TOKEN_DE_STORAGE"
+      },
+      "entidades": {
+        "emisor": { "nombre": "Muvail Systems S.L.", "cif": "B25926494" },
+        "cliente": { "nombre": "Logística Global S.L.", "cif": "B44556677" }
+      },
+      "impuestos": [
+        { "tipo": "IVA", "porcentaje": 21.0, "base": 250.00, "cuota": 52.50 }
+      ]
+    }
+  ]
+}

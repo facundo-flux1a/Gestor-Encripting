@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
         mensaje: true,
         is_new: true,
         webhook_payload: true,
+        dashboard_correo: true,
         created_at: true,
         updated_at: true,
       },
@@ -133,6 +134,7 @@ export async function GET(req: NextRequest) {
         progress: parent.progress,
         mensaje: parent.mensaje,
         isNew: parent.is_new,
+        origen: parent.dashboard_correo ?? null,
         updatedAt: parent.updated_at,
         createdAt: parent.created_at,
         // Resumen de hijos para lotes multi-documento

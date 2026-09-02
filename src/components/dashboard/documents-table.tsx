@@ -330,6 +330,11 @@ const getColumns = (
                   ✨ Nuevo
                 </span>
               )}
+              {((doc as any)?.datos_extra?.canal_origen === 'api' || (doc as any)?.dashboard_correo === 'api') && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" title="Ingresado vía API síncrona">
+                  API
+                </span>
+              )}
             </div>
           </>
         );

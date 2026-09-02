@@ -197,7 +197,14 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             </button>
           </div>
           <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
-            <p className="text-sm font-bold">Revisar factura</p>
+            <div className="flex items-center justify-center gap-1.5">
+              <p className="text-sm font-bold">Revisar factura</p>
+              {((doc as any)?.datos_extra?.canal_origen === 'api' || (doc as any)?.dashboard_correo === 'api') && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono" title="Ingresado vía API síncrona">
+                  API
+                </span>
+              )}
+            </div>
             <p className="text-[11px] font-medium truncate mt-0.5" style={{ color: statusColor }}>
               {(provider?.nombre || '—').substring(0, 22)}{(provider?.nombre || '').length > 22 ? '…' : ''} · {statusLabel}
             </p>
@@ -629,9 +636,23 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         </div>
         <div className="flex-1 overflow-hidden relative">
           {documentUrl ? (
-            <iframe key={documentUrl} src={`${documentUrl}#navpanes=0&view=FitH&toolbar=1`}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
-              title="Documento" />
+            (() => {
+              const cleanUrl = documentUrl.split('?')[0].toLowerCase();
+              const tipoArch = (doc?.archivos?.[0]?.tipo_archivo || '').toLowerCase();
+              const isImage = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].some(ext => cleanUrl.endsWith('.' + ext) || tipoArch === ext || tipoArch.includes('image'));
+              if (isImage) {
+                return (
+                  <div className="w-full h-full flex items-center justify-center p-4 overflow-auto bg-black/40">
+                    <img src={documentUrl} alt={docName} className="max-w-full max-h-full object-contain rounded shadow-lg" />
+                  </div>
+                );
+              }
+              return (
+                <iframe key={documentUrl} src={`${documentUrl}#navpanes=0&view=FitH&toolbar=1`}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
+                  title="Documento" />
+              );
+            })()
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-white/25 gap-3 select-none">
               <svg className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
