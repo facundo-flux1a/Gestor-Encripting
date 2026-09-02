@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, X, AlertCircle } from 'lucide-react';
+import { Upload, X, AlertCircle, Camera } from 'lucide-react';
 import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ export function UploadDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [companyError, setCompanyError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { toast } = useToast();
 
@@ -486,18 +487,38 @@ export function UploadDialog({
               onChange={handleFileChange}
               className="hidden"
               id="file-upload"
-              accept=".pdf,.PDF,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar,application/pdf"
+              accept="image/*,.pdf,.PDF,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar,application/pdf"
             />
-            <Button
-              variant="outline"
-              className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm"
-              onClick={handleSelectFilesClick}
-              type="button"
-            >
-              Seleccionar archivos
-            </Button>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFileChange}
+              className="hidden"
+              id="camera-upload"
+            />
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button
+                variant="outline"
+                className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm"
+                onClick={handleSelectFilesClick}
+                type="button"
+              >
+                Seleccionar archivos
+              </Button>
+              <Button
+                variant="outline"
+                className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                onClick={() => cameraInputRef.current?.click()}
+                type="button"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Tomar foto
+              </Button>
+            </div>
             <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
-              PDF - ZIP (máx. 10 MB por archivo)
+              PDF, ZIP e imágenes (máx. 10 MB por archivo)
             </p>
           </div>
 

@@ -226,7 +226,9 @@ export async function POST(request: NextRequest) {
     const enriched = documentos.map((doc: any) => {
       const entidades = entidadesByDoc[doc.doc_id] || {};
       const emisorCif = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim().toLowerCase();
-      const isIssued = !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
+      const isIssued =
+        doc.tipo_documento?.toLowerCase().includes('emitida') ||
+        !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
       const iva_details = ivaByDoc[doc.doc_id] || [];
 
       return { ...doc, entidades, isIssued, iva_details, nombre_de_empresa: empresaNombreGlobal };
