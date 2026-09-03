@@ -30,8 +30,8 @@ export function PageHeader({
             <div className={cn("flex items-center justify-between w-full gap-2", className)}>
                 <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                     {/* Icon with rotation effect */}
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 transition-transform duration-300 hover:scale-105">
-                        <Icon className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 text-primary" />
+                    <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-primary/10 transition-transform duration-300 hover:scale-105 shrink-0">
+                        <Icon className="h-4 w-4 sm:h-6 sm:w-6 shrink-0 text-primary" />
                     </div>
 
                     <h1 className="text-lg font-bold tracking-tight truncate sm:text-2xl lg:text-3xl" data-tutorial={dataTutorial}>

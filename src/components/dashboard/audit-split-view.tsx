@@ -15,6 +15,7 @@ import { Form } from '@/components/ui/form';
 import { cn, fixMinioUrl } from '@/lib/utils';
 import { toggleContextItem, deleteHistoryItem, type Incident as AIIncident } from '@/services/vertex-ai-service';
 import { useToast } from "@/hooks/use-toast";
+import { SyntheticInvoiceViewer } from '@/components/documento/synthetic-invoice-viewer';
 
 interface AuditSplitViewProps {
     doc: Document;
@@ -408,10 +409,7 @@ export function AuditSplitView({
                             </div>
                         </>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                            <Eye className="h-12 w-12 mb-4 opacity-20" />
-                            <p>No hay archivo para previsualizar</p>
-                        </div>
+                        <SyntheticInvoiceViewer doc={doc} />
                     )}
                 </div>
             </div>

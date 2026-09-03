@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Calendar, ChevronDown, Check, X } from 'lucide-react';
+import { Calendar, ChevronDown, Check, X, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -11,6 +11,13 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { QuarterBadge } from './quarter-badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { Trimestre } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +68,40 @@ export function TrimestreSelector({
     if (selectedAños.length === 2) return `${selectedAños[0]}, ${selectedAños[1]}`;
     return `${selectedAños.length} años seleccionados`;
   }, [selectedAños]);
+
+  // Auxiliar para determinar el valor activo en el Select móvil de cada año
+  const getMobileSelectValue = (año: number) => {
+    const has1 = selectedPeriodos.has(`${año}-1`);
+    const has2 = selectedPeriodos.has(`${año}-2`);
+    const has3 = selectedPeriodos.has(`${año}-3`);
+    const has4 = selectedPeriodos.has(`${año}-4`);
+
+    if (has1 && has2 && has3 && has4) return 'todo';
+    if (has1 && has2 && !has3 && !has4) return 'semestre1';
+    if (has3 && has4 && !has1 && !has2) return 'semestre2';
+    if (has4 && !has1 && !has2 && !has3) return 't4';
+    if (has3 && !has1 && !has2 && !has4) return 't3';
+    if (has2 && !has1 && !has3 && !has4) return 't2';
+    if (has1 && !has2 && !has3 && !has4) return 't1';
+
+    if (has4) return 't4';
+    if (has3) return 't3';
+    if (has2) return 't2';
+    if (has1) return 't1';
+    return 't1';
+  };
+
+  const handleMobileSelectChange = (año: number, val: string) => {
+    if (val === 'todo' || val === 'semestre1' || val === 'semestre2') {
+      onSelectAñoPreset?.(año, val);
+    } else if (val.startsWith('t')) {
+      const qNum = parseInt(val.replace('t', ''), 10);
+      if (!isNaN(qNum)) {
+        onSelectAñoPreset?.(año, 'limpiar');
+        onTogglePeriodo(año, qNum);
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 bg-card rounded-lg border shadow-sm">
@@ -118,7 +159,7 @@ export function TrimestreSelector({
         </div>
       </div>
 
-      {/* 📱 FILAS DE TRIMESTRES (Una fila por cada Año seleccionado) */}
+      {/* 📱 FILAS DE TRIMESTRES (Móvil: Desplegable Select / Desktop: Fila de Botones) */}
       <div className="space-y-3 sm:space-y-4" data-tutorial="trimestres-periods">
         {añosOrdenados.map((año, yearIndex) => {
           // Filtrar trimestres del año
@@ -126,20 +167,62 @@ export function TrimestreSelector({
             .filter(t => t.año === año)
             .sort((a, b) => b.trimestre - a.trimestre);
 
+          const mobileVal = getMobileSelectValue(año);
+
           return (
             <div
               key={año}
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-2.5 sm:p-3 bg-accent/30 rounded-md border border-border/50"
             >
-              {/* Etiqueta del Año + Presets del Año */}
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-between sm:justify-start">
-                <span className="text-xs sm:text-sm font-semibold text-foreground tracking-tight">
+              {/* Etiqueta del Año */}
+              <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                <span className="text-xs sm:text-sm font-semibold text-foreground tracking-tight shrink-0">
                   Ejercicio {año}
                 </span>
 
+                {/* 📱 MÓVIL: Select Desplegable de Trimestre / Periodo (Solo móvil) */}
+                <div className="sm:hidden w-full max-w-[200px]">
+                  <Select
+                    value={mobileVal}
+                    onValueChange={(val) => handleMobileSelectChange(año, val)}
+                  >
+                    <SelectTrigger className="h-8 text-xs font-medium bg-background border-border shadow-sm">
+                      <SelectValue placeholder="Seleccionar período" />
+                    </SelectTrigger>
+                    <SelectContent align="end" className="z-[100]">
+                      <SelectItem value="todo" className="text-xs font-semibold py-2">
+                        Año completo ({año})
+                      </SelectItem>
+                      <SelectItem value="semestre1" className="text-xs py-2">
+                        1º Semestre (T1 - T2)
+                      </SelectItem>
+                      <SelectItem value="semestre2" className="text-xs py-2">
+                        2º Semestre (T3 - T4)
+                      </SelectItem>
+
+                      {trimestresAño.map(t => {
+                        return (
+                          <SelectItem key={t.trimestre} value={`t${t.trimestre}`} className="text-xs py-2">
+                            <div className="flex items-center justify-between gap-3 w-full">
+                              <span>T{t.trimestre} {t.año}</span>
+                              {t.cerrado && (
+                                <QuarterBadge cerrado={t.cerrado_estado ?? t.cerrado} className="ml-1" />
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* 💻 DESKTOP: Presets + Botones Horizontales (Sin cambios en Desktop) */}
+              <div className="hidden sm:flex flex-row items-center justify-between w-full sm:w-auto gap-3">
+                {/* Presets del Año en Desktop */}
                 {onSelectAñoPreset && (
                   <div
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-1 shrink-0"
                     data-tutorial={yearIndex === 0 ? 'trimestres-presets' : undefined}
                   >
                     <Button
@@ -168,11 +251,12 @@ export function TrimestreSelector({
                     </Button>
                   </div>
                 )}
-              </div>
 
-              {/* Botones de Trimestres (T4, T3, T2, T1) */}
-              <ScrollArea className="w-full sm:w-auto" data-tutorial={yearIndex === 0 ? 'trimestres-quarter-buttons' : undefined}>
-                <div className="flex gap-2 pb-1 sm:pb-0 flex-nowrap">
+                {/* Botones de Trimestres en Desktop (T4, T3, T2, T1) */}
+                <div
+                  className="flex gap-2 flex-nowrap shrink-0"
+                  data-tutorial={yearIndex === 0 ? 'trimestres-quarter-buttons' : undefined}
+                >
                   {trimestresAño.map(t => {
                     const key = `${t.año}-${t.trimestre}`;
                     const isSelected = selectedPeriodos.has(key);
@@ -198,8 +282,7 @@ export function TrimestreSelector({
                     );
                   })}
                 </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              </div>
             </div>
           );
         })}

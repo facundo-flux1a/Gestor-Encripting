@@ -296,7 +296,7 @@ export default function DocsPage() {
           icon={BookOpen}
         />
 
-      <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-14 pb-24">
+      <div className="w-full max-w-4xl mx-auto py-6 sm:py-8 px-3 sm:px-6 lg:px-8 space-y-14 pb-24 overflow-x-hidden break-words">
 
         {/* Introducción */}
         <section className="space-y-4" data-tutorial="docs-header">
@@ -517,7 +517,7 @@ export default function DocsPage() {
 
             <div className="bg-white/80 dark:bg-black/40 border border-red-200 dark:border-red-900/50 rounded-lg p-5">
               <p className="mb-3 font-semibold text-red-800 dark:text-red-300">Fórmula obligatoria para recalcular o corroborar el total de un documento:</p>
-              <div className="font-mono bg-red-950 text-red-400 p-4 rounded text-center text-lg font-bold shadow-inner">
+              <div className="font-mono bg-red-950 text-red-400 p-3 sm:p-4 rounded text-center text-xs sm:text-lg font-bold shadow-inner break-words overflow-x-auto">
                 Total = Base Imponible + IVA_puro + Recargo - ABS(Retención)
               </div>
             </div>

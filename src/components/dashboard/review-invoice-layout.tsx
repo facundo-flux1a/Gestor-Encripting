@@ -7,12 +7,13 @@ import { useFieldArray, useWatch } from 'react-hook-form';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DocumentTypeSelector } from './document-type-selector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSidebar } from '@/components/ui/sidebar';
+import { SyntheticInvoiceViewer } from '@/components/documento/synthetic-invoice-viewer';
 
 const fmtNum = (v: number | string | null | undefined) => {
   const n = parseFloat(String(v ?? 0));
@@ -79,7 +80,8 @@ interface Props {
 export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting, isValidating, isEditable, onEdit, onCancelEdit, onSave, onDelete, onValidate, onAuditMode, onMarkDuplicate, navigation }: Props) {
   const router = useRouter();
   const { setOpen, isMobile } = useSidebar();
-  
+  const [isMobileViewerOpen, setIsMobileViewerOpen] = React.useState(false);
+
   React.useEffect(() => {
     if (!isMobile) {
       // Forzar el colapso de la sidebar al entrar a esta vista
@@ -170,10 +172,10 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   };
 
   return (
-    <div className="flex overflow-hidden bg-background" style={{ height: '100vh', minHeight: 0 }}>
+    <div className="flex flex-col md:flex-row overflow-hidden bg-background" style={{ height: '100dvh', minHeight: 0 }}>
 
       {/* ═══ LEFT PANEL ═══ */}
-      <div className="flex flex-col border-r border-border overflow-hidden shrink-0" style={{ width: '60%', minWidth: '500px' }}>
+      <div className="flex flex-col border-r border-border overflow-hidden w-full md:w-[60%] md:min-w-[500px] md:shrink-0">
 
         {/* Top bar */}
         <div style={{ background: 'hsl(var(--card))', borderBottom: '1px solid hsl(var(--border))' }}
@@ -194,6 +196,16 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
               title="Cerrar y volver a la sección principal"
             >
               <X className="h-4 w-4" />
+            </button>
+            {/* Mobile: botón para abrir visor en modal */}
+            <button
+              type="button"
+              onClick={() => setIsMobileViewerOpen(true)}
+              className="md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors border border-primary/20 shrink-0"
+              title="Ver documento"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span>Ver doc</span>
             </button>
           </div>
           <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
@@ -256,15 +268,15 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         <div className="flex-1 overflow-y-auto px-6 py-5">
 
           {/* PROVEEDOR + CIF */}
-          <div className="grid grid-cols-2 gap-6">
-            <div><SL>Proveedor</SL>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="min-w-0"><SL>Proveedor</SL>
               {isEditing
                 ? <FormField control={form.control} name="proveedor" render={({ field }) => (
                     <EInput readOnly={false} value={field.value ?? ''} onChange={v => field.onChange(v)} placeholder="—" />
                   )} />
                 : <EInput value={provider?.nombre || doc.proveedor || ''} placeholder="—" />}
             </div>
-            <div><SL>CIF</SL>
+            <div className="min-w-0"><SL>CIF</SL>
               {isEditing
                 ? <FormField control={form.control} name="cif" render={({ field }) => (
                     <EInput readOnly={false} value={field.value ?? ''} onChange={v => field.onChange(v)} className="font-mono text-foreground" placeholder="—" />
@@ -623,8 +635,8 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         </div>
       </div>
 
-      {/* ═══ RIGHT — PDF ═══ */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: '#1a1a2a' }}>
+      {/* ═══ RIGHT — PDF / Visor (solo desktop) ═══ */}
+      <div className="hidden md:flex md:flex-col md:flex-1 min-w-0 overflow-hidden" style={{ background: '#1a1a2a' }}>
         <div className="flex items-center px-3 py-1.5 border-b border-white/10 shrink-0" style={{ background: '#141420' }}>
           <span className="text-xs text-white/40 truncate flex-1">{docName}</span>
           {documentUrl && (
@@ -654,15 +666,54 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
               );
             })()
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-white/25 gap-3 select-none">
-              <svg className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-sm">Sin archivo adjunto</p>
-            </div>
+            <SyntheticInvoiceViewer doc={doc} />
           )}
         </div>
       </div>
+      {/* ═══ MOBILE VIEWER MODAL ═══ */}
+      {isMobileViewerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col" style={{ background: '#1a1a2a' }}>
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0" style={{ background: '#141420' }}>
+            <span className="text-xs text-white/50 truncate flex-1 mr-2">{docName}</span>
+            {documentUrl && (
+              <button onClick={() => window.open(documentUrl, '_blank')}
+                className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10 shrink-0 mr-1">
+                <ExternalLink className="h-3 w-3" />Abrir
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsMobileViewerOpen(false)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors shrink-0"
+            >
+              <X className="h-3.5 w-3.5" />Cerrar
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden relative">
+            {documentUrl ? (
+              (() => {
+                const cleanUrl = documentUrl.split('?')[0].toLowerCase();
+                const tipoArch = (doc?.archivos?.[0]?.tipo_archivo || '').toLowerCase();
+                const isImage = ['png','jpg','jpeg','webp','gif','bmp','svg'].some(ext => cleanUrl.endsWith('.' + ext) || tipoArch === ext || tipoArch.includes('image'));
+                if (isImage) {
+                  return (
+                    <div className="w-full h-full flex items-center justify-center p-4 overflow-auto bg-black/40">
+                      <img src={documentUrl} alt={docName} className="max-w-full max-h-full object-contain rounded shadow-lg" />
+                    </div>
+                  );
+                }
+                return (
+                  <iframe key={documentUrl} src={`${documentUrl}#navpanes=0&view=FitH&toolbar=1`}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
+                    title="Documento" />
+                );
+              })()
+            ) : (
+              <SyntheticInvoiceViewer doc={doc} />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,10 +48,10 @@ export default async function ProveedorAnaliticaPage({
         <MainLayout>
             <div className="flex-1 space-y-8 p-4 pt-6 md:p-8">
                 <MainLayoutHeader>
-                    <div className="flex-1 opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2 group">
-                            <Building className="h-8 w-8 text-primary group-hover:scale-110 transition-transform duration-300" />
-                            <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                    <div className="flex-1 min-w-0 opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <h2 className="text-lg sm:text-3xl font-bold tracking-tight flex items-center gap-2 group min-w-0">
+                            <Building className="h-5 w-5 sm:h-8 sm:w-8 text-primary shrink-0 group-hover:scale-110 transition-transform duration-300" />
+                            <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text truncate">
                                 {provider.nombre}
                             </span>
                         </h2>

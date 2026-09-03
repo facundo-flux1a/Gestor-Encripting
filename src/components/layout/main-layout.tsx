@@ -177,7 +177,7 @@ export function MainLayoutHeader({ children, className, hideSidebarTrigger = fal
     )}>
       {/* Mobile: Mostrar trigger del sidebar solo si no está oculto */}
       {!hideSidebarTrigger && (
-        <div className="md:hidden">
+        <div className="md:hidden shrink-0 z-20 mr-1">
           <SidebarTrigger />
         </div>
       )}

@@ -500,6 +500,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      if (doc.is_issued === undefined || doc.is_issued === null || typeof doc.is_issued !== 'boolean') {
+        results.push({ numero_documento: String(doc.numero_documento ?? ''), estado: 'error', error: 'is_issued es requerido y debe ser un booleano (true = emitida, false = recibida).' });
+        continue;
+      }
+
       const cleanCif = (v: unknown) => normalizeCIF(v == null ? null : String(v)) ?? '';
       const cifEmisor = cleanCif(doc.entidades?.emisor?.cif);
       const serie     = (doc.serie || '').trim().toUpperCase();
@@ -541,7 +546,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Tipo documento ──
-      const isIssued = doc.is_issued !== false; // default true
+      const isIssued: boolean = doc.is_issued; // obligatorio: validado arriba
       let tipoDocumento = isIssued ? 'FACTURA EMITIDA' : 'FACTURA RECIBIDA';
       if (doc.estado === 'anulada') tipoDocumento += ' (ANULADA)';
 

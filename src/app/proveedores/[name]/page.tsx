@@ -100,12 +100,12 @@ function ProveedorDetailInner({ name }: { name: string }) {
         <MainLayout>
             <div className="flex-1 space-y-8 p-4 pt-6 md:p-8">
                 <MainLayoutHeader>
-                    <div className="flex-1">
-                        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                            <Building className="h-8 w-8 text-primary" />
-                            {data.prov.nombre}
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-lg sm:text-3xl font-bold tracking-tight flex items-center gap-2 min-w-0">
+                            <Building className="h-5 w-5 sm:h-8 sm:w-8 text-primary shrink-0" />
+                            <span className="truncate">{data.prov.nombre}</span>
                         </h2>
-                        <p className="text-muted-foreground font-mono">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-mono truncate">
                             {data.prov.identificador_fiscal}
                         </p>
                     </div>

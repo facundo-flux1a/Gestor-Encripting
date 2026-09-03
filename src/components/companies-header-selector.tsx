@@ -46,15 +46,24 @@ export function CompaniesHeaderSelector() {
           variant="outline"
           role="combobox"
           aria-expanded={isPopoverOpen}
-          className="w-full justify-between"
+          className="w-full max-w-[100px] xs:max-w-[120px] sm:max-w-[220px] justify-between text-xs sm:text-sm px-2 sm:px-3"
           data-tutorial="company-selector"
         >
-          {selectedCompanyIds.length === 0
-            ? 'Seleccionar empresas'
-            : selectedCompanyIds.length === companies.length
-              ? 'Todas las empresas'
-              : `${selectedCompanyIds.length} seleccionada(s)`}
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <span className="truncate sm:hidden">
+            {selectedCompanyIds.length === 0
+              ? 'Empresas'
+              : selectedCompanyIds.length === companies.length
+                ? 'Todas'
+                : `${selectedCompanyIds.length} sel.`}
+          </span>
+          <span className="truncate hidden sm:inline">
+            {selectedCompanyIds.length === 0
+              ? 'Seleccionar empresas'
+              : selectedCompanyIds.length === companies.length
+                ? 'Todas las empresas'
+                : `${selectedCompanyIds.length} seleccionada(s)`}
+          </span>
+          <ChevronDown className="ml-1 sm:ml-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent

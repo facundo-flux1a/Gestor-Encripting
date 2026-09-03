@@ -289,6 +289,7 @@ export default function SIIPage() {
       <div className="container max-w-6xl mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
         <PageHeader
           title="Gestor SII (AEAT - Hacienda)"
+          mobileTitle="SII AEAT"
           icon={Send}
           description="Modulo exclusivo para Suministro Inmediato de Información con la Agencia Tributaria"
           hideSidebarTrigger

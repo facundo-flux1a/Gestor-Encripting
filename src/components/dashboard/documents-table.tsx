@@ -1743,7 +1743,6 @@ export function DocumentsTable({
               includeSummary={true}
             />
           </div>
-          {/* )} FIN VISTA CONDICIONAL */}
 
           <div className="text-center text-xs text-muted-foreground mt-2 py-1 flex items-center justify-center gap-2 opacity-70">
             <span className="font-medium">

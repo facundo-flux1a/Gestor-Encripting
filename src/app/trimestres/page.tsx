@@ -927,7 +927,7 @@ function TrimestresPageContent() {
         >
           <div className="flex flex-wrap items-center gap-3">
             <div className="hidden text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground md:block">Empresa</div>
-            <div className="w-[200px]" data-tutorial="trimestres-company-selector">
+            <div className="w-auto shrink" data-tutorial="trimestres-company-selector">
               <CompaniesHeaderSelector />
             </div>
             <details className="group relative">

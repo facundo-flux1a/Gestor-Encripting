@@ -550,14 +550,14 @@ export default function SIIDashboardPage() {
           mobileTitle="SII AEAT"
           icon={Landmark}
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Cert status pill */}
             <button
               type="button"
               disabled={testingCert}
               onClick={() => handleTestCert(false)}
               title="Haz clic para comprobar la conexión con la AEAT (Ping)"
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 border shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold flex items-center gap-1 sm:gap-1.5 border shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                 certValid === true
                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
                   : certValid === false
@@ -574,7 +574,16 @@ export default function SIIDashboardPage() {
               ) : (
                 <Lock className="h-3.5 w-3.5 text-amber-500" />
               )}
-              <span>
+              <span className="sm:hidden">
+                {testingCert
+                  ? 'Probando...'
+                  : certValid === true
+                  ? 'Conectado'
+                  : certValid === false
+                  ? 'Error'
+                  : 'Pendiente'}
+              </span>
+              <span className="hidden sm:inline">
                 {testingCert
                   ? 'Comprobando conexión...'
                   : certValid === true
@@ -587,9 +596,10 @@ export default function SIIDashboardPage() {
             </button>
 
             {/* Environment Badge */}
-            <Badge variant="outline" className="font-mono text-xs py-1 px-3 border-primary/20 bg-primary/5 text-primary">
+            <Badge variant="outline" className="hidden xs:inline-flex font-mono text-[10px] sm:text-xs py-0.5 sm:py-1 px-2 sm:px-3 border-primary/20 bg-primary/5 text-primary">
               <Globe className="h-3 w-3 mr-1" />
-              AEAT PRUEBAS
+              <span className="sm:hidden">PRUEBAS</span>
+              <span className="hidden sm:inline">AEAT PRUEBAS</span>
             </Badge>
           </div>
         </PageHeader>

@@ -12,6 +12,7 @@ import { GroupedDocumentsView } from '@/components/dashboard/grouped-documents-v
 import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDocumentEvents } from '@/hooks/useDocumentEvents'
 import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -611,8 +612,68 @@ function DocumentsPageContent() {
         ) : (
           <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
             {/* Tabs List */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-              <div className="w-full sm:w-auto overflow-x-auto" data-tutorial="tabs-filters">
+            {/* Tabs Selector Header: Mobile Select vs Desktop Tabs */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              {/* VISTA MÓVIL: Desplegable Select */}
+              <div className="w-full sm:hidden" data-tutorial="tabs-filters-mobile">
+                <Select value={activeTab} onValueChange={handleTabChange}>
+                  <SelectTrigger className="w-full h-10 font-medium bg-background border-border shadow-sm">
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent align="start" className="z-[100] w-[calc(100vw-2rem)]">
+                    <SelectItem value="sin-confirmar" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                          Sin Confirmar
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                          {sinConfirmar.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+
+                    <SelectItem value="emitidas" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <TrendingUp className="h-4 w-4 text-green-500 shrink-0" />
+                          Facturas Emitidas
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+                          {facturasEmitidas.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+
+                    <SelectItem value="recibidas" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <TrendingDown className="h-4 w-4 text-blue-500 shrink-0" />
+                          Facturas Recibidas
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                          {facturasRecibidas.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+
+                    <SelectItem value="otros" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <FileText className="h-4 w-4 text-purple-500 shrink-0" />
+                          Otros
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
+                          {otrosDocumentos.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* VISTA DESKTOP: Pestañas horizontales */}
+              <div className="hidden sm:block overflow-x-auto" data-tutorial="tabs-filters">
                 <TabsList className="inline-flex w-full sm:w-auto">
                   <TabsTrigger
                     value="sin-confirmar"
