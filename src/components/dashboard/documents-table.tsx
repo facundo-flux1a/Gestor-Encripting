@@ -26,6 +26,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
+import { isApiIssuedDocument } from '@/lib/client-utils';
 import { useToast } from '@/hooks/use-toast';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import {
@@ -201,37 +202,43 @@ const getColumns = (
               </TooltipContent>
             </Tooltip>
 
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(doc);
-                    }}
-                    disabled={doc.trimestre_cerrado === 1}
-                  >
-                    <span className="sr-only">Eliminar</span>
-                    {doc.trimestre_cerrado === 1 ? (
-                      <Lock className="h-4 w-4 text-muted-foreground/50" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                    )}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side={doc.trimestre_cerrado === 1 ? "top" : "bottom"}
-                sideOffset={5}
-                className={doc.trimestre_cerrado === 1 ? "z-[99999] bg-destructive text-destructive-foreground border-none" : "z-[99999]"}
-                avoidCollisions={true}
-                collisionPadding={10}
-              >
-                <p>{doc.trimestre_cerrado === 1 ? `No se puede eliminar: Trimestre ${doc.año_trimestre}Q${doc.num_trimestre} cerrado` : 'Eliminar documento'}</p>
-              </TooltipContent>
-            </Tooltip>
+          {(() => {
+            const isApiIssued = isApiIssuedDocument(doc);
+            const isLocked = doc.trimestre_cerrado === 1 || isApiIssued;
+            return (
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 relative z-20 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-destructive/20 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(doc);
+                      }}
+                      disabled={isLocked}
+                    >
+                      <span className="sr-only">Eliminar</span>
+                      {isLocked ? (
+                        <Lock className="h-4 w-4 text-muted-foreground/50" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+                      )}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side={isLocked ? "top" : "bottom"}
+                  sideOffset={5}
+                  className={isLocked ? "z-[99999] bg-destructive text-destructive-foreground border-none" : "z-[99999]"}
+                  avoidCollisions={true}
+                  collisionPadding={10}
+                >
+                  <p>{doc.trimestre_cerrado === 1 ? `No se puede eliminar: Trimestre ${doc.año_trimestre}Q${doc.num_trimestre} cerrado` : isApiIssued ? 'No se puede eliminar: Factura emitida por API (Verifactu)' : 'Eliminar documento'}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })()}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -421,6 +428,7 @@ const getColumns = (
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
             isDuplicate={isDuplicate}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       }
@@ -440,6 +448,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       }
@@ -458,6 +467,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       }
@@ -683,6 +693,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       },
@@ -724,6 +735,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       },
@@ -744,6 +756,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       }
@@ -889,6 +902,7 @@ const getColumns = (
             table={table}
             rowIndex={row.index}
             trimestre_cerrado={row.original.trimestre_cerrado}
+            isApiIssued={isApiIssuedDocument(row.original)}
           />
         );
       },
@@ -1397,11 +1411,11 @@ export function DocumentsTable({
       .filter(id => id !== undefined);
   }, [rowSelection, documents]);
 
-  // ✅ Detectar si hay documentos bloqueados en la selección
+  // ✅ Detectar si hay documentos bloqueados en la selección (trimestre cerrado o emitida por API)
   const hasLockedSelected = useMemo(() => {
     return Object.keys(rowSelection).some(key => {
       const doc = documents[parseInt(key)];
-      return doc && doc.trimestre_cerrado === 1;
+      return doc && (doc.trimestre_cerrado === 1 || isApiIssuedDocument(doc));
     });
   }, [rowSelection, documents]);
 

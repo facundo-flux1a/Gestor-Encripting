@@ -18,7 +18,7 @@ import { IndividualTutorialRouter } from '@/components/documento/IndividualTutor
 import { AuditSplitView } from '@/components/dashboard/audit-split-view';
 import { ReviewInvoiceLayout } from '@/components/dashboard/review-invoice-layout';
 import { getAuditHistory, clearSuggestions } from '@/services/vertex-ai-service';
-import { calcularTrimestreExtendido } from '@/lib/client-utils';
+import { calcularTrimestreExtendido, isApiIssuedDocument } from '@/lib/client-utils';
 import { type QuarterOption } from '@/components/documento/quarter-reassignment-dialog';
 import { UnifiedPreSaveDialog } from '@/components/documento/UnifiedPreSaveDialog';
 import { normalizeCIF } from '@/lib/utils';
@@ -97,7 +97,7 @@ function DocumentoPageContent() {
     }, { keepErrors: false, keepDirty: false, keepIsSubmitted: false, keepTouched: false, keepIsValid: false, keepSubmitCount: false });
   }, [form]);
 
-  const isEditable = useMemo(() => !doc?.trimestre_cerrado, [doc?.id_documento, doc?.trimestre_cerrado]);
+  const isEditable = useMemo(() => !doc?.trimestre_cerrado && !isApiIssuedDocument(doc), [doc]);
 
   const isFixed = useMemo(() => {
     if (!doc) return true;

@@ -1,5 +1,6 @@
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
+import { isApiIssuedDocument } from '@/lib/client-utils';
 
 /**
  * Parsea una fecha evitando desfases UTC en strings ISO (YYYY-MM-DD).
@@ -251,7 +252,10 @@ export async function puedeEditarDocumento(documentoId: number): Promise<{ puede
         d.trimestre_cerrado,
         d.año_trimestre,
         d.num_trimestre,
-        d.fecha_cierre_trimestre
+        d.fecha_cierre_trimestre,
+        d.tipo_documento,
+        d.datos_extra,
+        d.dashboard_correo
       FROM documentos d
       WHERE d.id = ?
     `;
@@ -268,6 +272,13 @@ export async function puedeEditarDocumento(documentoId: number): Promise<{ puede
       return { 
         puede: false, 
         razon: `El trimestre ${doc.año_trimestre}Q${doc.num_trimestre} está cerrado desde ${new Date(doc.fecha_cierre_trimestre).toLocaleDateString('es-ES')}`
+      };
+    }
+
+    if (isApiIssuedDocument(doc)) {
+      return {
+        puede: false,
+        razon: 'No se pueden editar facturas emitidas ingresadas por API (Verifactu)'
       };
     }
 

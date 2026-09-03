@@ -36,3 +36,25 @@ export function calcularTrimestreExtendido(fecha: Date | string): { año: number
   if (mes >= 7 && mes <= 9) return { año, trimestre: 3 };
   return { año, trimestre: 4 };
 }
+
+/**
+ * Verifica si un documento es una factura/abono emitida/o ingresada/o vía API.
+ * Las facturas emitidas por API (Verifactu) no pueden ser editadas ni eliminadas.
+ */
+export function isApiIssuedDocument(doc: any): boolean {
+  if (!doc) return false;
+
+  let isApi = doc.dashboard_correo === 'api' || doc['dashboard-correo'] === 'api';
+  if (!isApi && doc.datos_extra) {
+    try {
+      const extra = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra;
+      if (extra?.canal_origen === 'api') {
+        isApi = true;
+      }
+    } catch (e) {}
+  }
+  if (!isApi) return false;
+
+  const tipo = String(doc.tipo_documento || '').toUpperCase();
+  return tipo.includes('EMITID') || tipo.includes('EMITIDA') || tipo.includes('EMITIDO');
+}

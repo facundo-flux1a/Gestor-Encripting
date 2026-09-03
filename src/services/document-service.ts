@@ -19,6 +19,7 @@ import type { Trimestre, TrimestreFilters, CerrarTrimestrePayload, PausarTrimest
 import { validateIncidentsAsync } from './incidents-service';
 import { runHealthChecksForDocument } from './health-check-service';
 import { parseFechaLocal, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
+import { isApiIssuedDocument } from '@/lib/client-utils';
 import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
 
 
@@ -781,11 +782,12 @@ export async function updateDocument(id: number, data: DocumentUpdatePayload, us
       // ═══════════════════════════════════════════════════════════
       const doc = await tx.documentos.findUnique({
         where: { id: BigInt(id) },
-        select: { tipo_documento: true, trimestre_cerrado: true, año_trimestre: true, num_trimestre: true, id_de_empresa: true, importe_total: true, importe_sin_impuestos: true, datos_extra: true }
+        select: { tipo_documento: true, trimestre_cerrado: true, año_trimestre: true, num_trimestre: true, id_de_empresa: true, importe_total: true, importe_sin_impuestos: true, datos_extra: true, dashboard_correo: true }
       });
 
       if (!doc) throw new Error('Documento no encontrado');
       if (doc.trimestre_cerrado) throw new Error('No se puede modificar un documento de un trimestre cerrado');
+      if (isApiIssuedDocument(doc)) throw new Error('No se pueden editar facturas emitidas ingresadas por API (Verifactu)');
 
       empresaId = Number(doc.id_de_empresa);
       console.log('📋 [updateDocument] Empresa ID:', empresaId);
@@ -1222,14 +1224,15 @@ export async function updateDocumentField(id: number, fieldName: string, value: 
       // ✅ CAMBIO: Verificar trimestre_cerrado en lugar de trimestre actual
       const doc = await tx.documentos.findUnique({
         where: { id: BigInt(id) },
-        select: { trimestre_cerrado: true, datos_extra: true, id_de_empresa: true }
+        select: { trimestre_cerrado: true, datos_extra: true, id_de_empresa: true, tipo_documento: true, dashboard_correo: true }
       });
 
       if (!doc) throw new Error('Documento no encontrado.');
 
       const isChangingTipoDocumento = fieldName === 'tipo_documento';
-      if (doc.trimestre_cerrado === true && !isChangingTipoDocumento) {
-        throw new Error('No se pueden editar campos de documentos de trimestres cerrados.');
+      const isApiIssued = isApiIssuedDocument(doc);
+      if ((doc.trimestre_cerrado === true || isApiIssued) && !isChangingTipoDocumento) {
+        throw new Error(isApiIssued ? 'No se pueden editar facturas emitidas ingresadas por API (Verifactu).' : 'No se pueden editar campos de documentos de trimestres cerrados.');
       }
 
       const directDocumentFields = ['numero_documento', 'fecha_emision', 'fecha_vencimiento', 'base_imponible', 'total', 'observaciones', 'tipo_documento', 'incidencia', 'incidencia_razon'];
@@ -1498,7 +1501,7 @@ export async function moveDocument(
     // Verificar que el documento existe y pertenece a una empresa del usuario
     const docRow = await prisma.documentos.findFirst({
       where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: userId } } },
-      select: { id: true, id_de_empresa: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true }
+      select: { id: true, id_de_empresa: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true, tipo_documento: true, dashboard_correo: true, datos_extra: true }
     });
 
     if (!docRow) {
@@ -1509,11 +1512,14 @@ export async function moveDocument(
       };
     }
 
-    if (docRow.trimestre_cerrado) {
-      console.warn(`⚠️ [moveDocument] Intento de mover documento en trimestre cerrado: ${docRow.año_trimestre}Q${docRow.num_trimestre}`);
+    const isApiIssued = isApiIssuedDocument(docRow);
+    if (docRow.trimestre_cerrado || isApiIssued) {
+      console.warn(`⚠️ [moveDocument] Intento de mover documento en trimestre cerrado o emitida por API: ${docRow.año_trimestre}Q${docRow.num_trimestre}`);
       return {
         success: false,
-        error: `No se puede mover el documento porque pertenece al trimestre ${docRow.año_trimestre}Q${docRow.num_trimestre}, el cual ya está cerrado.`
+        error: isApiIssued
+          ? 'No se pueden mover facturas emitidas ingresadas por API (Verifactu).'
+          : `No se puede mover el documento porque pertenece al trimestre ${docRow.año_trimestre}Q${docRow.num_trimestre}, el cual ya está cerrado.`
       };
     }
 
@@ -1601,7 +1607,7 @@ export async function deleteDocument(
     // Verificar que el documento pertenece a una empresa del usuario y si está cerrado
     const docRaw = await prisma.documentos.findFirst({
       where: { id: BigInt(documentId), empresas: { id_de_usuario: { array_contains: user.id } } },
-      select: { id: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true, id_de_empresa: true, numero_documento: true, tipo_documento: true, importe_total: true, fecha_emision: true }
+      select: { id: true, trimestre_cerrado: true, num_trimestre: true, año_trimestre: true, id_de_empresa: true, numero_documento: true, tipo_documento: true, importe_total: true, fecha_emision: true, dashboard_correo: true, datos_extra: true }
     });
 
     if (!docRaw) {
@@ -1610,11 +1616,14 @@ export async function deleteDocument(
     }
 
     const docData = { ...docRaw, id_de_empresa: Number(docRaw.id_de_empresa), trimestre_cerrado: docRaw.trimestre_cerrado ? 1 : 0 };
-    if (docData.trimestre_cerrado === 1) {
-      console.warn(`⚠️ [deleteDocument] Intento de borrar documento en trimestre cerrado: ${docData.año_trimestre}Q${docData.num_trimestre}`);
+    const isApiIssued = isApiIssuedDocument(docRaw);
+    if (docData.trimestre_cerrado === 1 || isApiIssued) {
+      console.warn(`⚠️ [deleteDocument] Intento de borrar documento bloqueado (cerrado o emitida por API): ${docData.id}`);
       return {
         success: false,
-        error: `No se puede eliminar el documento porque pertenece al trimestre ${docData.año_trimestre}Q${docData.num_trimestre}, el cual ya está cerrado.`
+        error: isApiIssued
+          ? 'No se puede eliminar una factura emitida ingresada por API (Verifactu).'
+          : `No se puede eliminar el documento porque pertenece al trimestre ${docData.año_trimestre}Q${docData.num_trimestre}, el cual ya está cerrado.`
       };
     }
 
@@ -5362,22 +5371,26 @@ export async function deleteDocuments(ids: number[], userId: number): Promise<{ 
 
     console.log(`🗑️[deleteDocuments] Eliminando ${ids.length} documentos para usuario ${userId} `);
 
-    // ✅ BLOQUEO DE TRIMESTRE CERRADO
-    const [closedCheck] = await connection.query<RowDataPacket[]>(`
-      SELECT d.id, d.num_trimestre, d.año_trimestre 
+    // ✅ BLOQUEO DE TRIMESTRE CERRADO Y EMITIDAS POR API
+    const [docsToCheck] = await connection.query<RowDataPacket[]>(`
+      SELECT d.id, d.num_trimestre, d.año_trimestre, d.trimestre_cerrado, d.tipo_documento, d.dashboard_correo, d.datos_extra 
       FROM documentos d
       LEFT JOIN empresas e ON d.id_de_empresa = e.id
       WHERE d.id IN (?) 
-        AND d.trimestre_cerrado = 1
         AND (JSON_CONTAINS(e.id_de_usuario, CAST(? AS JSON)) OR d.id_de_empresa IS NULL)
     `, [ids, userId]);
 
-    if (closedCheck.length > 0) {
-      const firstLocked = closedCheck[0];
-      console.warn(`⚠️ [deleteDocuments] Bloqueo masivo: ${closedCheck.length} documentos en trimestres cerrados.`);
+    const lockedDocs = docsToCheck.filter((d: any) => d.trimestre_cerrado === 1 || isApiIssuedDocument(d));
+
+    if (lockedDocs.length > 0) {
+      const firstLocked = lockedDocs[0];
+      const isApi = isApiIssuedDocument(firstLocked);
+      console.warn(`⚠️ [deleteDocuments] Bloqueo masivo: ${lockedDocs.length} documentos bloqueados.`);
       return {
         success: false,
-        error: `No se pueden eliminar los documentos seleccionados porque ${closedCheck.length} de ellos pertenecen a trimestres cerrados (ej: ${firstLocked.año_trimestre}Q${firstLocked.num_trimestre}).`
+        error: isApi
+          ? `No se pueden eliminar los documentos seleccionados porque ${lockedDocs.length} de ellos son facturas emitidas ingresadas por API (Verifactu).`
+          : `No se pueden eliminar los documentos seleccionados porque ${lockedDocs.length} de ellos pertenecen a trimestres cerrados (ej: ${firstLocked.año_trimestre}Q${firstLocked.num_trimestre}).`
       };
     }
 

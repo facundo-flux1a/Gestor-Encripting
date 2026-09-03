@@ -28,6 +28,7 @@ interface EditableCellProps {
   rowIndex: number;
   trimestre_cerrado?: number;
   isDuplicate?: boolean;
+  isApiIssued?: boolean;
 }
 
 const formatCurrency = (amount: number | null | undefined, currency = 'EUR') => {
@@ -65,6 +66,7 @@ export function EditableCell({
   rowIndex,
   trimestre_cerrado = 0,
   isDuplicate = false,
+  isApiIssued = false,
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
@@ -73,7 +75,7 @@ export function EditableCell({
   const inputRef = useRef<HTMLInputElement>(null);
   const isBlurring = useRef(false);
 
-  const isTrimesterClosed = trimestre_cerrado === 1;
+  const isTrimesterClosed = trimestre_cerrado === 1 || isApiIssued;
 
   // Usar un ref para rastrear si estamos editando activamente
   const isEditingRef = useRef(false);
@@ -205,10 +207,12 @@ export function EditableCell({
     });
 
     if (isTrimesterClosed) {
-      console.log('🔒 [EditableCell] Trimestre cerrado, bloqueando edición');
+      console.log('🔒 [EditableCell] Documento bloqueado para edición');
       toast({
-        title: 'Trimestre Cerrado',
-        description: 'No se pueden editar documentos de trimestres cerrados.',
+        title: isApiIssued ? 'Factura Emitida por API' : 'Trimestre Cerrado',
+        description: isApiIssued
+          ? 'No se pueden editar facturas emitidas ingresadas por API (Verifactu).'
+          : 'No se pueden editar documentos de trimestres cerrados.',
         variant: 'destructive',
       });
       return;
