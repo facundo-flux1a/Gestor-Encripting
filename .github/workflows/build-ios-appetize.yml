@@ -38,14 +38,9 @@ jobs:
                      -derivedDataPath build \
                      CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
-      - name: Zip App for Appetize
-        run: |
-          cd build/Build/Products/Debug-iphonesimulator
-          zip -r Appetize-iOS-App.zip App.app
-
       - name: Upload Artifact for Appetize.io
         uses: actions/upload-artifact@v4
         with:
           name: Appetize-iOS-App
-          path: build/Build/Products/Debug-iphonesimulator/Appetize-iOS-App.zip
+          path: build/Build/Products/Debug-iphonesimulator/*.app
           retention-days: 7

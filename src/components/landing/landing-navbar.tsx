@@ -8,7 +8,7 @@ import { MuvailLogo } from '@/components/brand/muvail-logo';
 
 export function LandingNavbar({ user }: { user: any }) {
     return (
-        <nav className="fixed top-0 z-50 w-full border-b border-border bg-background">
+        <nav className="fixed top-0 z-50 w-full border-b border-border bg-background pt-[env(safe-area-inset-top)]">
             <div className="container mx-auto flex h-[4.5rem] items-center justify-between px-4">
                 <Link href="/" className="rounded-lg transition-opacity hover:opacity-80" aria-label="Ir al inicio de Muvail">
                     <MuvailLogo />

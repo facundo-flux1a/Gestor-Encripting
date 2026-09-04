@@ -20,16 +20,22 @@ export const metadata: Metadata = {
   title: 'Muvail | Gestión documental inteligente',
   description: 'Gestión documental y control financiero inteligente para empresas.',
   manifest: '/site.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Muvail',
+  },
   icons: {
     icon: '/icon.png',
     shortcut: '/favicon.ico',
-    apple: '/apple-icon.png',
+    apple: '/branding/muvail-icon-192.png',
   },
 };
 
 export const viewport: Viewport = {
   themeColor: '#073f39',
   colorScheme: 'light dark',
+  viewportFit: 'cover',
 };
 
 export default async function RootLayout({
