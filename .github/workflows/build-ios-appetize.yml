@@ -17,19 +17,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
-      - name: Sync Capacitor iOS
-        run: npx cap sync ios
+      - name: Sync Capacitor iOS & Pods
+        run: |
+          npx cap sync ios
+          cd ios/App && pod install
 
       - name: Build iOS Simulator App
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
                      -sdk iphonesimulator \
+                     -destination 'generic/platform=iOS Simulator' \
                      -configuration Debug \
                      -derivedDataPath build \
                      CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO

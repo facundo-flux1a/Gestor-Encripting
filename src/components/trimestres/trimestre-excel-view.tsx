@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 
 // AG Grid Imports
 import { AgGridReact } from 'ag-grid-react';
+import { useTheme } from 'next-themes';
 import {
     ColDef,
     ValueFormatterParams,
@@ -19,14 +20,15 @@ import {
     ModuleRegistry,
     AllCommunityModule,
     themeQuartz,
-    colorSchemeDark
+    colorSchemeDark,
+    colorSchemeLight
 } from 'ag-grid-community';
 
 // Register AG Grid Modules
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Define the Quartz Dark theme
 const darkTheme = themeQuartz.withPart(colorSchemeDark);
+const lightTheme = themeQuartz.withPart(colorSchemeLight);
 
 interface TrimestreExcelViewProps {
     documents: Document[];
@@ -384,6 +386,13 @@ const calculateAnnualSummary = (data: Document[], selectedPeriodos?: Set<string>
 
 export function TrimestreExcelView({ documents, isLoading, año, selectedTrimestre, selectedPeriodos }: TrimestreExcelViewProps) {
     const { toast } = useToast();
+    const { resolvedTheme } = useTheme();
+    const [mounted, setMounted] = React.useState(false);
+    React.useEffect(() => setMounted(true), []);
+
+    const isLight = mounted && resolvedTheme === 'light';
+    const agTheme = isLight ? lightTheme : darkTheme;
+
     const [isExpanded, setIsExpanded] = useState(true);
     const [viewType, setViewType] = useState<'separate' | 'unified'>('unified');
 
@@ -451,7 +460,12 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             editable: false,
             cellStyle: (p: any) => ({
                 fontWeight: p.data?.isSectionHeader ? '900' : 'bold',
-                backgroundColor: p.data?.isSectionHeader ? 'rgba(71, 85, 105, 0.9)' : 'rgba(51, 65, 85, 0.4)',
+                backgroundColor: p.data?.isSectionHeader
+                    ? (isLight ? 'rgba(226, 232, 240, 0.95)' : 'rgba(71, 85, 105, 0.9)')
+                    : (isLight ? 'rgba(241, 245, 249, 0.8)' : 'rgba(51, 65, 85, 0.4)'),
+                color: p.data?.isSectionHeader
+                    ? (isLight ? '#0f172a' : '#f8fafc')
+                    : undefined,
                 textAlign: p.data?.isSectionHeader ? 'center' : 'left'
             }),
             tooltipValueGetter: (p: any) => {
@@ -584,7 +598,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
             }),
             tooltipValueGetter: (p: any) => p.data?.finalMismatch ? '🚫 Descuadre FINAL: La suma de (Base + IVA + Recargo - Retención) no coincide con el total registrado.' : undefined
         },
-    ], [selectedTrimestre]);
+    ], [selectedTrimestre, isLight]);
 
     const gridData = useMemo(() => {
         if (isLoading || documents.length === 0) return { rowDataIngresos: [], rowDataGastos: [], rowDataNeto: [], rowDataUnified: [], auditData: null };
@@ -903,15 +917,16 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                             <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                 <AgGridReact
                                                     domLayout="autoHeight"
-                                                    theme={darkTheme}
+                                                    theme={agTheme}
                                                     rowData={gridData.rowDataUnified}
                                                     columnDefs={columnDefs}
                                                     defaultColDef={defaultColDef}
                                                     enableBrowserTooltips={true}
                                                     getRowStyle={(params) => params.data?.isSectionHeader ? {
-                                                        backgroundColor: 'rgba(30, 41, 59, 1)',
+                                                        backgroundColor: isLight ? 'rgba(241, 245, 249, 1)' : 'rgba(30, 41, 59, 1)',
+                                                        color: isLight ? '#0f172a' : '#f8fafc',
                                                         pointerEvents: 'none',
-                                                        borderBottom: '2px solid #334155'
+                                                        borderBottom: isLight ? '2px solid #cbd5e1' : '2px solid #334155'
                                                     } : undefined}
                                                 />
                                             </div>
@@ -929,7 +944,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                                 <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
-                                                        theme={darkTheme}
+                                                        theme={agTheme}
                                                         rowData={gridData.rowDataIngresos}
                                                         columnDefs={columnDefs}
                                                         defaultColDef={defaultColDef}
@@ -943,7 +958,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                                 <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
-                                                        theme={darkTheme}
+                                                        theme={agTheme}
                                                         rowData={gridData.rowDataGastos}
                                                         columnDefs={columnDefs}
                                                         defaultColDef={defaultColDef}
@@ -957,7 +972,7 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                                                 <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                                                     <AgGridReact
                                                         domLayout="autoHeight"
-                                                        theme={darkTheme}
+                                                        theme={agTheme}
                                                         rowData={gridData.rowDataNeto}
                                                         columnDefs={columnDefs}
                                                         defaultColDef={defaultColDef}
@@ -983,6 +998,18 @@ export function TrimestreExcelView({ documents, isLoading, año, selectedTrimest
                     --ag-border-color: hsl(var(--border));
                     --ag-row-hover-color: hsl(var(--primary) / 0.08);
                     --ag-selected-row-background-color: hsl(var(--primary) / 0.15);
+                    --ag-font-family: 'Manrope', sans-serif;
+                    --ag-font-size: 13px;
+                }
+                .ag-theme-quartz-light {
+                    --ag-background-color: #ffffff;
+                    --ag-header-background-color: #f1f5f9;
+                    --ag-odd-row-background-color: #f8fafc;
+                    --ag-header-foreground-color: #0f172a;
+                    --ag-foreground-color: #0f172a;
+                    --ag-border-color: #e2e8f0;
+                    --ag-row-hover-color: rgba(59, 130, 246, 0.08);
+                    --ag-selected-row-background-color: rgba(59, 130, 246, 0.15);
                     --ag-font-family: 'Manrope', sans-serif;
                     --ag-font-size: 13px;
                 }

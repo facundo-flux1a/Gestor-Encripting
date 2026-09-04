@@ -335,21 +335,21 @@ export function InteractiveEndpoint({
     : '';
 
   return (
-    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
+    <div className="border border-border rounded-xl overflow-hidden bg-card shadow-sm">
       
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/40">
         <span className={cn(
-          'font-mono text-xs px-2.5 py-1 rounded font-bold tracking-widest',
+          'font-mono text-xs px-2.5 py-1 rounded-md font-bold tracking-widest border',
           method === 'GET'
-            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
-            : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+            ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
         )}>
           {method}
         </span>
-        <code className="font-mono text-sm text-slate-700 dark:text-slate-300 flex-1">{path}</code>
+        <code className="font-mono text-sm text-foreground flex-1 font-semibold">{path}</code>
         {isMockOnly && (
-          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 font-medium">
             <AlertTriangle className="h-3 w-3" />
             Modo Playground — Solo lectura
           </span>
@@ -357,12 +357,12 @@ export function InteractiveEndpoint({
       </div>
 
       <div className="p-5 space-y-5">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
 
         {/* Parameters */}
         {params.length > 0 && (
           <div className="space-y-2" data-tutorial="docs-param-inputs">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Parámetros</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Parámetros</h4>
             <div className="grid gap-2">
               {params.map(param => {
                 const state = paramStates[param.key] || { enabled: false, value: '' };
@@ -372,8 +372,8 @@ export function InteractiveEndpoint({
                     className={cn(
                       'flex items-start gap-3 p-3 rounded-lg border transition-all duration-200',
                       state.enabled
-                        ? 'border-primary/40 bg-primary/5 dark:bg-primary/10'
-                        : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30'
+                        ? 'border-primary/40 bg-primary/5'
+                        : 'border-border/60 bg-muted/20'
                     )}
                   >
                     {/* Checkbox */}
@@ -483,17 +483,17 @@ export function InteractiveEndpoint({
         {/* Generated cURL */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Petición generada (cURL)</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Petición generada (cURL)</h4>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
               {copied ? 'Copiado' : 'Copiar'}
             </button>
           </div>
-          <div className="bg-slate-950 rounded-lg p-4 overflow-x-auto">
-            <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap break-all">{curlCommand}</pre>
+          <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 overflow-x-auto shadow-inner">
+            <pre className="font-mono text-xs text-emerald-400 whitespace-pre-wrap break-all">{curlCommand}</pre>
           </div>
         </div>
 
@@ -533,7 +533,7 @@ export function InteractiveEndpoint({
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setShowResponse(v => !v)}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
               >
                 Respuesta
                 {responseStatus && (
@@ -560,31 +560,31 @@ export function InteractiveEndpoint({
             </div>
 
             {isMockOnly && (
-              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                 <span><strong>Playground seguro:</strong> Esta llamada nunca se ha ejecutado contra la base de datos. Los datos mostrados son de ejemplo estático y ninguna incidencia ha sido modificada.</span>
               </div>
             )}
 
             {responseStatus === 429 && (
-              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-lg px-3 py-2 text-xs text-red-800 dark:text-red-300">
+              <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 text-xs text-destructive">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                 <span><strong>Límite de peticiones excedido:</strong> Por seguridad, el Playground tiene un límite estricto de uso. Espera un momento antes de realizar otra petición.</span>
               </div>
             )}
 
-            <div className="bg-slate-950 rounded-lg overflow-hidden">
+            <div className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden shadow-inner">
               <div className="max-h-96 overflow-y-auto p-4">
-                <pre className="font-mono text-xs text-slate-300 whitespace-pre-wrap">{response}</pre>
+                <pre className="font-mono text-xs text-slate-200 whitespace-pre-wrap">{response}</pre>
               </div>
             </div>
 
             {responseImageUrl && (
-              <div className="mt-4 p-4 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-900/50 flex justify-center">
+              <div className="mt-4 p-4 border border-border rounded-lg bg-muted/30 flex justify-center">
                 <img 
                   src={responseImageUrl} 
                   alt="Thumbnail" 
-                  className="max-w-full max-h-[500px] object-contain rounded shadow-sm border border-slate-200 dark:border-slate-700" 
+                  className="max-w-full max-h-[500px] object-contain rounded shadow-sm border border-border" 
                 />
               </div>
             )}

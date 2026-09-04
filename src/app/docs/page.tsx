@@ -300,20 +300,20 @@ export default function DocsPage() {
 
         {/* Introducción */}
         <section className="space-y-4" data-tutorial="docs-header">
-          <p className="text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="text-lg text-muted-foreground leading-relaxed">
             La API REST v1 del Gestor Documental está concebida como la capa de integración oficial para sistemas externos que necesiten consumir, analizar o sincronizar datos fiscales y contables en tiempo real. Es la interfaz preferida para desarrolladores de ERPs, contabilidades, herramientas de BI como Tableau o Google Data Studio, y plataformas de automatización como Make o n8n.
           </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-            Todos los endpoints están versionados bajo el prefijo <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono text-pink-600 dark:text-pink-400">/api/v1/</code> y son de acceso restringido mediante API Keys únicas por empresa (tenant). Cada clave solo otorga acceso a los datos de la empresa a la que está vinculada, garantizando un aislamiento completo entre tenants.
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Todos los endpoints están versionados bajo el prefijo <code className="bg-muted text-primary px-1.5 py-0.5 rounded font-mono text-xs font-semibold border border-border/50">/api/v1/</code> y son de acceso restringido mediante API Keys únicas por empresa (tenant). Cada clave solo otorga acceso a los datos de la empresa a la que está vinculada, garantizando un aislamiento completo entre tenants.
           </p>
-          <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg mt-4">
+          <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-4 text-amber-900 dark:text-amber-200">
             <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              <p className="text-sm font-semibold">
                 Límites de Seguridad del Playground
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400/90 leading-relaxed">
-                Para proteger la integridad de nuestra base de datos, las peticiones ejecutadas <strong>desde esta interfaz web</strong> están limitadas a 1 petición cada 30 segundos (en modo pruebas). En producción el límite es de 20 llamadas por minuto. Si superas el límite, recibirás un error <code>429 Too Many Requests</code>. Las integraciones reales vía API desde tus sistemas tienen límites mucho más holgados.
+              <p className="text-xs opacity-90 leading-relaxed">
+                Para proteger la integridad de nuestra base de datos, las peticiones ejecutadas <strong>desde esta interfaz web</strong> están limitadas a 1 petición cada 30 segundos (en modo pruebas). En producción el límite es de 20 llamadas por minuto. Si superas el límite, recibirás un error <code className="font-mono bg-amber-500/20 px-1 py-0.5 rounded text-xs font-bold">429 Too Many Requests</code>. Las integraciones reales vía API desde tus sistemas tienen límites mucho más holgados.
               </p>
             </div>
           </div>
@@ -321,19 +321,21 @@ export default function DocsPage() {
 
         {/* 1. Autenticación */}
         <section className="space-y-4" data-tutorial="docs-auth-section">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-            <Key className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <div className="flex items-center gap-2 pb-2 border-b border-border">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <Key className="h-5 w-5" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
               1. Autenticación y Seguridad
             </h2>
           </div>
-          <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-            Cada petición HTTP debe incluir el header <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-sm font-mono text-pink-600 dark:text-pink-400">X-Api-Key</code> con tu token de acceso. 
+          <p className="text-muted-foreground leading-relaxed">
+            Cada petición HTTP debe incluir el header <code className="bg-muted text-primary px-1.5 py-0.5 rounded text-xs font-mono font-semibold border border-border/50">X-Api-Key</code> con tu token de acceso. 
             Las claves se generan desde la sección <strong>Ajustes → Integraciones</strong> del Gestor Documental y están vinculadas a un tenant específico. 
-            Una clave comprometida puede revocarse de inmediato desde la misma pantalla sin afectar al resto de las integraciones.
+            Una clave compromised puede revocarse de inmediato desde la misma pantalla sin afectar al resto de las integraciones.
           </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Si el header no se envía o el token es inválido/revocado, el servidor retornará un <code className="font-mono">401 Unauthorized</code>.
+          <p className="text-sm text-muted-foreground">
+            Si el header no se envía o el token es inválido/revocado, el servidor retornará un <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">401 Unauthorized</code>.
           </p>
 
           <ApiKeyPanel
@@ -346,21 +348,28 @@ export default function DocsPage() {
 
         {/* 2. Endpoints */}
         <section className="space-y-8" data-tutorial="docs-endpoints-list">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-            <Database className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <div className="flex items-center gap-2 pb-2 border-b border-border">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <Database className="h-5 w-5" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
               2. Referencia de Endpoints
             </h2>
           </div>
 
           {/* 2.1 Documents Full */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FileJson className="h-5 w-5 text-indigo-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.1 Consulta Avanzada de Documentos <code className="text-base font-mono text-indigo-400">/full</code></h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <FileJson className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                2.1 Consulta Avanzada de Documentos 
+                <code className="text-sm font-mono text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">/full</code>
+              </h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              El endpoint central de extracción. Devuelve el árbol completo de cada documento procesado: metadata del encabezado, datos de la entidad emisora y receptora, líneas de detalle de producto o servicio, el array de impuestos desagregado (IVA, Recargo de Equivalencia, IRPF), un indicador del estado de salud matemática del documento, y ahora también incluye automáticamente <strong>la URL a la previsualización (miniatura JPEG) del PDF</strong> renderizada por nuestro motor interno Ghostscript. Es el equivalente a un <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">JOIN</code> masivo de todas las tablas relacionadas con la factura.
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              El endpoint central de extracción. Devuelve el árbol completo de cada documento procesado: metadata del encabezado, datos de la entidad emisora y receptora, líneas de detalle de producto o servicio, el array de impuestos desagregado (IVA, Recargo de Equivalencia, IRPF), un indicador del estado de salud matemática del documento, y la URL a la previsualización (miniatura JPEG) del PDF renderizada por nuestro motor interno Ghostscript. Es el equivalente a un <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">JOIN</code> masivo de todas las tablas relacionadas con la factura.
             </p>
             <InteractiveEndpoint
               method="GET"
@@ -374,11 +383,13 @@ export default function DocsPage() {
 
           {/* 2.2 Analytics */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-violet-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.2 Analíticas Financieras Agregadas</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.2 Analíticas Financieras Agregadas</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Endpoint de alto nivel que devuelve KPIs financieros ya agregados y depurados: ingresos totales, gastos totales, IVA repercutido, IVA soportado, retenciones y el resultado neto del período. Está optimizado para dashboards de gestión y herramientas de BI donde no se necesita el detalle línea por línea sino las cifras consolidadas del trimestre. Evita al integrador tener que hacer la agregación matemática por su cuenta.
             </p>
             <InteractiveEndpoint
@@ -393,11 +404,13 @@ export default function DocsPage() {
 
           {/* 2.3 Products */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-teal-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.3 Historial de Productos y Servicios</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.3 Historial de Productos y Servicios</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Extrae el registro histórico línea a línea de todos los productos y servicios que aparecen en las facturas procesadas. Esto incluye descripción, cantidad, precio unitario, descuentos y total por línea. Es especialmente útil para análisis de evolución de precios de materiales, estudios de variación de costes por proveedor y detección de duplicidades en pedidos.
             </p>
             <InteractiveEndpoint
@@ -412,11 +425,13 @@ export default function DocsPage() {
 
           {/* 2.4 Quarters */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-sky-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.4 Resumen de Trimestres Fiscales</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <Calendar className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.4 Resumen de Trimestres Fiscales</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Proporciona el estado y los totales de cada trimestre fiscal registrado en el sistema. Indica si el trimestre está abierto (activo, puede recibir nuevas facturas) o cerrado (congelado para declaración). Es la fuente de verdad para que un sistema externo sepa en qué período debe encuadrar un documento antes de enviarlo, y para verificar el estado de declaraciones anteriores.
             </p>
             <InteractiveEndpoint
@@ -431,12 +446,14 @@ export default function DocsPage() {
 
           {/* 2.5 Excel Export */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Download className="h-5 w-5 text-emerald-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.5 Motor de Exportación a Excel</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <Download className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.5 Motor de Exportación a Excel</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              Construye y exporta dinámicamente un libro de Excel estructurado (<code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">.xlsx</code>) que contiene el Libro de IVA Soportado y Repercutido, el resumen trimestral y el desglose por entidades. El archivo cumple con el formato habitual exigido para revisiones contables y pre-declaraciones del Modelo 303. El endpoint devuelve un buffer binario que el cliente debe descargar directamente.
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Construye y exporta dinámicamente un libro de Excel estructurado (<code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs text-primary font-medium">.xlsx</code>) que contiene el Libro de IVA Soportado y Repercutido, el resumen trimestral y el desglose por entidades. El archivo cumple con el formato habitual exigido para revisiones contables y pre-declaraciones del Modelo 303. El endpoint devuelve un buffer binario que el cliente debe descargar directamente.
             </p>
             <InteractiveEndpoint
               method="POST"
@@ -452,11 +469,13 @@ export default function DocsPage() {
 
           {/* 2.6 Incidents */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-amber-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.6 Gestión de Incidencias</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.6 Gestión de Incidencias</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               El motor de OCR retiene automáticamente las facturas que presentan descuadres matemáticos (por ejemplo, cuando la suma de líneas no cuadra con el total declarado) o inconsistencias detectadas por los modelos de IA. Este endpoint permite a un ERP consultar ese listado de documentos retenidos y, una vez revisados manualmente por el operador, aprobar su liberación para que continúen el flujo contable normal.
             </p>
             <InteractiveEndpoint
@@ -481,11 +500,13 @@ export default function DocsPage() {
 
           {/* 2.7 Thumbnail */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FileImage className="h-5 w-5 text-fuchsia-500" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">2.7 Previsualización de PDF (Thumbnail)</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                <FileImage className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">2.7 Previsualización de PDF (Thumbnail)</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Genera al instante una vista previa en formato JPEG (calidad 85%) de la primera página del documento PDF. El sistema renderiza el documento internamente usando Ghostscript de forma nativa y cachea el resultado en MinIO. Este endpoint es súper liviano e ideal para mostrar miniaturas en galerías dentro de tu ERP sin tener que descargar los PDFs originales.
               <br /><span className="inline-block mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">⚠️ Límite del Playground: máx. 5 peticiones por minuto para no afectar al servidor compartido.</span>
             </p>
@@ -502,101 +523,103 @@ export default function DocsPage() {
         </section>
 
         {/* 3. Regla Crítica */}
-        <section className="bg-red-50 dark:bg-red-950/20 border-2 border-red-500/50 rounded-xl overflow-hidden shadow-sm" data-tutorial="docs-responses-section">
-          <div className="bg-red-500 text-white px-6 py-3 flex items-center gap-3">
-            <TriangleAlert className="h-6 w-6 animate-pulse" />
-            <h2 className="text-lg font-bold tracking-wider uppercase">
+        <section className="bg-destructive/5 border border-destructive/30 rounded-xl overflow-hidden shadow-sm" data-tutorial="docs-responses-section">
+          <div className="bg-destructive/10 border-b border-destructive/20 text-destructive px-6 py-3.5 flex items-center gap-3">
+            <TriangleAlert className="h-5 w-5 shrink-0" />
+            <h2 className="text-base font-bold tracking-wider uppercase">
               Regla Crítica: Cálculo de Impuestos y Retenciones
             </h2>
           </div>
 
-          <div className="p-6 space-y-6 text-red-950 dark:text-red-100 text-sm">
-            <p className="text-base font-medium leading-relaxed">
-              El motor OCR extrae la información tal como aparece en la factura y la almacena de forma desagregada bajo el nodo <code className="font-bold bg-white/50 dark:bg-black/50 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-900">impuestos[]</code>. Este array agrupa en una sola lista tres conceptos que tienen signos contables opuestos: IVA puro (positivo), Recargo de Equivalencia (positivo) e IRPF o Retenciones (negativo). Si tu ERP suma ciegamente todos los valores del array sin discriminar el tipo, el total resultará incorrecto.
+          <div className="p-6 space-y-6 text-foreground text-sm">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              El motor OCR extrae la información tal como aparece en la factura y la almacena de forma desagregada bajo el nodo <code className="font-semibold bg-muted text-primary px-1.5 py-0.5 rounded border border-border">impuestos[]</code>. Este array agrupa en una sola lista tres conceptos que tienen signos contables opuestos: IVA puro (positivo), Recargo de Equivalencia (positivo) e IRPF o Retenciones (negativo). Si tu ERP suma ciegamente todos los valores del array sin discriminar el tipo, el total resultará incorrecto.
             </p>
 
-            <div className="bg-white/80 dark:bg-black/40 border border-red-200 dark:border-red-900/50 rounded-lg p-5">
-              <p className="mb-3 font-semibold text-red-800 dark:text-red-300">Fórmula obligatoria para recalcular o corroborar el total de un documento:</p>
-              <div className="font-mono bg-red-950 text-red-400 p-3 sm:p-4 rounded text-center text-xs sm:text-lg font-bold shadow-inner break-words overflow-x-auto">
+            <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-3">
+              <p className="font-semibold text-foreground text-sm">Fórmula obligatoria para recalcular o corroborar el total de un documento:</p>
+              <div className="font-mono bg-slate-950 text-slate-100 p-3 sm:p-4 rounded-lg text-center text-xs sm:text-base font-bold shadow-inner break-words overflow-x-auto border border-slate-800">
                 Total = Base Imponible + IVA_puro + Recargo - ABS(Retención)
               </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="bg-white/60 dark:bg-red-950/40 p-4 rounded-lg border border-red-100 dark:border-red-900/30">
-                <h4 className="font-bold mb-2 flex items-center gap-2">
-                  <span className="bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">+</span>
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                <h4 className="font-bold mb-2 flex items-center gap-2 text-foreground">
+                  <span className="bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold">+</span>
                   IVA Puro
                 </h4>
-                <p className="text-xs opacity-90 leading-relaxed">
-                  Identifica estos registros verificando que el campo <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">tipo_impuesto</code> <strong>no contenga</strong> las cadenas "RECARGO", "RETENCION" ni "IRPF". El valor del campo <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">cuota_impuesto</code> se suma a la base imponible.
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Identifica estos registros verificando que el campo <code className="font-mono bg-muted px-1 rounded">tipo_impuesto</code> <strong>no contenga</strong> las cadenas "RECARGO", "RETENCION" ni "IRPF". El valor del campo <code className="font-mono bg-muted px-1 rounded">cuota_impuesto</code> se suma a la base imponible.
                 </p>
               </div>
 
-              <div className="bg-white/60 dark:bg-red-950/40 p-4 rounded-lg border border-red-100 dark:border-red-900/30">
-                <h4 className="font-bold mb-2 flex items-center gap-2">
-                  <span className="bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">+</span>
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                <h4 className="font-bold mb-2 flex items-center gap-2 text-foreground">
+                  <span className="bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold">+</span>
                   Recargo de Equivalencia
                 </h4>
-                <p className="text-xs opacity-90 leading-relaxed">
-                  Identificable porque <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">tipo_impuesto</code> contiene "RECARGO". La <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">cuota_impuesto</code> es positiva y se suma también a la base. Es un impuesto adicional al IVA aplicable a comerciantes minoristas bajo este régimen.
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Identificable porque <code className="font-mono bg-muted px-1 rounded">tipo_impuesto</code> contiene "RECARGO". La <code className="font-mono bg-muted px-1 rounded">cuota_impuesto</code> es positiva y se suma también a la base. Es un impuesto adicional al IVA aplicable a comerciantes minoristas bajo este régimen.
                 </p>
               </div>
 
-              <div className="bg-white/60 dark:bg-red-950/40 p-4 rounded-lg border border-red-100 dark:border-red-900/30">
-                <h4 className="font-bold mb-2 flex items-center gap-2 text-red-700 dark:text-red-400">
-                  <span className="bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">-</span>
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                <h4 className="font-bold mb-2 flex items-center gap-2 text-destructive">
+                  <span className="bg-destructive text-destructive-foreground w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold">-</span>
                   Retención / IRPF
                 </h4>
-                <p className="text-xs opacity-90 leading-relaxed">
-                  <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">tipo_impuesto</code> contiene "RETENCION" o "IRPF". <strong className="underline">Crítico:</strong> La <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">cuota_impuesto</code> se almacena ya como valor negativo en la base de datos. Al restar usa <code className="font-mono">ABS()</code> o simplemente sumalo directamente (ya viene en negativo), evitando una doble negación.
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  <code className="font-mono bg-muted px-1 rounded">tipo_impuesto</code> contiene "RETENCION" o "IRPF". <strong className="underline text-foreground">Crítico:</strong> La <code className="font-mono bg-muted px-1 rounded">cuota_impuesto</code> se almacena ya como valor negativo en la base de datos. Al restar usa <code className="font-mono">ABS()</code> o sumalo directamente (ya viene en negativo).
                 </p>
               </div>
             </div>
 
-            <p className="text-xs opacity-80 border-t border-red-200 dark:border-red-900/50 pt-4">
-              <strong>Alternativa simplificada:</strong> Si solo necesitas los totales agregados para tu contabilidad y no requieres el detalle línea por línea, utiliza el endpoint <code className="font-mono">/api/v1/analytics</code>. Este endpoint ya aplica la fórmula internamente y te devuelve los campos <code className="font-mono">iva_repercutido</code>, <code className="font-mono">iva_soportado</code> y <code className="font-mono">retenciones_practicadas</code> calculados de forma limpia y lista para usar.
+            <p className="text-xs text-muted-foreground border-t border-border pt-4">
+              <strong>Alternativa simplificada:</strong> Si solo necesitas los totales agregados para tu contabilidad y no requieres el detalle línea por línea, utiliza el endpoint <code className="font-mono text-primary">/api/v1/analytics</code>. Este endpoint ya aplica la fórmula internamente y te devuelve los campos <code className="font-mono">iva_repercutido</code>, <code className="font-mono">iva_soportado</code> y <code className="font-mono">retenciones_practicadas</code> calculados de forma limpia.
             </p>
           </div>
         </section>
 
         {/* ====================== WEBHOOKS ====================== */}
         <section className="space-y-6" id="webhooks" data-tutorial="docs-webhooks-info">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-            <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <div className="flex items-center gap-2 pb-2 border-b border-border">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
               Webhooks (Notificaciones Push)
             </h2>
           </div>
 
-          <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="text-muted-foreground leading-relaxed">
             Los Webhooks envían peticiones HTTP POST automáticamente a tu ERP cuando ocurre un evento relevante, sin que tengas que hacer polling. Se configuran desde <strong>Dashboard → Webhooks</strong>.
           </p>
 
-          <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800/50 rounded-lg p-5 space-y-3 shadow-sm">
-            <h4 className="font-semibold text-sky-800 dark:text-sky-300 flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5" />
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 space-y-3 shadow-sm">
+            <h4 className="font-semibold text-foreground flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-primary" />
               Comportamiento del Motor de Webhooks
             </h4>
-            <ul className="list-disc list-inside text-sm text-sky-700 dark:text-sky-400/90 space-y-2 ml-1">
+            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2 ml-1">
               <li className="leading-relaxed">
-                <strong className="text-sky-900 dark:text-sky-200">Eventos concurrentes individuales (No hay lotes):</strong> Para simplificar y estabilizar las integraciones externas, el sistema no agrupa operaciones masivas en un solo payload gigante. Si subís un ZIP con 50 facturas, o eliminás 20 juntas, recibirás 50 peticiones individuales concurrentes. Tu endpoint debe estar preparado para absorber múltiples llamadas en paralelo.
+                <strong className="text-foreground">Eventos concurrentes individuales (No hay lotes):</strong> Para simplificar y estabilizar las integraciones externas, el sistema no agrupa operaciones masivas en un solo payload gigante. Si subís un ZIP con 50 facturas, o eliminás 20 juntas, recibirás 50 peticiones individuales concurrentes. Tu endpoint debe estar preparado para absorber múltiples llamadas en paralelo.
               </li>
               <li className="leading-relaxed">
-                <strong className="text-sky-900 dark:text-sky-200">Cascada de resolución:</strong> Cuando resolvés una incidencia manualmente desde el dashboard, se dispara un evento <code className="font-mono text-xs bg-sky-100 dark:bg-sky-900/50 px-1 rounded">incidencia.resuelta_manualmente</code>. Si tras esa resolución el documento queda limpio de errores y pasa a estado válido, el motor disparará inmediatamente después un segundo evento <code className="font-mono text-xs bg-sky-100 dark:bg-sky-900/50 px-1 rounded">documento.listo_para_erp</code> (siempre y cuando estés suscrito a él).
+                <strong className="text-foreground">Cascada de resolución:</strong> Cuando resolvés una incidencia manualmente desde el dashboard, se dispara un evento <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary">incidencia.resuelta_manualmente</code>. Si tras esa resolución el documento queda limpio de errores y pasa a estado válido, el motor disparará inmediatamente después un segundo evento <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary">documento.listo_para_erp</code> (siempre y cuando estés suscrito a él).
               </li>
             </ul>
           </div>
 
           <div className="space-y-8 mt-6">
-            <h3 className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-800 pb-2">Ejemplos de Payload por Evento</h3>
+            <h3 className="text-xl font-bold tracking-tight text-foreground border-b border-border pb-2">Ejemplos de Payload por Evento</h3>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.listo_para_erp</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Se dispara cuando el documento es validado (o al liberarse desde <code className="font-mono text-xs">incidencia.resuelta_manualmente</code>). Contiene toda la metadata contable para asentar el documento de inmediato en tu ERP.</p>
-              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+              <h4 className="text-xs font-semibold text-primary font-mono bg-primary/10 border border-primary/20 inline-block px-2.5 py-1 rounded">documento.listo_para_erp</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">Se dispara cuando el documento es validado (o al liberarse desde <code className="font-mono text-xs">incidencia.resuelta_manualmente</code>). Contiene toda la metadata contable para asentar el documento de inmediato en tu ERP.</p>
+              <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`{
   "webhook_id": 42,
   "evento": "documento.listo_para_erp",
@@ -621,9 +644,9 @@ export default function DocsPage() {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.modificado</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Incluye un array estricto (<code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">campos_actualizados</code>) detallando qué propiedades mutaron <strong>realmente</strong> tras una edición en el dashboard. Útil para hacer updates quirúrgicos en tu base de datos.</p>
-              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+              <h4 className="text-xs font-semibold text-primary font-mono bg-primary/10 border border-primary/20 inline-block px-2.5 py-1 rounded">documento.modificado</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">Incluye un array estricto (<code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-primary">campos_actualizados</code>) detallando qué propiedades mutaron <strong>realmente</strong> tras una edición en el dashboard. Útil para hacer updates quirúrgicos en tu base de datos.</p>
+              <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`{
   "webhook_id": 42,
   "evento": "documento.modificado",
@@ -642,9 +665,9 @@ export default function DocsPage() {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.requiere_atencion</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Evento de alerta. Avisa que un documento quedó retenido en el dashboard debido a descuadres matemáticos o validaciones fallidas.</p>
-              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+              <h4 className="text-xs font-semibold text-primary font-mono bg-primary/10 border border-primary/20 inline-block px-2.5 py-1 rounded">documento.requiere_atencion</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">Evento de alerta. Avisa que un documento quedó retenido en el dashboard debido a descuadres matemáticos o validaciones fallidas.</p>
+              <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`{
   "webhook_id": 42,
   "evento": "documento.requiere_atencion",
@@ -660,9 +683,9 @@ export default function DocsPage() {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">incidencia.resuelta_manualmente</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Indica que un usuario forzó la resolución de una incidencia. Inmediatamente después suele dispararse un evento <code className="font-mono text-xs">listo_para_erp</code>.</p>
-              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+              <h4 className="text-xs font-semibold text-primary font-mono bg-primary/10 border border-primary/20 inline-block px-2.5 py-1 rounded">incidencia.resuelta_manualmente</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">Indica que un usuario forzó la resolución de una incidencia. Inmediatamente después suele dispararse un evento <code className="font-mono text-xs text-primary">listo_para_erp</code>.</p>
+              <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`{
   "webhook_id": 42,
   "evento": "incidencia.resuelta_manualmente",
@@ -682,9 +705,9 @@ export default function DocsPage() {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400 font-mono bg-pink-50 dark:bg-pink-950/30 inline-block px-2 py-1 rounded">documento.eliminado</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Indica que un documento fue borrado del sistema. Útil para anular el registro de forma síncrona en tu ERP.</p>
-              <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed shadow-sm">
+              <h4 className="text-xs font-semibold text-primary font-mono bg-primary/10 border border-primary/20 inline-block px-2.5 py-1 rounded">documento.eliminado</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">Indica que un documento fue borrado del sistema. Útil para anular el registro de forma síncrona en tu ERP.</p>
+              <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`{
   "webhook_id": 42,
   "evento": "documento.eliminado",
@@ -700,16 +723,16 @@ export default function DocsPage() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Eventos disponibles</h3>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <h3 className="text-lg font-semibold text-foreground">Eventos disponibles</h3>
+            <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/80">
+                <thead className="bg-muted/50 border-b border-border">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Evento</th>
-                    <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Cuándo se dispara</th>
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Evento</th>
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Cuándo se dispara</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                <tbody className="divide-y divide-border">
                   {([
                     ['documento.listo_para_erp', 'Documento procesado o liberado de incidencias, listo para contabilizar. Incluye metadata contable completa (Entidades, IVA).'],
                     ['documento.requiere_atencion', 'Documento procesado con incidencias o descuadres contables.'],
@@ -717,9 +740,9 @@ export default function DocsPage() {
                     ['incidencia.resuelta_manualmente', 'Incidencia resuelta desde el dashboard. Acompañada casi siempre de un evento listo_para_erp subsiguiente.'],
                     ['documento.eliminado', 'Un documento fue eliminado del sistema.'],
                   ] as [string, string][]).map(([evento, desc]) => (
-                    <tr key={evento} className="bg-white dark:bg-slate-900/50">
-                      <td className="px-4 py-3 font-mono text-xs text-pink-600 dark:text-pink-400">{evento}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{desc}</td>
+                    <tr key={evento} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-primary font-semibold">{evento}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{desc}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -728,11 +751,11 @@ export default function DocsPage() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Verificación de Firma HMAC SHA-256</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Cada petición incluye el header <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono text-pink-600 dark:text-pink-400">X-Muvail-Signature</code> generado con HMAC SHA-256 usando el secreto único del webhook. <strong className="text-slate-700 dark:text-slate-200">Siempre verificá la firma</strong> antes de procesar.
+            <h3 className="text-lg font-semibold text-foreground">Verificación de Firma HMAC SHA-256</h3>
+            <p className="text-sm text-muted-foreground">
+              Cada petición incluye el header <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs text-primary font-semibold border border-border/50">X-Muvail-Signature</code> generado con HMAC SHA-256 usando el secreto único del webhook. <strong className="text-foreground">Siempre verificá la firma</strong> antes de procesar.
             </p>
-            <pre className="text-sm bg-slate-900 text-slate-300 p-5 rounded-xl overflow-x-auto leading-relaxed">
+            <pre className="text-sm bg-slate-950 text-slate-200 p-4 rounded-xl overflow-x-auto leading-relaxed shadow-sm border border-slate-800">
 {`import crypto from 'crypto';
 
 function verifyMuvailWebhook(rawBody: string, signature: string, secret: string): boolean {
