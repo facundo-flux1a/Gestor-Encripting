@@ -19,6 +19,8 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
         run: npm install --legacy-peer-deps
 
       - name: Sync Capacitor iOS & Pods
