@@ -102,19 +102,27 @@ export async function POST(request: NextRequest) {
 
     const empresaId = authResult.empresa_id; // Fuente de verdad: la BD
 
-    // 3. Leer filtros del body JSON (todos opcionales)
+    // 3. Leer filtros de Query Params (URL) o del Body JSON (ambos opcionales)
     let body: any = {};
     try {
       body = await request.json();
     } catch {
-      // body vacío es válido — exporta todo sin filtros
+      // body vacío es válido
     }
 
-    const trimestre: number | null = body.trimestre ? Number(body.trimestre) : null;
-    const año: number | null = body.año ? Number(body.año) : null;
-    const proveedor: string | null = body.proveedor?.trim() || null;
-    const cliente: string | null = body.cliente?.trim() || null;
-    const tipo: 'emitidas' | 'recibidas' | 'todas' = body.tipo || 'todas';
+    const searchParams = request.nextUrl.searchParams;
+
+    const trimestreRaw = body.trimestre ?? searchParams.get('trimestre') ?? searchParams.get('num_trimestre');
+    const añoRaw = body.año ?? body.anio ?? searchParams.get('año') ?? searchParams.get('anio');
+    const proveedorRaw = body.proveedor ?? searchParams.get('proveedor');
+    const clienteRaw = body.cliente ?? searchParams.get('cliente');
+    const tipoRaw = body.tipo ?? searchParams.get('tipo');
+
+    const trimestre: number | null = trimestreRaw ? Number(trimestreRaw) : null;
+    const año: number | null = añoRaw ? Number(añoRaw) : null;
+    const proveedor: string | null = proveedorRaw?.trim() || null;
+    const cliente: string | null = clienteRaw?.trim() || null;
+    const tipo: 'emitidas' | 'recibidas' | 'todas' = (tipoRaw as any) || 'todas';
 
     // Validaciones básicas
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
