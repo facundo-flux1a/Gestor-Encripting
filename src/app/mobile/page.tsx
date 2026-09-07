@@ -2,13 +2,19 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Camera, LogOut, Building2, CheckCircle2, Clock, AlertCircle, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
 import { DataRefreshProvider } from '@/context/DataRefreshProvider';
-import { UploadProgressManager } from '@/components/upload/upload-progress-card';
 import { MuvailLogo } from '@/components/brand/muvail-logo';
 import { isNativeApp } from '@/lib/is-native-app';
+
+// Cargado solo en el cliente para evitar el crash de useContext durante SSR
+const UploadProgressManager = dynamic(
+  () => import('@/components/upload/upload-progress-card').then(m => ({ default: m.UploadProgressManager })),
+  { ssr: false }
+);
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
