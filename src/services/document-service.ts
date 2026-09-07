@@ -4476,10 +4476,10 @@ export async function getDocumentosByTrimestre(
 
     const whereClause = whereConditions.join(' AND ');
 
-    // ✅ CLASIFICACIÓN DINÁMICA: obtener CIFs para subquery igual que Dashboard
+    // ✅ CLASIFICACIÓN DINÁMICA y NOMBRES DESENCRIPTADOS (vía Prisma)
     const empresasInfo = await prisma.empresas.findMany({
       where: { id: { in: empresaIds } },
-      select: { CIF: true }
+      select: { id: true, CIF: true, nombre_de_empresa: true }
     });
     const MY_COMPANY_FISCAL_IDS = empresasInfo.map((e: any) => e.CIF).filter(Boolean) as string[];
     const MY_COMPANY_FISCAL_COMBINED = MY_COMPANY_FISCAL_IDS.length > 0
@@ -4488,6 +4488,14 @@ export async function getDocumentosByTrimestre(
     const cifPlaceholders = MY_COMPANY_FISCAL_COMBINED.length > 0
       ? MY_COMPANY_FISCAL_COMBINED.map(() => '?').join(',')
       : "'NEVER_MATCH'";
+
+    const empresasMap = new Map<number, { nombre_de_empresa: string; CIF: string }>();
+    empresasInfo.forEach((e: any) => {
+      empresasMap.set(Number(e.id), {
+        nombre_de_empresa: e.nombre_de_empresa || '',
+        CIF: e.CIF || ''
+      });
+    });
 
     const query = `
 SELECT
@@ -4527,6 +4535,17 @@ SELECT
     console.log('📝 [getDocumentosByTrimestre] Params:', fullParams);
 
     const [documentRows] = await db.query<DocumentPacket[]>(query, fullParams);
+
+    // ✅ Inyectar nombre_de_empresa y CIF desencriptados desde Prisma
+    documentRows.forEach(doc => {
+      if (doc.id_de_empresa) {
+        const emp = empresasMap.get(Number(doc.id_de_empresa));
+        if (emp) {
+          doc.empresa_nombre = emp.nombre_de_empresa;
+          doc.empresa_cif = emp.CIF;
+        }
+      }
+    });
 
     console.log('✅ [getDocumentosByTrimestre] Documentos encontrados:', documentRows.length);
 
