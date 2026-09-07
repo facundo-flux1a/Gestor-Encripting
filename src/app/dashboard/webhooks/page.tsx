@@ -21,7 +21,7 @@ export default async function WebhooksPage() {
     orderBy: { id: 'asc' }
   });
 
-  const empRows = empRowsPrisma.map(e => ({
+  const empRows = empRowsPrisma.map((e: { id: bigint | number; nombre_de_empresa: string | null }) => ({
     id: Number(e.id),
     nombre_de_empresa: e.nombre_de_empresa || ''
   }));
@@ -34,7 +34,7 @@ export default async function WebhooksPage() {
     );
   }
 
-  const empresaIds = empRows.map(e => e.id);
+  const empresaIds = empRows.map((e: { id: number }) => e.id);
   const webhooks = await getWebhooks(empresaIds);
 
   return (

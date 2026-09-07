@@ -63,8 +63,15 @@ export async function POST(req: NextRequest) {
     const mailHash = hashField(cleanEmail);
 
     // 2. Lookup de Empresa
+    // Se busca primero por hash (blindIndex). El OR con mail_de_carga actúa como
+    // fallback para empresas que no tienen el hash calculado (ej. creadas manualmente).
     const empresaPrisma = await prisma.empresas.findFirst({
-      where: { mail_de_carga_hash: mailHash },
+      where: {
+        OR: [
+          { mail_de_carga_hash: mailHash },
+          { mail_de_carga: cleanEmail }
+        ]
+      },
       select: { id: true, CIF: true, recargo: true, nombre_de_empresa: true }
     });
 

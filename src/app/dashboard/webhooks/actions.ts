@@ -3,6 +3,7 @@
 import { createWebhook, deleteWebhook, updateWebhook } from '@/services/webhook-service';
 import { getCurrentUser } from '@/services/user-service';
 import { revalidatePath } from 'next/cache';
+import { prisma } from '@/lib/prisma';
 
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
@@ -70,6 +71,23 @@ export async function inlineUpdateWebhookAction(currentEmpresaId: number, webhoo
   const user = await getCurrentUser();
   if (!user) throw new Error('No autorizado');
 
+  if (updates.id_de_empresa !== undefined) {
+    const userEmpresa = await prisma.empresas.findFirst({
+      where: {
+        id: updates.id_de_empresa,
+        id_de_usuario: { array_contains: user.id }
+      },
+      select: { id: true }
+    });
+    if (!userEmpresa) throw new Error('No tienes permisos sobre la empresa de destino');
+  }
+
+  if (updates.url_destino !== undefined) {
+    if (!updates.url_destino || (!updates.url_destino.startsWith('http://') && !updates.url_destino.startsWith('https://'))) {
+      throw new Error('La URL de destino debe comenzar con http:// o https://');
+    }
+  }
+
   await updateWebhook(webhookId, currentEmpresaId, updates);
   revalidatePath('/dashboard/webhooks');
 }
@@ -82,8 +100,19 @@ export async function editWebhookDetailsAction(currentEmpresaId: number, webhook
   const newEmpresaIdStr = formData.get('empresaId') as string;
   const newEmpresaId = parseInt(newEmpresaIdStr, 10);
 
-  if (!urlDestino) throw new Error('URL es requerida');
+  if (!urlDestino || (!urlDestino.startsWith('http://') && !urlDestino.startsWith('https://'))) {
+    throw new Error('La URL debe comenzar con http:// o https://');
+  }
   if (!newEmpresaId || isNaN(newEmpresaId)) throw new Error('Empresa es requerida');
+
+  const userEmpresa = await prisma.empresas.findFirst({
+    where: {
+      id: newEmpresaId,
+      id_de_usuario: { array_contains: user.id }
+    },
+    select: { id: true }
+  });
+  if (!userEmpresa) throw new Error('No tienes permisos sobre la empresa de destino');
 
   await updateWebhook(webhookId, currentEmpresaId, { 
     url_destino: urlDestino,
