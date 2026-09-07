@@ -1,18 +1,27 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Camera, LogOut, Building2, CheckCircle2, Clock, AlertCircle, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
-import { DataRefreshProvider } from '@/context/DataRefreshProvider';
 import { MuvailLogo } from '@/components/brand/muvail-logo';
 import { isNativeApp } from '@/lib/is-native-app';
 
-// Cargado solo en el cliente para evitar el crash de useContext durante SSR
-const UploadProgressManager = dynamic(
-  () => import('@/components/upload/upload-progress-card').then(m => ({ default: m.UploadProgressManager })),
+// DataRefreshProvider + UploadProgressManager se cargan solo en el cliente
+// para evitar el crash de useContext durante el SSR de Next.js
+const MobileProgressOverlay = dynamic(
+  async () => {
+    const { DataRefreshProvider } = await import('@/context/DataRefreshProvider');
+    const { UploadProgressManager } = await import('@/components/upload/upload-progress-card');
+    return function MobileProgressOverlayInner({ userId }: { userId: number }) {
+      return (
+        <DataRefreshProvider>
+          <UploadProgressManager userId={userId} />
+        </DataRefreshProvider>
+      );
+    };
+  },
   { ssr: false }
 );
 
@@ -72,7 +81,6 @@ function saveHistory(userId: number, records: MobileUploadRecord[]) {
 // ─── Componente interno (necesita DataRefreshProvider) ───────────────────────
 
 function MobileContent() {
-  const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   // true = la URL fue cargada desde la APK nativa
@@ -103,7 +111,7 @@ function MobileContent() {
       })
       .catch(() => {})
       .finally(() => setLoadingUser(false));
-  }, [router]);
+  }, []);
 
   // ── Cargar empresas ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -352,8 +360,8 @@ function MobileContent() {
           />
         </section>
 
-        {/* Cola de progreso */}
-        <UploadProgressManager userId={user.id} />
+        {/* Cola de progreso — cargada client-only para evitar crash SSR */}
+        <MobileProgressOverlay userId={user.id} />
 
         {/* Historial del día */}
         <section>
@@ -401,12 +409,8 @@ function MobileContent() {
   );
 }
 
-// ─── Página exportada (envuelta en DataRefreshProvider) ───────────────────────
+// ─── Página exportada ────────────────────────────────────────────────────────
 
 export default function MobilePage() {
-  return (
-    <DataRefreshProvider>
-      <MobileContent />
-    </DataRefreshProvider>
-  );
+  return <MobileContent />;
 }
