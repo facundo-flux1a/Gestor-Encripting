@@ -15,18 +15,21 @@ const nextConfig: NextConfig = {
   turbopack: {
     root,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve = config.resolve || {};
     config.resolve.modules = [
       path.join(root, 'node_modules'),
       ...(config.resolve.modules || ['node_modules']),
     ];
-    // Force all packages to use the same React instance (prevents createContext errors)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      react: path.resolve(path.join(root, 'node_modules/react')),
-      'react-dom': path.resolve(path.join(root, 'node_modules/react-dom')),
-    };
+    // Force client bundle to use the same React instance (prevents createContext errors on frontend)
+    // Server bundle MUST NOT be aliased so Next.js internal RSC dispatcher is preserved
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        react: path.resolve(path.join(root, 'node_modules/react')),
+        'react-dom': path.resolve(path.join(root, 'node_modules/react-dom')),
+      };
+    }
     return config;
   },
   images: {
