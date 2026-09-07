@@ -285,6 +285,7 @@ export async function login(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const inviteToken = formData.get('invite_token') as string;
+  const nextParam = formData.get('next') as string;
 
   if (!email || !password) {
     return redirect('/auth/login?error=invalid_credentials');
@@ -342,7 +343,9 @@ export async function login(formData: FormData) {
       await acceptInvitation(inviteToken, Number(userId));
     }
     
-    redirect('/dashboard');
+    // Redirigir al destino post-login: next param si es una ruta interna, /dashboard si no.
+    const destination = (nextParam && nextParam.startsWith('/')) ? nextParam : '/dashboard';
+    redirect(destination);
 
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) throw error;

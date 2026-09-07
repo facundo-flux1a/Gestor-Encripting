@@ -212,6 +212,7 @@ function LoginForm() {
   const inviteToken = searchParams.get('token');
   const invitedEmail = searchParams.get('email');
   const emailLocked = !!inviteToken && !!invitedEmail;
+  const nextUrl = searchParams.get('next') || '';
 
   const [email, setEmail] = useState(invitedEmail || '');
   const [recientes, setRecientes] = useState<string[]>([]);
@@ -240,6 +241,7 @@ function LoginForm() {
   return (
     <form action={enviar} className="space-y-5">
       {inviteToken && <input type="hidden" name="invite_token" value={inviteToken} />}
+      {nextUrl && <input type="hidden" name="next" value={nextUrl} />}
 
       <div className="space-y-2">
         <Label htmlFor="email" className="font-semibold text-[#f4fffc]">Correo electrónico</Label>
