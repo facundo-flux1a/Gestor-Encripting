@@ -44,4 +44,13 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- Necesario en Android 11+ (API 30+): permite que resolveActivity() encuentre
+         la app de cámara del sistema. Sin esto, Capacitor cae al file picker genérico
+         y el usuario ve Google Fotos en vez de la cámara. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
 </manifest>

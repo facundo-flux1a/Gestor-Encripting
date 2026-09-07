@@ -12,6 +12,7 @@ import {
 const publicRoutes = [
   '/',
   '/landing',
+  '/mobile',           // Vista móvil de la APK (maneja auth internamente)
   '/auth/login',
   '/auth/register',
   '/auth/forgot-password',
