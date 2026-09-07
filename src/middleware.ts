@@ -108,8 +108,10 @@ export async function middleware(request: NextRequest) {
       // ✅ Si es login/register y ya tiene sesión -> Dashboard (salvo si viene con ?logout=true o ?force=true)
       const isForceLogin = request.nextUrl.searchParams.has('logout') || request.nextUrl.searchParams.has('force');
       if ((pathname.startsWith('/auth/login') || pathname.startsWith('/auth/register')) && !hasToken && !isForceLogin) {
+        const nextParam = request.nextUrl.searchParams.get('next');
+        const targetUrl = (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')) ? nextParam : '/dashboard';
         return renovarSesionSiHaceFalta(
-          NextResponse.redirect(new URL('/dashboard', request.url)),
+          NextResponse.redirect(new URL(targetUrl, request.url)),
           payload,
           secretKey
         );

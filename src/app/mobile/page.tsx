@@ -105,8 +105,9 @@ function MobileContent() {
     fetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.id) {
-          setUser({ id: Number(data.id), email: data.email, nombre: data.nombre });
+        const u = data?.user || (data?.id ? data : null);
+        if (u?.id) {
+          setUser({ id: Number(u.id), email: u.email, nombre: u.nombre });
         }
       })
       .catch(() => {})
