@@ -92,11 +92,6 @@ function MobileContent() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.id) {
-          // Si NO es la APK y tiene sesión → redirigir al dashboard completo
-          if (!isNativeApp()) {
-            router.replace('/dashboard');
-            return;
-          }
           setUser({ id: Number(data.id), email: data.email, nombre: data.nombre });
         }
       })
@@ -210,8 +205,7 @@ function MobileContent() {
   // Sin sesión: según si es APK o desktop, el login va a destinos distintos
   if (!user) {
     // En desktop: ir al login normal que redirige al dashboard (no a /mobile)
-    // En APK: login con ?next=/mobile para volver aquí tras autenticarse
-    const loginHref = isNative ? '/auth/login?next=/mobile' : '/auth/login';
+    const loginHref = '/auth/login?next=/mobile';
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-6 text-center">
         <MuvailLogo className="h-10 w-auto" />
