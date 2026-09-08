@@ -21,8 +21,11 @@ import {
     Eye,
     Info,
     Sparkles,
-    Loader2
+    Loader2,
+    Calendar,
+    UploadCloud
 } from 'lucide-react';
+import { formatFechaLocal } from '@/lib/client-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -350,7 +353,7 @@ export default function HealthCheckPage() {
                                 <TableRow>
                                     <TableHead className="w-[150px]">Factura</TableHead>
                                     <TableHead>Emisor</TableHead>
-                                    <TableHead>Fecha</TableHead>
+                                    <TableHead className="min-w-[190px]">Fechas</TableHead>
                                     <TableHead className="text-right">Importe</TableHead>
                                     <TableHead>Diagnóstico</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
@@ -373,8 +376,28 @@ export default function HealthCheckPage() {
                                                         <span className="text-xs text-muted-foreground">ID: #{doc.id_documento}</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">
-                                                    {doc.fecha_emision ? new Date(doc.fecha_emision).toLocaleDateString('es-ES') : 'N/A'}
+                                                <TableCell className="whitespace-nowrap">
+                                                    <div className="flex flex-col gap-1">
+                                                        {/* Fecha de Subida */}
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[11px] font-medium text-muted-foreground/80 w-16">Subida:</span>
+                                                            <span className="font-semibold text-foreground text-sm">
+                                                                {formatFechaLocal(doc.fecha_creacion || doc.fecha_emision)}
+                                                            </span>
+                                                        </div>
+                                                        {/* Fecha Contable */}
+                                                        {doc.fecha_emision && (
+                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                <span className="text-[11px] font-medium text-muted-foreground/80 w-16">Contable:</span>
+                                                                <span>{formatFechaLocal(doc.fecha_emision)}</span>
+                                                                {doc.año_trimestre && doc.num_trimestre ? (
+                                                                    <span className="text-[11px] text-muted-foreground/70 font-mono">
+                                                                        ({doc.año_trimestre}-T{doc.num_trimestre})
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-right font-semibold">
                                                     {new Intl.NumberFormat('es-ES', {

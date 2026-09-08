@@ -5517,12 +5517,19 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
               d.importe_sin_impuestos +
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-              COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+              COALESCE(imp.total_cuota, 0)
           )) > 0.05)
       ) THEN 1 ELSE 0 END) as mismatches
     FROM documentos d
+    LEFT JOIN (
+      SELECT di2.documento_id, SUM(di2.cuota) as total_cuota
+      FROM impuestos_documento di2
+      JOIN documentos d2 ON di2.documento_id = d2.id
+      WHERE d2.id_de_empresa IN (?)
+      GROUP BY di2.documento_id
+    ) imp ON imp.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
-  `, [companyIds]);
+  `, [companyIds, companyIds]);
 
   // ─── FASE 1: Detectar y registrar checks LÓGICOS ───────────────────────────
 
@@ -5536,16 +5543,25 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
         YEAR(d.fecha_emision) != d.año_trimestre
         OR YEAR(d.fecha_emision) < 2020
       )
-      AND d.id NOT IN (SELECT documento_id FROM ${dbName}.health_check_status WHERE verified = 0)
+      AND NOT EXISTS (
+        SELECT 1 FROM ${dbName}.health_check_status hcs 
+        WHERE hcs.documento_id = d.id
+      )
   `, [companyIds]);
 
-  for (const doc of fechaAnomalas as any[]) {
-    const motivo = `Fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR.`;
+  if ((fechaAnomalas as any[]).length > 0) {
+    const dataToInsert = (fechaAnomalas as any[]).map(doc => ({
+      documento_id: Number(doc.id),
+      empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null,
+      verified: false,
+      check_type: 'FECHA_ANOMALA',
+      motivo: `Fecha de emisión (${doc.fecha_fmt}) no coincide con el año del trimestre asignado (${doc.año_trimestre}). Posible error de OCR.`
+    }));
     await prisma.health_check_status.createMany({
-      data: [{ documento_id: Number(doc.id), empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null, verified: false, check_type: 'FECHA_ANOMALA', motivo }] as any[],
+      data: dataToInsert,
       skipDuplicates: true
     });
-    console.log(`📅 [HealthCheck] Fecha anómala registrada para doc #${doc.id}`);
+    console.log(`📅 [HealthCheck] Registradas ${dataToInsert.length} fechas anómalas en batch.`);
   }
 
   // 1b. Entidad duplicada: misma entidad como emisor/proveedor Y receptor/cliente
@@ -5557,36 +5573,49 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
     FROM entidades_documento ed
     JOIN documentos d ON ed.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
-      AND ed.documento_id NOT IN (SELECT documento_id FROM ${dbName}.health_check_status WHERE verified = 0)
+      AND NOT EXISTS (
+        SELECT 1 FROM ${dbName}.health_check_status hcs 
+        WHERE hcs.documento_id = ed.documento_id
+      )
     GROUP BY ed.documento_id, entidad_key
     HAVING SUM(ed.rol IN ('emisor','proveedor')) > 0
        AND SUM(ed.rol IN ('receptor','cliente')) > 0
   `, [companyIds]);
 
-  for (const doc of entidadesDuplicadas as any[]) {
-    // ✅ Obtener nombre desencriptado con Prisma
-    let nombreEntidad = doc.entidad_key || 'Desconocida';
-    if (doc.entidad_id_sample) {
-      const [rows] = await db.query<{ id: string }[]>(`
-        SELECT id FROM entidades_documento
-        WHERE id = ?
-        LIMIT 1
-      `, [doc.entidad_id_sample]);
+  if ((entidadesDuplicadas as any[]).length > 0) {
+    const dataToInsert: any[] = [];
+    for (const doc of entidadesDuplicadas as any[]) {
+      // ✅ Obtener nombre desencriptado con Prisma
+      let nombreEntidad = doc.entidad_key || 'Desconocida';
+      if (doc.entidad_id_sample) {
+        const [rows] = await db.query<{ id: string }[]>(`
+          SELECT id FROM entidades_documento
+          WHERE id = ?
+          LIMIT 1
+        `, [doc.entidad_id_sample]);
 
-      if (rows.length > 0) {
-        const entidad = await prisma.entidades_documento.findUnique({ where: { id: BigInt(rows[0].id) }, select: { nombre: true, identificador_fiscal: true } });
-        if (entidad) {
-          nombreEntidad = entidad.nombre || entidad.identificador_fiscal || nombreEntidad;
+        if (rows.length > 0) {
+          const entidad = await prisma.entidades_documento.findUnique({ where: { id: BigInt(rows[0].id) }, select: { nombre: true, identificador_fiscal: true } });
+          if (entidad) {
+            nombreEntidad = entidad.nombre || entidad.identificador_fiscal || nombreEntidad;
+          }
         }
       }
+
+      dataToInsert.push({
+        documento_id: Number(doc.documento_id),
+        empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null,
+        verified: false,
+        check_type: 'ENTIDAD_DUPLICADA',
+        motivo: `La entidad "${nombreEntidad}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`
+      });
     }
 
-    const motivo = `La entidad "${nombreEntidad}" aparece simultáneamente como emisor/proveedor y receptor/cliente en el mismo documento.`;
     await prisma.health_check_status.createMany({
-      data: [{ documento_id: Number(doc.documento_id), empresa_id: doc.id_de_empresa ? Number(doc.id_de_empresa) : null, verified: false, check_type: 'ENTIDAD_DUPLICADA', motivo }] as any[],
+      data: dataToInsert,
       skipDuplicates: true
     });
-    console.log(`🔁 [HealthCheck] Entidad duplicada registrada para doc #${doc.documento_id}`);
+    console.log(`🔁 [HealthCheck] Registradas ${dataToInsert.length} entidades duplicadas en batch.`);
   }
 
   // ─── FASE 2: Fetch documents with mismatches OR pending confirmation (verified = 0) ───
@@ -5604,7 +5633,7 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
             d.importe_sin_impuestos +
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-            COALESCE((SELECT SUM(di2.cuota) FROM impuestos_documento di2 WHERE di2.documento_id = d.id), 0)
+            COALESCE(imp.total_cuota, 0)
         )))
         ELSE 0
       END) as mismatch_amount,
@@ -5612,13 +5641,20 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
       hcs.check_type as hcs_check_type,
       hcs.motivo as hcs_motivo
     FROM documentos d
+    LEFT JOIN (
+      SELECT di2.documento_id, SUM(di2.cuota) as total_cuota
+      FROM impuestos_documento di2
+      JOIN documentos d2 ON di2.documento_id = d2.id
+      WHERE d2.id_de_empresa IN (?)
+      GROUP BY di2.documento_id
+    ) imp ON imp.documento_id = d.id
     LEFT JOIN ${dbName}.health_check_status hcs ON hcs.documento_id = d.id
     WHERE d.id_de_empresa IN (?)
     HAVING (mismatch_amount > 0.05 AND (hcs.verified IS NULL OR hcs.verified = 0))
        OR (mismatch_amount <= 0.05 AND hcs.verified = 0)
     ORDER BY d.fecha_emision DESC
     LIMIT 50
-  `, [companyIds]);
+  `, [companyIds, companyIds]);
 
   let documents = await mapDocumentPacketsToDocuments(docRows);
   const triggeredDiagnoses: number[] = [];

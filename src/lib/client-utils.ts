@@ -20,6 +20,52 @@ export function parseFechaLocal(fecha: Date | string): Date {
 }
 
 /**
+ * Formatea una fecha de calendario (YYYY-MM-DD o ISO) a formato legible en español (DD/MM/YYYY)
+ * SIN desfases de huso horario (independiente de la zona horaria del navegador o servidor).
+ */
+export function formatFechaLocal(fecha: Date | string | null | undefined): string {
+  if (!fecha) return 'N/A';
+  if (typeof fecha === 'string') {
+    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha.trim());
+    if (isoMatch) {
+      return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+    }
+  }
+  const date = parseFechaLocal(fecha);
+  if (isNaN(date.getTime())) return 'N/A';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/**
+ * Formatea la fecha de subida / creación (timestamp con hora) en formato español.
+ */
+export function formatFechaHoraSubida(fecha: Date | string | null | undefined): { fecha: string; hora: string } {
+  if (!fecha) return { fecha: 'N/A', hora: '' };
+  try {
+    const d = new Date(fecha);
+    if (isNaN(d.getTime())) return { fecha: 'N/A', hora: '' };
+    const fechaStr = d.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Europe/Madrid'
+    });
+    const horaStr = d.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Madrid'
+    });
+    return { fecha: fechaStr, hora: horaStr };
+  } catch {
+    return { fecha: 'N/A', hora: '' };
+  }
+}
+
+
+/**
  * Calcula el trimestre natural correspondiente a una fecha:
  * - T1: Enero - Marzo (meses 1-3)
  * - T2: Abril - Junio (meses 4-6)

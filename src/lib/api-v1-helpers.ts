@@ -5,6 +5,8 @@
  * y /api/v1/documents/full según las especificaciones de integración contable.
  */
 
+import { buildProxyUrl } from '@/lib/s3-client';
+
 export interface FormattedEntity {
   nombre: string | null;
   cif: string | null;
@@ -80,23 +82,16 @@ export function formatEntityData(ent: any): FormattedEntity {
 }
 
 /**
- * Normaliza y genera la URL pública del archivo PDF sin duplicar prefijos de MinIO.
+ * Devuelve la URL del proxy interno (/api/files/[filename]) para acceder al archivo.
+ * Con bucket privado, ninguna URL pública de MinIO debe exponerse al exterior.
  */
 export function buildFileUrl(rutaArchivo: string | null | undefined): string | null {
   if (!rutaArchivo || typeof rutaArchivo !== 'string') return null;
   const trimmed = rutaArchivo.trim();
   if (!trimmed) return null;
-
-  // Si ya es una URL absoluta, devolverla directamente
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-
-  const MINIO_ENDPOINT = (process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar').replace(/\/$/, '');
-  const MINIO_BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'flux1a';
-  const cleanPath = trimmed.replace(/^\//, '');
-
-  return `${MINIO_ENDPOINT}/${MINIO_BUCKET_NAME}/${cleanPath}`;
+  // Si ya es URL del proxy interno, devolver tal cual
+  if (trimmed.startsWith('/api/')) return trimmed;
+  return buildProxyUrl(trimmed);
 }
 
 export interface FormattedLine {
