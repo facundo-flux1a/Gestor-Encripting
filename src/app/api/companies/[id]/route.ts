@@ -153,7 +153,11 @@ export async function PATCH(
 
     if ('name' in body) updateData.nombre_de_empresa = body.name.trim();
     if ('nombreFiscal' in body) updateData.nombre_fiscal = body.nombreFiscal?.trim() || null;
-    if ('cif' in body) updateData.CIF = body.cif?.trim() || null;
+    if ('cif' in body) {
+      const cifVal = body.cif?.trim() || null;
+      updateData.CIF = cifVal;
+      updateData.cif_hash = cifVal ? hashField(cifVal) : null;
+    }
     if ('mailDeCarga' in body) {
       const mailVal = body.mailDeCarga?.trim() || null;
       updateData.mail_de_carga = mailVal;

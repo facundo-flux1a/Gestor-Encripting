@@ -1729,6 +1729,7 @@ export function DocumentsTable({
           */}
           <div className="w-full rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border overflow-hidden">
             <DataTable
+              key={`${selectedCompanyIds.join('_')}-${viewId || filename}`}
               columns={columns}
               data={documents}
               hiddenColumns={hiddenColumns}

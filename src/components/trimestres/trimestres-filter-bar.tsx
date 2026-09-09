@@ -6,18 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-} from '@/components/ui/command';
 import {
     Collapsible,
     CollapsibleContent,
@@ -79,6 +73,27 @@ function MultiSelectFilter({
     isLoading?: boolean;
 }) {
     const [open, setOpen] = React.useState(false);
+    const [search, setSearch] = React.useState('');
+
+    const filteredOptions = React.useMemo(() => {
+        if (!search.trim()) return options;
+        const q = search.toLowerCase();
+        return options.filter(o => o.toLowerCase().includes(q));
+    }, [options, search]);
+
+    const allSelected = filteredOptions.length > 0 && filteredOptions.every(o => selected.includes(o));
+    const someSelected = filteredOptions.some(o => selected.includes(o));
+
+    const toggleAll = () => {
+        if (allSelected) {
+            // Deseleccionar los visibles
+            onChange(selected.filter(v => !filteredOptions.includes(v)));
+        } else {
+            // Seleccionar los visibles
+            const set = new Set([...selected, ...filteredOptions]);
+            onChange(Array.from(set));
+        }
+    };
 
     const toggle = (value: string) => {
         onChange(selected.includes(value)
@@ -88,48 +103,142 @@ function MultiSelectFilter({
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(''); }}>
             <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 border-dashed gap-1.5" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                        'h-8 border-dashed gap-1.5 text-xs transition-all duration-200',
+                        selected.length > 0 && 'border-primary/70 bg-primary/15 font-semibold text-primary ring-1 ring-primary/30'
+                    )}
+                    disabled={isLoading}
+                >
+                    {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />}
                     <span>{title}</span>
                     {selected.length > 0 && (
                         <>
                             <span className="mx-1 h-4 w-px bg-border" />
-                            <Badge variant="secondary" className="h-5 px-1 text-[10px] font-mono">{selected.length}</Badge>
+                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono bg-primary/20 text-primary border border-primary/30 font-bold">{selected.length}</Badge>
                         </>
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[220px] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder={`Buscar ${title.toLowerCase()}...`} />
-                    {isLoading ? (
-                        <div className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+            <PopoverContent className="w-[260px] p-0 rounded-xl shadow-xl" align="start">
+                {isLoading ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+                    </div>
+                ) : (
+                    <div className="flex flex-col">
+                        {/* Buscador */}
+                        <div className="flex items-center border-b border-border/40 px-3 py-2">
+                            <input
+                                autoFocus
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder={`Buscar ${title.toLowerCase()}...`}
+                                className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
+                            />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    className="ml-1 shrink-0 rounded-full p-0.5 text-muted-foreground/60 hover:text-foreground transition-colors"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            )}
                         </div>
-                    ) : (
-                        <>
-                            <CommandEmpty>Sin resultados</CommandEmpty>
-                            <CommandGroup className="max-h-60 overflow-auto">
-                                {options.map(option => {
+
+                        {/* Fila "Seleccionar todo" con botón Deseleccionar todo */}
+                        <div className="flex items-center justify-between border-b border-border/30 px-3 py-2 bg-muted/20">
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={toggleAll}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        toggleAll();
+                                    }
+                                }}
+                                className={cn(
+                                    'flex items-center gap-2 text-xs font-semibold transition-colors duration-150',
+                                    'hover:text-primary cursor-pointer select-none',
+                                    allSelected ? 'text-primary' : 'text-muted-foreground'
+                                )}
+                            >
+                                <Checkbox
+                                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                                    className="h-4 w-4 rounded pointer-events-none"
+                                    aria-label="Seleccionar todos"
+                                />
+                                <span className="truncate">
+                                    {allSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                    {filteredOptions.length !== options.length && ` (${filteredOptions.length})`}
+                                </span>
+                            </div>
+                            {selected.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => onChange([])}
+                                    className="text-[10px] font-medium text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-2"
+                                >
+                                    Deseleccionar todo
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Lista de opciones con Checkbox */}
+                        {filteredOptions.length === 0 ? (
+                            <p className="py-4 text-center text-xs text-muted-foreground">Sin resultados</p>
+                        ) : (
+                            <ul className="max-h-60 overflow-y-auto py-1">
+                                {filteredOptions.map(option => {
                                     const isSelected = selected.includes(option);
                                     return (
-                                        <CommandItem key={option} onSelect={() => toggle(option)}>
-                                            <div className={cn(
-                                                'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary flex-shrink-0',
-                                                isSelected ? 'bg-primary text-primary-foreground' : 'opacity-50 [&_svg]:invisible'
-                                            )}>
-                                                <Check className="h-4 w-4" />
-                                            </div>
-                                            <span className="truncate text-sm">{option}</span>
-                                        </CommandItem>
+                                        <li key={option}>
+                                            <button
+                                                type="button"
+                                                onClick={() => toggle(option)}
+                                                className={cn(
+                                                    'flex w-full items-center gap-2.5 px-3 py-1.5 text-xs transition-colors duration-150',
+                                                    'hover:bg-primary/8 cursor-pointer text-left',
+                                                    isSelected && 'text-primary font-medium bg-primary/5'
+                                                )}
+                                            >
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    className="h-4 w-4 shrink-0 rounded pointer-events-none"
+                                                    aria-label={option}
+                                                />
+                                                <span className="truncate">{option}</span>
+                                            </button>
+                                        </li>
                                     );
                                 })}
-                            </CommandGroup>
-                        </>
-                    )}
-                </Command>
+                            </ul>
+                        )}
+
+                        {/* Footer si hay filtro activo */}
+                        {selected.length > 0 && (
+                            <div className="border-t border-border/30 px-3 py-1.5 flex items-center justify-between bg-muted/10">
+                                <span className="text-[10px] text-muted-foreground">
+                                    {selected.length} seleccionado{selected.length > 1 ? 's' : ''}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => onChange([])}
+                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                    <X className="h-3 w-3" />
+                                    Limpiar filtro
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </PopoverContent>
         </Popover>
     );

@@ -118,10 +118,10 @@ function TrimestresPageContent() {
   // ─── FILTROS DE LA TABLA DE DOCUMENTOS ─────────────────────────────────────
   const [filters, setFilters] = React.useState<TrimestresFilterState>(EMPTY_FILTERS);
 
-  // ── Resetear filtros al cambiar de periodo ──
+  // ── Resetear filtros al cambiar de periodo o de empresa ──
   React.useEffect(() => {
     setFilters(EMPTY_FILTERS);
-  }, [selectedAños, selectedPeriodos]);
+  }, [selectedAños, selectedPeriodos, selectedCompanyIds]);
 
   const handleToggleAño = (año: number) => {
     setSelectedAños(prev => {

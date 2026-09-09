@@ -4,6 +4,7 @@ import { Column, Table } from '@tanstack/react-table';
 import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Command,
   CommandEmpty,
@@ -93,11 +94,46 @@ export function DataTableFacetedFilter<TData, TValue>({
   fullWidth = false,
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const [open, setOpen] = useState(false);
-  const selectedValues = new Set(column?.getFilterValue() as string[]);
+  const [search, setSearch] = useState('');
+
+  // Leer siempre desde la columna para estar en sincronía
+  const rawFilter = column?.getFilterValue() as string[] | undefined;
+  const selectedValues = new Set<string>(rawFilter ?? []);
   const hasActiveFilter = selectedValues.size > 0;
 
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const q = search.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, search]);
+
+  const allSelected =
+    filteredOptions.length > 0 && filteredOptions.every((o) => selectedValues.has(o.value));
+  const someSelected = filteredOptions.some((o) => selectedValues.has(o.value));
+
+  const toggleAll = () => {
+    const next = new Set(selectedValues);
+    if (allSelected) {
+      // Deseleccionar solo los visibles
+      filteredOptions.forEach((o) => next.delete(o.value));
+    } else {
+      // Seleccionar todos los visibles
+      filteredOptions.forEach((o) => next.add(o.value));
+    }
+    const arr = Array.from(next);
+    column?.setFilterValue(arr.length ? arr : undefined);
+  };
+
+  const toggleOption = (value: string) => {
+    const next = new Set(selectedValues);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    const arr = Array.from(next);
+    column?.setFilterValue(arr.length ? arr : undefined);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(''); }}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -126,51 +162,121 @@ export function DataTableFacetedFilter<TData, TValue>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn(filterPopoverClass, 'w-[220px]')} align="start">
-        <Command filter={includesCommandFilter}>
-          <CommandInput placeholder={`Buscar ${title?.toLowerCase()}...`} className="h-9" />
-          {isLoading ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+      <PopoverContent className={cn(filterPopoverClass, 'w-[260px] p-0')} align="start">
+        {isLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {/* Buscador */}
+            <div className="flex items-center border-b border-border/40 px-3 py-2">
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Buscar ${title?.toLowerCase()}...`}
+                className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="ml-1 shrink-0 rounded-full p-0.5 text-muted-foreground/60 hover:text-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
-          ) : (
-            <>
-              <CommandEmpty className="py-4 text-xs">Sin coincidencias</CommandEmpty>
-              <CommandList>
-                <CommandGroup className="max-h-56 overflow-auto p-1">
-                  {options.map((option) => {
-                    const isSelected = selectedValues.has(option.value);
-                    return (
-                      <CommandItem
-                        key={option.value}
-                        value={option.label}
-                        onSelect={() => {
-                          if (isSelected) selectedValues.delete(option.value);
-                          else selectedValues.add(option.value);
-                          const filterValues = Array.from(selectedValues);
-                          column?.setFilterValue(filterValues.length ? filterValues : undefined);
-                        }}
-                        className="rounded-lg transition-colors duration-200 cursor-pointer"
+
+            {/* Fila "Seleccionar todo" con botón rápido para deseleccionar */}
+            <div className="flex items-center justify-between border-b border-border/30 px-3 py-2 bg-muted/20">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={toggleAll}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleAll();
+                  }
+                }}
+                className={cn(
+                  'flex items-center gap-2 text-xs font-semibold transition-colors duration-150',
+                  'hover:text-primary cursor-pointer select-none',
+                  allSelected ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                  className="h-4 w-4 rounded pointer-events-none"
+                  aria-label="Seleccionar todos"
+                />
+                <span className="truncate">
+                  {allSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                  {filteredOptions.length !== options.length && ` (${filteredOptions.length})`}
+                </span>
+              </div>
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  onClick={() => column?.setFilterValue(undefined)}
+                  className="text-[10px] font-medium text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-2"
+                >
+                  Deseleccionar todo
+                </button>
+              )}
+            </div>
+
+            {/* Lista de opciones */}
+            {filteredOptions.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">Sin coincidencias</p>
+            ) : (
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {filteredOptions.map((option) => {
+                  const isSelected = selectedValues.has(option.value);
+                  return (
+                    <li key={option.value}>
+                      <button
+                        type="button"
+                        onClick={() => toggleOption(option.value)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 px-3 py-1.5 text-xs transition-colors duration-150',
+                          'hover:bg-primary/8 cursor-pointer text-left',
+                          isSelected && 'text-primary font-medium bg-primary/5'
+                        )}
                       >
-                        <div
-                          className={cn(
-                            'mr-2 flex h-4 w-4 items-center justify-center rounded-md border transition-all duration-200',
-                            isSelected
-                              ? 'border-primary bg-primary text-primary-foreground scale-100'
-                              : 'border-border/60 opacity-60 scale-95'
-                          )}
-                        >
-                          <Check className={cn('h-3 w-3', !isSelected && 'invisible')} />
-                        </div>
+                        <Checkbox
+                          checked={isSelected}
+                          className="h-4 w-4 shrink-0 rounded pointer-events-none"
+                          aria-label={option.label}
+                        />
                         <span className="truncate">{option.label}</span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </>
-          )}
-        </Command>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {/* Footer: limpiar selección */}
+            {hasActiveFilter && (
+              <div className="border-t border-border/30 px-3 py-1.5 flex items-center justify-between bg-muted/10">
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedValues.size} seleccionado{selectedValues.size > 1 ? 's' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => column?.setFilterValue(undefined)}
+                  className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                  Limpiar filtro
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

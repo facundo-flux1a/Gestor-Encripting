@@ -61,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText, Hash } from 'lucide-react';
+import { ChevronDown, GripVertical, ArrowUpDown, Search, ChevronLeft, ChevronRight, RotateCcw, FileText, Hash, FilterX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/dashboard/export-button';
 import {
@@ -489,37 +489,19 @@ export function DataTable<TData extends object, TValue>({
   const [idFilterText, setIdFilterText] = React.useState('');
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
-  // 🆕 PERSISTENCIA DE FILTROS DE TABLA (Trimestres, Años, Tipos, etc.)
-  const isFiltersLoadedRef = React.useRef(false);
+  // Cálculo de filtros activos para indicador visual
+  const activeFiltersCount = React.useMemo(() => {
+    let count = columnFilters.length;
+    if (globalFilter?.trim()) count += 1;
+    if (idFilterText?.trim()) count += 1;
+    return count;
+  }, [columnFilters, globalFilter, idFilterText]);
 
-  React.useEffect(() => {
-    if (!viewId) return;
-    fetch(`/api/filters?viewId=${encodeURIComponent(viewId)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.filters && Array.isArray(data.filters)) {
-          console.log(`🔄 [DataTable] Filtros recuperados para ${viewId}:`, data.filters);
-          setColumnFilters(data.filters);
-        }
-        isFiltersLoadedRef.current = true;
-      })
-      .catch((err) => {
-        console.error('Error cargando filtros persistentes:', err);
-        isFiltersLoadedRef.current = true;
-      });
-  }, [viewId]);
-
-  React.useEffect(() => {
-    if (!viewId || !isFiltersLoadedRef.current) return;
-    const timer = setTimeout(() => {
-      fetch('/api/filters', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ viewId, filters: columnFilters }),
-      }).catch((err) => console.error('Error guardando filtros persistentes:', err));
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [viewId, columnFilters]);
+  const handleClearAllFilters = React.useCallback(() => {
+    setColumnFilters([]);
+    setGlobalFilter('');
+    setIdFilterText('');
+  }, []);
 
   // 🆕 PAGINACIÓN CONTROLADA para forzar 100 por defecto
   const [pagination, setPagination] = React.useState({
@@ -954,6 +936,20 @@ export function DataTable<TData extends object, TValue>({
               </button>
             )}
           </div>
+
+          {activeFiltersCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAllFilters}
+              className="h-10 px-3 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/50 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+              title="Limpiar todos los filtros activos"
+            >
+              <FilterX className="h-3.5 w-3.5" />
+              <span>Filtros activos ({activeFiltersCount})</span>
+              <span className="underline ml-0.5 font-semibold">Limpiar</span>
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* 🆕 NUEVO: Botón para resetear columnas */}
