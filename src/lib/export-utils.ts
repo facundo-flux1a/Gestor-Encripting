@@ -92,7 +92,7 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
             || docObj.ruta_archivo
             || docObj.archivo_ruta
             || (typeof docObj.archivos === 'string' ? docObj.archivos : '');
-        return rawPath ? buildFileUrl(rawPath) : '';
+        return (rawPath ? buildFileUrl(rawPath) : '') || '';
     }
 
     if (columnId === '__entidad__') {

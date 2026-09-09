@@ -10,6 +10,7 @@ import { redis } from '@/lib/redis';
 import { extractionQueue, ExtractionJobData, ingestionQueue, dbWriterQueue, EXTRACTION_QUEUE_NAME } from '@/lib/queue';
 import { updateIngestionProgress, createIngestionRecord, updateParentProgress } from '@/lib/ingestion-progress';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getPresignedUrl, getFileBuffer } from '@/lib/s3-client';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -191,30 +192,8 @@ export function startExtractionWorker() {
 // ─── Helpers S3 / rate-limit ──────────────────────────────────────────────────
 
 async function getFileBufferFromS3(s3Path: string): Promise<Buffer> {
-  const { MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME } = process.env;
-  const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';
-  
-  const s3Client = new S3Client({
-    region: process.env.MINIO_REGION || "us-east-1",
-    endpoint: MINIO_ENDPOINT,
-    credentials: {
-      accessKeyId: MINIO_ACCESS_KEY!,
-      secretAccessKey: MINIO_SECRET_KEY!,
-    },
-    forcePathStyle: true,
-  });
-
-  const response = await s3Client.send(new GetObjectCommand({
-    Bucket: MINIO_BUCKET_NAME!,
-    Key: s3Path,
-  }));
-
-  const stream = response.Body as NodeJS.ReadableStream;
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
+  const { buffer } = await getFileBuffer(s3Path);
+  return buffer;
 }
 
 // ─── Token Budget Tracker (TPM proactivo) ─────────────────────────────────────
@@ -404,6 +383,13 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
   const apiKey = process.env.PDFTOOLS_API_KEY || 'pdf_tools_secret';
   
   console.log(`[ExtractionWorker] ✂️  Recortando PDF con pdftools (${pageStart}-${pageEnd}) para ${filename}`);
+
+  let signedPdfUrl = pdfUrl;
+  try {
+    signedPdfUrl = await getPresignedUrl(pdfUrl, 900);
+  } catch (signErr: any) {
+    console.warn(`[ExtractionWorker] ⚠️ Error al firmar URL para pdftools:`, signErr?.message);
+  }
   
   const res = await fetch(pdftoolsUrl, {
     method: 'POST',
@@ -412,7 +398,7 @@ async function splitPdfWithTools(pdfUrl: string, pageStart: number, pageEnd: num
       'X-API-Key': apiKey
     },
     body: JSON.stringify({
-      pdf_url: pdfUrl,
+      pdf_url: signedPdfUrl,
       page_start: pageStart,
       page_end: pageEnd,
       filename: filename
@@ -441,6 +427,13 @@ async function convertPdfToImagesWithPdfTools(pdfUrl: string, pageStart = 1, pag
   const pdftoolsUrl = (process.env.PDFTOOLS_URL || 'https://pdftools.allbase.com.ar/split').replace(/\/split$/, '/to-images');
   const apiKey = process.env.PDFTOOLS_API_KEY || 'pdf_tools_secret';
 
+  let signedPdfUrl = pdfUrl;
+  try {
+    signedPdfUrl = await getPresignedUrl(pdfUrl, 900);
+  } catch (signErr: any) {
+    console.warn(`[ExtractionWorker] ⚠️ Error al firmar URL para pdftools to-images:`, signErr?.message);
+  }
+
   const res = await fetch(pdftoolsUrl, {
     method: 'POST',
     headers: {
@@ -448,7 +441,7 @@ async function convertPdfToImagesWithPdfTools(pdfUrl: string, pageStart = 1, pag
       'X-API-Key': apiKey,
     },
     body: JSON.stringify({
-      pdf_url: pdfUrl,
+      pdf_url: signedPdfUrl,
       page_start: pageStart,
       page_end: pageEnd,
       output: 'base64',

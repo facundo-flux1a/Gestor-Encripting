@@ -16,6 +16,7 @@ import { redis } from '@/lib/redis';
 import { ingestionQueue, extractionQueue, IngestionJobData, INGESTION_QUEUE_NAME } from '@/lib/queue';
 import { updateIngestionProgress, PROGRESS, createIngestionRecord } from '@/lib/ingestion-progress';
 import { wLog } from '@/lib/worker-logger';
+import { getFileBuffer } from '@/lib/s3-client';
 
 // Cuántos jobs de ingesta (ZIP-routing) procesar en paralelo.
 // Es CPU-light, puede ser alto. Los Gemini calls tienen su propia limitación.
@@ -50,9 +51,8 @@ export function startIngestionWorker() {
               mensaje: 'Descargando archivo comprimido para extraer documentos...',
             });
 
-            const response = await fetch(data.publicUrl);
-            if (!response.ok) throw new Error(`Error HTTP al descargar ZIP/RAR de MinIO: ${response.status}`);
-            const fileBuffer = await response.arrayBuffer();
+            const { buffer } = await getFileBuffer(data.publicUrl);
+            const fileBuffer = buffer;
 
             const { S3Client } = await import('@aws-sdk/client-s3');
             const MINIO_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || process.env.MINIO_ENDPOINT || 'https://minio.allbase.com.ar';

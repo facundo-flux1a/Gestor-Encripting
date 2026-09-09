@@ -174,7 +174,6 @@ export async function POST(req: NextRequest) {
         Key: filePath,
         Body: fileBuffer,
         ContentType: mimeType,
-        ACL: 'public-read',
       }));
 
       const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;

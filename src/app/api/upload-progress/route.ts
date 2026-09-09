@@ -4,6 +4,7 @@ import connection, { dbName } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { fireWebhook, fireBatchWebhook } from '@/services/webhook-service';
 import { prisma } from '@/lib/prisma';
+import { buildProxyUrl } from '@/lib/s3-client';
 
 // ==========================================
 // POST: Recibir callback de n8n / microservicio
@@ -289,7 +290,7 @@ async function dispatchCompletionWebhook(uploadId: string) {
             ...dRows[0],
             empresa_nombre: empresaPrisma?.nombre_de_empresa || '',
             empresa_cif: empresaPrisma?.CIF || '',
-            url_archivo: aRows[0]?.ruta_archivo ?? null,
+            url_archivo: aRows[0]?.ruta_archivo ? buildProxyUrl(aRows[0].ruta_archivo) : null,
             tiene_incidencias: hasInc,
             cantidad_incidencias: docIncidenciasCount,
             upload_id_original: uploadId
@@ -359,7 +360,7 @@ async function dispatchCompletionWebhook(uploadId: string) {
           ...dRows[0], 
           empresa_nombre: empresaPrisma?.nombre_de_empresa || '',
           empresa_cif: empresaPrisma?.CIF || '',
-          url_archivo: latestArchivo?.ruta_archivo ?? null,
+          url_archivo: latestArchivo?.ruta_archivo ? buildProxyUrl(latestArchivo.ruta_archivo) : null,
           upload_id_original: uploadId
         };
         

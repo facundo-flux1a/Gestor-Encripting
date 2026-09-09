@@ -580,7 +580,6 @@ export async function POST(request: NextRequest) {
               Key: s3Key,
               Body: downloadedFile.buffer,
               ContentType: detected.contentType,
-              ACL: 'public-read',
             }));
             rutaArchivoMinio = `${MINIO_ENDPOINT_POST.replace(/\/$/, '')}/${MINIO_BUCKET_POST}/${s3Key}`;
           } catch (err: any) {

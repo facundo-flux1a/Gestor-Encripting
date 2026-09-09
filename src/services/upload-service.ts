@@ -103,7 +103,7 @@ async function checkDuplicate(fileHash: string, empresaId: string): Promise<any>
  * Replica el comportamiento que tenía n8n: descomprimir → subir hijo → usar URL del hijo.
  */
 export async function extractAndUploadZipChildren(
-  fileBuffer: ArrayBuffer,
+  fileBuffer: ArrayBuffer | Buffer,
   parentUploadId: string,
   s3Client: S3Client,
   bucketName: string,
@@ -115,7 +115,8 @@ export async function extractAndUploadZipChildren(
   publicUrls: Record<string, string>;
 }> {
   const zip = new JSZip();
-  const zipContent = await zip.loadAsync(Buffer.from(fileBuffer));
+  const rawBuffer = Buffer.isBuffer(fileBuffer) ? fileBuffer : Buffer.from(fileBuffer);
+  const zipContent = await zip.loadAsync(rawBuffer);
 
   const fileHashes: Record<string, string> = {};
   const uploadIds: Record<string, string> = {};
@@ -147,7 +148,6 @@ export async function extractAndUploadZipChildren(
       Key: childPath,
       Body: fileData,
       ContentType: childMimeType,
-      ACL: 'public-read',
     }));
 
     const childPublicUrl = `${minioEndpoint.replace(/\/$/, '')}/${bucketName}/${childPath}`;
@@ -166,7 +166,7 @@ export async function extractAndUploadZipChildren(
  * y retorna toda la info necesaria para encolar cada hijo.
  */
 export async function extractAndUploadRarChildren(
-  fileBuffer: ArrayBuffer,
+  fileBuffer: ArrayBuffer | Buffer,
   parentUploadId: string,
   s3Client: S3Client,
   bucketName: string,
@@ -177,7 +177,7 @@ export async function extractAndUploadRarChildren(
   filePaths: Record<string, string>;
   publicUrls: Record<string, string>;
 }> {
-  const buffer = Buffer.from(fileBuffer);
+  const buffer = Buffer.isBuffer(fileBuffer) ? fileBuffer : Buffer.from(fileBuffer);
   
   // Usar node-unrar-js dinámicamente para evitar errores de Turbopack
   const unrar = await import('node-unrar-js');
@@ -218,7 +218,6 @@ export async function extractAndUploadRarChildren(
       Key: childPath,
       Body: fileData,
       ContentType: childMimeType,
-      ACL: 'public-read',
     }));
 
     const childPublicUrl = `${minioEndpoint.replace(/\/$/, '')}/${bucketName}/${childPath}`;
@@ -554,7 +553,6 @@ export async function uploadDocument(
       Key: filePath,
       Body: Buffer.from(fileBuffer),
       ContentType: fileMimeType,
-      ACL: 'public-read',
     }));
 
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
@@ -749,7 +747,6 @@ export async function uploadDocumentFromApi(
       Key: filePath,
       Body: Buffer.from(fileBuffer),
       ContentType: fileMimeType,
-      ACL: 'public-read',
     }));
 
     const publicUrl = `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;

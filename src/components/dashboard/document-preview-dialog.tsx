@@ -70,15 +70,10 @@ export function DocumentPreviewDialog({
       setIsDownloading(true);
       toast({ title: "Iniciando descarga segura..." });
 
-      // Extraer el nombre del archivo de la URL
-      const urlParts = fixedUrl.split('/');
-      const rawFilename = urlParts[urlParts.length - 1];
-
-      if (!rawFilename) throw new Error("No se pudo extraer el nombre del archivo");
-
-      // Decodificar primero por si ya viene con %20 y luego codificar para la URL de la API
-      const filename = decodeURIComponent(rawFilename);
-      const proxyUrl = `/api/files/${encodeURIComponent(filename)}`;
+      // Generar URL de descarga preservando cualquier parámetro de ruta (?path=...)
+      const proxyUrl = fixedUrl.includes('?')
+        ? `${fixedUrl}&download=true`
+        : `${fixedUrl}?download=true`;
       console.log("📡 [DocumentPreview] Usando proxy de descarga:", proxyUrl);
 
       // Abrir en nueva pestaña para que el navegador gestione la descarga (disparado por Content-Disposition)
@@ -122,7 +117,7 @@ export function DocumentPreviewDialog({
   const isOffice  = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods'].includes(ext);
 
   // Viewer URLs
-  const googleDocsViewerUrl  = `https://docs.google.com/gview?url=${encodeURIComponent(fixedUrl)}&embedded=true&t=${Date.now()}`;
+  const pdfViewerUrl         = `${fixedUrl}#toolbar=1&navpanes=0`;
   const officeViewerUrl      = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fixedUrl)}`;
 
   return (
@@ -181,11 +176,11 @@ export function DocumentPreviewDialog({
             </div>
           )}
 
-          {/* 📄 PDF — Google Docs Viewer */}
+          {/* 📄 PDF — Visor Nativo Embebido */}
           {isPdf && (
             <iframe
               key={key}
-              src={googleDocsViewerUrl}
+              src={pdfViewerUrl}
               className="w-full h-full border-0"
               aria-label={`Preview of ${documentName}`}
               title={`Preview of ${documentName}`}

@@ -89,9 +89,16 @@ export function buildFileUrl(rutaArchivo: string | null | undefined): string | n
   if (!rutaArchivo || typeof rutaArchivo !== 'string') return null;
   const trimmed = rutaArchivo.trim();
   if (!trimmed) return null;
-  // Si ya es URL del proxy interno, devolver tal cual
-  if (trimmed.startsWith('/api/')) return trimmed;
-  return buildProxyUrl(trimmed);
+  
+  const proxyPath = trimmed.startsWith('/api/') ? trimmed : buildProxyUrl(trimmed);
+  if (!proxyPath) return null;
+
+  if (proxyPath.startsWith('http://') || proxyPath.startsWith('https://')) {
+    return proxyPath;
+  }
+
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  return baseUrl ? `${baseUrl}${proxyPath}` : proxyPath;
 }
 
 export interface FormattedLine {

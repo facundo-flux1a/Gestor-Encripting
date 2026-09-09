@@ -1,6 +1,7 @@
 // app/api/unrar/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { getFileBuffer } from '@/lib/s3-client';
 
 /**
  * POST /api/unrar
@@ -23,15 +24,18 @@ export async function POST(req: NextRequest) {
 
     console.log(`[UNRAR API] Descargando archivo desde: ${fileUrl}`);
     
-    // Descargar el archivo RAR
-    const response = await fetch(fileUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Error descargando archivo: ${response.status} ${response.statusText}`);
+    // Descargar el archivo RAR (soporta S3 privado y URLs externas)
+    let buffer: Buffer;
+    try {
+      const downloaded = await getFileBuffer(fileUrl);
+      buffer = downloaded.buffer;
+    } catch {
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Error descargando archivo: ${response.status} ${response.statusText}`);
+      }
+      buffer = Buffer.from(await response.arrayBuffer());
     }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     
     console.log(`[UNRAR API] Archivo descargado: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
 

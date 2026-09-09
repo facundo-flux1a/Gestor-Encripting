@@ -1,6 +1,7 @@
 'use server';
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { buildProxyUrl } from '@/lib/s3-client';
 import db from '@/lib/db';
 import { getSession } from '@/services/auth-service';
 import crypto from 'crypto';
@@ -36,11 +37,10 @@ export async function uploadSuggestionMedia(formData: FormData) {
             Key: filePath,
             Body: Buffer.from(buffer),
             ContentType: file.type,
-            ACL: 'public-read',
         }));
 
-        const publicUrl = `${ACTUAL_MINIO_ENDPOINT?.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
-        return { success: true, url: publicUrl };
+        const fileUrl = buildProxyUrl(filePath) || `${ACTUAL_MINIO_ENDPOINT?.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${filePath}`;
+        return { success: true, url: fileUrl };
     } catch (error: any) {
         console.error('❌ [SuggestionService] Upload error:', error);
         return { success: false, error: error.message };

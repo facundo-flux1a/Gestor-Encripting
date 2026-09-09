@@ -43,16 +43,55 @@ export function formatCurrency(amount: number | string | null | undefined, curre
     currency
   }).format(numericAmount);
 }
-// 🪣 Fix MinIO URLs with fallback domain
+// 🪣 Normaliza URLs de MinIO redirigiéndolas al proxy autenticado interno
 export function fixMinioUrl(url: string | null | undefined): string {
   if (!url) return '';
-  const brokenDomain = 'http://flux1a-minio-32adec-164-68-127-171.traefik.me:9000';
-  const fallbackDomain = 'https://minio.allbase.com.ar';
-  
-  if (url.includes(brokenDomain)) {
-    return url.replace(brokenDomain, fallbackDomain);
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/api/files/') || trimmed.includes('/api/files/')) return trimmed;
+
+  // Si es una ruta relativa que empieza con archivos/
+  if (trimmed.startsWith('archivos/')) {
+    const segments = trimmed.split('/');
+    const filename = segments[segments.length - 1];
+    return `/api/files/${encodeURIComponent(filename)}?path=${encodeURIComponent(trimmed)}`;
   }
-  return url;
+
+  if (
+    trimmed.includes('minio') ||
+    trimmed.includes(':9000') ||
+    trimmed.includes('/gestor-documental')
+  ) {
+    try {
+      const parsed = new URL(trimmed);
+      const segments = parsed.pathname.replace(/^\//, '').split('/');
+      segments.shift(); // Quitar el nombre del bucket (gestor-documental o gestor-documental-2)
+      const fullKey = segments.map(decodeURIComponent).join('/');
+      const filename = segments[segments.length - 1];
+
+      if (segments.length > 1 && fullKey) {
+        // Archivo en subcarpeta (ej: archivos/zip-children/.../AR-2026-0292.pdf)
+        return `/api/files/${encodeURIComponent(filename)}?path=${encodeURIComponent(fullKey)}`;
+      } else if (filename) {
+        // Archivo en la raíz
+        return `/api/files/${encodeURIComponent(decodeURIComponent(filename))}`;
+      }
+    } catch {
+      const clean = trimmed.replace(/^\//, '');
+      const segments = clean.split('/');
+      if (segments[0] === 'gestor-documental' || segments[0] === 'gestor-documental-2') {
+        segments.shift();
+      }
+      const fullKey = segments.map(decodeURIComponent).join('/');
+      const filename = segments[segments.length - 1];
+      if (segments.length > 1 && fullKey) {
+        return `/api/files/${encodeURIComponent(filename)}?path=${encodeURIComponent(fullKey)}`;
+      } else if (filename) {
+        return `/api/files/${encodeURIComponent(decodeURIComponent(filename))}`;
+      }
+    }
+  }
+
+  return trimmed;
 }
 
 // 🪪 Normaliza un CIF/NIF/NIE español a formato estándar (sin separadores ni prefijo ES)

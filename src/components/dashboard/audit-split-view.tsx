@@ -401,7 +401,7 @@ export function AuditSplitView({
                                     variant="secondary"
                                     size="icon"
                                     className="h-8 w-8 shadow-lg bg-background/80 backdrop-blur"
-                                    onClick={() => window.open(documentUrl, '_blank')}
+                                    onClick={() => window.open(rawDocumentUrl, '_blank')}
                                     title="Abrir en pestaña nueva"
                                 >
                                     <Eye className="h-4 w-4" />

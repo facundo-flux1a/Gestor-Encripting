@@ -6,7 +6,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import { useFieldArray, useWatch } from 'react-hook-form';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { cn, fixMinioUrl } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DocumentTypeSelector } from './document-type-selector';
@@ -94,7 +94,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
   const provider = useMemo(() => doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'), [doc.entidades]);
   const client   = useMemo(() => doc.entidades.find(e => e.rol === 'cliente' || e.rol === 'receptor'), [doc.entidades]);
-  const documentUrl = doc?.archivos?.[0]?.ruta_archivo;
+  const documentUrl = fixMinioUrl(doc?.archivos?.[0]?.ruta_archivo);
   const docName = doc?.archivos?.[0]?.nombre_archivo || `doc_${doc.id_documento}`;
 
   const [disponibles, setDisponibles] = React.useState<{ año: number; trimestre: number; label: string }[]>([]);

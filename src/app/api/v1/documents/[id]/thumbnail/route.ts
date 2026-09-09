@@ -3,6 +3,7 @@ import { validateApiKey } from '@/services/api-key-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getFileBuffer } from '@/lib/s3-client';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, readFile, unlink } from 'fs/promises';
@@ -206,21 +207,17 @@ export async function GET(
         }
       }
 
-      // 5. Generar el thumbnail
-      // Detectar si ruta_archivo ya es una URL completa o un path relativo
-    const isFullUrl = archivo.ruta_archivo.startsWith('http://') || archivo.ruta_archivo.startsWith('https://');
-    const originalFileUrl = isFullUrl
-      ? archivo.ruta_archivo
-      : `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${archivo.ruta_archivo}`;
-    console.log(`📥 [V1-THUMBNAIL] Descargando archivo original: ${originalFileUrl}`);
-    const response = await fetch(originalFileUrl);
-    if (!response.ok) {
-      console.error(`❌ [V1-THUMBNAIL] Error al descargar original. Status: ${response.status}`);
-      return NextResponse.json({ error: 'Error al descargar archivo original' }, { status: 500 });
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const originalBuffer = Buffer.from(arrayBuffer);
+      // 5. Descargar el archivo original autenticado
+      console.log(`📥 [V1-THUMBNAIL] Descargando archivo original con SDK: ${archivo.ruta_archivo}`);
+      let originalBuffer: Buffer;
+      try {
+        const downloaded = await getFileBuffer(archivo.ruta_archivo);
+        originalBuffer = downloaded.buffer;
+      } catch (err: any) {
+        console.error(`❌ [V1-THUMBNAIL] Error al descargar original:`, err);
+        await releaseConcurrency();
+        return NextResponse.json({ error: 'Error al descargar archivo original' }, { status: 500 });
+      }
 
     let imageBuffer: Buffer;
     const isPDF = archivo.tipo_archivo?.toLowerCase().includes('pdf') || archivo.ruta_archivo.toLowerCase().endsWith('.pdf');
@@ -277,7 +274,6 @@ export async function GET(
       Key: thumbnailKey,
       Body: imageBuffer,
       ContentType: 'image/jpeg',
-      ACL: 'public-read',
     })).catch(err => console.error('❌ [V1-THUMBNAIL] Error al subir a MinIO:', err));
 
     console.log(`✅ [V1-THUMBNAIL] Generación completada. Devolviendo binario...`);

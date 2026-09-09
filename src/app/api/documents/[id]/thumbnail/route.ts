@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/services/user-service';
 import db from '@/lib/db';
 import type { RowDataPacket } from 'mysql2';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getFileBuffer } from '@/lib/s3-client';
 import { convert as convertPdfToImg } from 'pdf-img-convert';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -118,22 +119,16 @@ export async function GET(
       }
     }
 
-    // 5. Descargar el archivo original de MinIO o URL pública
-    const isFullUrl = rutaArchivo.startsWith('http://') || rutaArchivo.startsWith('https://');
-    const originalFileUrl = isFullUrl
-      ? rutaArchivo
-      : `${MINIO_ENDPOINT.replace(/\/$/, '')}/${MINIO_BUCKET_NAME}/${rutaArchivo}`;
-
-    console.log(`📥 [THUMBNAIL] Descargando archivo original: ${originalFileUrl}`);
-    
-    const response = await fetch(originalFileUrl);
-    if (!response.ok) {
-      console.error(`❌ [THUMBNAIL] No se pudo descargar el original. Status: ${response.status}`);
+    // 5. Descargar el archivo original de MinIO autenticado
+    console.log(`📥 [THUMBNAIL] Descargando archivo original con SDK: ${rutaArchivo}`);
+    let originalBuffer: Buffer;
+    try {
+      const downloaded = await getFileBuffer(rutaArchivo);
+      originalBuffer = downloaded.buffer;
+    } catch (err: any) {
+      console.error(`❌ [THUMBNAIL] No se pudo descargar el original:`, err);
       return NextResponse.json({ error: 'Error al descargar archivo original' }, { status: 500 });
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const originalBuffer = Buffer.from(arrayBuffer);
     
     let imageBuffer: Buffer;
     const isPDF = tipoArchivo?.toLowerCase().includes('pdf') || rutaArchivo.toLowerCase().endsWith('.pdf');
@@ -199,7 +194,6 @@ export async function GET(
       Key: thumbnailKey,
       Body: imageBuffer,
       ContentType: 'image/jpeg',
-      ACL: 'public-read',
     })).catch(err => console.error('❌ Error al subir thumbnail a MinIO:', err));
 
     console.log(`✅ [THUMBNAIL] Generación completada con éxito.`);
