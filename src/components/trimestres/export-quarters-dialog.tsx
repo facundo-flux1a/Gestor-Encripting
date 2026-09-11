@@ -300,16 +300,34 @@ export function ExportQuartersDialog({
           cuota: Math.abs(Number(detail.cuota) || 0) * sign,
         }));
 
+        const baseNoSujetaDoc = Math.abs(Number(doc.base_no_sujeta || doc.datos_extra?.base_no_sujeta || 0)) * sign;
+
         return {
           ...doc,
           proveedor: isIssued ? receptorNombre : emisorNombre,
           cif: isIssued ? '' : emisorCif,
           total: totalDoc,
           base_imponible: baseDoc,
+          base_no_sujeta: baseNoSujetaDoc,
           iva_details: correctedIvaDetails,
           is_issued: isIssued,
         };
       });
+
+      // ── Descubrimiento dinámico de tasas desde los datos procesados ─────
+      const _ratesSet = new Set<number>([21, 10, 4, 0]); // fallback mínimo
+      processedData.forEach((doc: any) => {
+        (doc.iva_details || []).forEach((d: any) => {
+          const tipo = (d.tipo_impuesto || '').toLowerCase();
+          if (/retencion|irpf|recargo|equivalencia/.test(tipo)) return;
+          _ratesSet.add(Math.round(Number(d.porcentaje)));
+        });
+      });
+      const _sortedRates = Array.from(_ratesSet).sort((a, b) => b - a);
+      const _ivaColumns = _sortedRates.flatMap(r => [
+        { id: `base_${r}`, header: `Base ${r}%` },
+        ...(r > 0 ? [{ id: `iva_${r}`, header: `IVA ${r}%` }] : []),
+      ]);
 
       const exportColumns = [
         { id: 'numero_documento', header: 'Número' },
@@ -318,10 +336,8 @@ export function ExportQuartersDialog({
         { id: 'cif', header: 'CIF' },
         { id: 'base_imponible', header: 'Base Imponible' },
         { id: 'total', header: 'Total' },
-        { id: 'base_21', header: 'Base 21%' },
-        { id: 'iva_21', header: 'IVA 21%' },
-        { id: 'base_10', header: 'Base 10%' },
-        { id: 'iva_10', header: 'IVA 10%' },
+        ..._ivaColumns,
+        { id: 'base_no_sujeta', header: 'Base Exenta / No Sujeta' },
         { id: 'retencion', header: 'Retención' },
       ];
 

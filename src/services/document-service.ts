@@ -187,14 +187,15 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const emisor = currentEntidades.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
     const receptor = currentEntidades.find(e => e.rol === 'receptor' || e.rol === 'cliente');
 
-    // Separar filas de IVA de filas de retención/recargo para evitar mezclarlas en iva_details
-    const isRetentionType = (tipo: string | null | undefined): boolean =>
-      !!tipo && /retencion|reten|irpf|recargo/i.test(tipo);
+    // Mapear TODAS las filas de impuestos_documento a iva_details (IVA, Retención y Recargo).
+    // Esto permite que la tabla, el exportador CSV/Excel, el motor financiero y el playground
+    // encuentren la fila RETENCION directamente en iva_details sin lógica adicional.
+    const isRetentionOrRecargoType = (tipo: string | null | undefined): boolean =>
+      !!tipo && /retencion|reten|irpf|recargo|equivalencia/i.test(tipo);
 
-    const ivaImpuestos = currentImpuestos.filter(i => !isRetentionType(i.tipo_impuesto));
-    const retentionImpuestos = currentImpuestos.filter(i => isRetentionType(i.tipo_impuesto));
+    const retentionImpuestos = currentImpuestos.filter(i => isRetentionOrRecargoType(i.tipo_impuesto));
 
-    const iva_details: IvaDetail[] = ivaImpuestos.map(i => ({
+    const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
       id: i.id,
       tipo_impuesto: i.tipo_impuesto,
       porcentaje: i.porcentaje,
@@ -202,7 +203,10 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
       cuota: i.cuota,
     }));
 
-    const total_iva = iva_details.reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
+    // total_iva incluye solo IVA puro (no retenciones, que tienen cuota negativa y signo contrario)
+    const total_iva = iva_details
+      .filter(tax => !isRetentionOrRecargoType(tax.tipo_impuesto))
+      .reduce((sum, tax) => sum + (Number(tax.cuota) || 0), 0);
 
     const entidades: DocumentEntity[] = currentEntidades.map(e => ({
       id: e.id,

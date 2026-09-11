@@ -151,7 +151,8 @@ export async function POST(request: NextRequest) {
         d.observaciones,
         d.año_trimestre,
         d.num_trimestre,
-        d.trimestre_cerrado
+        d.trimestre_cerrado,
+        d.datos_extra
       FROM documentos d
       WHERE d.id_de_empresa = ?
         AND (
@@ -281,7 +282,14 @@ export async function POST(request: NextRequest) {
     const workbook = XLSX.utils.book_new();
 
     // ── HOJA 1: DOCUMENTOS ──────────────────────────────────────────────────
-    const VAT_RATES = [21, 15, 10, 4, 0];
+    // ── Descubrimiento dinámico de tasas de IVA desde los datos reales ─────
+    const _discoveredRates = new Set<number>([21, 15, 10, 4, 0]); // fallback tasas estándar
+    filtered.forEach((doc: any) => {
+      (doc.iva_details || []).forEach((i: any) => {
+        if (isRealIvaDetail(i)) _discoveredRates.add(Math.round(Number(i.porcentaje)));
+      });
+    });
+    const VAT_RATES = Array.from(_discoveredRates).sort((a, b) => b - a);
 
     const dataRows = filtered.map((doc: any) => {
       const row: Record<string, any> = {
@@ -330,6 +338,15 @@ export async function POST(request: NextRequest) {
       );
       row['Recargo de Equiv.'] = recargoDetail ? Math.abs(Number(recargoDetail.cuota) || 0) : 0;
 
+      // Base No Sujeta / Suplidos
+      let datosExtra: any = {};
+      try {
+        if (typeof doc.datos_extra === 'string') datosExtra = JSON.parse(doc.datos_extra);
+        else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtra = doc.datos_extra;
+      } catch { datosExtra = {}; }
+      const baseNoSujeta = Number(datosExtra?.base_no_sujeta || datosExtra?.BASE_NO_SUJETA || 0);
+      row['Base No Sujeta'] = baseNoSujeta;
+
       // Totales finales
       row['Base Imponible'] = Number(doc.importe_sin_impuestos) || 0;
       row['Total Factura'] = Number(doc.importe_total) || 0;
@@ -338,15 +355,23 @@ export async function POST(request: NextRequest) {
     });
 
     // Fila de totales
+    // Columnas numéricas dinámicas (una por tasa descubierta)
     const numCols = [
-      'Base 21%', 'IVA 21%', 'Base 15%', 'IVA 15%',
-      'Base 10%', 'IVA 10%', 'Base 4%', 'IVA 4%',
-      'Base 0%', 'Retención', 'Recargo de Equiv.', 'Base Imponible', 'Total Factura'
+      ...VAT_RATES.flatMap(r => r > 0 ? [`Base ${r}%`, `IVA ${r}%`] : [`Base ${r}%`]),
+      'Base No Sujeta', 'Retención', 'Recargo de Equiv.', 'Base Imponible', 'Total Factura'
     ];
     const totalsRow: Record<string, any> = { 'Tipo': 'TOTALES' };
     numCols.forEach(col => {
       totalsRow[col] = filtered.reduce((sum: number, doc: any) => {
         // Re-calculate same as above for totals
+        if (col === 'Base No Sujeta') {
+          let de: any = {};
+          try {
+            if (typeof doc.datos_extra === 'string') de = JSON.parse(doc.datos_extra);
+            else if (doc.datos_extra && typeof doc.datos_extra === 'object') de = doc.datos_extra;
+          } catch { de = {}; }
+          return sum + Number(de?.base_no_sujeta || de?.BASE_NO_SUJETA || 0);
+        }
         if (col === 'Base Imponible') return sum + (Number(doc.importe_sin_impuestos) || 0);
         if (col === 'Total Factura') return sum + (Number(doc.importe_total) || 0);
         if (col === 'Retención') {
@@ -395,6 +420,8 @@ export async function POST(request: NextRequest) {
       const accumulators: Record<string, Record<number | string, number>> = {
         retenciones: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
         recargos: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        base_no_sujeta: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
+        descuento_global: { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 },
       };
       VAT_RATES.forEach(r => {
         accumulators[`base_${r}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
@@ -407,6 +434,23 @@ export async function POST(request: NextRequest) {
         const totalDoc = Math.abs(Number(doc.importe_total) || 0);
         if (q >= 1 && q <= 4) totalFacturado[q] += totalDoc;
         totalFacturado.total += totalDoc;
+
+        // Acumular Base no sujeta a IVA
+        let de: any = {};
+        try {
+          if (typeof doc.datos_extra === 'string') de = JSON.parse(doc.datos_extra);
+          else if (doc.datos_extra && typeof doc.datos_extra === 'object') de = doc.datos_extra;
+        } catch { de = {}; }
+        const bns = Math.abs(Number(de?.base_no_sujeta || de?.BASE_NO_SUJETA || doc?.base_no_sujeta || 0));
+        if (q >= 1 && q <= 4) accumulators.base_no_sujeta[q] += bns;
+        accumulators.base_no_sujeta.total += bns;
+
+        // Acumular Descuento Global
+        const desc = Math.abs(Number(de?.descuento_global || de?.DESCUENTO_GLOBAL || doc?.descuento_global || 0));
+        if (desc > 0) {
+          if (q >= 1 && q <= 4) accumulators.descuento_global[q] += desc;
+          accumulators.descuento_global.total += desc;
+        }
 
         (doc.iva_details || []).forEach((detail: any) => {
           const tipo = (detail.tipo_impuesto || '').toUpperCase();
@@ -455,6 +499,11 @@ export async function POST(request: NextRequest) {
           accumulators[key]?.total !== 0;
         if (hasData) summaryRows.push(buildRow(`Base ${r}%`, accumulators[key]));
       });
+
+      const hasBns = activeQuarters.some(q => accumulators.base_no_sujeta?.[q] !== 0) ||
+        accumulators.base_no_sujeta?.total !== 0;
+      if (hasBns) summaryRows.push(buildRow('Base no sujeta a IVA', accumulators.base_no_sujeta));
+
       summaryRows.push([]);
 
       // IVA
@@ -469,9 +518,11 @@ export async function POST(request: NextRequest) {
       // Totales bases e IVA
       const totalBasesRow: (string | number)[] = ['Total Bases'];
       activeQuarters.forEach(q => {
-        totalBasesRow.push(VAT_RATES.reduce((s, r) => s + (accumulators[`base_${r}`]?.[q] || 0), 0));
+        const vatSum = VAT_RATES.reduce((s, r) => s + (accumulators[`base_${r}`]?.[q] || 0), 0);
+        totalBasesRow.push(vatSum + (accumulators.base_no_sujeta?.[q] || 0));
       });
-      totalBasesRow.push(VAT_RATES.reduce((s, r) => s + (accumulators[`base_${r}`]?.total || 0), 0));
+      const totalVatSum = VAT_RATES.reduce((s, r) => s + (accumulators[`base_${r}`]?.total || 0), 0);
+      totalBasesRow.push(totalVatSum + (accumulators.base_no_sujeta?.total || 0));
       summaryRows.push(totalBasesRow);
 
       const totalIvaRow: (string | number)[] = ['Total IVA'];
@@ -482,10 +533,13 @@ export async function POST(request: NextRequest) {
       summaryRows.push(totalIvaRow);
       summaryRows.push([]);
 
-      // Total facturado, retenciones y recargos
+      // Total facturado, retenciones, recargos y descuentos
       summaryRows.push(buildRow('Total Gral. Facturado', totalFacturado));
       summaryRows.push(buildRow('Total Retenciones', accumulators.retenciones));
       summaryRows.push(buildRow('Total Recargos de Equiv.', accumulators.recargos));
+      const hasDescuento = activeQuarters.some(q => accumulators.descuento_global?.[q] !== 0) ||
+        accumulators.descuento_global?.total !== 0;
+      if (hasDescuento) summaryRows.push(buildRow('(-) Descuento Global', accumulators.descuento_global));
       summaryRows.push([]);
     };
 

@@ -232,10 +232,11 @@ const calculateAnnualSummary = (data: Document[], selectedPeriodos?: Set<string>
                 else if (Math.abs(ratio - 1.10) < 0.02) deducedRate = 10;
                 else if (Math.abs(ratio - 1.21) < 0.02) deducedRate = 21;
                 else if (Math.abs(ratio - 1.00) < 0.01) {
-                    // ✅ CASO SATURADO: El usuario sugiere que se maneje como IVA.
-                    deducedRate = 21;
-                    refinedBase = Math.round((Math.max(0, Math.abs(docTotalVal) + docDescuentoGlobal - recCab + retCab) / 1.21) * 100) / 100;
-                    refinedIva = Math.max(0, Math.abs(docTotalVal) - refinedBase + docDescuentoGlobal - recCab + retCab);
+                    // ✅ CASO SATURADO: total ≈ base → sin IVA (exento/no sujeto).
+                    // No inventamos IVA embebido cuando no hay filas de impuestos_documento.
+                    deducedRate = 0;
+                    refinedIva = 0;
+                    // refinedBase se mantiene como baseImponible original (sin recalcular)
                 }
                 else deducedRate = 0; // Exento u otros casos
             }

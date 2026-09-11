@@ -1,7 +1,7 @@
 import { Document } from './types';
 import { isFiscalmenteValido } from './document-fiscal-status';
 
-export const VAT_RATES = [21, 15, 10, 4, 0];
+export const VAT_RATES = [21, 19, 15, 10, 4, 0];
 
 export interface FinancialSummary {
     totalReal: Record<number | string, number>;

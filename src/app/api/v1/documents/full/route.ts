@@ -287,13 +287,37 @@ export async function GET(request: NextRequest) {
       const docArchivos = archivosByDoc[docId] || [];
       const publicUrl = docArchivos.length > 0 ? docArchivos[0].url_archivo : null;
 
-      const impuestos = impuestosByDoc[docId] || [];
-      const retencion = extractRetencionFromImpuestos(impuestos);
+      const impuestosRaw = impuestosByDoc[docId] || [];
+      const retencion = extractRetencionFromImpuestos(impuestosRaw);
 
       const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
 
-      const baseImponible = doc.importe_sin_impuestos != null ? Number(doc.importe_sin_impuestos) : (Number(doc.importe_total) || 0);
+      // Bases: sujeta (campo BD) + no sujeta/suplidos (datos_extra)
+      let datosExtra: any = {};
+      try {
+        if (typeof doc.datos_extra === 'string') datosExtra = JSON.parse(doc.datos_extra);
+        else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtra = doc.datos_extra;
+      } catch { datosExtra = {}; }
+
+      const baseSujeta = Number(doc.importe_sin_impuestos) || 0;
+      const baseNoSujeta = Number(datosExtra.base_no_sujeta) || 0;
+      const baseTotal = Math.round((baseSujeta + baseNoSujeta) * 100) / 100;
       const totalConImpuestos = Number(doc.importe_total) || 0;
+
+      // Retención con fallback a datos_extra
+      const retencionIrpf = retencion || (Math.abs(Number(datosExtra.retencion_irpf)) || 0);
+
+      // Si el documento no tiene filas de impuestos pero sí tiene base, inyectar fila EXENTO
+      let impuestos = impuestosRaw;
+      if (impuestos.length === 0 && baseTotal > 0) {
+        impuestos = [{
+          tipo_impuesto: 'EXENTO',
+          porcentaje: 0,
+          base_imponible: baseTotal,
+          cuota: 0,
+          total_con_impuesto: baseTotal,
+        }];
+      }
 
       return {
         id: doc.id,
@@ -303,8 +327,14 @@ export async function GET(request: NextRequest) {
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
         actualizado_en: fechaCreacionIso,
-        importe_total: baseImponible,
-        importe_sin_impuestos: baseImponible,
+        // --- Bases desglosadas ---
+        base_sujeta: baseSujeta,
+        base_no_sujeta: baseNoSujeta,
+        base_total: baseTotal,
+        base_imponible: baseSujeta,
+        // --- Campos originales (retrocompatibilidad) ---
+        importe_total: baseSujeta,
+        importe_sin_impuestos: baseSujeta,
         importe_con_impuestos: totalConImpuestos,
         moneda: doc.moneda,
         observaciones: doc.observaciones,
@@ -317,7 +347,9 @@ export async function GET(request: NextRequest) {
         fecha_cierre_trimestre: doc.fecha_cierre_trimestre,
         año: doc.año_trimestre,
         trimestre: doc.num_trimestre,
-        retencion,
+        // --- Retenciones ---
+        retencion: retencionIrpf,
+        retencion_irpf: retencionIrpf,
         canal_carga: doc['dashboard-correo'],
         is_issued: isIssued,
         url_archivo: publicUrl,

@@ -61,6 +61,7 @@ interface StatsHoverTableProps {
     };
     quotas: {
         iva21: number;
+        iva19?: number;
         iva15?: number;
         iva10: number;
         iva4: number;
@@ -119,6 +120,7 @@ export function StatsHoverTable({
 
     const currentQuotas = {
         iva21: isActive('iva21') ? quotas.iva21 : 0,
+        iva19: isActive('iva19') ? (quotas.iva19 || 0) : 0,
         iva15: isActive('iva15') ? (quotas.iva15 || 0) : 0,
         iva10: isActive('iva10') ? quotas.iva10 : 0,
         iva4: isActive('iva4') ? quotas.iva4 : 0,
@@ -135,6 +137,7 @@ export function StatsHoverTable({
         (isActive('base0') ? bases.base0 : 0);
     const calculatedTotalIVA =
         (isActive('iva21') ? quotas.iva21 : 0) +
+        (isActive('iva19') ? (quotas.iva19 || 0) : 0) +
         (isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (isActive('iva10') ? quotas.iva10 : 0) +
         (isActive('iva4') ? quotas.iva4 : 0) +
@@ -160,6 +163,7 @@ export function StatsHoverTable({
     // Delta de cuotas desactivadas (AHORA SOLO IVA)
     const disabledQuotasDelta =
         (!isActive('iva21') ? quotas.iva21 : 0) +
+        (!isActive('iva19') ? (quotas.iva19 || 0) : 0) +
         (!isActive('iva15') ? (quotas.iva15 || 0) : 0) +
         (!isActive('iva10') ? quotas.iva10 : 0) +
         (!isActive('iva4') ? quotas.iva4 : 0) +
@@ -246,6 +250,14 @@ export function StatsHoverTable({
                     onClick={() => toggleKey('iva21')}
                     isActive={isActive('iva21')}
                 />
+                {quotas.iva19 !== undefined && quotas.iva19 !== 0 && (
+                    <TaxRow
+                        label="IVA 19%"
+                        value={quotas.iva19}
+                        onClick={() => toggleKey('iva19')}
+                        isActive={isActive('iva19')}
+                    />
+                )}
                 {quotas.iva15 !== undefined && quotas.iva15 !== 0 && (
                     <TaxRow
                         label="IVA 15%"

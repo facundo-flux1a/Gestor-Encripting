@@ -974,11 +974,12 @@ const getColumns = (
       header: 'Retención',
       ...noColumnFilter,
       cell: ({ row }: { row: Row<Document> }) => {
-        const ivaDetail = row.original.iva_details.find(i => {
+        const ivaDetail = row.original.iva_details?.find(i => {
           const t = (i.tipo_impuesto || '').toLowerCase();
           return t.includes('retencion') || t.includes('irpf');
         });
-        const value = ivaDetail?.cuota ?? 0;
+        const fallbackRet = (row.original as any).retencion_irpf ? -(Math.abs(Number((row.original as any).retencion_irpf))) : 0;
+        const value = ivaDetail?.cuota ?? fallbackRet ?? 0;
         const formatted = formatCurrency(value);
         return (
           <div className="text-right font-medium transition-colors duration-300 hover:text-primary">
@@ -988,11 +989,13 @@ const getColumns = (
       },
       footer: ({ table }: { table: TanstackTable<Document> }) => {
         const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
-          const detail = row.original.iva_details.find((d: IvaDetail) => {
+          const detail = row.original.iva_details?.find((d: IvaDetail) => {
             const t = (d.tipo_impuesto || '').toLowerCase();
             return t.includes('retencion') || t.includes('irpf');
           });
-          return sum + (Number(detail?.cuota) || 0);
+          const fallbackRet = (row.original as any).retencion_irpf ? -(Math.abs(Number((row.original as any).retencion_irpf))) : 0;
+          const cuota = detail?.cuota ?? fallbackRet ?? 0;
+          return sum + (Number(cuota) || 0);
         }, 0);
         const formatted = formatCurrency(total);
         return (
@@ -1112,6 +1115,16 @@ const getColumns = (
 
     {
       id: 'iva_only',
+      accessorFn: (row: Document) => {
+        const totalImpuestos = Number(row.iva) || 0;
+        const recargoSum = (row.iva_details || [])
+          .filter(i =>
+            i.tipo_impuesto?.toLowerCase().includes('recargo') ||
+            i.tipo_impuesto?.toLowerCase().includes('equivalencia')
+          )
+          .reduce((acc, curr) => acc + (Number(curr.cuota) || 0), 0);
+        return totalImpuestos - recargoSum;
+      },
       header: 'IVA',
       ...noColumnFilter,
       cell: ({ row }) => {

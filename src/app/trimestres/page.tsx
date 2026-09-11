@@ -591,12 +591,15 @@ function TrimestresPageContent() {
           cuota: Math.abs(Number(detail.cuota) || 0) * sign,
         }));
 
+        const baseNoSujetaDoc = Math.abs(Number(doc.base_no_sujeta || doc.datos_extra?.base_no_sujeta || 0)) * sign;
+
         return {
           ...doc,
           proveedor: isIssued ? receptorNombre : emisorNombre,
           cif: isIssued ? '' : emisorCif,
           total: totalDoc,
           base_imponible: baseDoc,
+          base_no_sujeta: baseNoSujetaDoc,
           iva_details: correctedIvaDetails,
           is_issued: isIssued
         };
@@ -614,6 +617,7 @@ function TrimestresPageContent() {
         { id: 'iva_21', header: 'IVA 21%' },
         { id: 'base_10', header: 'Base 10%' },
         { id: 'iva_10', header: 'IVA 10%' },
+        { id: 'base_no_sujeta', header: 'Base Exenta / No Sujeta' },
         { id: 'retencion', header: 'Retención' },
       ];
 
@@ -811,6 +815,7 @@ function TrimestresPageContent() {
     // ✅ MODELO REAL AGREGADO (Extraído literalmente de cada línea de la BD)
     const quotas = {
       iva21: summary.ivaDB[21]?.total || 0,
+      iva19: summary.ivaDB[19]?.total || 0,
       iva15: summary.ivaDB[15]?.total || 0,
       iva10: summary.ivaDB[10]?.total || 0,
       iva4: summary.ivaDB[4]?.total || 0,

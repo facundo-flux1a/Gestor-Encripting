@@ -85,8 +85,15 @@ function DocumentoPageContent() {
 
   const resetFormWithDocData = useCallback((docData: Document) => {
     const clientEnt = docData.entidades?.find(e => e.rol === 'cliente' || e.rol === 'receptor');
+    // Filtrar filas de retención/IRPF de iva_details: se manejan por separado
+    // en el campo retencion_irpf. Incluirlas aquí causaría doble resta en el total.
+    const ivaDetailsFiltered = (docData.iva_details || []).filter((t: any) => {
+      const tipo = (t.tipo_impuesto || '').toLowerCase();
+      return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+    });
     form.reset({
       ...docData,
+      iva_details: ivaDetailsFiltered,
       fecha_emision: docData.fecha_emision ? new Date(docData.fecha_emision).toISOString().split('T')[0] : '',
       fecha_vencimiento: docData.fecha_vencimiento ? new Date(docData.fecha_vencimiento).toISOString().split('T')[0] : '',
       cif: docData.cif || '',
@@ -106,7 +113,11 @@ function DocumentoPageContent() {
     const fv = form.getValues();
     const base = Number(fv.base_imponible ?? doc.base_imponible ?? 0);
     const total = Number(fv.total ?? doc.total ?? 0);
-    const taxes = (fv.iva_details || doc.iva_details || []).reduce((acc: number, t: any) => acc + Number(t.cuota || 0), 0);
+    // Excluir retenciones/IRPF de taxes: ya se restan por separado en retencionEfectiva
+    const taxes = (fv.iva_details || doc.iva_details || []).filter((t: any) => {
+      const tipo = (t.tipo_impuesto || '').toLowerCase();
+      return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+    }).reduce((acc: number, t: any) => acc + Number(t.cuota || 0), 0);
     const baseNS = Number((fv as any).base_no_sujeta ?? (doc as any).base_no_sujeta ?? 0);
     const retencion = Number((fv as any).retencion_irpf ?? (doc as any).retencion_irpf ?? 0);
     const descuento = Number((fv as any).descuento_global ?? (doc as any).descuento_global ?? 0);

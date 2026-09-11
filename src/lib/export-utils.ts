@@ -39,7 +39,7 @@ const isRetencionDetail = (detail: any): boolean => {
 
 const getRetencionFromDoc = (doc: any): number => {
     const detail = doc?.iva_details?.find((i: any) => isRetencionDetail(i));
-    return detail ? Math.abs(Number(detail.cuota) || 0) : 0;
+    return detail ? Math.abs(Number(detail.cuota) || 0) : (Math.abs(Number(doc?.retencion_irpf)) || 0);
 };
 
 const getRecargoFromDoc = (doc: any): number => {
@@ -50,39 +50,63 @@ const getRecargoFromDoc = (doc: any): number => {
     return details.reduce((sum: number, i: any) => sum + (Number(i.cuota) || 0), 0);
 };
 
+const getBaseNoSujetaFromDoc = (doc: any): number => {
+    const extra = typeof doc?.datos_extra === 'string'
+        ? (() => { try { return JSON.parse(doc.datos_extra); } catch { return {}; } })()
+        : (doc?.datos_extra || {});
+    return Number(
+        extra?.base_no_sujeta ?? 
+        extra?.BASE_NO_SUJETA ?? 
+        extra?.base_exenta ?? 
+        extra?.BASE_EXENTA ?? 
+        doc?.base_no_sujeta ?? 
+        doc?.base_exenta ?? 
+        0
+    );
+};
+
+const getIvaOnlyFromDoc = (doc: any): number => {
+    const totalImpuestos = Number(doc?.iva) || 0;
+    const recargoSum = (doc?.iva_details || [])
+        .filter((i: any) =>
+            i.tipo_impuesto?.toLowerCase().includes('recargo') ||
+            i.tipo_impuesto?.toLowerCase().includes('equivalencia')
+        )
+        .reduce((acc: number, curr: any) => acc + (Number(curr.cuota) || 0), 0);
+    return Math.round((totalImpuestos - recargoSum) * 100) / 100;
+};
+
 // Función auxiliar para obtener valor de una celda o propiedad de documento
 export const getValueForExport = (item: any, columnId: string, format?: ExportFormat): string | number => {
-    let value: any;
+    const doc = item?.original || item || {};
 
-    // Si es Row de react-table
+    if (columnId === 'base_no_sujeta' || columnId === 'base_exenta') {
+        const val = getBaseNoSujetaFromDoc(doc);
+        return format === 'excel' ? val : formatCurrency(val);
+    }
+    if (columnId === 'iva_only' || columnId === 'iva') {
+        const val = getIvaOnlyFromDoc(doc);
+        return format === 'excel' ? val : formatCurrency(val);
+    }
+    if (columnId === 'retencion') {
+        const val = getRetencionFromDoc(doc);
+        return format === 'excel' ? val : formatCurrency(val);
+    }
+    if (columnId === 'recargo') {
+        const val = getRecargoFromDoc(doc);
+        return format === 'excel' ? val : formatCurrency(val);
+    }
+
+    // Columnas de desglose de IVA por tasa (base_21, iva_21, base_10, etc.)
+    if (/^(base|iva)_\d+$/.test(columnId)) {
+        return getTaxColumnValue(doc, columnId, format);
+    }
+
+    let value: any;
     if (item && typeof item.getValue === 'function') {
         value = item.getValue(columnId);
-        // Lógica específica para columnas de impuestos en react-table que pueden necesitar acceso a row.original
-        if ((columnId.startsWith('base_') || columnId.startsWith('iva_')) && item.original) {
-            return getTaxColumnValue(item.original, columnId);
-        }
-        if (columnId === 'retencion' && item.original) {
-            const val = getRetencionFromDoc(item.original);
-            return format === 'excel' ? val : formatCurrency(val);
-        }
-        if (columnId === 'recargo' && item.original) {
-            const val = getRecargoFromDoc(item.original);
-            return format === 'excel' ? val : formatCurrency(val);
-        }
     } else {
-        // Si es objeto plano (Document)
         value = item[columnId];
-        if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
-            return getTaxColumnValue(item, columnId, format);
-        }
-        if (columnId === 'retencion') {
-            const val = getRetencionFromDoc(item);
-            return format === 'excel' ? val : formatCurrency(val);
-        }
-        if (columnId === 'recargo') {
-            const val = getRecargoFromDoc(item);
-            return format === 'excel' ? val : formatCurrency(val);
-        }
     }
 
     if (columnId === 'enlace_documento' || columnId === 'url_archivo' || columnId === 'archivo') {
@@ -191,6 +215,12 @@ const getNumericValue = (item: any, columnId: string): number => {
         val = item[columnId];
     }
 
+    if (columnId === 'base_no_sujeta' || columnId === 'base_exenta') {
+        return getBaseNoSujetaFromDoc(item.original || item);
+    }
+    if (columnId === 'iva_only' || columnId === 'iva') {
+        return getIvaOnlyFromDoc(item.original || item);
+    }
     if (columnId === 'retencion') {
         return getRetencionFromDoc(item.original || item);
     }
@@ -205,7 +235,7 @@ const getNumericValue = (item: any, columnId: string): number => {
     }
 
     // Lógica para obtener dinámicamente desgloses de IVA (base_21, iva_21)
-    if (columnId.startsWith('base_') || columnId.startsWith('iva_')) {
+    if (/^(base|iva)_\d+$/.test(columnId)) {
         const doc = item.original || item; // Support both Row and Document
         const rateMatch = columnId.match(/\d+/);
         if (rateMatch) {
@@ -309,6 +339,52 @@ export const generateAdvancedExport = (
     }
     if (options.includeFileUrls && !effectiveColumns.some(c => c.id === 'enlace_documento' || c.id === 'url_archivo' || c.id === 'archivo')) {
         effectiveColumns.push({ id: 'enlace_documento', header: 'Enlace Documento' });
+    }
+
+    // ── Inyección dinámica de columnas IVA faltantes ──────────────────────
+    // Si la tabla pasó columnas base_XX/iva_XX pero le faltan tasas que sí
+    // existen en los datos (ej. 19%), las insertan en el orden correcto.
+    {
+        const _ratePattern = /^(base|iva)_(\d+)$/;
+        const _existingRateIdxMap = new Map<number, number>(); // rate → last col idx
+        effectiveColumns.forEach((col, idx) => {
+            const m = col.id.match(_ratePattern);
+            if (m) _existingRateIdxMap.set(Number(m[2]), idx);
+        });
+
+        if (_existingRateIdxMap.size > 0) {
+            // Descubrir todas las tasas presentes en los datos
+            const _allRates = new Set<number>(_existingRateIdxMap.keys());
+            data.forEach(item => {
+                const doc = item.original || item;
+                (doc.iva_details || []).forEach((d: any) => {
+                    const tipo = (d.tipo_impuesto || '').toLowerCase();
+                    if (/retencion|irpf|recargo|equivalencia/.test(tipo)) return;
+                    _allRates.add(Math.round(Number(d.porcentaje)));
+                });
+            });
+
+            // Insertar las tasas faltantes en posición correcta (orden descendente)
+            const _sortedRates = Array.from(_allRates).sort((a, b) => b - a);
+            let _offset = 0; // compensar índices tras cada splice
+            _sortedRates.forEach((rate, i) => {
+                if (_existingRateIdxMap.has(rate)) return; // ya existe, saltar
+                // Insertar después del bloque de la tasa inmediatamente superior
+                const higherRate = _sortedRates.slice(0, i).find(r => _existingRateIdxMap.has(r));
+                const insertAfter = higherRate !== undefined
+                    ? (_existingRateIdxMap.get(higherRate)! + _offset)
+                    : (_offset); // si no hay superior, al principio del bloque
+                const insertIdx = insertAfter + 1;
+                const newCols: { id: string; header: string }[] = [
+                    { id: `base_${rate}`, header: `Base ${rate}%` },
+                    ...(rate > 0 ? [{ id: `iva_${rate}`, header: `IVA ${rate}%` }] : []),
+                ];
+                effectiveColumns.splice(insertIdx, 0, ...newCols);
+                _offset += newCols.length;
+                // Actualizar el mapa con el índice compensado
+                _existingRateIdxMap.set(rate, insertIdx + newCols.length - 1 - _offset + _offset);
+            });
+        }
     }
 
     // Función interna para generar hoja de datos
@@ -630,7 +706,17 @@ const generateEntitiesSheet = (data: any[]): XLSX.WorkSheet => {
 // ==========================================
 
 const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.WorkSheet => {
-    const rates = [21, 15, 10, 4, 0];
+    // Descubrimiento dinámico de tasas desde los datos reales
+    const _ratesSet = new Set<number>([21, 15, 10, 4, 0]);
+    data.forEach(item => {
+        const doc = item.original || item;
+        (doc.iva_details || []).forEach((d: any) => {
+            const tipo = (d.tipo_impuesto || '').toLowerCase();
+            if (/retencion|irpf|recargo|equivalencia/.test(tipo)) return;
+            _ratesSet.add(Math.round(Number(d.porcentaje)));
+        });
+    });
+    const rates = Array.from(_ratesSet).sort((a, b) => b - a);
     const types = ['base', 'iva'];
 
     const createEmptySummary = () => {

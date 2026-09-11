@@ -97,7 +97,8 @@ export async function GET(request: NextRequest) {
         d.año_trimestre,
         d.num_trimestre,
         d.trimestre_cerrado,
-        d.fecha_creacion
+        d.fecha_creacion,
+        d.datos_extra
       FROM documentos d
       WHERE d.id_de_empresa = ?
         AND (
@@ -233,13 +234,38 @@ export async function GET(request: NextRequest) {
       const docRutaArchivo = archivoByDoc[doc.doc_id];
       const publicUrl = buildFileUrl(docRutaArchivo);
 
-      const impuestos = ivaByDoc[doc.doc_id] || [];
-      const retencion = extractRetencionFromImpuestos(impuestos);
+      const impuestosRaw = ivaByDoc[doc.doc_id] || [];
+      const retencion = extractRetencionFromImpuestos(impuestosRaw);
 
       const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
 
-      const baseImponible = doc.importe_sin_impuestos != null ? Number(doc.importe_sin_impuestos) : (Number(doc.importe_total) || 0);
+      // Bases: sujeta (campo BD) + no sujeta/suplidos (datos_extra)
+      let datosExtra: any = {};
+      try {
+        if (typeof doc.datos_extra === 'string') datosExtra = JSON.parse(doc.datos_extra);
+        else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtra = doc.datos_extra;
+      } catch { datosExtra = {}; }
+
+      const baseSujeta    = Number(doc.importe_sin_impuestos) || 0;
+      const baseNoSujeta  = Number(datosExtra.base_no_sujeta) || 0;
+      const baseTotal     = Math.round((baseSujeta + baseNoSujeta) * 100) / 100;
       const totalConImpuestos = Number(doc.importe_total) || 0;
+
+      // Retención de fallback desde datos_extra (documentos pre-integración)
+      const retencionIrpf = retencion || (Math.abs(Number(datosExtra.retencion_irpf)) || 0);
+
+      // Si el documento no tiene filas de impuestos pero sí tiene base (ej: facturas exentas/extranjeras),
+      // inyectar una fila EXENTO para que el integrador no reciba un array vacío.
+      let impuestos = impuestosRaw;
+      if (impuestos.length === 0 && baseTotal > 0) {
+        impuestos = [{
+          tipo_impuesto: 'EXENTO',
+          porcentaje: 0,
+          base_imponible: baseTotal,
+          cuota: 0,
+          total_con_impuesto: baseTotal,
+        }];
+      }
 
       return {
         id: doc.doc_id,
@@ -248,14 +274,22 @@ export async function GET(request: NextRequest) {
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
         actualizado_en: fechaCreacionIso,
-        importe_total: baseImponible,
-        importe_sin_impuestos: baseImponible,
-        importe_con_impuestos: totalConImpuestos,
+        // --- Bases desglosadas ---
+        base_sujeta:          baseSujeta,
+        base_no_sujeta:       baseNoSujeta,
+        base_total:           baseTotal,
+        base_imponible:       baseSujeta,   // alias explícito para compatibilidad
+        // --- Campos originales (retrocompatibilidad) ---
+        importe_total:           baseSujeta,
+        importe_sin_impuestos:   baseSujeta,
+        importe_con_impuestos:   totalConImpuestos,
         moneda: doc.moneda,
         observaciones: doc.observaciones,
         trimestre: doc.num_trimestre,
         año: doc.año_trimestre,
-        retencion,
+        // --- Retenciones ---
+        retencion:      retencionIrpf,
+        retencion_irpf: retencionIrpf,
         entidades: entidades,
         is_issued: isIssued,
         url_archivo: publicUrl,

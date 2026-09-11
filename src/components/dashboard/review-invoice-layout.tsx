@@ -133,13 +133,27 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const currentKey = currentAño && currentNum ? `${currentAño}-${currentNum}` : '';
 
   const liveIva    = isEditing ? ivaFields : (doc.iva_details || []);
+  // Filas a mostrar en la tabla: excluir retenciones/IRPF porque tienen
+  // su propia fila dedicada más abajo y se restan por separado en el total.
+  const liveIvaRows = liveIva.filter((t: any) => {
+    const tipo = (t.tipo_impuesto || '').toLowerCase();
+    return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+  });
   const liveBase   = Number(isEditing ? (fv.base_imponible ?? doc.base_imponible) : doc.base_imponible) || 0;
   const liveBaseNS = Number(isEditing ? (fv.base_no_sujeta ?? (doc as any).base_no_sujeta) : (doc as any).base_no_sujeta) || 0;
   const liveRetencion = Number(isEditing ? ((fv as any).retencion_irpf ?? (doc as any).retencion_irpf) : (doc as any).retencion_irpf) || 0;
   const liveDescuento = Number(isEditing ? (fv.descuento_global ?? (doc as any).descuento_global) : (doc as any).descuento_global) || 0;
 
-  // Calculamos el total dinámicamente si está editando
-  const liveIvaSum = liveIva.reduce((acc: number, t: any) => acc + Number(t.cuota || 0), 0);
+  // Calculamos el total dinámicamente si está editando.
+  // ⚠️ Excluir filas de retención/IRPF de liveIvaSum porque ya se restan
+  // explícitamente con liveRetencion. Sumarlas aquí causaría doble resta.
+  // Recargo sí se incluye (no tiene campo separado en la fórmula).
+  const liveIvaSum = liveIva
+    .filter((t: any) => {
+      const tipo = (t.tipo_impuesto || '').toLowerCase();
+      return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+    })
+    .reduce((acc: number, t: any) => acc + Number(t.cuota || 0), 0);
   const calculatedTotal = liveBase + liveIvaSum + liveBaseNS - liveDescuento - liveRetencion;
   const liveTotal  = isEditing ? calculatedTotal : (Number(doc.total) || 0);
 
@@ -411,7 +425,10 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </div>
               )) : doc.iva_details.length === 0
                 ? <div className="py-4 border border-dashed border-border/50 rounded-md text-center"><p className="text-xs text-muted-foreground">Sin desglose de IVA</p></div>
-                : doc.iva_details.map((iva, i) => (
+                : doc.iva_details.filter((iva) => {
+                    const tipo = (iva.tipo_impuesto || '').toLowerCase();
+                    return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+                  }).map((iva, i) => (
                   <div key={i} className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
                     <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
                     <EInput value={`${iva.porcentaje}%`} className="text-center text-muted-foreground" />
@@ -478,7 +495,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </tr>
               </thead>
               <tbody>
-                {liveIva.map((iva: any, i: number) => (
+                {liveIvaRows.map((iva: any, i: number) => (
                   <tr key={i} className="border-t border-border/40 hover:bg-muted/10 transition-colors">
                     <td className="px-3 py-2 text-center font-medium text-muted-foreground">{iva.porcentaje}%</td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(iva.base_imponible)}</td>
