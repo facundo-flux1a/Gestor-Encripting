@@ -253,10 +253,30 @@ function DocumentsPageContent() {
     };
   }, [sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos]);
 
-  const otherDocsHiddenColumns = [
-    'base_21', 'iva_21', 'base_10', 'iva_10', 'base_4', 'iva_4', 'base_0', 'iva_0',
-    'retencion', 'base_imponible', 'iva', 'total'
-  ];
+  // Columnas de IVA a ocultar en la pestaña "Otros" (nóminas, contratos, etc.).
+  // Computado dinámicamente para incluir cualquier tasa extra que aparezca en los documentos
+  // (ej: base_19/iva_19 de facturas de proveedores extranjeros), garantizando que la
+  // pestaña "Otros" nunca muestre columnas de IVA sueltas.
+  const otherDocsHiddenColumns = React.useMemo(() => {
+    const BASE_RATES = [21, 10, 4, 0];
+    const found = new Set<number>(BASE_RATES);
+    documents.forEach((doc: any) => {
+      (doc.iva_details || []).forEach((detail: any) => {
+        const tipo = (detail?.tipo_impuesto || '').toLowerCase();
+        const isRealIva = !tipo.includes('retencion') && !tipo.includes('irpf') &&
+          !tipo.includes('recargo') && !tipo.includes('equivalencia');
+        if (isRealIva) {
+          const rate = Math.round(Number(detail.porcentaje));
+          if (!isNaN(rate)) found.add(rate);
+        }
+      });
+    });
+    const allRates = Array.from(found);
+    return [
+      ...allRates.flatMap(r => [`base_${r}`, `iva_${r}`]),
+      'retencion', 'base_imponible', 'iva', 'total'
+    ];
+  }, [documents]);
 
   const companiesForUpload = React.useMemo(() => {
     return companies.map(company => ({

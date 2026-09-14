@@ -359,3 +359,62 @@
 .dark .custom-scrollbar {
   scrollbar-color: hsl(var(--primary) / 0.7) hsl(var(--muted) / 0.2) !important;
 }
+
+/* ===================================
+   Visible Vertical Scrollbar (Review Invoice Layout)
+   =================================== */
+
+.review-form-scrollbar::-webkit-scrollbar {
+  width: 10px !important;
+}
+
+.review-form-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.35) !important;
+  border-radius: 9999px !important;
+  margin: 6px 2px !important;
+}
+
+.review-form-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.6) !important;
+  border-radius: 9999px !important;
+  border: 2px solid transparent !important;
+  background-clip: content-box !important;
+  transition: background 0.2s ease !important;
+}
+
+.review-form-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.85) !important;
+  background-clip: content-box !important;
+}
+
+.review-form-scrollbar::-webkit-scrollbar-thumb:active {
+  background: hsl(var(--primary)) !important;
+  background-clip: content-box !important;
+}
+
+/* Para Firefox */
+.review-form-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: hsl(var(--primary) / 0.6) hsl(var(--muted) / 0.35) !important;
+}
+
+/* Versión para modo oscuro */
+.dark .review-form-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.6) !important;
+  border: 1px solid hsl(var(--border) / 0.5) !important;
+}
+
+.dark .review-form-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.75) !important;
+  background-clip: content-box !important;
+}
+
+.dark .review-form-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.95) !important;
+  background-clip: content-box !important;
+}
+
+.dark .review-form-scrollbar {
+  scrollbar-color: hsl(var(--primary) / 0.75) hsl(var(--muted) / 0.6) !important;
+}
+

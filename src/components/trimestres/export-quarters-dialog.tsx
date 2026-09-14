@@ -339,6 +339,7 @@ export function ExportQuartersDialog({
         ..._ivaColumns,
         { id: 'base_no_sujeta', header: 'Base Exenta / No Sujeta' },
         { id: 'retencion', header: 'Retención' },
+        { id: 'descuento_global', header: 'Descuento' },
       ];
 
       // Nombre dinámico descriptivo

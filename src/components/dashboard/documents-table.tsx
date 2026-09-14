@@ -85,6 +85,16 @@ function documentHasActiveIncident(doc: Document): boolean {
   return activas.length > 0 || !!legacy;
 }
 
+const isRealIvaDetail = (detail: any): boolean => {
+  const tipo = (detail?.tipo_impuesto || '').toLowerCase();
+  return (
+    !tipo.includes('retencion') &&
+    !tipo.includes('irpf') &&
+    !tipo.includes('recargo') &&
+    !tipo.includes('equivalencia')
+  );
+};
+
 const getColumns = (
   onUpdate: (docId: number, field: string, value: any, table: TanstackTable<Document>, rowIndex: number) => void,
   onSummarize: (doc: Document) => void,
@@ -109,7 +119,8 @@ const getColumns = (
     };
   },
   yearCriterion: 'contable' | 'trimestre' = 'contable',
-  onToggleYearCriterion?: () => void
+  onToggleYearCriterion?: () => void,
+  vatRates: number[] = [21, 10, 4, 0]
 ): ColumnDef<Document>[] => {
   const noColumnFilter = { enableColumnFilter: false, meta: { filterVariant: 'none' as const } };
 
@@ -912,7 +923,7 @@ const getColumns = (
         filterVariant: 'faceted-tipo-documento' as const,
         filterExtraOptions: customTypes,
       },
-    }, ...[21, 10, 4, 0].flatMap(rate => ([
+    }, ...vatRates.flatMap(rate => ([
       {
         id: `base_${rate}`,
         header: `Base ${rate}%`,
@@ -1658,6 +1669,24 @@ export function DocumentsTable({
     setYearCriterion((prev) => (prev === 'contable' ? 'trimestre' : 'contable'));
   }, []);
 
+  // 🆕 Detectar dinámicamente las tasas de IVA presentes en los documentos actuales.
+  // Siempre incluimos las tasas estándar españolas [21, 10, 4, 0].
+  // Si hay documentos con otras tasas (ej: 19% alemán), se añaden automáticamente.
+  // isRealIvaDetail filtra retenciones/recargos para que no generen columnas de IVA.
+  const vatRates = useMemo(() => {
+    const BASE_RATES = [21, 10, 4, 0];
+    const found = new Set<number>(BASE_RATES);
+    documents.forEach(doc => {
+      (doc.iva_details || []).forEach(detail => {
+        if (isRealIvaDetail(detail)) {
+          const rate = Math.round(Number(detail.porcentaje));
+          if (!isNaN(rate)) found.add(rate);
+        }
+      });
+    });
+    return Array.from(found).sort((a, b) => b - a);
+  }, [documents]);
+
   const columns = useMemo(() => {
     const cols = getColumns(
       handleUpdate as any,
@@ -1674,7 +1703,8 @@ export function DocumentsTable({
       onMove,
       footerValues,
       yearCriterion,
-      handleToggleYearCriterion
+      handleToggleYearCriterion,
+      vatRates
     );
     // 🔧 FIX Z-INDEX: Ajustar columna de acciones
     if (cols.length > 0 && cols[0].id === 'actions') {
@@ -1686,7 +1716,7 @@ export function DocumentsTable({
       );
     }
     return cols;
-  }, [handleUpdate, showConfirmButton, duplicates, yearCriterion, handleToggleYearCriterion]);
+  }, [handleUpdate, showConfirmButton, duplicates, yearCriterion, handleToggleYearCriterion, vatRates]);
 
   const previewUrl = docToPreview?.archivos?.[0]?.ruta_archivo;
   const previewName = docToPreview?.archivos?.[0]?.nombre_archivo || `documento_${docToPreview?.id_documento}.pdf`;

@@ -76,12 +76,28 @@ const getIvaOnlyFromDoc = (doc: any): number => {
     return Math.round((totalImpuestos - recargoSum) * 100) / 100;
 };
 
+const getDescuentoFromDoc = (doc: any): number => {
+    const extra = typeof doc?.datos_extra === 'string'
+        ? (() => { try { return JSON.parse(doc.datos_extra); } catch { return {}; } })()
+        : (doc?.datos_extra || {});
+    return Math.abs(Number(
+        extra?.descuento_global ?? 
+        extra?.DESCUENTO_GLOBAL ?? 
+        doc?.descuento_global ?? 
+        0
+    ));
+};
+
 // Función auxiliar para obtener valor de una celda o propiedad de documento
 export const getValueForExport = (item: any, columnId: string, format?: ExportFormat): string | number => {
     const doc = item?.original || item || {};
 
     if (columnId === 'base_no_sujeta' || columnId === 'base_exenta') {
         const val = getBaseNoSujetaFromDoc(doc);
+        return format === 'excel' ? val : formatCurrency(val);
+    }
+    if (columnId === 'descuento_global' || columnId === 'descuento') {
+        const val = getDescuentoFromDoc(doc);
         return format === 'excel' ? val : formatCurrency(val);
     }
     if (columnId === 'iva_only' || columnId === 'iva') {
@@ -145,7 +161,7 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
 
     // Forzar conversión a número en Excel para columnas conocidas aunque vengan como string
     if (format === 'excel' && value !== null && value !== undefined && value !== '') {
-        const isColumnNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad'].includes(columnId)
+        const isColumnNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad', 'descuento', 'descuento_global'].includes(columnId)
             || columnId.startsWith('base_')
             || columnId.startsWith('iva_')
             || columnId.includes('total')
@@ -154,6 +170,7 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
             || columnId.includes('precio')
             || columnId.includes('importe')
             || columnId.includes('resultado')
+            || columnId.includes('descuento')
             || columnId.includes('cantidad');
 
         if (isColumnNumeric) {
@@ -226,6 +243,9 @@ const getNumericValue = (item: any, columnId: string): number => {
     }
     if (columnId === 'recargo') {
         return getRecargoFromDoc(item.original || item);
+    }
+    if (columnId === 'descuento_global' || columnId === 'descuento') {
+        return getDescuentoFromDoc(item.original || item);
     }
 
     // Si la celda explícitamente existe en el root del objeto o fila
@@ -387,6 +407,39 @@ export const generateAdvancedExport = (
         }
     }
 
+    // ── Inyección dinámica de columna Descuento ───────────────────────────
+    // Si la tabla exporta facturas/documentos y no tiene columna de descuento,
+    // se inserta junto a las columnas de impuestos/retenciones para mantener el desglose completo.
+    if (!effectiveColumns.some(c => c.id === 'descuento_global' || c.id === 'descuento')) {
+        const hasFiscalCols = effectiveColumns.some(c =>
+            c.id === 'base_imponible' || c.id === 'retencion' || c.id === 'base_no_sujeta' || c.id.startsWith('base_') || c.id.startsWith('iva_')
+        );
+        if (hasFiscalCols) {
+            let lastFiscalIdx = -1;
+            effectiveColumns.forEach((col, idx) => {
+                if (
+                    col.id === 'retencion' ||
+                    col.id === 'recargo' ||
+                    col.id === 'base_no_sujeta' ||
+                    /^(base|iva)_\d+$/.test(col.id)
+                ) {
+                    lastFiscalIdx = idx;
+                }
+            });
+
+            if (lastFiscalIdx !== -1) {
+                effectiveColumns.splice(lastFiscalIdx + 1, 0, { id: 'descuento_global', header: 'Descuento' });
+            } else {
+                const totalIdx = effectiveColumns.findIndex(c => c.id === 'total' || c.id === 'importe_total');
+                if (totalIdx !== -1) {
+                    effectiveColumns.splice(totalIdx, 0, { id: 'descuento_global', header: 'Descuento' });
+                } else {
+                    effectiveColumns.push({ id: 'descuento_global', header: 'Descuento' });
+                }
+            }
+        }
+    }
+
     // Función interna para generar hoja de datos
     const generateDataSheet = (sheetData: any[]): XLSX.WorkSheet => {
         // 1. Preparar datos procesados
@@ -418,7 +471,7 @@ export const generateAdvancedExport = (
 
             effectiveColumns.slice(1).forEach(col => {
                 // Check heuristic for numeric column or tax column
-                const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad'].includes(col.id)
+                const isNumeric = ['base', 'iva', 'retencion', 'total', 'base_imponible', 'importe_total', 'importe_sin_impuestos', 'cantidad', 'descuento', 'descuento_global'].includes(col.id)
                     || col.id.startsWith('base_')
                     || col.id.startsWith('iva_')
                     || col.id.includes('total')
@@ -427,6 +480,7 @@ export const generateAdvancedExport = (
                     || col.id.includes('precio')
                     || col.id.includes('importe')
                     || col.id.includes('resultado')
+                    || col.id.includes('descuento')
                     || col.id.includes('cantidad');
 
                 if (isNumeric) {
@@ -847,9 +901,9 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
             });
         }
 
-        // ✅ Acumular base_no_sujeta y descuento_global desde el documento (ya mapeados en top-level)
+        // ✅ Acumular base_no_sujeta y descuento_global desde el documento
         const bns  = Math.abs(Number((doc as any).base_no_sujeta  || 0));
-        const desc = Math.abs(Number((doc as any).descuento_global || 0));
+        const desc = getDescuentoFromDoc(doc);
         if (bns > 0) {
             targetSum.base_no_sujeta[q]   += bns * absSign;
             targetSum.base_no_sujeta.total += bns * absSign;

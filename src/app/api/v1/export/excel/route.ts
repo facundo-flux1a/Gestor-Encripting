@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
     const empresaNombreGlobal = empresaData?.nombre_de_empresa || `Empresa_${empresaId}`;
 
     const entidadesByDoc: Record<number, Record<string, { nombre: string; cif: string }>> = {};
-    entidadesPrisma.forEach((ent) => {
+    entidadesPrisma.forEach((ent: any) => {
       if (!entidadesByDoc[ent.documento_id]) entidadesByDoc[ent.documento_id] = {};
       if (ent.rol) {
          entidadesByDoc[ent.documento_id][ent.rol] = {
@@ -347,6 +347,10 @@ export async function POST(request: NextRequest) {
       const baseNoSujeta = Number(datosExtra?.base_no_sujeta || datosExtra?.BASE_NO_SUJETA || 0);
       row['Base No Sujeta'] = baseNoSujeta;
 
+      // Descuento Global
+      const descuento = Math.abs(Number(datosExtra?.descuento_global || datosExtra?.DESCUENTO_GLOBAL || doc?.descuento_global || 0));
+      row['Descuento'] = descuento;
+
       // Totales finales
       row['Base Imponible'] = Number(doc.importe_sin_impuestos) || 0;
       row['Total Factura'] = Number(doc.importe_total) || 0;
@@ -358,7 +362,7 @@ export async function POST(request: NextRequest) {
     // Columnas numéricas dinámicas (una por tasa descubierta)
     const numCols = [
       ...VAT_RATES.flatMap(r => r > 0 ? [`Base ${r}%`, `IVA ${r}%`] : [`Base ${r}%`]),
-      'Base No Sujeta', 'Retención', 'Recargo de Equiv.', 'Base Imponible', 'Total Factura'
+      'Base No Sujeta', 'Retención', 'Recargo de Equiv.', 'Descuento', 'Base Imponible', 'Total Factura'
     ];
     const totalsRow: Record<string, any> = { 'Tipo': 'TOTALES' };
     numCols.forEach(col => {
@@ -371,6 +375,14 @@ export async function POST(request: NextRequest) {
             else if (doc.datos_extra && typeof doc.datos_extra === 'object') de = doc.datos_extra;
           } catch { de = {}; }
           return sum + Number(de?.base_no_sujeta || de?.BASE_NO_SUJETA || 0);
+        }
+        if (col === 'Descuento') {
+          let de: any = {};
+          try {
+            if (typeof doc.datos_extra === 'string') de = JSON.parse(doc.datos_extra);
+            else if (doc.datos_extra && typeof doc.datos_extra === 'object') de = doc.datos_extra;
+          } catch { de = {}; }
+          return sum + Math.abs(Number(de?.descuento_global || de?.DESCUENTO_GLOBAL || doc?.descuento_global || 0));
         }
         if (col === 'Base Imponible') return sum + (Number(doc.importe_sin_impuestos) || 0);
         if (col === 'Total Factura') return sum + (Number(doc.importe_total) || 0);

@@ -619,6 +619,7 @@ function TrimestresPageContent() {
         { id: 'iva_10', header: 'IVA 10%' },
         { id: 'base_no_sujeta', header: 'Base Exenta / No Sujeta' },
         { id: 'retencion', header: 'Retención' },
+        { id: 'descuento_global', header: 'Descuento' },
       ];
 
       generateAdvancedExport(processedData, exportColumns, {

@@ -279,7 +279,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         </div>
 
         {/* Scrollable form */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5 review-form-scrollbar">
 
           {/* PROVEEDOR + CIF */}
           <div className="grid grid-cols-2 gap-4">
