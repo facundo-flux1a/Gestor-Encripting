@@ -130,14 +130,14 @@ function DocumentoPageContent() {
     if (searchParams.get('audit') === 'true') setIsAuditMode(true);
   }, [searchParams]);
 
-  const fetchDocument = useCallback(async (id: number) => {
+  const fetchDocument = useCallback(async (id: number, forceFormReset: boolean = false) => {
     try {
       setIsLoading(true);
 
       if (isDemoMode) {
         const found = DEMO_DOCUMENTS.find(d => d.id_documento === id) || DEMO_DOCUMENTS[0];
         setDoc(found);
-        if (lastDocIdRef.current !== found.id_documento) {
+        if (forceFormReset || lastDocIdRef.current !== found.id_documento) {
           resetFormWithDocData(found);
           lastDocIdRef.current = found.id_documento;
         }
@@ -149,7 +149,7 @@ function DocumentoPageContent() {
       if (!res.ok) { if (res.status === 404) notFound(); throw new Error(`Error ${res.status}`); }
       const fetchedDoc = await res.json();
       setDoc(fetchedDoc);
-      if (lastDocIdRef.current !== fetchedDoc.id_documento) {
+      if (forceFormReset || lastDocIdRef.current !== fetchedDoc.id_documento) {
         resetFormWithDocData(fetchedDoc);
         lastDocIdRef.current = fetchedDoc.id_documento;
       }
@@ -159,6 +159,12 @@ function DocumentoPageContent() {
       setIsLoading(false);
     }
   }, [toast, resetFormWithDocData, isDemoMode]);
+
+  const reloadDocument = useCallback(async () => {
+    if (docId !== null) {
+      await fetchDocument(docId, true);
+    }
+  }, [docId, fetchDocument]);
 
   useEffect(() => {
     if (docId === null) { notFound(); return; }
@@ -287,7 +293,7 @@ function DocumentoPageContent() {
         }
       }
 
-      await fetchDocument(doc.id_documento);
+      await fetchDocument(doc.id_documento, true);
       toast({
         title: '✅ Cambios Guardados',
         description: 'El documento y su configuración se actualizaron correctamente.',
@@ -634,6 +640,7 @@ function DocumentoPageContent() {
       onAuditMode={() => setIsAuditMode(true)}
       onMarkDuplicate={handleMarkDuplicate}
       navigation={navState}
+      onRefresh={reloadDocument}
     />
   );
 

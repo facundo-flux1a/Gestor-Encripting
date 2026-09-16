@@ -31,28 +31,75 @@ export function checkTipoMismatch(input: CheckTipoMismatchInput): PreSaveIssue |
 
   if (!normEmisor && !normReceptor) return null;
 
-  let expectedType: string | null = null;
-  const currentTipo = (input.tipoDocumento || '').toUpperCase();
-  const isAbono =
-    (input.total ?? 0) < 0 ||
-    currentTipo.includes('ABONO') ||
-    currentTipo.includes('RECTIFICATIVA');
+  const isCompanyEmisor = normEmisor === normEmpresa;
+  const isCompanyReceptor = normReceptor === normEmpresa;
 
-  if (normEmisor === normEmpresa) {
-    expectedType = isAbono ? 'NOTA DE CRÉDITO EMITIDA' : 'FACTURA EMITIDA';
-  } else if (normReceptor === normEmpresa) {
-    expectedType = isAbono ? 'NOTA DE CRÉDITO RECIBIDA' : 'FACTURA RECIBIDA';
-  }
+  if (isCompanyEmisor && isCompanyReceptor) return null;
+  if (!isCompanyEmisor && !isCompanyReceptor) return null;
 
-  if (expectedType && currentTipo !== expectedType) {
-    const roleLabel = normEmisor === normEmpresa ? 'EMISOR' : 'RECEPTOR';
-    const empName = input.empresaNombre ? ` (${input.empresaNombre})` : '';
+  const rawTipo = (input.tipoDocumento || '').trim();
+  const cleanTipo = rawTipo.replace(/\s*\(SIN CONFIRMAR\)\s*/gi, '').trim().toUpperCase();
+
+  const isDocEmitido = cleanTipo.includes('EMITID') || cleanTipo.includes('VENTA');
+  const isDocRecibido = cleanTipo.includes('RECIBID') || cleanTipo.includes('COMPRA');
+
+  const hasAbonoTerm =
+    cleanTipo.includes('ABONO') ||
+    cleanTipo.includes('CRÉDITO') ||
+    cleanTipo.includes('CREDITO') ||
+    cleanTipo.includes('RECTIFICATIV');
+
+  const hasNegativeTotal = input.total !== null && input.total !== undefined && Number(input.total) < 0;
+  const isAbono = hasAbonoTerm || hasNegativeTotal;
+  const isAlbaran = cleanTipo.includes('ALBAR');
+
+  const roleLabel = isCompanyEmisor ? 'EMISOR' : 'RECEPTOR';
+  const empName = input.empresaNombre ? ` (${input.empresaNombre})` : '';
+
+  // 1. Conflicto de polaridad (Emisor vs Receptor)
+  if (isCompanyEmisor && (isDocRecibido || !isDocEmitido)) {
+    const suggestedValue = isAlbaran
+      ? 'ALBARÁN EMITIDO'
+      : isAbono
+      ? 'ABONO EMITIDO'
+      : 'FACTURA EMITIDA';
+
     return {
       type: 'TIPO_MISMATCH',
       title: 'Conflicto de Tipo de Documento',
-      description: `La empresa propia${empName} figura como ${roleLabel} de las entidades. El documento actualmente figura como "${input.tipoDocumento || ''}", pero por regla fiscal debe corregirse a "${expectedType}".`,
+      description: `La empresa propia${empName} figura como ${roleLabel} (ventas/emitidas). El documento actualmente figura como "${input.tipoDocumento || ''}", pero por regla fiscal debe corregirse a "${suggestedValue}".`,
       blocking: true,
-      suggestedValue: expectedType,
+      suggestedValue,
+      currentValue: input.tipoDocumento || '',
+    };
+  }
+
+  if (isCompanyReceptor && (isDocEmitido || !isDocRecibido)) {
+    const suggestedValue = isAlbaran
+      ? 'ALBARÁN RECIBIDO'
+      : isAbono
+      ? 'ABONO RECIBIDO'
+      : 'FACTURA RECIBIDA';
+
+    return {
+      type: 'TIPO_MISMATCH',
+      title: 'Conflicto de Tipo de Documento',
+      description: `La empresa propia${empName} figura como ${roleLabel} (compras/gastos). El documento actualmente figura como "${input.tipoDocumento || ''}", pero por regla fiscal debe corregirse a "${suggestedValue}".`,
+      blocking: true,
+      suggestedValue,
+      currentValue: input.tipoDocumento || '',
+    };
+  }
+
+  // 2. Conflicto de signo / naturaleza (Total negativo sin clasificar como Abono/Rectificativa)
+  if (hasNegativeTotal && !hasAbonoTerm) {
+    const suggestedValue = isCompanyEmisor ? 'ABONO EMITIDO' : 'ABONO RECIBIDO';
+    return {
+      type: 'TIPO_MISMATCH',
+      title: 'Conflicto de Tipo de Documento',
+      description: `El documento tiene un importe total negativo (${input.total} €), por lo que contable y fiscalmente debe clasificarse como "${suggestedValue}".`,
+      blocking: true,
+      suggestedValue,
       currentValue: input.tipoDocumento || '',
     };
   }

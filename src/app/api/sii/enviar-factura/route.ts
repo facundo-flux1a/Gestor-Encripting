@@ -1,6 +1,7 @@
 // src/app/api/sii/enviar-factura/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { siiService } from '@/services/sii-services';
+import { prisma } from '@/lib/prisma';
 
 
 export async function POST(request: NextRequest) {
@@ -27,6 +28,33 @@ export async function POST(request: NextRequest) {
           error: 'Faltan datos requeridos: certificado, contraseña o factura' 
         },
         { status: 400 }
+      );
+    }
+
+    // 🛡️ Guardia de seguridad: Facturas de proveedores extranjeros nunca deben enviarse al SII
+    const docId = facturaRaw.id || facturaRaw.documento_id;
+    if (docId) {
+      const doc = await prisma.documentos.findUnique({
+        where: { id: BigInt(docId) },
+        select: { datos_extra: true }
+      });
+      const datosExtra = (doc?.datos_extra as Record<string, any>) || {};
+      if (datosExtra.es_proveedor_extranjero_ue === true) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Operación no permitida: Las facturas de proveedores extranjeros no deben remitirse al SII español (IVA de origen no computable).',
+          },
+          { status: 422 }
+        );
+      }
+    } else if (facturaRaw.es_proveedor_extranjero_ue === true) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Operación no permitida: Las facturas de proveedores extranjeros no deben remitirse al SII español (IVA de origen no computable).',
+        },
+        { status: 422 }
       );
     }
 

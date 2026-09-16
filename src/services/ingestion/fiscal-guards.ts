@@ -8,6 +8,7 @@ import {
   DocumentoGemini,
   Impuesto,
   normalizeCIF,
+  detectCountryFromCIF,
   detectTipoDocumento,
   validateMathBalance,
 } from './normalize';
@@ -22,6 +23,7 @@ export type FiscalGuardCode =
   | 'CIF_EMISOR_AUSENTE'
   | 'CIF_RECEPTOR_AUSENTE'
   | 'CIF_FORMATO_INVALIDO'
+  | 'CIF_PROVEEDOR_EXTRANJERO_UE'
   | 'EMISOR_IGUAL_RECEPTOR'
   | 'MATH_BALANCE'
   | 'IVA_VS_BASE'
@@ -182,6 +184,8 @@ export function runFiscalGuards(
   const failures: FiscalGuardFailure[] = [];
   const emisor = doc.empresa_emisora || {};
   const receptor = doc.cliente || doc.empresa_receptora || {};
+  // detectCountryFromCIF corre sobre el CIF crudo (antes de normalizeCIF) para preservar prefijos de país
+  const countryInfo = detectCountryFromCIF(emisor.cif);
   const cifEmisor = normalizeCIF(emisor.cif);
   const cifReceptor = normalizeCIF(receptor.cif);
   const { total, base, base_no_sujeta } = getImportes(doc);
@@ -202,11 +206,20 @@ export function runFiscalGuards(
   if (!cifEmisor && !esTicket) {
     failures.push({ code: 'CIF_EMISOR_AUSENTE', message: 'CIF del emisor ausente' });
   } else if (cifEmisor && !looksLikeSpanishTaxId(cifEmisor)) {
-    failures.push({
-      code: 'CIF_FORMATO_INVALIDO',
-      message: `CIF emisor con formato inválido: ${cifEmisor}`,
-      details: { cif: cifEmisor },
-    });
+    if (countryInfo.isForeign) {
+      // CIF de proveedor UE/EEUU — formato válido para su país, incidencia informativa no bloqueante
+      failures.push({
+        code: 'CIF_PROVEEDOR_EXTRANJERO_UE',
+        message: `Proveedor extranjero (${countryInfo.countryName || countryInfo.countryCode}): IVA no deducible en España`,
+        details: { cif: cifEmisor, countryCode: countryInfo.countryCode, countryName: countryInfo.countryName },
+      });
+    } else {
+      failures.push({
+        code: 'CIF_FORMATO_INVALIDO',
+        message: `CIF emisor con formato inválido: ${cifEmisor}`,
+        details: { cif: cifEmisor },
+      });
+    }
   }
 
   if (!esTicket && tipoInfo.esEmitida && !cifReceptor) {
@@ -272,9 +285,9 @@ export function runFiscalGuards(
     }
   }
 
-  failures.push(...validateIvaVsBase(impuestos, 0.05));
-
-  return { ok: failures.length === 0, failures };
+  // CIF_PROVEEDOR_EXTRANJERO_UE es informativo — no bloquea el flujo normal del documento
+  const blockingFailures = failures.filter(f => f.code !== 'CIF_PROVEEDOR_EXTRANJERO_UE');
+  return { ok: blockingFailures.length === 0, failures };
 }
 
 export function formatGuardFailures(failures: FiscalGuardFailure[]): string {

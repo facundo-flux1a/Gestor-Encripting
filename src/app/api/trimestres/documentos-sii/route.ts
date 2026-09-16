@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         )
+        AND (JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.es_proveedor_extranjero_ue')) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.es_proveedor_extranjero_ue')) != 'true')
     `;
 
     if (!incluirEnviadas) {

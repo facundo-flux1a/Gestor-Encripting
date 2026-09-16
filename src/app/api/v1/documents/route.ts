@@ -355,7 +355,7 @@ export async function GET(request: NextRequest) {
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import { calcularTrimestreExtendido, resolverTrimestreContableImportacion, obtenerPrimerTrimestreAbiertoDelAnio } from '@/lib/trimestre-utils';
-import { normalizeCIF } from '@/services/ingestion/normalize';
+import { normalizeCIF, detectCountryFromCIF } from '@/services/ingestion/normalize';
 import { runHealthChecksForDocument } from '@/services/health-check-service';
 import connection, { dbName } from '@/lib/db';
 
@@ -539,6 +539,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const rawCifEmisor = doc.entidades?.emisor?.cif;
+      const countryInfo = detectCountryFromCIF(rawCifEmisor ? String(rawCifEmisor) : null);
+      const isIssued: boolean = doc.is_issued; // obligatorio: validado arriba
+      const esExtranjeroRecibido = Boolean(countryInfo.isForeign && !isIssued);
+
       const cleanCif = (v: unknown) => normalizeCIF(v == null ? null : String(v)) ?? '';
       const cifEmisor = cleanCif(doc.entidades?.emisor?.cif);
       const serie     = (doc.serie || '').trim().toUpperCase();
@@ -559,6 +564,7 @@ export async function POST(request: NextRequest) {
       // ── Importes ──
       const baseSinImpuestos = Number(doc.importe_sin_impuestos) || 0;
       const totalConImpuestos = Number(doc.importe_total) || 0;
+      const importeSinImpuestosFinal = esExtranjeroRecibido ? totalConImpuestos : baseSinImpuestos;
 
       // ── Fechas ──
       const fechaEmision     = parseFlexibleDate(doc.fecha_emision ? String(doc.fecha_emision) : '');
@@ -580,7 +586,6 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Tipo documento ──
-      const isIssued: boolean = doc.is_issued; // obligatorio: validado arriba
       let tipoDocumento = isIssued ? 'FACTURA EMITIDA' : 'FACTURA RECIBIDA';
       if (doc.estado === 'anulada') tipoDocumento += ' (ANULADA)';
 
@@ -590,8 +595,26 @@ export async function POST(request: NextRequest) {
         forma_pago: doc.forma_pago || '',
         cif: cifEmisor || cleanCif(doc.entidades?.cliente?.cif),
         canal_origen: 'api',
-        ...(doc.descuento_global ? { descuento_global: Number(doc.descuento_global) } : {}),
-        ...(doc.base_no_sujeta ? { base_no_sujeta: Number(doc.base_no_sujeta) } : {}),
+        descuento_global: esExtranjeroRecibido ? 0 : (doc.descuento_global ? Number(doc.descuento_global) : 0),
+        base_no_sujeta: esExtranjeroRecibido ? 0 : (doc.base_no_sujeta ? Number(doc.base_no_sujeta) : 0),
+        ...(esExtranjeroRecibido ? {
+          es_proveedor_extranjero_ue: true,
+          zona_emisor: countryInfo.region,
+          pais_emisor: countryInfo.countryCode,
+          pais_emisor_nombre: countryInfo.countryName,
+          cuenta_proveedor_sugerida: '4100000',
+          backup_fiscal_origen: {
+            importe_sin_impuestos_original: baseSinImpuestos,
+            base_no_sujeta_original: Number(doc.base_no_sujeta) || 0,
+            descuento_global_original: Number(doc.descuento_global) || 0,
+            impuestos_originales: Array.isArray(doc.impuestos) ? doc.impuestos.map((imp: any) => ({
+              tipo: (imp.tipo_impuesto || 'IVA').toUpperCase(),
+              porcentaje: Number(imp.porcentaje) || 0,
+              base: Number(imp.base ?? imp.base_imponible) || 0,
+              cuota: Number(imp.cuota) || 0,
+            })) : [],
+          },
+        } : {}),
         ...(doc.verifactu ? { verifactu: doc.verifactu } : {}),
         ...(doc.estado === 'anulada' ? { estado_factura: 'anulada' } : {}),
       };
@@ -650,7 +673,7 @@ export async function POST(request: NextRequest) {
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
                 importe_total: totalConImpuestos,
-                importe_sin_impuestos: baseSinImpuestos,
+                importe_sin_impuestos: importeSinImpuestosFinal,
                 moneda: (doc.moneda || 'EUR').toUpperCase(),
                 observaciones: doc.observaciones || undefined,
                 año_trimestre: trimestreData.año,
@@ -674,7 +697,7 @@ export async function POST(request: NextRequest) {
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
                 importe_total: totalConImpuestos,
-                importe_sin_impuestos: baseSinImpuestos,
+                importe_sin_impuestos: importeSinImpuestosFinal,
                 moneda: (doc.moneda || 'EUR').toUpperCase(),
                 observaciones: doc.observaciones || undefined,
                 id_de_empresa: BigInt(empresaId),
@@ -743,22 +766,38 @@ export async function POST(request: NextRequest) {
           }
 
           // ── Impuestos ──
-          const impuestos = Array.isArray(doc.impuestos) ? doc.impuestos : [];
-          if (impuestos.length > 0) {
-            await tx.impuestos_documento.createMany({
-              data: impuestos.map((imp: any) => {
-                const base  = Number(imp.base ?? imp.base_imponible) || 0;
-                const cuota = Number(imp.cuota) || 0;
-                return {
-                  documento_id: savedDocId,
-                  id_de_empresa: BigInt(empresaId),
-                  tipo_impuesto: (imp.tipo_impuesto || 'IVA').toUpperCase(),
-                  porcentaje: Number(imp.porcentaje) || 0,
-                  base_imponible: base,
-                  cuota: cuota,
-                  total_con_impuesto: base + cuota,
-                };
-              }),
+          if (!esExtranjeroRecibido) {
+            const impuestos = Array.isArray(doc.impuestos) ? doc.impuestos : [];
+            if (impuestos.length > 0) {
+              await tx.impuestos_documento.createMany({
+                data: impuestos.map((imp: any) => {
+                  const base  = Number(imp.base ?? imp.base_imponible) || 0;
+                  const cuota = Number(imp.cuota) || 0;
+                  return {
+                    documento_id: savedDocId,
+                    id_de_empresa: BigInt(empresaId),
+                    tipo_impuesto: (imp.tipo_impuesto || 'IVA').toUpperCase(),
+                    porcentaje: Number(imp.porcentaje) || 0,
+                    base_imponible: base,
+                    cuota: cuota,
+                    total_con_impuesto: base + cuota,
+                  };
+                }),
+              });
+            }
+          } else {
+            const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'Extranjero';
+            const paisCodigo = countryInfo.countryCode && countryInfo.countryCode !== paisNombre ? ` (${countryInfo.countryCode})` : '';
+            const descExtranjero = `Proveedor extranjero detectado: ${paisNombre}${paisCodigo}. Factura de origen internacional. El IVA de origen no es deducible en España (Modelo 303), por lo que el total computa íntegramente como gasto contable. Requiere validación.`;
+
+            await tx.incidencias_documento.create({
+              data: {
+                documento_id: savedDocId,
+                id_de_empresa: BigInt(empresaId),
+                descripcion: descExtranjero,
+                incidencia: true,
+                validado: false,
+              }
             });
           }
 

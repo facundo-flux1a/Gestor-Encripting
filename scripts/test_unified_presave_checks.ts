@@ -87,4 +87,87 @@ console.log('🧪 Running Unified Pre-Save Validation Unit Tests...\n');
   console.log('  ✅ CIF Normalization works as expected');
 }
 
+// ── Test 5: Abono Recibido vs Nota de Crédito Recibida (Synonyms: should NOT mismatch) ──
+{
+  console.log('▶ Test 5: Synonyms (Abono Recibido and Nota de Crédito Recibida) should NOT mismatch');
+  const baseInput = {
+    total: -50.00,
+    empresaCIF: 'B12345678',
+    empresaNombre: 'Mi Empresa SL',
+    entidades: [
+      { rol: 'emisor', identificador_fiscal: 'DE281940556' },
+      { rol: 'receptor', identificador_fiscal: 'B12345678' }
+    ]
+  };
+
+  const issueAbono = checkTipoMismatch({ ...baseInput, tipoDocumento: 'Abono Recibido' });
+  assert.equal(issueAbono, null, 'Abono Recibido should be valid for receptor credit note');
+
+  const issueNotaCredito = checkTipoMismatch({ ...baseInput, tipoDocumento: 'NOTA DE CRÉDITO RECIBIDA' });
+  assert.equal(issueNotaCredito, null, 'NOTA DE CRÉDITO RECIBIDA should be valid for receptor credit note');
+
+  console.log('  ✅ Both "Abono Recibido" and "NOTA DE CRÉDITO RECIBIDA" pass without false-positive blocking');
+}
+
+// ── Test 6: Polarity mismatch: Receptor company with Emitida type ─────────────
+{
+  console.log('▶ Test 6: Receptor company with Emitida document type (must block)');
+  const issue = checkTipoMismatch({
+    tipoDocumento: 'Factura Emitida',
+    total: 100.00,
+    empresaCIF: 'B12345678',
+    empresaNombre: 'Mi Empresa SL',
+    entidades: [
+      { rol: 'emisor', identificador_fiscal: 'DE281940556' },
+      { rol: 'receptor', identificador_fiscal: 'B12345678' }
+    ]
+  });
+
+  assert.ok(issue, 'Must detect polarity mismatch');
+  assert.equal(issue?.blocking, true);
+  assert.equal(issue?.suggestedValue, 'FACTURA RECIBIDA');
+  console.log('  ✅ Correctly detected and blocked when receptor has Factura Emitida');
+}
+
+// ── Test 7: Polarity mismatch: Emisor company with Recibida type ──────────────
+{
+  console.log('▶ Test 7: Emisor company with Recibida document type (must block)');
+  const issue = checkTipoMismatch({
+    tipoDocumento: 'Abono Recibido',
+    total: -80.00,
+    empresaCIF: 'B87654321',
+    empresaNombre: 'Empresa Test SL',
+    entidades: [
+      { rol: 'emisor', identificador_fiscal: 'B87654321' },
+      { rol: 'receptor', identificador_fiscal: 'B12345678' }
+    ]
+  });
+
+  assert.ok(issue, 'Must detect polarity mismatch');
+  assert.equal(issue?.blocking, true);
+  assert.equal(issue?.suggestedValue, 'ABONO EMITIDO');
+  console.log('  ✅ Correctly detected and blocked when emisor has Abono Recibido');
+}
+
+// ── Test 8: Negative total on standard Factura (must require Abono) ───────────
+{
+  console.log('▶ Test 8: Negative total on plain Factura Recibida');
+  const issue = checkTipoMismatch({
+    tipoDocumento: 'Factura Recibida',
+    total: -120.00,
+    empresaCIF: 'B12345678',
+    empresaNombre: 'Mi Empresa SL',
+    entidades: [
+      { rol: 'emisor', identificador_fiscal: 'DE281940556' },
+      { rol: 'receptor', identificador_fiscal: 'B12345678' }
+    ]
+  });
+
+  assert.ok(issue, 'Negative total must require Abono');
+  assert.equal(issue?.blocking, true);
+  assert.equal(issue?.suggestedValue, 'ABONO RECIBIDO');
+  console.log('  ✅ Correctly detected negative total on Factura Recibida and suggested ABONO RECIBIDO');
+}
+
 console.log('\n🎉 ALL GENUINE UNIFIED PRE-SAVE UNIT TESTS PASSED SUCCESSFULLY!');
+

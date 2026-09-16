@@ -36,7 +36,7 @@ import {
 } from '@/lib/document-fiscal-status';
 import { evaluarFechaContable } from '@/lib/fecha-contable-utils';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
-import { normalizeCIF } from '@/services/ingestion/normalize';
+import { normalizeCIF, detectCountryFromCIF } from '@/services/ingestion/normalize';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
@@ -115,6 +115,10 @@ export function startDbWriterWorker() {
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
 
         // Normalización CIF/NIF/NIE (espacios, ES, paréntesis OCR, etc.)
+        // IMPORTANTE: detectCountryFromCIF debe correr ANTES de cleanCif (que quita el prefijo 'ES')
+        const rawCifEmisor = aiResult.empresa_emisora?.cif ?? null;
+        const countryInfo = detectCountryFromCIF(rawCifEmisor ? String(rawCifEmisor) : null);
+
         const cleanCif = (c: unknown): string => normalizeCIF(c == null ? null : String(c)) ?? '';
         const cifDashboard = cleanCif(ingestion.cif);
         const cifEmisor = cleanCif(aiResult.empresa_emisora?.cif);
@@ -204,6 +208,7 @@ export function startDbWriterWorker() {
         const esEmitida  = tipoDocumento.includes('EMITIDA') || tipoDocumento.includes('EMITIDO');
         const esRecibida = tipoDocumento.includes('RECIBIDA') || tipoDocumento.includes('RECIBIDO');
         const isSinConfirmar = !esEmitida && !esRecibida;
+        const esExtranjeroRecibido = Boolean(countryInfo.isForeign && !esEmitida);
         
         const rolEmisor  = esEmitida || isSinConfirmar ? 'emisor'   : 'proveedor';
         const rolReceptor= esEmitida || isSinConfirmar ? 'cliente'  : 'receptor';
@@ -211,6 +216,16 @@ export function startDbWriterWorker() {
         // Determinar CIF del documento para mostrar en Dashboard
         // Si es emitida o indeterminada, usamos el del cliente/receptor. Si es recibida, el del emisor/proveedor.
         const cifDocumento = (esEmitida || isSinConfirmar ? cifCliente : cifEmisor) || '';
+
+        const rawTotales = aiResult.totales_por_impuesto || aiResult.desglose_iva || [];
+        const impuestosOriginales = Array.isArray(rawTotales)
+          ? rawTotales.map((imp: any) => ({
+              tipo: (imp.tipo_iva || 'IVA').toString().toUpperCase(),
+              porcentaje: Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0,
+              base: Number(imp.base_imponible) || 0,
+              cuota: Number(imp.cuota_iva) || 0,
+            }))
+          : [];
 
         // =====================================================================
         // TRANSACCIÓN ATÓMICA DE PRISMA
@@ -229,7 +244,7 @@ export function startDbWriterWorker() {
               fecha_emision: fechaEmision,
               fecha_vencimiento: fechaVencimiento,
               importe_total: importeTotal,
-              importe_sin_impuestos: importeSinIva,
+              importe_sin_impuestos: esExtranjeroRecibido ? importeTotal : importeSinIva,
               moneda: (aiResult.moneda || 'EUR').toString().toUpperCase(),
               id_de_empresa: BigInt(empresaId),
               is_new: 1,
@@ -245,8 +260,21 @@ export function startDbWriterWorker() {
                 cif: cifDocumento,
                 valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || '',
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
-                descuento_global: descuentoGlobal,
-                base_no_sujeta: baseNoSujeta,
+                descuento_global: esExtranjeroRecibido ? 0 : descuentoGlobal,
+                base_no_sujeta: esExtranjeroRecibido ? 0 : baseNoSujeta,
+                ...(esExtranjeroRecibido ? {
+                  es_proveedor_extranjero_ue: true,
+                  zona_emisor: countryInfo.region,
+                  pais_emisor: countryInfo.countryCode,
+                  pais_emisor_nombre: countryInfo.countryName,
+                  cuenta_proveedor_sugerida: '4100000',
+                  backup_fiscal_origen: {
+                    importe_sin_impuestos_original: importeSinIva,
+                    base_no_sujeta_original: baseNoSujeta,
+                    descuento_global_original: descuentoGlobal,
+                    impuestos_originales: impuestosOriginales,
+                  },
+                } : {}),
                 ...(trimestreNatural
                   ? {
                       trimestre_natural_año: trimestreNatural.año,
@@ -365,35 +393,54 @@ export function startDbWriterWorker() {
           console.log(`[DbWriterWorker] 💰 [Paso 5/5] Líneas guardadas. Procesando impuestos y cierre...`);
 
           // 9. Impuestos / IVA (nuevo: totales_por_impuesto, legacy: desglose_iva)
-          const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
-          if (totales && Array.isArray(totales)) {
-            const impuestosToInsert = totales.map((imp: any) => {
-              const tipo   = (imp.tipo_iva || 'IVA').toString().toUpperCase();
-              // Retenciones: en abonos fuerza positivo (+), en facturas normales no se toca
-              const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
-              const cuotaRaw = Number(imp.cuota_iva) || 0;
-              const cuota  = esRet
-                ? (isAbono ? Math.abs(cuotaRaw) : cuotaRaw)
-                : applySign(cuotaRaw);
-              const base   = esRet
-                ? (Number(imp.base_imponible) || 0)
-                : applySign(Number(imp.base_imponible) || 0);
-              const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
+          if (!esExtranjeroRecibido) {
+            const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
+            if (totales && Array.isArray(totales)) {
+              const impuestosToInsert = totales.map((imp: any) => {
+                const tipo   = (imp.tipo_iva || 'IVA').toString().toUpperCase();
+                // Retenciones: en abonos fuerza positivo (+), en facturas normales no se toca
+                const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
+                const cuotaRaw = Number(imp.cuota_iva) || 0;
+                const cuota  = esRet
+                  ? (isAbono ? Math.abs(cuotaRaw) : cuotaRaw)
+                  : applySign(cuotaRaw);
+                const base   = esRet
+                  ? (Number(imp.base_imponible) || 0)
+                  : applySign(Number(imp.base_imponible) || 0);
+                const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
 
-              return {
+                return {
+                  documento_id: doc.id,
+                  id_de_empresa: BigInt(empresaId),
+                  tipo_impuesto: tipo,
+                  porcentaje: porcentaje,
+                  base_imponible: base,
+                  cuota: cuota,
+                  total_con_impuesto: base + cuota,
+                };
+              });
+
+              if (impuestosToInsert.length > 0) {
+                await tx.impuestos_documento.createMany({ data: impuestosToInsert });
+              }
+            }
+          } else {
+            console.log(
+              `[DbWriterWorker] 🌍 Proveedor extranjero detectado (${countryInfo.countryName || countryInfo.countryCode}): IVA no deducible en España. Omitiendo inserción en impuestos_documento (base contable computada = total = ${importeTotal})`
+            );
+            const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'Extranjero';
+            const paisCodigo = countryInfo.countryCode && countryInfo.countryCode !== paisNombre ? ` (${countryInfo.countryCode})` : '';
+            const descExtranjero = `Proveedor extranjero detectado: ${paisNombre}${paisCodigo}. Factura de origen internacional. El IVA de origen no es deducible en España (Modelo 303), por lo que el total computa íntegramente como gasto contable. Requiere validación.`;
+
+            await tx.incidencias_documento.create({
+              data: {
                 documento_id: doc.id,
                 id_de_empresa: BigInt(empresaId),
-                tipo_impuesto: tipo,
-                porcentaje: porcentaje,
-                base_imponible: base,
-                cuota: cuota,
-                total_con_impuesto: base + cuota,
-              };
+                descripcion: descExtranjero,
+                incidencia: true,
+                validado: false,
+              }
             });
-
-            if (impuestosToInsert.length > 0) {
-              await tx.impuestos_documento.createMany({ data: impuestosToInsert });
-            }
           }
 
           // 10. Incidencia: guards en REVISION, extractor blando, fecha ausente o ejercicio anterior

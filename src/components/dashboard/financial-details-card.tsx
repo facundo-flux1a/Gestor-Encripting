@@ -45,6 +45,10 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
         name: "iva_details"
     });
 
+    const rawDatosExtra = (doc as any)?.datos_extra || {};
+    const isForeign = Boolean(rawDatosExtra.es_proveedor_extranjero_ue);
+    const backupFiscalImpuestos = rawDatosExtra.backup_fiscal_origen?.impuestos_originales || [];
+
     return (
         <Card className="transition-all duration-300 hover:shadow-lg">
             <CardHeader className="px-3 sm:px-6 py-3 sm:py-6">
@@ -178,6 +182,47 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                             </Button>
                         )}
                     </div>
+
+                    {/* Sugerencia de cuotas respaldadas del documento original */}
+                    {backupFiscalImpuestos.length > 0 && !isForeign && (
+                        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs shadow-sm">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
+                                    <span>💡</span> Cuotas detectadas en documento original (respaldo):
+                                </span>
+                                {isEditing && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
+                                            if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
+                                                form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
+                                            }
+                                            form.setValue('iva_details', []);
+                                            backupFiscalImpuestos.forEach((imp: any) => {
+                                                append({
+                                                    tipo_impuesto: imp.tipo || 'IVA',
+                                                    porcentaje: Number(imp.porcentaje) || 21,
+                                                    base_imponible: Number(imp.base) || 0,
+                                                    cuota: Number(imp.cuota) || 0,
+                                                });
+                                            });
+                                        }}
+                                        className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 shadow-sm"
+                                    >
+                                        Copiar al desglose
+                                    </button>
+                                )}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {backupFiscalImpuestos.map((imp: any, i: number) => (
+                                    <span key={i} className="px-2 py-0.5 rounded bg-background/60 border border-amber-500/20 font-mono text-[10px] text-foreground">
+                                        {imp.tipo} {imp.porcentaje}%: Base {formatCurrency(imp.base, doc.moneda)} → Cuota {formatCurrency(imp.cuota, doc.moneda)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         {isEditing ? (

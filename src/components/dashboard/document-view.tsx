@@ -108,6 +108,50 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
     const isInitializedRef = useRef(false);
     const provider = useMemo(() => doc.entidades.find(e => e.rol === 'proveedor' || e.rol === 'emisor'), [doc.entidades]);
 
+    const rawDatosExtra = (doc as any)?.datos_extra || {};
+    const isForeign = Boolean(rawDatosExtra.es_proveedor_extranjero_ue);
+    const countryName = rawDatosExtra.pais_emisor_nombre || rawDatosExtra.pais_emisor || '';
+    const [cuentaCompra, setCuentaCompra] = useState<string | null>(null);
+    const [isSavingAccount, setIsSavingAccount] = useState(false);
+
+    useEffect(() => {
+        const providerCif = provider?.identificador_fiscal || doc.cif;
+        if (!doc.empresa_id || !providerCif) return;
+        fetch(`/api/entidades-config?empresaId=${doc.empresa_id}&identificadorFiscal=${encodeURIComponent(providerCif)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data?.config?.cuenta_compra) {
+                    setCuentaCompra(data.config.cuenta_compra);
+                }
+            })
+            .catch(() => {});
+    }, [doc.empresa_id, provider?.identificador_fiscal, doc.cif]);
+
+    const handleAssignAccount4100000 = async () => {
+        const providerCif = provider?.identificador_fiscal || doc.cif;
+        if (!doc.empresa_id || !providerCif) return;
+        setIsSavingAccount(true);
+        try {
+            const res = await fetch('/api/entidades-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    empresaId: Number(doc.empresa_id),
+                    identificadorFiscal: providerCif,
+                    nombreReferencia: provider?.nombre || doc.proveedor || '',
+                    cuentaCompra: '4100000',
+                }),
+            });
+            if (res.ok) {
+                setCuentaCompra('4100000');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSavingAccount(false);
+        }
+    };
+
     useEffect(() => {
         if (isEditing && !isInitializedRef.current && doc.lineas?.length > 0) {
             form.setValue('lineas', doc.lineas);
@@ -334,6 +378,41 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
                     <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 group-hover:-translate-x-1" /> Volver
                 </Button>
             </div>
+
+            {isForeign && (
+                <div className="mb-3 sm:mb-4 p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-xs flex flex-col gap-2 animate-fade-in">
+                    <div className="flex items-center gap-2">
+                        <span className="text-base">🌍</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-blue-400">
+                                Proveedor Extranjero {countryName ? `(${countryName})` : ''}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] bg-blue-500/20 text-blue-300 border-blue-500/30">
+                                IVA NO DEDUCIBLE
+                            </Badge>
+                        </div>
+                    </div>
+                    <p className="text-muted-foreground text-[11px]">
+                        El IVA de origen no es deducible en España (Modelo 303). El importe total de la factura computa íntegramente como base del gasto contable.
+                    </p>
+                    {cuentaCompra !== '4100000' && (
+                        <div className="pt-2 border-t border-blue-500/20 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] text-muted-foreground">
+                                💡 Subcuenta contable sugerida: <strong className="text-foreground font-mono">4100000</strong> (Acreedores)
+                            </span>
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleAssignAccount4100000}
+                                disabled={isSavingAccount}
+                                className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white"
+                            >
+                                {isSavingAccount ? 'Guardando...' : 'Asignar 4100000 en 1 clic'}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <Card className="mb-3 sm:mb-4 lg:mb-6 animate-fade-in">
                 {/* Information general content... ya renderizado por lo de arriba */}

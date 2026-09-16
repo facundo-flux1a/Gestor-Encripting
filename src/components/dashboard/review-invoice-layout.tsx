@@ -7,13 +7,24 @@ import { useFieldArray, useWatch } from 'react-hook-form';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { cn, fixMinioUrl } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye, Globe } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DocumentTypeSelector } from './document-type-selector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSidebar } from '@/components/ui/sidebar';
 import { SyntheticInvoiceViewer } from '@/components/documento/synthetic-invoice-viewer';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const fmtNum = (v: number | string | null | undefined) => {
   const n = parseFloat(String(v ?? 0));
@@ -75,9 +86,10 @@ interface Props {
     hasPrev: boolean;
     hasNext: boolean;
   };
+  onRefresh?: () => Promise<void> | void;
 }
 
-export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting, isValidating, isEditable, onEdit, onCancelEdit, onSave, onDelete, onValidate, onAuditMode, onMarkDuplicate, navigation }: Props) {
+export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting, isValidating, isEditable, onEdit, onCancelEdit, onSave, onDelete, onValidate, onAuditMode, onMarkDuplicate, navigation, onRefresh }: Props) {
   const router = useRouter();
   const { setOpen, isMobile } = useSidebar();
   const [isMobileViewerOpen, setIsMobileViewerOpen] = React.useState(false);
@@ -99,6 +111,130 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
   const [disponibles, setDisponibles] = React.useState<{ año: number; trimestre: number; label: string }[]>([]);
   const empresaId = doc.empresa_id || (doc as any).id_de_empresa;
+
+  const { toast } = useToast();
+  const rawDatosExtra = (doc as any)?.datos_extra || {};
+  const [isForeign, setIsForeign] = React.useState<boolean>(
+    Boolean(rawDatosExtra.es_proveedor_extranjero_ue)
+  );
+  const [showCaseADialog, setShowCaseADialog] = React.useState(false);
+  const [showCaseBDialog, setShowCaseBDialog] = React.useState(false);
+  const [isPendingToggle, setIsPendingToggle] = React.useState(false);
+  const [cuentaCompra, setCuentaCompra] = React.useState<string | null>(null);
+  const [isSavingAccount, setIsSavingAccount] = React.useState(false);
+
+  const countryName = rawDatosExtra.pais_emisor_nombre || rawDatosExtra.pais_emisor || '';
+  const backupFiscalImpuestos = rawDatosExtra.backup_fiscal_origen?.impuestos_originales || [];
+
+  React.useEffect(() => {
+    setIsForeign(Boolean(rawDatosExtra.es_proveedor_extranjero_ue));
+  }, [rawDatosExtra.es_proveedor_extranjero_ue]);
+
+  React.useEffect(() => {
+    const providerCif = provider?.identificador_fiscal || doc.cif;
+    if (!empresaId || !providerCif) return;
+    fetch(`/api/entidades-config?empresaId=${empresaId}&identificadorFiscal=${encodeURIComponent(providerCif)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.config?.cuenta_compra) {
+          setCuentaCompra(data.config.cuenta_compra);
+        }
+      })
+      .catch(() => {});
+  }, [empresaId, provider?.identificador_fiscal, doc.cif]);
+
+  const handleToggleForeign = async (targetForeign: boolean) => {
+    setIsPendingToggle(true);
+    try {
+      const res = await fetch(`/api/documents/${doc.id_documento}/extranjero`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ esExtranjero: targetForeign }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsForeign(targetForeign);
+        setShowCaseADialog(false);
+        setShowCaseBDialog(false);
+
+        if (targetForeign) {
+          const currentTotal = Number(form.getValues('total') ?? doc.total) || 0;
+          form.setValue('base_imponible', currentTotal);
+          form.setValue('iva_details', []);
+          toast({
+            title: '🌍 Proveedor Extranjero',
+            description: 'Documento ajustado: base contable igualada al total y líneas de impuestos removidas.',
+          });
+        } else {
+          toast({
+            title: '🏢 Convertido a Documento Local',
+            description: 'Recuerda definir manualmente las cuotas y tasas de IVA correspondientes en el desglose.',
+          });
+        }
+
+        if (onRefresh) {
+          await onRefresh();
+        } else {
+          router.refresh();
+        }
+      } else {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo cambiar el estado del documento.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error de red',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPendingToggle(false);
+      setShowCaseADialog(false);
+      setShowCaseBDialog(false);
+    }
+  };
+
+  const handleAssignAccount4100000 = async () => {
+    const providerCif = provider?.identificador_fiscal || doc.cif;
+    if (!empresaId || !providerCif) return;
+    setIsSavingAccount(true);
+    try {
+      const res = await fetch('/api/entidades-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresaId: Number(empresaId),
+          identificadorFiscal: providerCif,
+          nombreReferencia: provider?.nombre || doc.proveedor || '',
+          cuentaCompra: '4100000',
+        }),
+      });
+      if (res.ok) {
+        setCuentaCompra('4100000');
+        toast({
+          title: 'Subcuenta asignada',
+          description: `Se asignó la cuenta 4100000 al proveedor ${provider?.nombre || providerCif}.`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo asignar la cuenta contable.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingAccount(false);
+    }
+  };
 
   React.useEffect(() => {
     if (!empresaId) return;
@@ -281,6 +417,137 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         {/* Scrollable form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 review-form-scrollbar">
 
+          {/* ── BANNER / TOGGLE PROVEEDOR EXTRANJERO ── */}
+          {isForeign ? (
+            <div className="mb-5 p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-xs flex flex-col gap-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-lg leading-none mt-0.5">🌍</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-blue-400">
+                        Proveedor Extranjero {countryName ? `(${countryName})` : ''}
+                      </p>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        IVA NO DEDUCIBLE
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      El IVA de origen no es deducible en España (Modelo 303). El total computa íntegramente como gasto.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCaseBDialog(true)}
+                  disabled={isPendingToggle}
+                  className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-[11px] font-medium border border-border text-foreground transition-colors shrink-0 flex items-center gap-1"
+                >
+                  {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Cambiar a Local
+                </button>
+              </div>
+
+              {/* Sugerencia de cuenta 4100000 */}
+              {cuentaCompra !== '4100000' && (
+                <div className="pt-2 border-t border-blue-500/20 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span>💡</span>
+                    <span>Subcuenta sugerida: <strong className="text-foreground font-mono">4100000</strong> (Acreedores)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAssignAccount4100000}
+                    disabled={isSavingAccount}
+                    className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] shadow-sm transition-colors shrink-0 flex items-center gap-1"
+                  >
+                    {isSavingAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Asignar 4100000 en 1 clic
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mb-5 flex items-center justify-between px-3.5 py-2 rounded-lg border border-border/40 bg-muted/20 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span>🏢</span>
+                <span className="text-[11px] font-medium">Proveedor Nacional / Local (Régimen General)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCaseADialog(true)}
+                disabled={isPendingToggle}
+                className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-transparent hover:border-border flex items-center gap-1"
+              >
+                {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                <span>🌍</span> Marcar como Extranjero
+              </button>
+            </div>
+          )}
+
+          {/* ── MODAL CASO A: LOCAL ➔ EXTRANJERO ── */}
+          <AlertDialog open={showCaseADialog} onOpenChange={setShowCaseADialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <span>🌍</span> ¿Marcar como Proveedor Extranjero?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm space-y-2 text-muted-foreground pt-1">
+                  <p>
+                    El IVA de origen no es deducible en España (Modelo 303).
+                  </p>
+                  <p>
+                    El importe total de la factura pasará a computarse íntegramente como base del gasto contable.
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    Se eliminarán todas las líneas de impuestos de este documento en la base de datos (se conservará un respaldo en metadatos para auditoría).
+                  </p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isPendingToggle}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleToggleForeign(true)}
+                  disabled={isPendingToggle}
+                  className="bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  {isPendingToggle ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                  Confirmar y Marcar Extranjero
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* ── MODAL CASO B: EXTRANJERO ➔ LOCAL ── */}
+          <AlertDialog open={showCaseBDialog} onOpenChange={setShowCaseBDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <span>🏢</span> ¿Desmarcar Proveedor Extranjero (Convertir a Local)?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm space-y-2 text-muted-foreground pt-1">
+                  <p>
+                    Este documento fue ingresado o configurado como extranjero, por lo que <strong>no cuenta con cuotas o tasas de impuestos registradas</strong>.
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    Al convertirlo a documento local, deberás definir manualmente el IVA y las cuotas correspondientes en la sección de desglose de impuestos para que compute correctamente en tus modelos fiscales.
+                  </p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isPendingToggle}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleToggleForeign(false)}
+                  disabled={isPendingToggle}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {isPendingToggle ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                  Confirmar y Convertir a Local
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           {/* PROVEEDOR + CIF */}
           <div className="grid grid-cols-2 gap-4">
             <div className="min-w-0"><SL>Proveedor</SL>
@@ -398,6 +665,80 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </button>
               )}
             </div>
+
+            {/* Sugerencia de cuotas respaldadas del documento original si está como local */}
+            {backupFiscalImpuestos.length > 0 && !isForeign && (
+              <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
+                    <span>💡</span> Cuotas detectadas en documento original (respaldo):
+                  </span>
+                  {isEditing ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
+                        if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
+                          form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
+                        }
+                        form.setValue('iva_details', []);
+                        backupFiscalImpuestos.forEach((imp: any) => {
+                          appendIva({
+                            tipo_impuesto: imp.tipo || 'IVA',
+                            porcentaje: Number(imp.porcentaje) || 21,
+                            base_imponible: Number(imp.base) || 0,
+                            cuota: Number(imp.cuota) || 0,
+                          });
+                        });
+                        toast({
+                          title: '💡 Desglose aplicado',
+                          description: 'Se copiaron las cuotas originales del respaldo y se ajustó la base imponible.',
+                        });
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
+                    >
+                      Copiar al desglose
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onEdit();
+                        setTimeout(() => {
+                          const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
+                          if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
+                            form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
+                          }
+                          form.setValue('iva_details', []);
+                          backupFiscalImpuestos.forEach((imp: any) => {
+                            appendIva({
+                              tipo_impuesto: imp.tipo || 'IVA',
+                              porcentaje: Number(imp.porcentaje) || 21,
+                              base_imponible: Number(imp.base) || 0,
+                              cuota: Number(imp.cuota) || 0,
+                            });
+                          });
+                          toast({
+                            title: '💡 Desglose aplicado',
+                            description: 'Se activó la edición y se copiaron las cuotas originales.',
+                          });
+                        }, 50);
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
+                    >
+                      <Edit className="h-3 w-3" /> Editar y aplicar cuotas
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {backupFiscalImpuestos.map((imp: any, i: number) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-background/60 border border-amber-500/20 font-mono text-[10px] text-foreground">
+                      {imp.tipo} {imp.porcentaje}%: Base {fmtEur(imp.base)} → Cuota {fmtEur(imp.cuota)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               {/* header */}
               <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>

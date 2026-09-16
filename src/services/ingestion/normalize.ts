@@ -190,6 +190,108 @@ export function normalizeCIF(raw: string | null | undefined): string | null {
   return cif || null;
 }
 
+// ─── 4b. detectCountryFromCIF ─────────────────────────────────────────────────
+/**
+ * Detecta el país de un CIF/NIF ANTES de que normalizeCIF lo limpie.
+ * Examina los dos primeros caracteres del CIF crudo o patrones de EIN americano.
+ *
+ * Retorna isForeign=true si el prefijo corresponde a un país de la UE/EEE
+ * que NO es España, o a un identificador fiscal de EE.UU.
+ */
+const EU_COUNTRY_PREFIXES: Record<string, string> = {
+  AT: 'Austria', BE: 'Bélgica', BG: 'Bulgaria', CY: 'Chipre',
+  CZ: 'República Checa', DE: 'Alemania', DK: 'Dinamarca', EE: 'Estonia',
+  EL: 'Grecia', FI: 'Finlandia', FR: 'Francia', HR: 'Croacia',
+  HU: 'Hungría', IE: 'Irlanda', IT: 'Italia', LT: 'Lituania',
+  LU: 'Luxemburgo', LV: 'Letonia', MT: 'Malta', NL: 'Países Bajos',
+  PL: 'Polonia', PT: 'Portugal', RO: 'Rumanía', SE: 'Suecia',
+  SI: 'Eslovenia', SK: 'Eslovaquia',
+  // Fuera de la UE pero con formato similar:
+  GB: 'Reino Unido', CH: 'Suiza', NO: 'Noruega',
+};
+
+export interface CountryDetectionResult {
+  countryCode: string | null;
+  countryName: string | null;
+  isForeign: boolean;
+  isEuropeanUnion?: boolean;
+  isUSA?: boolean;
+  region?: 'UE' | 'USA' | 'TERCER_PAIS' | 'ES' | null;
+  detectionMethod?: 'eu_prefix' | 'us_prefix' | 'ein_canonical' | 'ein_nodash' | null;
+}
+
+const EIN_CANONICAL_RE = /^\d{2}-\d{7}$/;
+const EIN_NODASH_RE = /^\d{9}$/;
+
+export function detectCountryFromCIF(raw: string | null | undefined): CountryDetectionResult {
+  if (!raw || raw.trim() === '') {
+    return { countryCode: null, countryName: null, isForeign: false, region: null, detectionMethod: null };
+  }
+
+  const trimmed = raw.trim().toUpperCase();
+
+  // 0. Prefijo ES explícito → España
+  if (trimmed.startsWith('ES')) {
+    return { countryCode: 'ES', countryName: 'España', isForeign: false, isEuropeanUnion: true, isUSA: false, region: 'ES', detectionMethod: null };
+  }
+
+  // 1. Prefijo UE/EEE (2 letras ISO)
+  const prefix2 = trimmed.replace(/[\s\-./()]/g, '').substring(0, 2);
+  const euCountryName = EU_COUNTRY_PREFIXES[prefix2] ?? null;
+  if (euCountryName) {
+    const isTercerPais = prefix2 === 'GB' || prefix2 === 'CH' || prefix2 === 'NO';
+    return {
+      countryCode: prefix2,
+      countryName: euCountryName,
+      isForeign: true,
+      isEuropeanUnion: !isTercerPais,
+      isUSA: false,
+      region: isTercerPais ? 'TERCER_PAIS' : 'UE',
+      detectionMethod: 'eu_prefix',
+    };
+  }
+
+  // 2. Prefijo "US" → Estados Unidos
+  if (trimmed.startsWith('US')) {
+    return {
+      countryCode: 'US',
+      countryName: 'Estados Unidos',
+      isForeign: true,
+      isEuropeanUnion: false,
+      isUSA: true,
+      region: 'USA',
+      detectionMethod: 'us_prefix',
+    };
+  }
+
+  // 3. EIN canónico: XX-XXXXXXX
+  if (EIN_CANONICAL_RE.test(trimmed)) {
+    return {
+      countryCode: 'US',
+      countryName: 'Estados Unidos',
+      isForeign: true,
+      isEuropeanUnion: false,
+      isUSA: true,
+      detectionMethod: 'ein_canonical',
+    };
+  }
+
+  // 4. EIN sin guión: 9 dígitos numéricos puros
+  const stripped = trimmed.replace(/[\s\-]/g, '');
+  if (EIN_NODASH_RE.test(stripped)) {
+    return {
+      countryCode: 'US',
+      countryName: 'Estados Unidos',
+      isForeign: true,
+      isEuropeanUnion: false,
+      isUSA: true,
+      detectionMethod: 'ein_nodash',
+    };
+  }
+
+  return { countryCode: null, countryName: null, isForeign: false, isEuropeanUnion: false, isUSA: false, detectionMethod: null };
+}
+
 // ─── 5. detectTipoDocumento ───────────────────────────────────────────────────
 /**
  * Determina si el documento es EMITIDO, RECIBIDO o INDETERMINADO.

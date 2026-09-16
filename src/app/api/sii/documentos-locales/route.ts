@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       FROM documentos d
       LEFT JOIN trimestres t ON (t.id_de_empresa = d.id_de_empresa AND t.año = d.año_trimestre AND t.num_trimestre = d.num_trimestre)
       WHERE d.id_de_empresa IN (${empresaId.split(',').map(() => '?').join(',')})
+        AND (JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.es_proveedor_extranjero_ue')) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.es_proveedor_extranjero_ue')) != 'true')
     `;
 
     const params: any[] = empresaId.split(',').map(id => parseInt(id.trim()));
