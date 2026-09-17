@@ -28,6 +28,41 @@ X-Api-Key: muvail_aBcD1234efGh5678...
 
 ## 2. Endpoints Disponibles Actualmente
 
+### 🟢 Verificación de Identidad y Empresa (`/me`)
+Permite comprobar la validez de la API Key y obtener los datos de la empresa vinculada (ID, CIF, nombre comercial y razón social fiscal) antes de sincronizar datos.
+
+* **URL:** `/api/v1/me`
+* **Método:** `GET`
+* **Autenticación:** Header `X-Api-Key: muvail_...` (no requiere ni admite body)
+
+#### Ejemplo de Petición (cURL)
+```bash
+curl -X GET "https://[tu-dominio]/api/v1/me" \
+     -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
+     -H "Accept: application/json"
+```
+
+#### Respuesta de Éxito (`200 OK`)
+```json
+{
+  "status": "ok",
+  "autenticado": true,
+  "api_key": {
+    "id": 15,
+    "nombre": "Conector ERP Contabilidad",
+    "prefix": "muvail_Ab3xKm"
+  },
+  "empresa": {
+    "id": 117,
+    "cif": "B12345678",
+    "nombre": "Construcciones Gómez S.L.",
+    "nombre_fiscal": "Construcciones Gómez S.L."
+  }
+}
+```
+
+---
+
 ### 🟢 Generación de Reporte Excel
 Exporta un reporte detallado de los documentos procesados (facturas, abonos) junto con su resumen de IVA, calculado y consolidado en un archivo Microsoft Excel (`.xlsx`).
 

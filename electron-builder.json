@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.muvail.gestor",
+  "productName": "Gestor Muvail",
+  "copyright": "Copyright © 2026 Muvail",
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
+  "directories": {
+    "output": "dist-desktop"
+  },
+  "files": [
+    "electron/**/*",
+    "public/branding/**/*",
+    "!node_modules/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "zip",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/branding/muvail-icon-512.png"
+  }
+}

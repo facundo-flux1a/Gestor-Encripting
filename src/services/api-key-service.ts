@@ -33,6 +33,7 @@ export interface ValidateApiKeyResult {
   usuario_id?: number;
   key_id?: number;
   nombre?: string;
+  key_prefix?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,7 +195,7 @@ export async function validateApiKey(rawKey: string): Promise<ValidateApiKeyResu
     const keyHash = hashKey(rawKey);
 
     const [rows] = await db.query<RowDataPacket[]>(
-      `SELECT id, empresa_id, usuario_id, nombre FROM api_keys
+      `SELECT id, empresa_id, usuario_id, nombre, key_prefix FROM api_keys
        WHERE key_hash = ? AND activa = 1`,
       [keyHash]
     );
@@ -203,13 +204,13 @@ export async function validateApiKey(rawKey: string): Promise<ValidateApiKeyResu
       return { valid: false };
     }
 
-    const { id: key_id, empresa_id, usuario_id, nombre } = rows[0];
+    const { id: key_id, empresa_id, usuario_id, nombre, key_prefix } = rows[0];
 
     // Actualizar ultimo_uso en background (no bloqueante)
     db.query(`UPDATE api_keys SET ultimo_uso = NOW() WHERE id = ?`, [key_id])
       .catch(() => {});
 
-    return { valid: true, empresa_id, usuario_id, key_id, nombre };
+    return { valid: true, empresa_id, usuario_id, key_id, nombre, key_prefix };
   } catch (error) {
     console.error('❌ [api-key-service] validateApiKey error:', error);
     return { valid: false };

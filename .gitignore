@@ -57,3 +57,4 @@ firestore-debug.log
 
 # Migration docs with secrets
 MIGRACION_AZURE_OPENAI_GPT4O.txt
+dist-desktop/
