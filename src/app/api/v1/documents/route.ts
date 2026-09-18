@@ -246,8 +246,9 @@ export async function GET(request: NextRequest) {
         else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtra = doc.datos_extra;
       } catch { datosExtra = {}; }
 
-      const baseSujeta    = Number(doc.importe_sin_impuestos) || 0;
-      const baseNoSujeta  = Number(datosExtra.base_no_sujeta) || 0;
+      const baseSujeta      = Number(doc.importe_sin_impuestos) || 0;
+      const baseNoSujeta    = Number(datosExtra.base_no_sujeta) || 0;
+      const descuentoGlobal = Number(datosExtra.descuento_global) || 0;
       const baseTotal     = Math.round((baseSujeta + baseNoSujeta) * 100) / 100;
       const totalConImpuestos = Number(doc.importe_total) || 0;
 
@@ -287,9 +288,10 @@ export async function GET(request: NextRequest) {
         observaciones: doc.observaciones,
         trimestre: doc.num_trimestre,
         año: doc.año_trimestre,
-        // --- Retenciones ---
-        retencion:      retencionIrpf,
-        retencion_irpf: retencionIrpf,
+        // --- Retenciones y descuentos ---
+        retencion:        retencionIrpf,
+        retencion_irpf:   retencionIrpf,
+        descuento_global: descuentoGlobal,
         entidades: entidades,
         is_issued: isIssued,
         url_archivo: publicUrl,
