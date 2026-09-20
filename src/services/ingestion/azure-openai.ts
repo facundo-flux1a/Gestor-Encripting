@@ -38,20 +38,28 @@ function requireEnv(name: string): string {
 }
 
 export function isAzureOpenAiConfigured(): boolean {
-  return Boolean(
+  const hasAzure = Boolean(
     process.env.AZURE_OPENAI_ENDPOINT?.trim() &&
       process.env.AZURE_OPENAI_API_KEY?.trim() &&
       process.env.AZURE_OPENAI_DEPLOYMENT?.trim()
   );
+  const hasFallback = Boolean(process.env.FALLBACK_OPENAI_KEY?.trim());
+  return hasAzure || hasFallback;
 }
 
-export function getLlmProvider(): 'azure-openai' {
-  if (!isAzureOpenAiConfigured()) {
+export function getLlmProvider(): 'azure-openai' | 'openai-fallback' {
+  const hasAzure = Boolean(
+    process.env.AZURE_OPENAI_ENDPOINT?.trim() &&
+      process.env.AZURE_OPENAI_API_KEY?.trim() &&
+      process.env.AZURE_OPENAI_DEPLOYMENT?.trim()
+  );
+  const hasFallback = Boolean(process.env.FALLBACK_OPENAI_KEY?.trim());
+  if (!hasAzure && !hasFallback) {
     throw new Error(
-      'Azure OpenAI no configurado. Definí AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY y AZURE_OPENAI_DEPLOYMENT.'
+      'Ni Azure OpenAI ni FALLBACK_OPENAI_KEY configurados. Definí AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY y AZURE_OPENAI_DEPLOYMENT o FALLBACK_OPENAI_KEY.'
     );
   }
-  return 'azure-openai';
+  return hasAzure ? 'azure-openai' : 'openai-fallback';
 }
 
 export function assertAzureOpenAiConfigured(): void {
@@ -76,6 +84,61 @@ function chatUrl(): string {
   return `${base}/models/chat/completions?api-version=${apiVersion}`;
 }
 
+const OPENAI_STANDARD_URL = 'https://api.openai.com/v1/chat/completions';
+
+/**
+ * Fallback a la API estándar de OpenAI usando FALLBACK_OPENAI_KEY.
+ * Utiliza exactamente el mismo modelo, payload y devuelve la misma estructura { text, usage }.
+ */
+async function callOpenAiStandardChat(body: Record<string, unknown>): Promise<{
+  text: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}> {
+  const fallbackKey = process.env.FALLBACK_OPENAI_KEY?.trim();
+  if (!fallbackKey) {
+    throw new Error('FALLBACK_OPENAI_KEY no configurado en el entorno.');
+  }
+
+  const hasFile = Array.isArray((body.messages as any)?.[0]?.content) &&
+    (body.messages as any)[0].content.some((c: any) => c.type === 'file' || c.type === 'image_url');
+  console.log(
+    `[OpenAI-Fallback] 🚀 POST api.openai.com model=${body.model}${hasFile ? ' (con adjunto documento/imagen)' : ''}`
+  );
+
+  const res = await fetch(OPENAI_STANDARD_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${fallbackKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const raw = await res.text();
+  if (!res.ok) {
+    console.error(`[OpenAI-Fallback] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
+    const err: any = new Error(`OpenAI Fallback ${res.status}: ${raw.slice(0, 200)}`);
+    err.status = res.status;
+    err.statusCode = res.status;
+    throw err;
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`OpenAI Fallback: respuesta no JSON: ${raw.slice(0, 200)}`);
+  }
+
+  const text = parsed.choices?.[0]?.message?.content || '';
+  const usage = parsed.usage;
+  console.log(
+    `[OpenAI-Fallback] 📬 OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`
+  );
+
+  return { text, usage };
+}
+
 async function buildUserContent(
   prompt: string,
   fileBuffer?: Buffer,
@@ -84,7 +147,26 @@ async function buildUserContent(
 ): Promise<string | Array<Record<string, unknown>>> {
   if (!fileBuffer || fileBuffer.length === 0) return prompt;
 
-  const mime = mimeType || 'application/octet-stream';
+  let mime = mimeType || 'application/octet-stream';
+  // Detección automática por magic bytes para garantizar que ni PDFs ni imágenes se confundan
+  if (
+    fileBuffer.length >= 4 &&
+    fileBuffer[0] === 0x25 &&
+    fileBuffer[1] === 0x50 &&
+    fileBuffer[2] === 0x44 &&
+    fileBuffer[3] === 0x46
+  ) {
+    mime = 'application/pdf';
+  } else if (fileBuffer.length >= 3 && fileBuffer[0] === 0xff && fileBuffer[1] === 0xd8 && fileBuffer[2] === 0xff) {
+    mime = 'image/jpeg';
+  } else if (fileBuffer.length >= 8 && fileBuffer[0] === 0x89 && fileBuffer[1] === 0x50 && fileBuffer[2] === 0x4e && fileBuffer[3] === 0x47) {
+    mime = 'image/png';
+  } else if (fileBuffer.length >= 12 && fileBuffer.subarray(0, 4).toString('ascii') === 'RIFF' && fileBuffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    mime = 'image/webp';
+  } else if (fileBuffer.length >= 4 && fileBuffer.subarray(0, 3).toString('ascii') === 'GIF') {
+    mime = 'image/gif';
+  }
+
   const b64 = fileBuffer.toString('base64');
   const dataUrl = `data:${mime};base64,${b64}`;
   const isImage = mime.startsWith('image/');
@@ -138,9 +220,14 @@ export async function callAzureOpenAiChat(opts: AzureOpenAiCallOpts): Promise<{
   text: string;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }> {
-  const key = requireEnv('AZURE_OPENAI_API_KEY');
-  const deployment = requireEnv('AZURE_OPENAI_DEPLOYMENT');
-  const url = chatUrl();
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT?.trim() || 'gpt-5.6-luna';
+  const azureKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const fallbackKey = process.env.FALLBACK_OPENAI_KEY?.trim();
+
+  if (!azureKey && !fallbackKey) {
+    throw new Error('Ni AZURE_OPENAI_API_KEY ni FALLBACK_OPENAI_KEY están configurados en el entorno.');
+  }
 
   // URL de imagen de ejemplo para few-shot visual prompting (configurable en .env)
   const exampleImageUrl =
@@ -172,42 +259,60 @@ export async function callAzureOpenAiChat(opts: AzureOpenAiCallOpts): Promise<{
     body.response_format = { type: 'json_object' };
   }
 
-  console.log(
-    `[AzureOpenAI] 🚀 POST deployment=${deployment} bytes=${opts.fileBuffer?.length ?? 0} mime=${opts.mimeType || 'text'}`
-  );
+  // Si Azure está configurado, intentamos Azure primero
+  if (azureKey && azureEndpoint) {
+    try {
+      const url = chatUrl();
+      console.log(
+        `[AzureOpenAI] 🚀 POST deployment=${deployment} bytes=${opts.fileBuffer?.length ?? 0} mime=${opts.mimeType || 'text'}`
+      );
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': key,
-    },
-    body: JSON.stringify(body),
-  });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': azureKey,
+        },
+        body: JSON.stringify(body),
+      });
 
-  const raw = await res.text();
-  if (!res.ok) {
-    console.error(`[AzureOpenAI] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
-    const err: any = new Error(`Azure OpenAI ${res.status}: ${raw.slice(0, 200)}`);
-    err.status = res.status;
-    err.statusCode = res.status;
-    throw err;
+      const raw = await res.text();
+      if (!res.ok) {
+        console.error(`[AzureOpenAI] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
+        const err: any = new Error(`Azure OpenAI ${res.status}: ${raw.slice(0, 200)}`);
+        err.status = res.status;
+        err.statusCode = res.status;
+        throw err;
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`Azure OpenAI: respuesta no JSON: ${raw.slice(0, 200)}`);
+      }
+
+      const text = parsed.choices?.[0]?.message?.content || '';
+      const usage = parsed.usage;
+      console.log(
+        `[AzureOpenAI] 📬 OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`
+      );
+
+      return { text, usage };
+    } catch (azureErr: any) {
+      if (fallbackKey) {
+        console.warn(
+          `[AzureOpenAI -> Fallback] ⚠️ Azure OpenAI falló (${azureErr?.message || azureErr}). Activando fallback a OpenAI estándar con modelo "${deployment}"...`
+        );
+        return await callOpenAiStandardChat(body);
+      }
+      throw azureErr;
+    }
   }
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`Azure OpenAI: respuesta no JSON: ${raw.slice(0, 200)}`);
-  }
-
-  const text = parsed.choices?.[0]?.message?.content || '';
-  const usage = parsed.usage;
-  console.log(
-    `[AzureOpenAI] 📬 OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`
-  );
-
-  return { text, usage };
+  // Si Azure no está configurado pero hay fallbackKey
+  console.log(`[AzureOpenAI] Azure no configurado, usando directamente FALLBACK_OPENAI_KEY con modelo "${deployment}"...`);
+  return await callOpenAiStandardChat(body);
 }
 
 /** Parsea JSON de la respuesta (limpia fences si vienen). */
@@ -249,9 +354,14 @@ export async function callAzureOpenAiChatWithImages(opts: {
   json?: boolean;
   maxCompletionTokens?: number;
 }): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
-  const key = requireEnv('AZURE_OPENAI_API_KEY');
-  const deployment = requireEnv('AZURE_OPENAI_DEPLOYMENT');
-  const url = chatUrl();
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT?.trim() || 'gpt-5.6-luna';
+  const azureKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const fallbackKey = process.env.FALLBACK_OPENAI_KEY?.trim();
+
+  if (!azureKey && !fallbackKey) {
+    throw new Error('Ni AZURE_OPENAI_API_KEY ni FALLBACK_OPENAI_KEY están configurados en el entorno.');
+  }
 
   const imageParts = opts.images.map((img) => {
     const b64 = img ? img.toString('base64') : '';
@@ -278,33 +388,49 @@ export async function callAzureOpenAiChatWithImages(opts: {
     body.response_format = { type: 'json_object' };
   }
 
-  console.log(`[AzureOpenAI] 🖼️  POST vision deployment=${deployment} images=${opts.images.length}`);
+  if (azureKey && azureEndpoint) {
+    try {
+      const url = chatUrl();
+      console.log(`[AzureOpenAI] 🖼️  POST vision deployment=${deployment} images=${opts.images.length}`);
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': key },
-    body: JSON.stringify(body),
-  });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'api-key': azureKey },
+        body: JSON.stringify(body),
+      });
 
-  const raw = await res.text();
-  if (!res.ok) {
-    console.error(`[AzureOpenAI] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
-    const err: any = new Error(`Azure OpenAI vision ${res.status}: ${raw.slice(0, 200)}`);
-    err.status = res.status;
-    throw err;
+      const raw = await res.text();
+      if (!res.ok) {
+        console.error(`[AzureOpenAI] ❌ HTTP ${res.status}: ${raw.slice(0, 500)}`);
+        const err: any = new Error(`Azure OpenAI vision ${res.status}: ${raw.slice(0, 200)}`);
+        err.status = res.status;
+        throw err;
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`Azure OpenAI vision: respuesta no JSON: ${raw.slice(0, 200)}`);
+      }
+
+      const text = parsed.choices?.[0]?.message?.content || '';
+      const usage = parsed.usage;
+      console.log(`[AzureOpenAI] 📬 Vision OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`);
+
+      return { text, usage };
+    } catch (azureErr: any) {
+      if (fallbackKey) {
+        console.warn(
+          `[AzureOpenAI -> Fallback] ⚠️ Azure OpenAI Vision falló (${azureErr?.message || azureErr}). Activando fallback a OpenAI estándar con modelo "${deployment}"...`
+        );
+        return await callOpenAiStandardChat(body);
+      }
+      throw azureErr;
+    }
   }
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`Azure OpenAI vision: respuesta no JSON: ${raw.slice(0, 200)}`);
-  }
-
-  const text = parsed.choices?.[0]?.message?.content || '';
-  const usage = parsed.usage;
-  console.log(`[AzureOpenAI] 📬 Vision OK tokens=${usage?.total_tokens ?? '?'} finish=${parsed.choices?.[0]?.finish_reason}`);
-
-  return { text, usage };
+  console.log(`[AzureOpenAI] Azure Vision no configurado, usando directamente FALLBACK_OPENAI_KEY con modelo "${deployment}"...`);
+  return await callOpenAiStandardChat(body);
 }
 
