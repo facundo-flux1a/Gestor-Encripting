@@ -314,6 +314,7 @@ export async function GET(request: NextRequest) {
         canal_origen: datosExtra.canal_origen || doc.dashboard_correo || 'ocr',
         tipo_documento: doc.tipo_documento,
         numero_documento: doc.numero_documento,
+        numero_documento_normalizado: doc.numero_documento_normalizado || datosExtra.numero_documento_normalizado || normalizeInvoiceNumber(doc.numero_documento),
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
         actualizado_en: fechaActualizacionIso,
@@ -405,7 +406,7 @@ export async function GET(request: NextRequest) {
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import { calcularTrimestreExtendido, resolverTrimestreContableImportacion, obtenerPrimerTrimestreAbiertoDelAnio } from '@/lib/trimestre-utils';
-import { normalizeCIF, detectCountryFromCIF } from '@/services/ingestion/normalize';
+import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 import { runHealthChecksForDocument } from '@/services/health-check-service';
 import connection, { dbName } from '@/lib/db';
 
@@ -419,7 +420,8 @@ function sha256ForEntity(text: string | null | undefined): string | null {
 }
 
 function buildRefExterna(cifEmisor: string, serie: string, numero: string): string {
-  return `${(cifEmisor || '').toUpperCase()}::${(serie || '').toUpperCase()}::${numero}`;
+  const cleanNum = normalizeInvoiceNumber(numero) || (numero || '').trim().toUpperCase();
+  return `${(cifEmisor || '').toUpperCase()}::${(serie || '').toUpperCase()}::${cleanNum}`;
 }
 
 async function downloadFileWithAuth(
@@ -598,8 +600,9 @@ export async function POST(request: NextRequest) {
       const cifEmisor = cleanCif(doc.entidades?.emisor?.cif);
       const serie     = (doc.serie || '').trim().toUpperCase();
       const numero    = String(doc.numero_documento).trim();
+      const numeroNorm = normalizeInvoiceNumber(numero) || numero;
       const refOrigen = doc.ref_origen ? String(doc.ref_origen).trim() : null;
-      const refExterna = buildRefExterna(cifEmisor, serie, numero);
+      const refExterna = buildRefExterna(cifEmisor, serie, numeroNorm);
 
       // ── Idempotencia: ¿ya existe? ──
       const [existingRows] = await connection.query<any[]>(
@@ -672,12 +675,17 @@ export async function POST(request: NextRequest) {
       if (refFacturaRectificada) {
         try {
           const cleanRef = String(refFacturaRectificada).trim();
+          const cleanRefNorm = normalizeInvoiceNumber(cleanRef) || cleanRef;
           const [foundRows] = await connection.query<any[]>(
             `SELECT id, numero_documento, ref_origen FROM documentos
              WHERE id_de_empresa = ?
-               AND (numero_documento = ? OR ref_origen = ?)
+               AND (
+                 numero_documento = ?
+                 OR JSON_UNQUOTE(JSON_EXTRACT(datos_extra, '$.numero_documento_normalizado')) = ?
+                 OR ref_origen = ?
+               )
              LIMIT 1`,
-            [empresaId, cleanRef, cleanRef]
+            [empresaId, cleanRef, cleanRefNorm, cleanRef]
           );
           if (foundRows && foundRows.length > 0) {
             facturaRectificadaId = BigInt(foundRows[0].id);
@@ -692,6 +700,7 @@ export async function POST(request: NextRequest) {
       // ── datos_extra ──
       const datosExtra: Record<string, any> = {
         ref_origen: refOrigen,
+        numero_documento_normalizado: numeroNorm,
         retencion_irpf: retencionIrpf,
         ref_externa: refExterna,
         forma_pago: doc.forma_pago || '',
@@ -776,6 +785,7 @@ export async function POST(request: NextRequest) {
               data: {
                 tipo_documento: tipoDocumento,
                 numero_documento: numero,
+                numero_documento_normalizado: numeroNorm,
                 ref_origen: refOrigen,
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
@@ -801,6 +811,7 @@ export async function POST(request: NextRequest) {
               data: {
                 tipo_documento: tipoDocumento,
                 numero_documento: numero,
+                numero_documento_normalizado: numeroNorm,
                 ref_origen: refOrigen,
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
@@ -965,6 +976,7 @@ export async function POST(request: NextRequest) {
 
         results.push({
           numero_documento: numero,
+          numero_documento_normalizado: numeroNorm,
           estado: isUpdate ? 'actualizado' : 'creado',
           id_interno: savedDocId ? Number(savedDocId) : null,
           ...(archivoWarning ? { advertencia_archivo: archivoWarning } : {}),

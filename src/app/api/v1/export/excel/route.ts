@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
 import { getPresignedUrl, getExcelPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
+import { normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
         d.id AS doc_id,
         d.tipo_documento,
         d.numero_documento,
+        d.numero_documento_normalizado,
         d.fecha_emision,
         d.fecha_vencimiento,
         d.importe_total,
@@ -333,6 +335,7 @@ export async function POST(request: NextRequest) {
       const row: Record<string, any> = {
         'Tipo': doc.tipo_documento || '',
         'Número': doc.numero_documento || '',
+        'Número Normalizado': doc.numero_documento_normalizado || rowDatosExtra.numero_documento_normalizado || normalizeInvoiceNumber(doc.numero_documento) || '',
         'Ref. Origen': doc.ref_origen || rowDatosExtra.ref_origen || '',
         'Fecha Emisión': doc.fecha_emision
           ? new Date(doc.fecha_emision).toLocaleDateString('es-ES')

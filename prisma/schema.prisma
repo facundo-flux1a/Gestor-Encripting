@@ -159,6 +159,7 @@ model documentos {
   file_hash                String?                    @db.VarChar(64)
   tipo_documento           String?                    @db.VarChar(100)
   numero_documento         String?                    @db.VarChar(100)
+  numero_documento_normalizado String?                @db.VarChar(100)
   fecha_emision            DateTime?                  @db.Date
   fecha_vencimiento        DateTime?                  @db.Date
   importe_total            Decimal?                   @db.Decimal(14, 2)
@@ -189,6 +190,7 @@ model documentos {
   @@unique([file_hash, id_de_empresa], map: "unique_hash_empresa")
   @@index([id_de_empresa], map: "fk_documento_empresa")
   @@index([numero_documento], map: "idx_documento_numero")
+  @@index([numero_documento_normalizado], map: "idx_documento_numero_norm")
   @@index([tipo_documento, fecha_emision], map: "idx_documento_tipo_fecha")
   @@index([is_new], map: "idx_documentos_is_new")
   @@index([año_trimestre, num_trimestre], map: "idx_trimestre")

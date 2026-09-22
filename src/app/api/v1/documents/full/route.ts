@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
 import { getPresignedUrl, getApiPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
+import { normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 
 export const dynamic = 'force-dynamic';
 
@@ -365,6 +366,7 @@ export async function GET(request: NextRequest) {
         file_hash: doc.file_hash,
         tipo_documento: doc.tipo_documento,
         numero_documento: doc.numero_documento,
+        numero_documento_normalizado: doc.numero_documento_normalizado || datosExtra.numero_documento_normalizado || normalizeInvoiceNumber(doc.numero_documento),
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
         actualizado_en: fechaActualizacionIso,

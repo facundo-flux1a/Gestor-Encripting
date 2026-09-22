@@ -36,7 +36,7 @@ import {
 } from '@/lib/document-fiscal-status';
 import { evaluarFechaContable } from '@/lib/fecha-contable-utils';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
-import { normalizeCIF, detectCountryFromCIF } from '@/services/ingestion/normalize';
+import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
@@ -152,6 +152,7 @@ export function startDbWriterWorker() {
         const importeTotal    = applySign(Number(rawImporteTotal) || 0);
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
         const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
+        const numeroDocumentoNorm = normalizeInvoiceNumber(numeroDocumento) || numeroDocumento;
         const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
         const fechaEmision = parseFechaLocalNullable(fechaEmisionRaw ? String(fechaEmisionRaw) : null);
         const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
@@ -241,6 +242,7 @@ export function startDbWriterWorker() {
               file_hash: ingestion.fileHash,
               tipo_documento: tipoDocumento,
               numero_documento: numeroDocumento,
+              numero_documento_normalizado: numeroDocumentoNorm,
               fecha_emision: fechaEmision,
               fecha_vencimiento: fechaVencimiento,
               importe_total: importeTotal,
@@ -254,6 +256,7 @@ export function startDbWriterWorker() {
               num_trimestre: trimestreData.trimestre,
               dashboard_correo: ingestion.origen || 'dashboard',
               datos_extra: {
+                numero_documento_normalizado: numeroDocumentoNorm,
                 categoria: aiResult.categoria_principal || aiResult.categoria_documento || '',
                 subcategoria: aiResult.subcategoria || '',
                 forma_pago: formaPago,

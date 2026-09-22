@@ -190,6 +190,28 @@ export function normalizeCIF(raw: string | null | undefined): string | null {
   return cif || null;
 }
 
+// ─── 4a. normalizeInvoiceNumber ───────────────────────────────────────────────
+/**
+ * Normaliza el número de factura/documento eliminando espacios superfluos
+ * alrededor de barras, guiones y caracteres de separación.
+ *
+ * Ejemplos:
+ *   "A / 04027"       →  "A/04027"
+ *   " A - 123 "       →  "A-123"
+ *   "FAC 2026 / 001"  →  "FAC2026/001"
+ *   null / ""         →  null
+ */
+export function normalizeInvoiceNumber(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  return trimmed
+    .toUpperCase()
+    .replace(/\s*([/\\#\-_])\s*/g, '$1') // quitar espacios alrededor de separadores comunes
+    .replace(/\s+/g, '');                // eliminar espacios restantes
+}
+
 // ─── 4b. detectCountryFromCIF ─────────────────────────────────────────────────
 /**
  * Detecta el país de un CIF/NIF ANTES de que normalizeCIF lo limpie.
