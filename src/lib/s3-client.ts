@@ -106,39 +106,93 @@ export async function getFileBuffer(rawKey: string): Promise<{ buffer: Buffer; f
 }
 
 /**
- * Genera una Presigned URL para que servicios externos (ej: pdftools)
- * puedan acceder temporalmente al archivo sin necesitar credenciales.
- * Resuelve si el archivo está en la raíz o en archivos/.
+ * Obtiene la duración por defecto en segundos para URLs presigned de la API.
+ * Default: 86400 segundos (1 día).
+ * Configurable via PRESIGNED_URL_EXPIRES_API en .env (ej: 30 para debugging).
  */
-export async function getPresignedUrl(rawKey: string, expiresIn = 900): Promise<string> {
+export function getApiPresignedUrlExpires(): number {
+  const envVal = process.env.PRESIGNED_URL_EXPIRES_API;
+  const parsed = envVal ? parseInt(envVal, 10) : 86400;
+  return isNaN(parsed) || parsed <= 0 ? 86400 : Math.min(parsed, 604800);
+}
+
+/**
+ * Obtiene la duración por defecto en segundos para URLs presigned de exports Excel.
+ * Default: 604800 segundos (7 días).
+ * Configurable via PRESIGNED_URL_EXPIRES_EXCEL en .env (ej: 30 para debugging).
+ */
+export function getExcelPresignedUrlExpires(): number {
+  const envVal = process.env.PRESIGNED_URL_EXPIRES_EXCEL;
+  const parsed = envVal ? parseInt(envVal, 10) : 604800;
+  return isNaN(parsed) || parsed <= 0 ? 604800 : Math.min(parsed, 604800);
+}
+
+/**
+ * Parsea el parámetro opcional de expiración (query param o body) con fallback al default indicado.
+ * Rango permitido: [1, 604800] segundos (máximo 7 días, límite de AWS S3 / MinIO).
+ */
+export function parsePresignedExpiresParam(paramValue: any, defaultSeconds: number): number {
+  if (paramValue === undefined || paramValue === null || paramValue === '') {
+    return defaultSeconds;
+  }
+  const parsed = parseInt(String(paramValue), 10);
+  if (isNaN(parsed) || parsed <= 0) {
+    return defaultSeconds;
+  }
+  return Math.min(parsed, 604800);
+}
+
+/**
+ * Genera una Presigned URL para que servicios externos o integradores
+ * puedan acceder temporalmente al archivo sin credenciales.
+ * Por defecto (checkExistence = false) firma la clave en memoria (<1ms) sin llamadas de red.
+ */
+export async function getPresignedUrl(
+  rawKey: string,
+  expiresIn?: number,
+  checkExistence = false
+): Promise<string> {
+  if (!rawKey || typeof rawKey !== 'string') return '';
   const bucket = getBucketName();
   const key = extractS3Key(rawKey);
+  if (!key) return '';
 
-  // Resolver la key real verificando existencia
+  const effectiveExpires = expiresIn !== undefined && expiresIn > 0
+    ? Math.min(expiresIn, 604800)
+    : getApiPresignedUrlExpires();
+
+  // Resolver la key real verificando existencia solo si se solicita explícitamente
   let actualKey = key;
-  try {
-    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    actualKey = key;
-  } catch {
-    if (!key.startsWith('archivos/')) {
-      try {
-        await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: `archivos/${key}` }));
-        actualKey = `archivos/${key}`;
-      } catch {}
-    } else {
-      const rootKey = key.replace(/^archivos\//, '');
-      try {
-        await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: rootKey }));
-        actualKey = rootKey;
-      } catch {}
+  if (checkExistence) {
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      actualKey = key;
+    } catch {
+      if (!key.startsWith('archivos/')) {
+        try {
+          await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: `archivos/${key}` }));
+          actualKey = `archivos/${key}`;
+        } catch {}
+      } else {
+        const rootKey = key.replace(/^archivos\//, '');
+        try {
+          await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: rootKey }));
+          actualKey = rootKey;
+        } catch {}
+      }
     }
   }
 
-  return getSignedUrl(
-    s3,
-    new GetObjectCommand({ Bucket: bucket, Key: actualKey }),
-    { expiresIn }
-  );
+  try {
+    return await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: bucket, Key: actualKey }),
+      { expiresIn: effectiveExpires }
+    );
+  } catch (err) {
+    console.error(`[getPresignedUrl] Error firmando URL para key "${actualKey}":`, err);
+    return '';
+  }
 }
 
 /**

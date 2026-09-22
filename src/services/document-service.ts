@@ -5637,7 +5637,20 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
             d.importe_sin_impuestos +
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) -
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0) +
-            COALESCE(imp.total_cuota, 0)
+            COALESCE(imp.total_cuota, 0) -
+            (CASE
+              WHEN EXISTS (
+                SELECT 1 FROM impuestos_documento di_ret 
+                WHERE di_ret.documento_id = d.id 
+                  AND (UPPER(di_ret.tipo_impuesto) LIKE '%RETEN%' OR UPPER(di_ret.tipo_impuesto) LIKE '%IRPF%')
+              ) THEN 0
+              ELSE 
+                CASE
+                  WHEN d.importe_total < 0 OR d.importe_sin_impuestos < 0 OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%'
+                    THEN -COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.retencion_irpf')) AS DECIMAL(10,2)), 0)
+                  ELSE COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.retencion_irpf')) AS DECIMAL(10,2)), 0)
+                END
+            END)
         )))
         ELSE 0
       END) as mismatch_amount,
@@ -5646,7 +5659,14 @@ export async function getHealthCheckAnalytics(companyIds: number[]): Promise<{
       hcs.motivo as hcs_motivo
     FROM documentos d
     LEFT JOIN (
-      SELECT di2.documento_id, SUM(di2.cuota) as total_cuota
+      SELECT di2.documento_id, 
+        SUM(
+          CASE 
+            WHEN UPPER(di2.tipo_impuesto) LIKE '%RETEN%' OR UPPER(di2.tipo_impuesto) LIKE '%IRPF%'
+              THEN -ABS(di2.cuota)
+            ELSE di2.cuota
+          END
+        ) as total_cuota
       FROM impuestos_documento di2
       JOIN documentos d2 ON di2.documento_id = d2.id
       WHERE d2.id_de_empresa IN (?)

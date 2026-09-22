@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
+import { getPresignedUrl, getApiPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,9 @@ export async function GET(request: NextRequest) {
     const proveedorParam = searchParams.get('proveedor');
     const clienteParam = searchParams.get('cliente');
     const tipoParam = searchParams.get('tipo') || 'todas';
+    const urlExpiresInParam = searchParams.get('url_expires_in') || searchParams.get('expires_in');
+    const urlExpiresIn = parsePresignedExpiresParam(urlExpiresInParam, getApiPresignedUrlExpires());
+    const incluirPermalink = searchParams.get('permalink') === 'true' || searchParams.get('incluir_permalink') === 'true';
 
     const desdeId = desdeIdParam ? Number(desdeIdParam) : null;
     const limit = Math.min(Math.max(limitParam ? Number(limitParam) : 500, 1), 1000);
@@ -98,12 +102,18 @@ export async function GET(request: NextRequest) {
         d.num_trimestre,
         d.trimestre_cerrado,
         d.fecha_creacion,
-        d.datos_extra
+        d.datos_extra,
+        d.ref_origen,
+        GREATEST(
+          d.fecha_creacion,
+          COALESCE((SELECT MAX(da.fecha_accion) FROM documentos_auditoria da WHERE da.documento_id = d.id), d.fecha_creacion)
+        ) AS fecha_actualizacion_real
       FROM documentos d
       WHERE d.id_de_empresa = ?
         AND (
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         )
         AND d.id NOT IN (
@@ -122,11 +132,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Filtro por modificación: ?modificados_desde=
+    // Cubre: creaciones nuevas (fecha_creacion), ediciones desde el dashboard (documentos_auditoria)
+    // y re-envíos por API (actividad.updated_at — solo para idempotencia de ingesta).
     if (modificadosDesdeParam) {
       const modDate = parseFlexibleDate(modificadosDesdeParam);
       if (modDate && !isNaN(modDate.getTime())) {
-        query += ` AND (d.fecha_creacion >= ? OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ?))`;
-        params.push(modDate, modDate);
+        query += ` AND (
+          d.fecha_creacion >= ?
+          OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ? AND documento_id IS NOT NULL)
+          OR d.id IN (SELECT documento_id FROM actividad WHERE updated_at >= ? AND documento_id IS NOT NULL)
+        )`;
+        params.push(modDate, modDate, modDate);
       }
     }
 
@@ -196,7 +212,7 @@ export async function GET(request: NextRequest) {
     });
 
     const entidadesByDoc: Record<number, Record<string, any>> = {};
-    entidadesPrisma.forEach((ent) => {
+    entidadesPrisma.forEach((ent: any) => {
       const docId = Number(ent.documento_id);
       if (!entidadesByDoc[docId]) entidadesByDoc[docId] = {};
       if (ent.rol) {
@@ -211,11 +227,24 @@ export async function GET(request: NextRequest) {
     });
 
     const archivoByDoc: Record<number, string> = {};
-    archivosPrisma.forEach((archivo) => {
+    archivosPrisma.forEach((archivo: any) => {
       if (archivo.ruta_archivo) {
         archivoByDoc[Number(archivo.documento_id)] = archivo.ruta_archivo;
       }
     });
+
+    // Pre-generar URLs presigned en paralelo para descarga directa (<1ms por archivo)
+    const presignedByDoc: Record<number, string> = {};
+    await Promise.all(
+      Object.entries(archivoByDoc).map(async ([docIdStr, ruta]) => {
+        if (ruta) {
+          const signed = await getPresignedUrl(ruta, urlExpiresIn);
+          if (signed) {
+            presignedByDoc[Number(docIdStr)] = signed;
+          }
+        }
+      })
+    );
 
     // 6.7 Cargar empresa para calcular clasificación emitida / recibida
     const empresa = await prisma.empresas.findUnique({
@@ -229,15 +258,25 @@ export async function GET(request: NextRequest) {
       const entidades = entidadesByDoc[doc.doc_id] || {};
 
       const emisorCif = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim().toLowerCase();
-      const isIssued = !!(empresaCif && emisorCif && emisorCif === empresaCif);
+      const tipoDocUpper = String(doc.tipo_documento || '').toUpperCase();
+      const isIssued = tipoDocUpper.includes('EMITID')
+        ? true
+        : tipoDocUpper.includes('RECIBID')
+          ? false
+          : !!(empresaCif && emisorCif && emisorCif === empresaCif);
 
       const docRutaArchivo = archivoByDoc[doc.doc_id];
-      const publicUrl = buildFileUrl(docRutaArchivo);
+      const proxyUrl = buildFileUrl(docRutaArchivo);
+      const presignedUrl = presignedByDoc[doc.doc_id] || null;
 
       const impuestosRaw = ivaByDoc[doc.doc_id] || [];
       const retencion = extractRetencionFromImpuestos(impuestosRaw);
 
       const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
+      // fecha_actualizacion_real = MAX(fecha_creacion, última auditoría) calculado en SQL
+      const fechaActualizacionIso = doc.fecha_actualizacion_real
+        ? new Date(doc.fecha_actualizacion_real).toISOString()
+        : fechaCreacionIso;
 
       // Bases: sujeta (campo BD) + no sujeta/suplidos (datos_extra)
       let datosExtra: any = {};
@@ -270,11 +309,19 @@ export async function GET(request: NextRequest) {
 
       return {
         id: doc.doc_id,
+        ref_origen: doc.ref_origen || datosExtra.ref_origen || null,
+        origen: datosExtra.canal_origen === 'api' || doc.dashboard_correo === 'api' ? 'sistema' : 'ocr',
+        canal_origen: datosExtra.canal_origen || doc.dashboard_correo || 'ocr',
         tipo_documento: doc.tipo_documento,
         numero_documento: doc.numero_documento,
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
-        actualizado_en: fechaCreacionIso,
+        actualizado_en: fechaActualizacionIso,
+        factura_rectificada: datosExtra.factura_rectificada || null,
+        factura_rectificada_id: datosExtra.factura_rectificada_id || null,
+        rectificada_por_numero: datosExtra.rectificada_por_numero || null,
+        rectificada_por_id: datosExtra.rectificada_por_id || null,
+        motivo_rectificacion: datosExtra.motivo_rectificacion || null,
         // --- Bases desglosadas ---
         base_sujeta:          baseSujeta,
         base_no_sujeta:       baseNoSujeta,
@@ -294,7 +341,8 @@ export async function GET(request: NextRequest) {
         descuento_global: descuentoGlobal,
         entidades: entidades,
         is_issued: isIssued,
-        url_archivo: publicUrl,
+        url_archivo: presignedUrl || proxyUrl,
+        ...(incluirPermalink ? { permalink: proxyUrl } : {}),
         impuestos,
         lineas_detalle: lineasByDoc[doc.doc_id] || [],
       };
@@ -550,6 +598,7 @@ export async function POST(request: NextRequest) {
       const cifEmisor = cleanCif(doc.entidades?.emisor?.cif);
       const serie     = (doc.serie || '').trim().toUpperCase();
       const numero    = String(doc.numero_documento).trim();
+      const refOrigen = doc.ref_origen ? String(doc.ref_origen).trim() : null;
       const refExterna = buildRefExterna(cifEmisor, serie, numero);
 
       // ── Idempotencia: ¿ya existe? ──
@@ -567,6 +616,18 @@ export async function POST(request: NextRequest) {
       const baseSinImpuestos = Number(doc.importe_sin_impuestos) || 0;
       const totalConImpuestos = Number(doc.importe_total) || 0;
       const importeSinImpuestosFinal = esExtranjeroRecibido ? totalConImpuestos : baseSinImpuestos;
+
+      // ── Retención IRPF (si viene en impuestos o campos raíz) ──
+      let retencionIrpf = Math.abs(Number(doc.retencion ?? doc.retencion_irpf ?? 0));
+      if (!retencionIrpf && Array.isArray(doc.impuestos)) {
+        const retItem = doc.impuestos.find((imp: any) => {
+          const t = String(imp.tipo_impuesto || imp.tipo || '').toUpperCase();
+          return t.includes('RETEN') || t.includes('IRPF');
+        });
+        if (retItem) {
+          retencionIrpf = Math.abs(Number(retItem.cuota) || 0);
+        }
+      }
 
       // ── Fechas ──
       const fechaEmision     = parseFlexibleDate(doc.fecha_emision ? String(doc.fecha_emision) : '');
@@ -588,17 +649,60 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Tipo documento ──
-      let tipoDocumento = isIssued ? 'FACTURA EMITIDA' : 'FACTURA RECIBIDA';
+      const rawTipo = String(doc.tipo || doc.tipo_documento || '').trim().toLowerCase();
+      const esAbono = rawTipo.includes('abono') || rawTipo.includes('rectificativa') || totalConImpuestos < 0 || baseSinImpuestos < 0;
+      const esTicket = rawTipo.includes('ticket') || rawTipo.includes('simplificada');
+
+      let tipoDocumento: string;
+      if (esAbono) {
+        tipoDocumento = isIssued ? 'ABONO EMITIDO' : 'ABONO RECIBIDO';
+      } else if (esTicket) {
+        tipoDocumento = isIssued ? 'TICKET EMITIDO' : 'TICKET';
+      } else {
+        tipoDocumento = isIssued ? 'FACTURA EMITIDA' : 'FACTURA RECIBIDA';
+      }
       if (doc.estado === 'anulada') tipoDocumento += ' (ANULADA)';
+
+      // ── Búsqueda de factura original para abonos/rectificativas ──
+      const refFacturaRectificada = doc.factura_rectificada || doc.ref_factura_origen || doc.factura_origen || doc.numero_factura_origen;
+      let facturaRectificadaId: bigint | null = null;
+      let facturaRectificadaNumero: string | null = null;
+      let facturaRectificadaRefOrigen: string | null = null;
+
+      if (refFacturaRectificada) {
+        try {
+          const cleanRef = String(refFacturaRectificada).trim();
+          const [foundRows] = await connection.query<any[]>(
+            `SELECT id, numero_documento, ref_origen FROM documentos
+             WHERE id_de_empresa = ?
+               AND (numero_documento = ? OR ref_origen = ?)
+             LIMIT 1`,
+            [empresaId, cleanRef, cleanRef]
+          );
+          if (foundRows && foundRows.length > 0) {
+            facturaRectificadaId = BigInt(foundRows[0].id);
+            facturaRectificadaNumero = foundRows[0].numero_documento || null;
+            facturaRectificadaRefOrigen = foundRows[0].ref_origen || null;
+          }
+        } catch (findErr: any) {
+          console.warn('[POST /api/v1/documents] Error buscando factura rectificada (ignorado):', findErr?.message);
+        }
+      }
 
       // ── datos_extra ──
       const datosExtra: Record<string, any> = {
+        ref_origen: refOrigen,
+        retencion_irpf: retencionIrpf,
         ref_externa: refExterna,
         forma_pago: doc.forma_pago || '',
         cif: cifEmisor || cleanCif(doc.entidades?.cliente?.cif),
         canal_origen: 'api',
         descuento_global: esExtranjeroRecibido ? 0 : (doc.descuento_global ? Number(doc.descuento_global) : 0),
         base_no_sujeta: esExtranjeroRecibido ? 0 : (doc.base_no_sujeta ? Number(doc.base_no_sujeta) : 0),
+        factura_rectificada: facturaRectificadaNumero || (refFacturaRectificada ? String(refFacturaRectificada).trim() : null),
+        factura_rectificada_id: facturaRectificadaId ? Number(facturaRectificadaId) : null,
+        factura_rectificada_ref_origen: facturaRectificadaRefOrigen || (doc.ref_factura_origen ? String(doc.ref_factura_origen).trim() : null),
+        motivo_rectificacion: doc.motivo_rectificacion || doc.motivo || null,
         ...(esExtranjeroRecibido ? {
           es_proveedor_extranjero_ue: true,
           zona_emisor: countryInfo.region,
@@ -672,6 +776,7 @@ export async function POST(request: NextRequest) {
               data: {
                 tipo_documento: tipoDocumento,
                 numero_documento: numero,
+                ref_origen: refOrigen,
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
                 importe_total: totalConImpuestos,
@@ -696,6 +801,7 @@ export async function POST(request: NextRequest) {
               data: {
                 tipo_documento: tipoDocumento,
                 numero_documento: numero,
+                ref_origen: refOrigen,
                 fecha_emision: fechaEmision,
                 fecha_vencimiento: fechaVencimiento ?? undefined,
                 importe_total: totalConImpuestos,
@@ -821,6 +927,24 @@ export async function POST(request: NextRequest) {
             });
           }
         }, { maxWait: 8000, timeout: 15000 });
+
+        // ── Si es rectificativa y encontramos la original, marcar en la original que fue rectificada ──
+        if (facturaRectificadaId && savedDocId) {
+          try {
+            await connection.query(
+              `UPDATE documentos 
+               SET datos_extra = JSON_SET(
+                 COALESCE(datos_extra, '{}'),
+                 '$.rectificada_por_id', ?,
+                 '$.rectificada_por_numero', ?
+               )
+               WHERE id = ?`,
+              [Number(savedDocId), numero, Number(facturaRectificadaId)]
+            );
+          } catch (linkErr: any) {
+            console.warn('[POST /api/v1/documents] Error enlazando factura original (ignorado):', linkErr?.message);
+          }
+        }
 
         // ── Actualizar actividad → Completado ──
         const finalStep = isUpdate ? 'Actualizado' : 'Guardado';

@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2';
 import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
+import { getPresignedUrl, getExcelPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +125,9 @@ export async function POST(request: NextRequest) {
     const cliente: string | null = clienteRaw?.trim() || null;
     const tipo: 'emitidas' | 'recibidas' | 'todas' = (tipoRaw as any) || 'todas';
 
+    const expiresRaw = body.url_expires_in ?? body.expires_in ?? searchParams.get('url_expires_in') ?? searchParams.get('expires_in');
+    const urlExpiresIn = parsePresignedExpiresParam(expiresRaw, getExcelPresignedUrlExpires());
+
     // Validaciones básicas
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
       return NextResponse.json({ error: '"trimestre" debe ser 1, 2, 3 o 4.' }, { status: 400 });
@@ -152,7 +156,8 @@ export async function POST(request: NextRequest) {
         d.año_trimestre,
         d.num_trimestre,
         d.trimestre_cerrado,
-        d.datos_extra
+        d.datos_extra,
+        d.ref_origen
       FROM documentos d
       WHERE d.id_de_empresa = ?
         AND (
@@ -206,11 +211,15 @@ export async function POST(request: NextRequest) {
       ivaByDoc[r.documento_id].push(r);
     });
 
-    // 7. Cargar entidades de todos los documentos y empresa en paralelo con Prisma
-    const [entidadesPrisma, empresaData] = await Promise.all([
+    // 7. Cargar entidades, archivos y empresa en paralelo con Prisma
+    const [entidadesPrisma, archivosPrisma, empresaData] = await Promise.all([
       prisma.entidades_documento.findMany({
         where: { documento_id: { in: docIds } },
         select: { documento_id: true, rol: true, nombre: true, identificador_fiscal: true }
+      }),
+      prisma.archivos_documento.findMany({
+        where: { documento_id: { in: docIds } },
+        select: { documento_id: true, ruta_archivo: true }
       }),
       prisma.empresas.findUnique({
         where: { id: empresaId },
@@ -231,6 +240,27 @@ export async function POST(request: NextRequest) {
          };
       }
     });
+
+    const archivoByDoc: Record<number, string> = {};
+    archivosPrisma.forEach((archivo: any) => {
+      const docId = Number(archivo.documento_id);
+      if (archivo.ruta_archivo && !archivoByDoc[docId]) {
+        archivoByDoc[docId] = archivo.ruta_archivo;
+      }
+    });
+
+    // Pre-firmar URLs presigned en paralelo (<1ms por archivo)
+    const presignedByDoc: Record<number, string> = {};
+    await Promise.all(
+      Object.entries(archivoByDoc).map(async ([docIdStr, ruta]) => {
+        if (ruta) {
+          const signed = await getPresignedUrl(ruta, urlExpiresIn);
+          if (signed) {
+            presignedByDoc[Number(docIdStr)] = signed;
+          }
+        }
+      })
+    );
 
     const enriched = documentos.map((doc: any) => {
       const entidades = entidadesByDoc[doc.doc_id] || {};
@@ -292,9 +322,18 @@ export async function POST(request: NextRequest) {
     const VAT_RATES = Array.from(_discoveredRates).sort((a, b) => b - a);
 
     const dataRows = filtered.map((doc: any) => {
+      let rowDatosExtra: any = {};
+      try {
+        if (typeof doc.datos_extra === 'string') rowDatosExtra = JSON.parse(doc.datos_extra);
+        else if (doc.datos_extra && typeof doc.datos_extra === 'object') rowDatosExtra = doc.datos_extra;
+      } catch { rowDatosExtra = {}; }
+
+      const presignedUrl = presignedByDoc[doc.doc_id] || '';
+
       const row: Record<string, any> = {
         'Tipo': doc.tipo_documento || '',
         'Número': doc.numero_documento || '',
+        'Ref. Origen': doc.ref_origen || rowDatosExtra.ref_origen || '',
         'Fecha Emisión': doc.fecha_emision
           ? new Date(doc.fecha_emision).toLocaleDateString('es-ES')
           : '',
@@ -310,6 +349,7 @@ export async function POST(request: NextRequest) {
         'CIF Receptor': doc.entidades.receptor?.cif || doc.entidades.cliente?.cif || '',
         'Moneda': doc.moneda || 'EUR',
         'Observaciones': doc.observaciones || '',
+        'Enlace PDF': presignedUrl,
       };
 
       // Columnas Base XX% e IVA XX%
@@ -439,7 +479,7 @@ export async function POST(request: NextRequest) {
         accumulators[`base_${r}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
         if (r > 0) accumulators[`iva_${r}`] = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
       });
-      const totalFacturado = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
+      const totalFacturado: Record<number | string, number> = { 1: 0, 2: 0, 3: 0, 4: 0, total: 0 };
 
       docs.forEach((doc: any) => {
         const q: number = doc.num_trimestre || 0;
@@ -595,3 +635,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Error interno al generar el export.' }, { status: 500 });
   }
 }
+
+export const GET = POST;
+

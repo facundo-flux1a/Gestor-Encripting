@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2';
 import { prisma } from '@/lib/prisma';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
+import { getPresignedUrl, getApiPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,11 +63,14 @@ export async function GET(request: NextRequest) {
     const proveedorParam = searchParams.get('proveedor');
     const clienteParam = searchParams.get('cliente');
     const tipoParam = searchParams.get('tipo') || 'todas';
+    const urlExpiresInParam = searchParams.get('url_expires_in') || searchParams.get('expires_in');
+    const urlExpiresIn = parsePresignedExpiresParam(urlExpiresInParam, getApiPresignedUrlExpires());
 
     // Parámetros de inclusión opcionales (por defecto false)
     const incluirIncidencias = searchParams.get('incluir_incidencias') === 'true';
     const incluirSinVerificar = searchParams.get('incluir_sin_verificar') === 'true';
     const incluirSinConfirmar = searchParams.get('incluir_sin_confirmar') === 'true';
+    const incluirPermalink = searchParams.get('permalink') === 'true' || searchParams.get('incluir_permalink') === 'true';
 
     const desdeId = desdeIdParam ? Number(desdeIdParam) : null;
     const limit = Math.min(Math.max(limitParam ? Number(limitParam) : 500, 1), 1000);
@@ -93,7 +97,11 @@ export async function GET(request: NextRequest) {
     // 4. Construir query de documentos principal
     let query = `
       SELECT
-        d.*
+        d.*,
+        GREATEST(
+          d.fecha_creacion,
+          COALESCE((SELECT MAX(da.fecha_accion) FROM documentos_auditoria da WHERE da.documento_id = d.id), d.fecha_creacion)
+        ) AS fecha_actualizacion_real
       FROM documentos d
       WHERE d.id_de_empresa = ?
     `;
@@ -106,11 +114,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Filtro por modificación: ?modificados_desde=
+    // Cubre: creaciones nuevas (fecha_creacion), ediciones desde el dashboard (documentos_auditoria)
+    // y re-envíos por API (actividad.updated_at — solo para idempotencia de ingesta).
     if (modificadosDesdeParam) {
       const modDate = parseFlexibleDate(modificadosDesdeParam);
       if (modDate && !isNaN(modDate.getTime())) {
-        query += ` AND (d.fecha_creacion >= ? OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ?))`;
-        params.push(modDate, modDate);
+        query += ` AND (
+          d.fecha_creacion >= ?
+          OR d.id IN (SELECT documento_id FROM documentos_auditoria WHERE fecha_accion >= ? AND documento_id IS NOT NULL)
+          OR d.id IN (SELECT documento_id FROM actividad WHERE updated_at >= ? AND documento_id IS NOT NULL)
+        )`;
+        params.push(modDate, modDate, modDate);
       }
     }
 
@@ -223,7 +237,19 @@ export async function GET(request: NextRequest) {
       lineasByDoc[r.documento_id].push(formatDocumentLine(r, docImpuestos));
     });
 
-    // 9. Agrupar archivos y generar enlaces públicos sin prefijos duplicados
+    // 9. Agrupar archivos y generar enlaces públicos y presigned
+    const presignedByArchivoId: Record<number, string> = {};
+    await Promise.all(
+      archivosRows.map(async (r: any) => {
+        if (r.ruta_archivo) {
+          const signed = await getPresignedUrl(r.ruta_archivo, urlExpiresIn);
+          if (signed) {
+            presignedByArchivoId[Number(r.id)] = signed;
+          }
+        }
+      })
+    );
+
     const archivosByDoc: Record<number, any[]> = {};
     archivosRows.forEach((r: any) => {
       const docId = Number(r.documento_id);
@@ -231,7 +257,8 @@ export async function GET(request: NextRequest) {
         archivosByDoc[docId] = [];
       }
 
-      const publicUrl = buildFileUrl(r.ruta_archivo);
+      const proxyUrl = buildFileUrl(r.ruta_archivo);
+      const presignedUrl = presignedByArchivoId[Number(r.id)] || null;
 
       archivosByDoc[docId].push({
         id: Number(r.id),
@@ -240,7 +267,8 @@ export async function GET(request: NextRequest) {
         hash_archivo: r.hash_archivo,
         ruta_archivo: r.ruta_archivo,
         fecha_subida: r.fecha_subida,
-        url_archivo: publicUrl
+        url_archivo: presignedUrl || proxyUrl,
+        ...(incluirPermalink ? { permalink: proxyUrl } : {})
       });
     });
 
@@ -285,12 +313,17 @@ export async function GET(request: NextRequest) {
       const isIssued = !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
 
       const docArchivos = archivosByDoc[docId] || [];
-      const publicUrl = docArchivos.length > 0 ? docArchivos[0].url_archivo : null;
+      const primaryUrl = docArchivos.length > 0 ? docArchivos[0].url_archivo : null;
+      const primaryProxyUrl = docArchivos.length > 0 ? docArchivos[0].url_proxy : null;
 
       const impuestosRaw = impuestosByDoc[docId] || [];
       const retencion = extractRetencionFromImpuestos(impuestosRaw);
 
       const fechaCreacionIso = doc.fecha_creacion ? new Date(doc.fecha_creacion).toISOString() : null;
+      // fecha_actualizacion_real = MAX(fecha_creacion, última auditoría) calculado en SQL
+      const fechaActualizacionIso = doc.fecha_actualizacion_real
+        ? new Date(doc.fecha_actualizacion_real).toISOString()
+        : fechaCreacionIso;
 
       // Bases: sujeta (campo BD) + no sujeta/suplidos (datos_extra)
       let datosExtra: any = {};
@@ -321,12 +354,20 @@ export async function GET(request: NextRequest) {
 
       return {
         id: doc.id,
+        ref_origen: doc.ref_origen || datosExtra.ref_origen || null,
+        origen: datosExtra.canal_origen === 'api' || doc['dashboard-correo'] === 'api' ? 'sistema' : 'ocr',
+        canal_origen: datosExtra.canal_origen || doc['dashboard-correo'] || 'ocr',
+        factura_rectificada: datosExtra.factura_rectificada || null,
+        factura_rectificada_id: datosExtra.factura_rectificada_id || null,
+        rectificada_por_numero: datosExtra.rectificada_por_numero || null,
+        rectificada_por_id: datosExtra.rectificada_por_id || null,
+        motivo_rectificacion: datosExtra.motivo_rectificacion || null,
         file_hash: doc.file_hash,
         tipo_documento: doc.tipo_documento,
         numero_documento: doc.numero_documento,
         fecha_emision: doc.fecha_emision,
         fecha_vencimiento: doc.fecha_vencimiento,
-        actualizado_en: fechaCreacionIso,
+        actualizado_en: fechaActualizacionIso,
         // --- Bases desglosadas ---
         base_sujeta: baseSujeta,
         base_no_sujeta: baseNoSujeta,
@@ -352,7 +393,8 @@ export async function GET(request: NextRequest) {
         retencion_irpf: retencionIrpf,
         canal_carga: doc['dashboard-correo'],
         is_issued: isIssued,
-        url_archivo: publicUrl,
+        url_archivo: primaryUrl,
+        ...(incluirPermalink ? { permalink: primaryProxyUrl } : {}),
         entidades: entities,
         impuestos,
         lineas_detalle: lineasByDoc[docId] || [],

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { cn, fixMinioUrl } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye, Globe } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { DocumentTypeSelector } from './document-type-selector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -63,7 +64,7 @@ const EInput = ({ value, readOnly = true, onChange, type = 'text', className = '
 );
 
 // ── Section label
-const SL = ({ children }: { children: React.ReactNode }) => (
+const SL = ({ children }: { children?: React.ReactNode }) => (
   <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-1.5">{children}</p>
 );
 
@@ -649,6 +650,41 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                     <DocumentTypeSelector value={field.value ?? ''} onChange={field.onChange} />
                   )} />
                 : <EInput value={doc.tipo_documento || '—'} className="font-medium text-foreground" />}
+
+              {rawDatosExtra?.factura_rectificada && (
+                <div className="mt-2 text-xs flex items-center gap-1.5 p-2 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                  <span>🔗 Rectifica a:</span>
+                  {rawDatosExtra.factura_rectificada_id ? (
+                    <Link
+                      href={`/documento/${rawDatosExtra.factura_rectificada_id}`}
+                      className="font-bold underline hover:text-blue-300 flex items-center gap-1"
+                    >
+                      {rawDatosExtra.factura_rectificada} <ExternalLink className="h-3 w-3 inline" />
+                    </Link>
+                  ) : (
+                    <span className="font-semibold text-foreground">{rawDatosExtra.factura_rectificada}</span>
+                  )}
+                  {rawDatosExtra.motivo_rectificacion && (
+                    <span className="text-[11px] text-muted-foreground ml-1">({rawDatosExtra.motivo_rectificacion})</span>
+                  )}
+                </div>
+              )}
+
+              {rawDatosExtra?.rectificada_por_numero && (
+                <div className="mt-2 text-xs flex items-center gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <span>⚠️ Rectificada por abono:</span>
+                  {rawDatosExtra.rectificada_por_id ? (
+                    <Link
+                      href={`/documento/${rawDatosExtra.rectificada_por_id}`}
+                      className="font-bold underline hover:text-amber-300 flex items-center gap-1"
+                    >
+                      {rawDatosExtra.rectificada_por_numero} <ExternalLink className="h-3 w-3 inline" />
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">{rawDatosExtra.rectificada_por_numero}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

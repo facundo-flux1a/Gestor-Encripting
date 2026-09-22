@@ -56,9 +56,10 @@ export function formatEntityData(ent: any): FormattedEntity {
   if (!cp && rawDir) {
     const cpMatch = rawDir.match(/\b(0[1-9]|[1-4][0-9]|5[0-2])\d{3}\b/);
     if (cpMatch) {
-      cp = cpMatch[0];
+      const foundCp = cpMatch[0];
+      cp = foundCp;
       if (!poblacion) {
-        const afterCp = rawDir.slice(rawDir.indexOf(cp) + cp.length).replace(/^[\s,.-]+/, '').trim();
+        const afterCp = rawDir.slice(rawDir.indexOf(foundCp) + foundCp.length).replace(/^[\s,.-]+/, '').trim();
         if (afterCp) {
           poblacion = afterCp.split(/[,;\n]/)[0].trim() || null;
         }

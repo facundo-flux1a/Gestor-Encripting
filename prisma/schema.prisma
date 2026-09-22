@@ -175,6 +175,7 @@ model documentos {
   año_trimestre           Int?
   num_trimestre            Int?
   dashboard_correo         String?                    @map("dashboard-correo") @db.VarChar(50)
+  ref_origen               String?                    @db.VarChar(255)
   ai_incidencias_documento ai_incidencias_documento[]
   ai_suggestions           ai_suggestions[]
   archivos_documento       archivos_documento[]

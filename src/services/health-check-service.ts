@@ -31,15 +31,36 @@ export async function runHealthChecksForDocument(documentId: number): Promise<vo
   let motivoFound: string | null = null;
 
   // ── 1. Descuadre matemático ──
-  // Nota: retencion_irpf y las filas RETENCION en impuestos_documento son mutuamente excluyentes.
-  // Cuando el usuario guarda con el campo IRPF separado, impuestos_documento se recrea sin fila RETENCION,
-  // y el valor va a datos_extra.retencion_irpf. El SUM ya maneja cuotas negativas del caso OCR.
+  // Base + No Sujeto + IVA + Recargo − Retención (IRPF) − Descuento Global = Total
+  // Las retenciones (IRPF) siempre restan del total, ya vengan en impuestos_documento o en datos_extra.
   const [mathRows] = await db.query<RowDataPacket[]>(
     `SELECT ABS(d.importe_total - (
         d.importe_sin_impuestos +
         COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.base_no_sujeta')) AS DECIMAL(10,2)), 0) +
-        COALESCE((SELECT SUM(di.cuota) FROM impuestos_documento di WHERE di.documento_id = d.id), 0) -
-        COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.retencion_irpf')) AS DECIMAL(10,2)), 0) -
+        COALESCE((SELECT SUM(
+          CASE
+            WHEN UPPER(di.tipo_impuesto) LIKE '%RETEN%' OR UPPER(di.tipo_impuesto) LIKE '%IRPF%' THEN
+              CASE
+                WHEN d.importe_total < 0 OR d.importe_sin_impuestos < 0 OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%'
+                  THEN ABS(di.cuota)
+                ELSE -ABS(di.cuota)
+              END
+            ELSE di.cuota
+          END
+        ) FROM impuestos_documento di WHERE di.documento_id = d.id), 0) -
+        (CASE
+          WHEN EXISTS (
+            SELECT 1 FROM impuestos_documento di_ret 
+            WHERE di_ret.documento_id = d.id 
+              AND (UPPER(di_ret.tipo_impuesto) LIKE '%RETEN%' OR UPPER(di_ret.tipo_impuesto) LIKE '%IRPF%')
+          ) THEN 0
+          ELSE 
+            CASE
+              WHEN d.importe_total < 0 OR d.importe_sin_impuestos < 0 OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%rectificativa%'
+                THEN -COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.retencion_irpf')) AS DECIMAL(10,2)), 0)
+              ELSE COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.retencion_irpf')) AS DECIMAL(10,2)), 0)
+            END
+        END) -
         COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.datos_extra, '$.descuento_global')) AS DECIMAL(10,2)), 0)
       )) as mismatch
      FROM documentos d WHERE d.id = ?`,
