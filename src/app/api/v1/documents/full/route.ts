@@ -402,7 +402,12 @@ export async function GET(request: NextRequest) {
         lineas_detalle: lineasByDoc[docId] || [],
         archivos: docArchivos,
         incidencias: incidenciasByDoc[docId] || [],
-        health_check: healthCheckByDoc[docId] || null
+        health_check: healthCheckByDoc[docId] || null,
+        // --- Veri*Factu ---
+        verifactu_verificado: datosExtra.verifactu_verificado ?? false,
+        verifactu_url: datosExtra.verifactu_url ?? null,
+        verifactu_campos: datosExtra.verifactu_campos ?? null,
+        verifactu_discrepancia_importe: datosExtra.verifactu_discrepancia_importe ?? null,
       };
     });
 

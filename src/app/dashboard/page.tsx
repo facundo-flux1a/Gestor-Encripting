@@ -635,7 +635,11 @@ export default function DashboardPage() {
         </Button>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md p-0 overflow-hidden border border-white/10 shadow-2xl">
+          <DialogContent
+            className="max-w-[calc(100vw-2rem)] sm:max-w-md p-0 overflow-hidden border border-white/10 shadow-2xl"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             {/* Gradient header */}
             <div className="relative bg-gradient-to-br from-red-950 via-red-900/80 to-zinc-900 px-6 pt-6 pb-5 border-b border-red-800/30">
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(239,68,68,0.15),transparent_60%)]" />

@@ -122,6 +122,14 @@ export interface DbWriterJobData {
   aiResult: any;
   fiscalStatus?: 'VALIDADO' | 'REVISION';
   fiscalRevisionReasons?: Array<{ code: string; message: string }>;
+  /** Resultado del detector QR Veri*Factu, si se encontró un QR válido en el documento */
+  verifactu?: {
+    url: string;
+    params: { nif: string; numserie: string; fecha: string; importe: string; huella?: string };
+    fetchOk: boolean;
+    fetchBody?: string;
+    discrepanciaImporte?: { ocrImporte: number; qrImporte: number; diferencia: number } | null;
+  } | null;
 }
 
 export const dbWriterQueue = new Queue(DB_WRITER_QUEUE_NAME, {

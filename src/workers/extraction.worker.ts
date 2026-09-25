@@ -43,6 +43,7 @@ import {
 import { runFiscalGuards, formatGuardFailures, isRepairableGuardFailure } from '@/services/ingestion/fiscal-guards';
 import { FiscalStatus } from '@/lib/document-fiscal-status';
 import { wLog } from '@/lib/worker-logger';
+import { detectQrVerifactu, type VerifactuQrResult } from '@/services/ingestion/qr-detector';
 
 assertAzureOpenAiConfigured();
 const EXTRACTION_CONCURRENCY = parseInt(
@@ -1025,6 +1026,22 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     `  emisor_cif: ${(normalized as any).empresa_emisora?.cif} | cliente_cif: ${(normalized as any).cliente?.cif}\n` +
     `  incidencia: ${(normalized as any).incidencia} — ${(normalized as any).descripcion_incidencia ?? ''}`, 'info');
 
+  // ── Detección QR Veri*Factu (antes de encolar al db-writer) ─────────────────
+  const ocrImporteTotal = Number(
+    (normalized as any).importe_total ??
+    (normalized as any).documento?.importe_total ??
+    0
+  ) || null;
+  let verifactuResult: VerifactuQrResult | null = null;
+  try {
+    verifactuResult = await detectQrVerifactu(finalBuffer, ingestion.mimeType, ocrImporteTotal);
+    if (verifactuResult) {
+      wLog('QrDetector', `✅ QR Veri*Factu detectado para ${ingestion.fileName} | NIF=${verifactuResult.params.nif} | importe=${verifactuResult.params.importe} | fetchOk=${verifactuResult.fetchOk}${verifactuResult.discrepanciaImporte ? ` | ⚠️ DISCREPANCIA: OCR=${verifactuResult.discrepanciaImporte.ocrImporte} QR=${verifactuResult.discrepanciaImporte.qrImporte}` : ''}`);
+    }
+  } catch (qrErr: any) {
+    console.warn(`[QrDetector] ⚠️ Error en detección QR (no crítico): ${qrErr?.message}`);
+  }
+
   await enqueueAfterFiscalGuards({
     job,
     ingestion: { ...ingestion, publicUrl: fileUrlForDb },
@@ -1033,6 +1050,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
     pageEnd,
     fileBuffer: (ingestion.mimeType === 'application/pdf' || /\.pdf$/i.test(ingestion.fileName || '')) ? finalBuffer : undefined,
     ocrText: ocrText,
+    verifactu: verifactuResult,
   });
 }
 
@@ -1135,8 +1153,9 @@ async function enqueueAfterFiscalGuards(params: {
   fileBuffer?: Buffer;
   ocrText?: string;
   visionDone?: boolean;
+  verifactu?: VerifactuQrResult | null;
 }) {
-  const { job, ingestion, normalized, pageStart, pageEnd, fileBuffer, ocrText, visionDone } = params;
+  const { job, ingestion, normalized, pageStart, pageEnd, fileBuffer, ocrText, visionDone, verifactu } = params;
   const repairAttempt = job.data.repairAttempt || 0;
   const guard = runFiscalGuards(normalized, { empresaCif: ingestion.cif });
 
@@ -1185,7 +1204,7 @@ async function enqueueAfterFiscalGuards(params: {
         mensaje: 'Extracción verificada con imagen. Validando...',
       });
       // Re-ejecutar guards con el resultado de visión (visionDone=true previene recursión)
-      return enqueueAfterFiscalGuards({ job, ingestion, normalized: visionResult, pageStart, pageEnd, visionDone: true });
+      return enqueueAfterFiscalGuards({ job, ingestion, normalized: visionResult, pageStart, pageEnd, visionDone: true, verifactu });
     }
     // Si el fallback visual falló, continuar con el resultado original
     wLog('VisionFallback', '⚠️  Fallback visual falló, continuando con resultado OCR original', 'warn');
@@ -1198,6 +1217,7 @@ async function enqueueAfterFiscalGuards(params: {
         ingestion,
         aiResult: normalized,
         fiscalStatus: FiscalStatus.VALIDADO,
+        verifactu: verifactu ?? null,
       },
       {
         jobId: `db-writer-${ingestion.uploadId}-v${repairAttempt}`,
@@ -1264,6 +1284,7 @@ async function enqueueAfterFiscalGuards(params: {
       aiResult: normalized,
       fiscalStatus: FiscalStatus.REVISION,
       fiscalRevisionReasons: guard.failures.map((f) => ({ code: f.code, message: f.message })),
+      verifactu: verifactu ?? null,
     },
     {
       jobId: `db-writer-${ingestion.uploadId}-revision`,

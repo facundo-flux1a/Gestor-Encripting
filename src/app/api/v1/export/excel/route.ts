@@ -353,6 +353,9 @@ export async function POST(request: NextRequest) {
         'Moneda': doc.moneda || 'EUR',
         'Observaciones': doc.observaciones || '',
         'Enlace PDF': presignedUrl,
+        'Veri*Factu': rowDatosExtra.verifactu_verificado
+          ? (rowDatosExtra.verifactu_discrepancia_importe ? '⚠ DISC' : '✓')
+          : '—',
       };
 
       // Columnas Base XX% e IVA XX%

@@ -53,7 +53,7 @@ export function startDbWriterWorker() {
   const worker = new Worker<DbWriterJobData>(
     DB_WRITER_QUEUE_NAME,
     async (job: Job<DbWriterJobData>) => {
-      const { ingestion, fiscalStatus, fiscalRevisionReasons } = job.data;
+      const { ingestion, fiscalStatus, fiscalRevisionReasons, verifactu } = job.data;
       let aiResult = job.data.aiResult;
       const { uploadId, fileName, empresaId } = ingestion;
       const resolvedFiscalStatus =
@@ -289,6 +289,16 @@ export function startDbWriterWorker() {
                 ...(revisionReasons.length > 0
                   ? { [FISCAL_REVISION_REASONS_KEY]: revisionReasons }
                   : {}),
+                // ── Veri*Factu QR (si se detectó un QR válido) ───────────────────
+                ...(verifactu ? {
+                  verifactu_verificado: true,
+                  verifactu_url: verifactu.url,
+                  verifactu_campos: verifactu.params,
+                  verifactu_fetch_ok: verifactu.fetchOk,
+                  ...(verifactu.discrepanciaImporte ? {
+                    verifactu_discrepancia_importe: verifactu.discrepanciaImporte,
+                  } : {}),
+                } : {}),
               },
             }
           });
