@@ -505,8 +505,8 @@ export function startDbWriterWorker() {
 
           console.log(`[DbWriterWorker] ✅ Transacción Prisma completada con éxito (Doc ID: ${doc.id})`);
         }, {
-          maxWait: 5000,
-          timeout: 10000,
+          maxWait: 10000,
+          timeout: 30000,
         });
 
         if (savedDocumentoId) {
