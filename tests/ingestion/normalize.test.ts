@@ -62,33 +62,35 @@ describe('parseGeminiResponse', () => {
 // ─── validateRetenciones ─────────────────────────────────────────────────────
 
 describe('validateRetenciones', () => {
-  it('fuerza cuota_iva a negativo cuando tipo_iva es RETENCION', () => {
+  it('no modifica cuota_iva si viene positivo (comportamiento post-fix abonos)', () => {
+    // A partir del fix de abonos, la función NO fuerza el signo en caso normal.
+    // El LLM es responsable de mandar la retención negativa (instrucción en prompt).
     const impuestos: Impuesto[] = [
-      { tipo_iva: 'RETENCION', cuota_iva: 150 }, // positivo → debe forzarse negativo
+      { tipo_iva: 'RETENCION', cuota_iva: 150 },
     ];
     const result = validateRetenciones(impuestos);
-    expect(result[0].cuota_iva).toBe(-150);
+    expect(result[0].cuota_iva).toBe(150); // no se toca
   });
 
-  it('fuerza cuota_iva a negativo cuando tipo_iva es RETENCIÓN (con tilde)', () => {
+  it('no modifica cuota_iva en RETENCIÓN con tilde (comportamiento post-fix abonos)', () => {
     const impuestos: Impuesto[] = [
       { tipo_iva: 'RETENCIÓN', cuota_iva: 200 },
     ];
-    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-200);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(200); // no se toca
   });
 
-  it('fuerza cuota_iva a negativo cuando tipo_iva es IRPF', () => {
+  it('no modifica cuota_iva en IRPF (comportamiento post-fix abonos)', () => {
     const impuestos: Impuesto[] = [
       { tipo_iva: 'IRPF', cuota_iva: 75.5 },
     ];
-    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-75.5);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(75.5); // no se toca
   });
 
-  it('fuerza cuota_iva a negativo cuando tipo_iva es con RET (partial match)', () => {
+  it('no modifica cuota_iva en RET. PROFESIONAL (comportamiento post-fix abonos)', () => {
     const impuestos: Impuesto[] = [
       { tipo_iva: 'RET. PROFESIONAL', cuota_iva: 50 },
     ];
-    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(-50);
+    expect(validateRetenciones(impuestos)[0].cuota_iva).toBe(50); // no se toca
   });
 
   it('normaliza tipo_iva a "RETENCION" en todos los casos de retención', () => {
@@ -277,6 +279,32 @@ describe('validateMathBalance', () => {
     const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: -4.32 }];
     const result = validateMathBalance(-112.32, -108.00, impuestos);
     expect(result.ok).toBe(true);
+  });
+
+  it('Caso A — dto aplicado a la base: LLM extrae base bruta + descuento separado', () => {
+    // Doc: base bruta=600, dto=50, IVA s/550 (21%)=115.50, total=665.50
+    // LLM debe extraer: importe_sin_iva=600, descuento_global=50, cuota_iva=115.50
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 115.50 }];
+    const result = validateMathBalance(665.50, 600, impuestos, 2, 0, 50);
+    expect(result.ok).toBe(true);
+    expect(result.diferencia).toBe(0);
+  });
+
+  it('Caso B — dto aplicado al total: LLM extrae base bruta + descuento separado', () => {
+    // Doc: base=600, IVA s/600 (21%)=126, subtotal=726, dto=50, total=676
+    // LLM debe extraer: importe_sin_iva=600, descuento_global=50, cuota_iva=126
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 126 }];
+    const result = validateMathBalance(676, 600, impuestos, 2, 0, 50);
+    expect(result.ok).toBe(true);
+    expect(result.diferencia).toBe(0);
+  });
+
+  it('regresión — sin descuento (descuentoGlobal=0) no cambia el comportamiento', () => {
+    // Igual que el primer test, pero pasando explícitamente descuentoGlobal=0
+    const impuestos: Impuesto[] = [{ tipo_iva: 'IVA', cuota_iva: 21 }];
+    const result = validateMathBalance(121, 100, impuestos, 2, 0, 0);
+    expect(result.ok).toBe(true);
+    expect(result.diferencia).toBe(0);
   });
 });
 

@@ -240,8 +240,8 @@ Documento con Base 1000€, IVA 21% (210€) y Recargo 5,2% (52€):
 \`\`\`
 
 **VALIDACIÓN MATEMÁTICA CON RECARGO:**
-importe_sin_iva + suma(IVA) + suma(RECARGO) - suma(RETENCIONES) = importe_total
-Ejemplo: 1000 + 210 + 52 = 1262 ✓
+importe_sin_iva - descuento_global + suma(IVA) + suma(RECARGO) - suma(RETENCIONES) = importe_total
+Ejemplo: 1000 - 0 + 210 + 52 = 1262 ✓
 
 **SI NO ENCUENTRAS RECARGO:** No crees objetos con tipo_iva "RECARGO". Solo inclúyelo si está explícitamente en el documento.
 
@@ -718,13 +718,14 @@ Cuando los totales_por_impuesto no son legibles directamente del documento y los
 Ejemplo: si tienes líneas con IVA 21% con importes [+47,00, +27,00, -23,78, -23,78, -23,78], la base_imponible al 21% = 47,00 + 27,00 - 23,78 - 23,78 - 23,78 = 2,66 (NO 168,34).
 Las líneas de devolución (importe_linea negativo) RESTAN de la base de su tramo. Nunca las conviertas a positivo para agregarlas.
 **VALIDACIÓN MATEMÁTICA OBLIGATORIA:**
-importe_sin_iva + suma(IVA) + base_no_sujeta + suma(RECARGO) - suma(RETENCIONES) = importe_total
+importe_sin_iva - descuento_global + suma(IVA) + base_no_sujeta + suma(RECARGO) - suma(RETENCIONES) = importe_total
 En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
 
 🔥 MANEJO DE BASE NO SUJETA Y DESCUENTO GLOBAL (CRÍTICO)
 
 - **base_no_sujeta**: Importes no sujetos a IVA (suplidos, tasas, timbres notariales, etc.) que forman parte del total de la factura pero NO de la base imponible del IVA. Si no hay, pon 0.
-- **descuento_global**: Descuento aplicado al final de la factura sobre la base imponible (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € (positivo). Si el documento indica un porcentaje (ej: 10%), debes calcular el importe en euros equivalente y poner ese valor numérico. Si no hay descuento global, pon 0.
+- **descuento_global**: Descuento global aplicado al final de la factura (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € como valor POSITIVO. Si el documento indica un porcentaje (ej: 10%), calcula el importe equivalente en euros. Si no hay descuento global, pon 0.
+  ⚠️ **importe_sin_iva debe ser siempre la base BRUTA (antes de aplicar el descuento_global).** Si el documento muestra "base 600€ — descuento 50€ — base neta 550€", extrae 'importe_sin_iva: 600' y 'descuento_global: 50'. El sistema resta el descuento de la base en la validación fiscal: base_bruta - descuento_global + Σ IVA = total.
 
 🚨 REGLA ANTI-ALUCINACIÓN (CRÍTICO)
 NUNCA inventes información. NUNCA inventes un "descuento_global". Salvo por la deducción matemática de signos negativos en devoluciones (marcando siempre la correspondiente incidencia), extrae respetando lo impreso en el documento. Tu trabajo es extraer fielmente y registrar la incidencia si aplicaste deducción de signo.

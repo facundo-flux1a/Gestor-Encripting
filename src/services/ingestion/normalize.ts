@@ -360,7 +360,8 @@ export function validateMathBalance(
   importeSinImpuestos: number,
   impuestos: Impuesto[],
   tolerancia = 2,
-  baseNoSujeta = 0
+  baseNoSujeta = 0,
+  descuentoGlobal = 0
 ): ValidationResult {
   const esAbono = importeTotal < 0 || importeSinImpuestos < 0;
 
@@ -382,7 +383,8 @@ export function validateMathBalance(
     return acc + cuota;
   }, 0);
 
-  const totalCalculado = importeSinImpuestos + sumaCuotas + baseNoSujeta;
+  // descuentoGlobal siempre se almacena como positivo (según prompt); se resta de la base bruta.
+  const totalCalculado = importeSinImpuestos - Math.abs(descuentoGlobal) + sumaCuotas + baseNoSujeta;
   const diferencia = Math.abs(importeTotal - totalCalculado);
 
   return {

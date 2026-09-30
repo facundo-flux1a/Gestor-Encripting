@@ -250,7 +250,7 @@ Cada recargo de equivalencia va como un objeto SEPARADO en totales_por_impuesto:
 - total_con_iva: base_imponible + cuota_iva
 
 **VALIDACIÓN MATEMÁTICA CON RECARGO:**
-importe_sin_iva + suma(cuotas IVA) + suma(cuotas RECARGO) - suma(RETENCIONES) = importe_total
+importe_sin_iva - descuento_global + suma(cuotas IVA) + suma(cuotas RECARGO) - suma(RETENCIONES) = importe_total
 
 **REGLA FINAL:** Si NO encuentras recargo en el documento, NO lo incluyas. Solo extráelo si está EXPLÍCITAMENTE en el documento.
 
@@ -628,6 +628,10 @@ DEBES crear un objeto SEPARADO en totales_por_impuesto para CADA porcentaje de I
 - NO crees objetos para tipos que NO aparezcan en el documento
 - En tickets: totales_por_impuesto siempre []
 
+🔥 MANEJO DE DESCUENTO GLOBAL
+- **descuento_global**: Descuento global aplicado al final de la factura (NO los descuentos individuales de cada línea). Extrae siempre el IMPORTE en € como valor POSITIVO. Si no hay descuento global, pon 0.
+  ⚠️ **importe_sin_iva debe ser siempre la base BRUTA (antes de aplicar el descuento_global).** Si el documento muestra "base 600€ — descuento 50€ — base neta 550€", extrae 'importe_sin_iva: 600' y 'descuento_global: 50'. El sistema resta el descuento en la validación: base_bruta - descuento_global + Σ IVA = total.
+
 🔥 MANEJO DE RETENCIONES (CRÍTICO)
 - tipo_iva: "RETENCION" (sin tildes, mayúsculas)
 - cuota_iva: SIEMPRE NEGATIVO
@@ -636,14 +640,14 @@ DEBES crear un objeto SEPARADO en totales_por_impuesto para CADA porcentaje de I
 
 VALIDACIONES OBLIGATORIAS
 - Suma de líneas vs importe_sin_iva: verificar internamente pero NO reportar como incidencia
-- VALIDACIÓN CRÍTICA: importe_sin_iva + suma(IVA) + suma(RECARGO) + suma(SUPLIDOS en líneas) - suma(RETENCIONES) = importe_total (tolerancia ±2€)
+- VALIDACIÓN CRÍTICA: importe_sin_iva - descuento_global + suma(IVA) + suma(RECARGO) + suma(SUPLIDOS en líneas) - suma(RETENCIONES) = importe_total (tolerancia ±2€)
 - En tickets: importe_sin_iva = importe_total, no aplica validación fiscal
 
 DESCRIPCIÓN DE INCIDENCIAS (SIEMPRE EN ESPAÑOL)
 Ejemplos:
 - "Identificación fiscal del proveedor no encontrada en el documento"
 - "CIF del emisor extraído de imagen de referencia — aparece cortado o ilegible en el documento original"
-- "Validación matemática falló: Base (X€) + IVA (Y€) + Suplidos (Z€) + Recargo (W€) - Retención (V€) ≠ Total (T€). Diferencia: D€"
+- "Validación matemática falló: Base (X€) - Descuento (D€) + IVA (Y€) + Suplidos (Z€) + Recargo (W€) - Retención (V€) ≠ Total (T€). Diferencia: D€"
 Si incidencia es false → descripcion_incidencia debe estar vacío ("").
 
 ⚠️ INCIDENCIAS DE LÍNEAS/PRODUCTOS: NO REPORTAR

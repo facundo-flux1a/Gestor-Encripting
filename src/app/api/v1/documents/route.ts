@@ -405,7 +405,7 @@ export async function GET(request: NextRequest) {
 // ─────────────────────────────────────────────────────────────────────────────
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
-import { calcularTrimestreExtendido, resolverTrimestreContableImportacion, obtenerPrimerTrimestreAbiertoDelAnio } from '@/lib/trimestre-utils';
+import { calcularTrimestreExtendido, resolverTrimestreContableImportacion, obtenerPrimerTrimestreAbiertoDelAnio, estaTrimestreCerrado } from '@/lib/trimestre-utils';
 import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 import { runHealthChecksForDocument } from '@/services/health-check-service';
 import connection, { dbName } from '@/lib/db';
@@ -615,10 +615,49 @@ export async function POST(request: NextRequest) {
       const existingId: bigint | null = existingRows?.[0]?.id ?? null;
       const isUpdate = existingId !== null;
 
+      // ── Validación de consistencia: is_issued vs tipo_documento ──
+      const rawTipo = String(doc.tipo || doc.tipo_documento || '').trim().toLowerCase();
+      if (isIssued && rawTipo.includes('recibid')) {
+        results.push({
+          numero_documento: numero,
+          estado: 'error',
+          error: `Inconsistencia: 'is_issued' es true (emitida) pero 'tipo_documento' indica '${doc.tipo_documento || doc.tipo}' (recibido).`,
+        });
+        continue;
+      }
+      if (!isIssued && rawTipo.includes('emitid')) {
+        results.push({
+          numero_documento: numero,
+          estado: 'error',
+          error: `Inconsistencia: 'is_issued' es false (recibida) pero 'tipo_documento' indica '${doc.tipo_documento || doc.tipo}' (emitido).`,
+        });
+        continue;
+      }
+
       // ── Importes ──
       const baseSinImpuestos = Number(doc.importe_sin_impuestos) || 0;
       const totalConImpuestos = Number(doc.importe_total) || 0;
       const importeSinImpuestosFinal = esExtranjeroRecibido ? totalConImpuestos : baseSinImpuestos;
+
+      // ── Validación de importes negativos vs tipo de documento ──
+      const esImportesNegativos = totalConImpuestos < 0 && baseSinImpuestos < 0;
+      const esAbonoDeclarado = rawTipo.includes('abono') || rawTipo.includes('rectificativa');
+
+      if (isIssued && esImportesNegativos && !esAbonoDeclarado) {
+        results.push({
+          numero_documento: numero,
+          estado: 'error',
+          error: `Los importes del documento son negativos (base: ${baseSinImpuestos}, total: ${totalConImpuestos}). Si se trata de un abono o factura rectificativa emitida, por favor especifíquelo como 'ABONO' o 'RECTIFICATIVA'. Si es una factura ordinaria, los importes deben ser positivos.`,
+        });
+        continue;
+      }
+
+      let advertenciaAbono: string | null = null;
+      let crearIncidenciaAbonoRecibido = false;
+      if (!isIssued && esImportesNegativos && !esAbonoDeclarado) {
+        advertenciaAbono = `Documento recibido con importes negativos registrado con tipo ordinario. Se creó incidencia para revisión en el gestor.`;
+        crearIncidenciaAbonoRecibido = true;
+      }
 
       // ── Retención IRPF (si viene en impuestos o campos raíz) ──
       let retencionIrpf = Math.abs(Number(doc.retencion ?? doc.retencion_irpf ?? 0));
@@ -644,16 +683,35 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Trimestre ──
-      let trimestreData: { año: number; trimestre: number };
-      try {
-        trimestreData = await resolverTrimestreContableImportacion(fechaEmision, Number(empresaId));
-      } catch {
-        trimestreData = calcularTrimestreExtendido(fechaEmision);
+      const trimestreNatural = calcularTrimestreExtendido(fechaEmision);
+      const numTrimestreCustom = doc.num_trimestre ?? doc.trimestre ?? doc.quarter;
+      const añoTrimestreCustom = doc.año_trimestre ?? doc.anio_trimestre ?? doc.año ?? doc.anio ?? doc.year;
+      const tieneTrimestreExplicito = numTrimestreCustom !== undefined && numTrimestreCustom !== null;
+
+      const anioAsignar = (añoTrimestreCustom && Number(añoTrimestreCustom) >= 2000)
+        ? Number(añoTrimestreCustom)
+        : trimestreNatural.año;
+      const trimAsignar = (numTrimestreCustom && Number(numTrimestreCustom) >= 1 && Number(numTrimestreCustom) <= 4)
+        ? Number(numTrimestreCustom)
+        : trimestreNatural.trimestre;
+
+      const cerradoEnDb = await estaTrimestreCerrado(anioAsignar, trimAsignar, Number(empresaId));
+      if (cerradoEnDb) {
+        const fechaFmt = fechaEmision.toISOString().split('T')[0];
+        const detalleOrigen = tieneTrimestreExplicito
+          ? `El trimestre ${anioAsignar}Q${trimAsignar} indicado`
+          : `El trimestre ${anioAsignar}Q${trimAsignar} correspondiente a la fecha de emisión (${fechaFmt})`;
+        results.push({
+          numero_documento: numero,
+          estado: 'error',
+          error: `${detalleOrigen} está cerrado para esta empresa. Para registrar esta factura debe reabrir el trimestre en el gestor.`,
+        });
+        continue;
       }
+      const trimestreData = { año: anioAsignar, trimestre: trimAsignar };
 
       // ── Tipo documento ──
-      const rawTipo = String(doc.tipo || doc.tipo_documento || '').trim().toLowerCase();
-      const esAbono = rawTipo.includes('abono') || rawTipo.includes('rectificativa') || totalConImpuestos < 0 || baseSinImpuestos < 0;
+      const esAbono = esAbonoDeclarado || esImportesNegativos || totalConImpuestos < 0 || baseSinImpuestos < 0;
       const esTicket = rawTipo.includes('ticket') || rawTipo.includes('simplificada');
 
       let tipoDocumento: string;
@@ -920,6 +978,19 @@ export async function POST(request: NextRequest) {
             });
           }
 
+          // ── Incidencia para documento recibido con importes negativos sin declarar abono ──
+          if (crearIncidenciaAbonoRecibido && savedDocId) {
+            await tx.incidencias_documento.create({
+              data: {
+                documento_id: savedDocId,
+                id_de_empresa: BigInt(empresaId),
+                descripcion: `Documento recibido con importes negativos (base: ${baseSinImpuestos}€, total: ${totalConImpuestos}€) ingresado con tipo '${doc.tipo || doc.tipo_documento || 'factura'}'. Verificar si corresponde a un abono o rectificativa.`,
+                incidencia: true,
+                validado: false,
+              },
+            });
+          }
+
           // ── Líneas de detalle ──
           const lineas = Array.isArray(doc.lineas_detalle) ? doc.lineas_detalle : (Array.isArray(doc.lineas) ? doc.lineas : []);
           if (lineas.length > 0) {
@@ -979,6 +1050,7 @@ export async function POST(request: NextRequest) {
           numero_documento_normalizado: numeroNorm,
           estado: isUpdate ? 'actualizado' : 'creado',
           id_interno: savedDocId ? Number(savedDocId) : null,
+          ...(advertenciaAbono ? { advertencia: advertenciaAbono } : {}),
           ...(archivoWarning ? { advertencia_archivo: archivoWarning } : {}),
         });
 

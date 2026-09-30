@@ -72,7 +72,7 @@ function getImpuestos(doc: DocumentoGemini): Impuesto[] {
   return Array.isArray(raw) ? (raw as Impuesto[]) : [];
 }
 
-function getImportes(doc: DocumentoGemini): { total: number; base: number; base_no_sujeta: number } {
+function getImportes(doc: DocumentoGemini): { total: number; base: number; base_no_sujeta: number; descuento_global: number } {
   const nested = (doc as any).documento || {};
   const total = Number(nested.importe_total ?? doc.importe_total ?? 0);
   const base = Number(
@@ -83,7 +83,8 @@ function getImportes(doc: DocumentoGemini): { total: number; base: number; base_
       0
   );
   const base_no_sujeta = Number(nested.base_no_sujeta ?? doc.base_no_sujeta ?? 0);
-  return { total, base, base_no_sujeta };
+  const descuento_global = Number(nested.descuento_global ?? doc.descuento_global ?? 0);
+  return { total, base, base_no_sujeta, descuento_global };
 }
 
 function getFechaEmision(doc: DocumentoGemini): string {
@@ -188,7 +189,7 @@ export function runFiscalGuards(
   const countryInfo = detectCountryFromCIF(emisor.cif);
   const cifEmisor = normalizeCIF(emisor.cif);
   const cifReceptor = normalizeCIF(receptor.cif);
-  const { total, base, base_no_sujeta } = getImportes(doc);
+  const { total, base, base_no_sujeta, descuento_global } = getImportes(doc);
   const impuestos = getImpuestos(doc);
   const tipoInfo = detectTipoDocumento(doc.tipo_documento);
 
@@ -273,9 +274,9 @@ export function runFiscalGuards(
   );
 
   if (impuestos.length > 0 || (total !== 0 && base !== 0)) {
-    const math = validateMathBalance(total, base, impuestos, 0.05, base_no_sujeta);
+    const math = validateMathBalance(total, base, impuestos, 0.05, base_no_sujeta, descuento_global);
     // tolerancia un poco más holgada en guard duro global
-    const mathLoose = validateMathBalance(total, base, impuestos, 0.5, base_no_sujeta);
+    const mathLoose = validateMathBalance(total, base, impuestos, 0.5, base_no_sujeta, descuento_global);
     if (!mathLoose.ok) {
       failures.push({
         code: 'MATH_BALANCE',
