@@ -123,6 +123,26 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const [isPendingToggle, setIsPendingToggle] = React.useState(false);
   const [cuentaCompra, setCuentaCompra] = React.useState<string | null>(null);
   const [isSavingAccount, setIsSavingAccount] = React.useState(false);
+  const [cuentaEditInput, setCuentaEditInput] = React.useState('');
+  const [cuentaEditMode, setCuentaEditMode] = React.useState(false);
+  const [isSavingImpuesto, setIsSavingImpuesto] = React.useState<number | null>(null);
+  const [impuestoEditMode, setImpuestoEditMode] = React.useState<number | null>(null); // id del impuesto en edición
+  const [impuestoEditInput, setImpuestoEditInput] = React.useState('');
+  const cuentasImpuestosSugeridas: Record<string, string> = rawDatosExtra.cuentas_impuestos_sugeridas || {};
+  const [impuestosCC, setImpuestosCC] = React.useState<Record<number, string | null>>(
+    () => Object.fromEntries((doc.iva_details || []).map((imp: any) => [imp.id, imp.cuenta_contable ?? null]))
+  );
+
+  // Emitida o recibida → determina qué CC de entidad usar
+  const tipoDocUpper = (doc.tipo_documento || '').toUpperCase();
+  const esEmitida = tipoDocUpper.includes('EMITIDA') || tipoDocUpper.includes('EMITIDO');
+  const ccSugeridaEntidad = isForeign
+    ? '4100000'
+    : esEmitida
+      ? '4300000' // Clientes
+      : '4000000'; // Proveedores (compra / recibida, default)
+  const ccFieldName = esEmitida ? 'cuentaVenta' : 'cuentaCompra'; // campo a usar en entidades-config
+  const ccDbField  = esEmitida ? 'cuenta_venta' : 'cuenta_compra'; // campo que devuelve el GET
 
   const countryName = rawDatosExtra.pais_emisor_nombre || rawDatosExtra.pais_emisor || '';
   const backupFiscalImpuestos = rawDatosExtra.backup_fiscal_origen?.impuestos_originales || [];
@@ -137,12 +157,12 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
     fetch(`/api/entidades-config?empresaId=${empresaId}&identificadorFiscal=${encodeURIComponent(providerCif)}`)
       .then(res => res.json())
       .then(data => {
-        if (data?.config?.cuenta_compra) {
-          setCuentaCompra(data.config.cuenta_compra);
-        }
+        // Leer el campo correcto según tipo de doc (compra o venta)
+        const cc = data?.config?.[ccDbField];
+        if (cc) setCuentaCompra(cc);
       })
       .catch(() => {});
-  }, [empresaId, provider?.identificador_fiscal, doc.cif]);
+  }, [empresaId, provider?.identificador_fiscal, doc.cif, ccDbField]);
 
   const handleToggleForeign = async (targetForeign: boolean) => {
     setIsPendingToggle(true);
@@ -210,7 +230,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           empresaId: Number(empresaId),
           identificadorFiscal: providerCif,
           nombreReferencia: provider?.nombre || doc.proveedor || '',
-          cuentaCompra: '4100000',
+          [ccFieldName]: '4100000', // extranjero siempre compra (4100000 = acreedores ext.)
         }),
       });
       if (res.ok) {
@@ -486,7 +506,260 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             </div>
           )}
 
-          {/* ── MODAL CASO A: LOCAL ➔ EXTRANJERO ── */}
+          {/* ================================================================
+           * SECCIÓN CUENTAS CONTABLES
+           * Diferenciada visualmente. Solo visible para documentos facturables.
+           * ================================================================ */}
+          {(doc as any)?.datos_extra?.es_facturable !== false && (
+            <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-violet-500/20 flex items-center gap-2">
+                <span className="text-sm">📒</span>
+                <span className="font-semibold text-violet-400 text-xs">Cuentas Contables</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">Sugerencias IA · Aceptar o editar</span>
+              </div>
+              <div className="p-4 flex flex-col gap-4">
+
+                {/* Cuenta de la Entidad */}
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[11px] font-medium text-violet-300">🏢 Entidad ({provider?.nombre || doc.proveedor || 'Proveedor/Cliente'})</p>
+
+                  {cuentaCompra && !cuentaEditMode ? (
+                    // ── Modo lectura: ya tiene CC asignada ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs bg-violet-900/30 border border-violet-500/30 rounded px-2 py-0.5 text-violet-200">
+                        {cuentaCompra}
+                      </span>
+                      <span className="text-[10px] text-green-400">✓ Asignada</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCuentaEditInput(cuentaCompra); setCuentaEditMode(true); }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      >
+                        Cambiar
+                      </button>
+                    </div>
+                  ) : cuentaEditMode ? (
+                    // ── Modo edición: cambiar cuenta existente ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="text"
+                        value={cuentaEditInput}
+                        onChange={e => setCuentaEditInput(e.target.value)}
+                        className="h-7 text-xs bg-background border border-violet-500/50 rounded px-2 w-32 font-mono"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        disabled={isSavingAccount || !cuentaEditInput.trim()}
+                        onClick={async () => {
+                          const providerCif = provider?.identificador_fiscal || doc.cif;
+                          if (!doc.empresa_id || !providerCif || !cuentaEditInput.trim()) return;
+                          setIsSavingAccount(true);
+                          try {
+                            const res = await fetch('/api/entidades-config', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccFieldName]: cuentaEditInput.trim() }),
+                            });
+                            if (res.ok) { setCuentaCompra(cuentaEditInput.trim()); setCuentaEditMode(false); }
+                          } finally { setIsSavingAccount(false); }
+                        }}
+                        className="text-[11px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2.5 py-1 disabled:opacity-40"
+                      >
+                        {isSavingAccount ? '...' : 'Guardar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCuentaEditMode(false)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    // ── Sin CC: mostrar sugerencia + input manual ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const providerCif = provider?.identificador_fiscal || doc.cif;
+                          if (!doc.empresa_id || !providerCif) return;
+                          setIsSavingAccount(true);
+                          try {
+                            const res = await fetch('/api/entidades-config', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccFieldName]: ccSugeridaEntidad }),
+                            });
+                            if (res.ok) setCuentaCompra(ccSugeridaEntidad);
+                          } finally { setIsSavingAccount(false); }
+                        }}
+                        disabled={isSavingAccount}
+                        className="text-[11px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2.5 py-1 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {isSavingAccount ? '...' : `💡 Aceptar ${ccSugeridaEntidad}`}
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {isForeign ? 'Acreedores ext.' : tipoDocUpper.includes('EMITIDA') || tipoDocUpper.includes('EMITIDO') ? 'Clientes' : 'Proveedores'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/50">·</span>
+                      <input
+                        type="text"
+                        placeholder="Cuenta manual"
+                        value={cuentaEditInput}
+                        onChange={e => setCuentaEditInput(e.target.value)}
+                        className="h-7 text-xs bg-background border border-input rounded px-2 w-28 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const providerCif = provider?.identificador_fiscal || doc.cif;
+                          if (!doc.empresa_id || !providerCif || !cuentaEditInput.trim()) return;
+                          setIsSavingAccount(true);
+                          try {
+                            const res = await fetch('/api/entidades-config', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccFieldName]: cuentaEditInput.trim() }),
+                            });
+                            if (res.ok) setCuentaCompra(cuentaEditInput.trim());
+                          } finally { setIsSavingAccount(false); }
+                        }}
+                        disabled={isSavingAccount || !cuentaEditInput.trim()}
+                        className="text-[11px] bg-muted hover:bg-muted/80 text-foreground rounded px-2.5 py-1 disabled:opacity-40"
+                      >
+                        Guardar manual
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Impuestos: ocultar para proveedores extranjeros (IVA no deducible) */}
+                {!isForeign && doc.iva_details && doc.iva_details.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[11px] font-medium text-violet-300">🧾 Impuestos del documento</p>
+                    <div className="rounded-lg border border-violet-500/20 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-violet-900/20 text-muted-foreground">
+                            <th className="text-left px-3 py-1.5 font-medium">Tipo</th>
+                            <th className="text-right px-3 py-1.5 font-medium">%</th>
+                            <th className="text-right px-3 py-1.5 font-medium">Cuota</th>
+                            <th className="text-left px-3 py-1.5 font-medium">Cuenta</th>
+                            <th className="px-2 py-1.5"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-violet-500/10">
+                          {(doc.iva_details as any[]).map((imp: any) => {
+                            const key = `${imp.tipo_impuesto}_${Math.round(Number(imp.porcentaje))}`;
+                            const sugerida = cuentasImpuestosSugeridas[key];
+                            const asignada = impuestosCC[imp.id];
+                            const enEdicion = impuestoEditMode === imp.id;
+
+                            const saveCC = async (valor: string | null) => {
+                              setIsSavingImpuesto(imp.id);
+                              try {
+                                const res = await fetch(`/api/documents/${doc.id_documento}/impuesto-cuenta`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ impuestoId: imp.id, cuentaContable: valor }),
+                                });
+                                if (res.ok) {
+                                  setImpuestosCC(prev => ({ ...prev, [imp.id]: valor }));
+                                  setImpuestoEditMode(null);
+                                  setImpuestoEditInput('');
+                                }
+                              } finally { setIsSavingImpuesto(null); }
+                            };
+
+                            return (
+                              <tr key={imp.id} className="hover:bg-violet-500/5">
+                                <td className="px-3 py-1.5 font-medium">{imp.tipo_impuesto}</td>
+                                <td className="px-3 py-1.5 text-right">{Number(imp.porcentaje).toFixed(0)}%</td>
+                                <td className="px-3 py-1.5 text-right font-mono">{Number(imp.cuota).toFixed(2)} €</td>
+
+                                {/* Celda Cuenta */}
+                                <td className="px-3 py-1.5" colSpan={enEdicion ? 2 : 1}>
+                                  {enEdicion ? (
+                                    // ── Modo edición inline ──
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={impuestoEditInput}
+                                        onChange={e => setImpuestoEditInput(e.target.value)}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter' && impuestoEditInput.trim()) saveCC(impuestoEditInput.trim());
+                                          if (e.key === 'Escape') { setImpuestoEditMode(null); setImpuestoEditInput(''); }
+                                        }}
+                                        placeholder={sugerida || 'Cuenta...'}
+                                        className="h-6 text-xs bg-background border border-violet-500/50 rounded px-2 w-24 font-mono"
+                                      />
+                                      <button type="button"
+                                        onClick={() => impuestoEditInput.trim() && saveCC(impuestoEditInput.trim())}
+                                        disabled={isSavingImpuesto === imp.id || !impuestoEditInput.trim()}
+                                        className="text-[10px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2 py-0.5 disabled:opacity-40">
+                                        {isSavingImpuesto === imp.id ? '...' : 'Guardar'}
+                                      </button>
+                                      <button type="button"
+                                        onClick={() => { setImpuestoEditMode(null); setImpuestoEditInput(''); }}
+                                        className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  ) : asignada ? (
+                                    // ── Lectura: CC asignada ──
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-mono bg-violet-900/30 border border-violet-500/30 rounded px-2 py-0.5 text-violet-200 text-xs">{asignada}</span>
+                                      <button type="button"
+                                        onClick={() => { setImpuestoEditInput(asignada); setImpuestoEditMode(imp.id); }}
+                                        className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                                        Cambiar
+                                      </button>
+                                      <button type="button"
+                                        onClick={() => saveCC(null)}
+                                        disabled={isSavingImpuesto === imp.id}
+                                        className="text-[10px] text-red-400/70 hover:text-red-400 underline">
+                                        Quitar
+                                      </button>
+                                    </div>
+                                  ) : sugerida ? (
+                                    // ── Sin CC: mostrar sugerencia ──
+                                    <span className="text-muted-foreground text-xs">💡 <span className="font-mono">{sugerida}</span></span>
+                                  ) : (
+                                    <span className="text-muted-foreground italic text-xs">Sin asignar</span>
+                                  )}
+                                </td>
+
+                                {/* Celda Acciones (oculta en modo edición porque usa colSpan=2) */}
+                                {!enEdicion && (
+                                  <td className="px-2 py-1.5">
+                                    {!asignada && sugerida && (
+                                      <button type="button" disabled={isSavingImpuesto === imp.id}
+                                        onClick={() => saveCC(sugerida)}
+                                        className="text-[10px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2 py-0.5 disabled:opacity-40">
+                                        {isSavingImpuesto === imp.id ? '...' : 'Aceptar'}
+                                      </button>
+                                    )}
+                                    {!asignada && !sugerida && (
+                                      <button type="button"
+                                        onClick={() => { setImpuestoEditInput(''); setImpuestoEditMode(imp.id); }}
+                                        className="text-[10px] text-violet-400 hover:text-violet-300 underline">
+                                        + Manual
+                                      </button>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
           <AlertDialog open={showCaseADialog} onOpenChange={setShowCaseADialog}>
             <AlertDialogContent>
               <AlertDialogHeader>

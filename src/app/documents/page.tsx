@@ -14,7 +14,8 @@ import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDocumentEvents } from '@/hooks/useDocumentEvents'
-import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
+import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown, Receipt } from 'lucide-react'
+import { TicketsView } from '@/components/dashboard/tickets-view'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { DocumentosTutorialRouter } from '@/components/tutorials/DocumentosTutorialRouter'
@@ -143,13 +144,14 @@ function DocumentsPageContent() {
   }, [selectedCompanyIds, key, refreshKey, isDemoMode]);
 
   // ✅ CLASIFICACIÓN CORREGIDA: Validación de CIF para abonos
-  const { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
+  const { facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     console.log('═══════════════════════════════════════════════════════');
     console.log('🔍 [CLASIFICACIÓN] INICIO');
     console.log('═══════════════════════════════════════════════════════');
 
     const facturasEmitidas: Document[] = [];
     const facturasRecibidas: Document[] = [];
+    const tickets: Document[] = [];
     const otrosDocumentos: Document[] = [];
     const sinConfirmar: Document[] = [];
 
@@ -162,7 +164,13 @@ function DocumentsPageContent() {
         return;
       }
 
-      // PASO 2: Verificar si es factura, abono o albarán
+      // PASO 2: Tickets → tab propio
+      if (tipoLower.includes('ticket')) {
+        tickets.push(doc);
+        return;
+      }
+
+      // PASO 3: Verificar si es factura, abono o albarán
       const esFacturaOAbono = tipoLower.includes('factura')
         || tipoLower.includes('abono')
         || tipoLower.includes('albaran')
@@ -191,7 +199,7 @@ function DocumentsPageContent() {
       }
     });
 
-    return { facturasEmitidas, facturasRecibidas, otrosDocumentos, sinConfirmar };
+    return { facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
   const computedFooters = React.useMemo(() => {
@@ -249,9 +257,10 @@ function DocumentsPageContent() {
       sinConfirmar: computeForDocs(sinConfirmar),
       emitidas: computeForDocs(facturasEmitidas),
       recibidas: computeForDocs(facturasRecibidas),
+      tickets: computeForDocs(tickets),
       otros: computeForDocs(otrosDocumentos)
     };
-  }, [sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos]);
+  }, [sinConfirmar, facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos]);
 
   // Columnas de IVA a ocultar en la pestaña "Otros" (nóminas, contratos, etc.).
   // Computado dinámicamente para incluir cualquier tasa extra que aparezca en los documentos
@@ -294,10 +303,11 @@ function DocumentsPageContent() {
 
     if (facturasRecibidas.length > 0) return 'recibidas';
     if (facturasEmitidas.length > 0) return 'emitidas';
+    if (tickets.length > 0) return 'tickets';
     if (otrosDocumentos.length > 0) return 'otros';
 
     return 'sin-confirmar';
-  }, [tabFromUrl, loading, documents.length, facturasRecibidas.length, facturasEmitidas.length, otrosDocumentos.length]);
+  }, [tabFromUrl, loading, documents.length, facturasRecibidas.length, facturasEmitidas.length, tickets.length, otrosDocumentos.length]);
 
   const currentDocuments = React.useMemo(() => {
     switch (activeTab) {
@@ -307,12 +317,14 @@ function DocumentsPageContent() {
         return facturasEmitidas;
       case 'recibidas':
         return facturasRecibidas;
+      case 'tickets':
+        return tickets;
       case 'otros':
         return otrosDocumentos;
       default:
         return [];
     }
-  }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, otrosDocumentos]);
+  }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos]);
 
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
@@ -677,6 +689,18 @@ function DocumentsPageContent() {
                       </div>
                     </SelectItem>
 
+                    <SelectItem value="tickets" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <Receipt className="h-4 w-4 text-orange-500 shrink-0" />
+                          Tickets
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+                          {tickets.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+
                     <SelectItem value="otros" className="cursor-pointer py-2.5">
                       <div className="flex items-center justify-between w-full gap-4">
                         <span className="flex items-center gap-2 font-medium">
@@ -759,6 +783,22 @@ function DocumentsPageContent() {
                       className="ml-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 transition-all duration-300 hover:scale-110 hover:bg-blue-500/20"
                     >
                       {facturasRecibidas.length}
+                    </Badge>
+                  </TabsTrigger>
+
+                  {/* Tickets */}
+                  <TabsTrigger
+                    value="tickets"
+                    disabled={isTutorialActive && currentStep === 3}
+                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-orange-500/10 data-[state=active]:text-orange-600 dark:data-[state=active]:text-orange-400 data-[state=active]:shadow-lg data-[state=active]:shadow-orange-500/20"
+                  >
+                    <Receipt className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
+                    <span className="whitespace-nowrap">Tickets</span>
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 transition-all duration-300 hover:scale-110 hover:bg-orange-500/20"
+                    >
+                      {tickets.length}
                     </Badge>
                   </TabsTrigger>
 
@@ -911,6 +951,23 @@ function DocumentsPageContent() {
                     footerValues={computedFooters.recibidas}
                   />
                 </div>
+              )}
+            </TabsContent>
+
+            {/* Tab Tickets */}
+            <TabsContent value="tickets" className="space-y-4 animate-in fade-in duration-300">
+              {isTabChanging ? (
+                <div className="flex items-center justify-center py-24">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-orange-500" />
+                    <p className="text-sm text-muted-foreground animate-pulse">Cargando tickets...</p>
+                  </div>
+                </div>
+              ) : (
+                <TicketsView
+                  documents={tickets}
+                  onDocumentChanged={handleDocumentChanged}
+                />
               )}
             </TabsContent>
 

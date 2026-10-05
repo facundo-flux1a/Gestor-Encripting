@@ -49,6 +49,27 @@ function getSha256(text: string | null | undefined): string | null {
   return crypto.createHash('sha256').update(cleanText).digest('hex');
 }
 
+/**
+ * Devuelve la cuenta contable estándar sugerida para un impuesto.
+ * No escribe en BD — es solo una sugerencia que el user valida en la UI.
+ */
+function resolveCC(tipo: string, porcentaje: number, esEmitida: boolean): string | null {
+  const t = tipo.toUpperCase();
+  const base = esEmitida ? '477' : '472';
+  if (t === 'RETENCION' || t.includes('IRPF') || t.includes('RET')) {
+    return esEmitida ? '4730000' : '4751000';
+  }
+  if (t === 'IVA' || t.includes('IVA')) {
+    const pct = Math.round(porcentaje);
+    return `${base}000${pct.toString().padStart(2, '0')}`;
+  }
+  if (t === 'RECARGO' || t.includes('RECARGO')) {
+    const pct = Math.round(porcentaje);
+    return `${base}000${pct.toString().padStart(2, '0')}`;
+  }
+  return null;
+}
+
 export function startDbWriterWorker() {
   const worker = new Worker<DbWriterJobData>(
     DB_WRITER_QUEUE_NAME,
@@ -106,6 +127,84 @@ export function startDbWriterWorker() {
         }
 
         // =====================================================================
+        // CARRIL RÁPIDO: NO FACTURABLES (es_facturable === false)
+        // Bypass total del pipeline de facturas: no corre guards, no exige CIF,
+        // no valida importes. Se guarda limpiamente con su categoría.
+        // =====================================================================
+        if (aiResult.es_facturable === false) {
+          // Priorizar categoria_principal (el campo que usa el prompt de no-facturables)
+          // con fallback a categoria_documento. Si ninguno encaja con las 8 categorías
+          // predefinidas del sistema, cae en "No clasificado".
+          const CATEGORIAS_VALIDAS = [
+            'Fiscal y Contable',
+            'Legal y Societario',
+            'Laboral y RR.HH.',
+            'Bancos y Financiación',
+            'Clientes',
+            'Proveedores',
+            'Administración Pública',
+            'Interno / Operaciones',
+          ];
+          const rawCategoria = (aiResult.categoria_principal || aiResult.categoria_documento || '').toString().trim();
+          const categoria = CATEGORIAS_VALIDAS.includes(rawCategoria) ? rawCategoria : 'No clasificado';
+          const tipoDocNF = (aiResult.tipo_documento || aiResult.tipo || 'DOCUMENTO NO FACTURABLE').toString().toUpperCase();
+
+          wLog('DbWriterWorker', `📂 No facturable → categoría: "${categoria}" | tipo: "${tipoDocNF}": ${fileName}`);
+
+          let savedNoFactId: bigint | null = null;
+          await prisma.$transaction(async (tx: any) => {
+            const docNF = await tx.documentos.create({
+              data: {
+                file_hash: ingestion.fileHash,
+                tipo_documento: tipoDocNF,
+                numero_documento: (aiResult.documento?.numero_documento || aiResult.numero_documento || `NF-${Date.now()}`).toString(),
+                numero_documento_normalizado: `NF-${Date.now()}`,
+                fecha_emision: null,
+                fecha_vencimiento: null,
+                importe_total: 0,
+                importe_sin_impuestos: 0,
+                moneda: 'EUR',
+                id_de_empresa: BigInt(empresaId),
+                is_new: 1,
+                trimestre_cerrado: false,
+                enviado_sii: false,
+                dashboard_correo: ingestion.origen || 'dashboard',
+                datos_extra: {
+                  es_facturable: false,
+                  categoria_documento: categoria, // una de las 8 categorías válidas o 'No clasificado'
+                  subcategoria: aiResult.subcategoria || '',
+                  valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || 0,
+                  concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
+                },
+              }
+            });
+            savedNoFactId = docNF.id;
+
+            await tx.archivos_documento.create({
+              data: {
+                documento_id: docNF.id,
+                nombre_archivo: ingestion.originalFileName,
+                ruta_archivo: ingestion.publicUrl,
+                tipo_archivo: ingestion.fileExtension,
+                id_de_empresa: BigInt(empresaId),
+              }
+            });
+          }, { maxWait: 10000, timeout: 30000 });
+
+          if (savedNoFactId) {
+            await updateIngestionProgress(uploadId, {
+              status: 'Completado',
+              step: 'Guardado',
+              progress: 100,
+              mensaje: `Documento no facturable guardado como "${categoria}".`,
+              documentoId: savedNoFactId ?? undefined,
+            });
+            if (ingestion.parentUploadId) await updateParentProgress(ingestion.parentUploadId).catch(() => {});
+          }
+          return; // salir del job limpiamente
+        }
+
+        // =====================================================================
         // PREPARACIÓN DE DATOS (Mapeo de Nuevo y Legacy Format)
         // =====================================================================
 
@@ -113,6 +212,7 @@ export function startDbWriterWorker() {
         const rawTipo = aiResult.tipo_documento || 'SIN CLASIFICAR';
         let tipoDocumento = rawTipo.toString().toUpperCase();
         const isAbono = tipoDocumento.includes('ABONO') || tipoDocumento.includes('RECTIFICATIVA');
+        const esTicketDoc = tipoDocumento.includes('TICKET');
 
         // Normalización CIF/NIF/NIE (espacios, ES, paréntesis OCR, etc.)
         // IMPORTANTE: detectCountryFromCIF debe correr ANTES de cleanCif (que quita el prefijo 'ES')
@@ -136,7 +236,8 @@ export function startDbWriterWorker() {
           } else if (cifCliente === cifDashboard) {
             tipoDocumento = isAbono ? 'ABONO RECIBIDO' : 'FACTURA RECIBIDA';
             wLog('DbWriterWorker', `🔍 Clasificación forzada por CIF: RECIBIDA (${cifDashboard})`);
-          } else if (!tipoDocumento.includes('SIN CONFIRMAR')) {
+          } else if (!esTicketDoc && !tipoDocumento.includes('SIN CONFIRMAR')) {
+            // Tickets nunca llevan (SIN CONFIRMAR): no tienen CIF receptor por diseño
             tipoDocumento = `${tipoDocumento} (SIN CONFIRMAR)`;
             wLog('DbWriterWorker', `⚠️ CIF no coincide con empresa — marcado sin confirmar`);
           }
@@ -208,8 +309,10 @@ export function startDbWriterWorker() {
         // Determinar rol de cada entidad según tipo_documento
         const esEmitida  = tipoDocumento.includes('EMITIDA') || tipoDocumento.includes('EMITIDO');
         const esRecibida = tipoDocumento.includes('RECIBIDA') || tipoDocumento.includes('RECIBIDO');
-        const isSinConfirmar = !esEmitida && !esRecibida;
+        const isSinConfirmar = !esEmitida && !esRecibida && !esTicketDoc;
         const esExtranjeroRecibido = Boolean(countryInfo.isForeign && !esEmitida);
+        const esIntracomunitario = Boolean(esExtranjeroRecibido && countryInfo.isEuropeanUnion);
+        const esExtracomunitario = Boolean(esExtranjeroRecibido && !countryInfo.isEuropeanUnion);
         
         const rolEmisor  = esEmitida || isSinConfirmar ? 'emisor'   : 'proveedor';
         const rolReceptor= esEmitida || isSinConfirmar ? 'cliente'  : 'receptor';
@@ -407,11 +510,13 @@ export function startDbWriterWorker() {
 
           // 9. Impuestos / IVA (nuevo: totales_por_impuesto, legacy: desglose_iva)
           if (!esExtranjeroRecibido) {
+            // ── Caso normal (proveedor nacional) ──────────────────────────────
             const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
+            const cuentasSugeridas: Record<string, string> = {};
+
             if (totales && Array.isArray(totales)) {
               const impuestosToInsert = totales.map((imp: any) => {
                 const tipo   = (imp.tipo_iva || 'IVA').toString().toUpperCase();
-                // Retenciones: en abonos fuerza positivo (+), en facturas normales no se toca
                 const esRet  = tipo === 'RETENCION' || tipo.includes('RET');
                 const cuotaRaw = Number(imp.cuota_iva) || 0;
                 const cuota  = esRet
@@ -422,6 +527,13 @@ export function startDbWriterWorker() {
                   : applySign(Number(imp.base_imponible) || 0);
                 const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
 
+                // Calcular sugerencia de CC (no se escribe en BD, se guarda en datos_extra)
+                const ccSugerida = resolveCC(tipo, porcentaje, esEmitida);
+                if (ccSugerida) {
+                  const key = `${tipo}_${Math.round(porcentaje)}`;
+                  cuentasSugeridas[key] = ccSugerida;
+                }
+
                 return {
                   documento_id: doc.id,
                   id_de_empresa: BigInt(empresaId),
@@ -430,6 +542,7 @@ export function startDbWriterWorker() {
                   base_imponible: base,
                   cuota: cuota,
                   total_con_impuesto: base + cuota,
+                  // cuenta_contable queda NULL — el user la acepta/rechaza desde la UI
                 };
               });
 
@@ -437,13 +550,106 @@ export function startDbWriterWorker() {
                 await tx.impuestos_documento.createMany({ data: impuestosToInsert });
               }
             }
-          } else {
+
+            // Persistir sugerencias de CC en datos_extra del documento (para la UI)
+            if (Object.keys(cuentasSugeridas).length > 0) {
+              await tx.documentos.update({
+                where: { id: doc.id },
+                data: {
+                  datos_extra: {
+                    ...((doc.datos_extra as Record<string, any>) || {}),
+                    cuentas_impuestos_sugeridas: cuentasSugeridas,
+                  },
+                },
+              });
+            }
+
+          } else if (esIntracomunitario) {
+            // ── Caso UE: inversión del sujeto pasivo (espejo IVA) ────────────
+            // El comprador español auto-repercute el IVA: genera un IVA soportado
+            // (deducible, 472) y uno repercutido (auto-repercutido, 477) que se anulan.
+            // Neto fiscal = 0. Ambas filas van a impuestos_documento para el Modelo 303.
+            const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
+            const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'UE';
             console.log(
-              `[DbWriterWorker] 🌍 Proveedor extranjero detectado (${countryInfo.countryName || countryInfo.countryCode}): IVA no deducible en España. Omitiendo inserción en impuestos_documento (base contable computada = total = ${importeTotal})`
+              `[DbWriterWorker] 🇪🇺 Proveedor intracomunitario (${paisNombre}): espejo IVA (inversión del sujeto pasivo)`
             );
+
+            const cuentasSugeridasUE: Record<string, string> = {};
+
+            if (totales && Array.isArray(totales) && totales.length > 0) {
+              const espejoRows: any[] = [];
+              for (const imp of totales) {
+                const tipo = (imp.tipo_iva || 'IVA').toString().toUpperCase();
+                const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
+                const base = applySign(Number(imp.base_imponible) || 0);
+                const cuota = applySign(Number(imp.cuota_iva) || 0);
+
+                // Fila soportada (deducible) — 472
+                espejoRows.push({
+                  documento_id: doc.id,
+                  id_de_empresa: BigInt(empresaId),
+                  tipo_impuesto: `${tipo}_INTRA_SOPORTADO`,
+                  porcentaje,
+                  base_imponible: base,
+                  cuota,
+                  total_con_impuesto: base + cuota,
+                });
+                // Fila auto-repercutida (devengada) — 477
+                espejoRows.push({
+                  documento_id: doc.id,
+                  id_de_empresa: BigInt(empresaId),
+                  tipo_impuesto: `${tipo}_INTRA_REPERCUTIDO`,
+                  porcentaje,
+                  base_imponible: base,
+                  cuota: -cuota, // negativo: anula al soportado
+                  total_con_impuesto: base - cuota,
+                });
+
+                // Sugerencias de CC para ambas filas
+                cuentasSugeridasUE[`${tipo}_${Math.round(porcentaje)}_SOPORTADO`] = `472000${Math.round(porcentaje).toString().padStart(2, '0')}`;
+                cuentasSugeridasUE[`${tipo}_${Math.round(porcentaje)}_REPERCUTIDO`] = `477000${Math.round(porcentaje).toString().padStart(2, '0')}`;
+              }
+
+              if (espejoRows.length > 0) {
+                await tx.impuestos_documento.createMany({ data: espejoRows });
+              }
+            }
+
+            // Incidencia informativa (no bloqueante, ya validada)
+            const descIntra = `Proveedor intracomunitario (${paisNombre}). Se aplicó inversión del sujeto pasivo: IVA auto-repercutido (espejo 472/477). Revisar y confirmar en Modelo 303.`;
+            await tx.incidencias_documento.create({
+              data: {
+                documento_id: doc.id,
+                id_de_empresa: BigInt(empresaId),
+                descripcion: descIntra,
+                incidencia: false, // informativa, no bloqueante
+                validado: true,
+              }
+            });
+
+            // Persistir sugerencias en datos_extra
+            if (Object.keys(cuentasSugeridasUE).length > 0) {
+              await tx.documentos.update({
+                where: { id: doc.id },
+                data: {
+                  datos_extra: {
+                    ...((doc.datos_extra as Record<string, any>) || {}),
+                    cuentas_impuestos_sugeridas: cuentasSugeridasUE,
+                  },
+                },
+              });
+            }
+
+          } else {
+            // ── Caso extracomunitario (USA, UK, TERCER_PAIS) ─────────────────
+            // IVA de origen no deducible. 100% del importe computa como gasto.
             const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'Extranjero';
             const paisCodigo = countryInfo.countryCode && countryInfo.countryCode !== paisNombre ? ` (${countryInfo.countryCode})` : '';
-            const descExtranjero = `Proveedor extranjero detectado: ${paisNombre}${paisCodigo}. Factura de origen internacional. El IVA de origen no es deducible en España (Modelo 303), por lo que el total computa íntegramente como gasto contable. Requiere validación.`;
+            console.log(
+              `[DbWriterWorker] 🌍 Proveedor extracomunitario (${paisNombre}): IVA no deducible — 100% gasto`
+            );
+            const descExtranjero = `Proveedor extracomunitario: ${paisNombre}${paisCodigo}. Factura de origen internacional no UE. El IVA de origen no es deducible en España (Modelo 303), el total computa íntegramente como base del gasto contable. Requiere validación.`;
 
             await tx.incidencias_documento.create({
               data: {

@@ -111,8 +111,14 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
     const rawDatosExtra = (doc as any)?.datos_extra || {};
     const isForeign = Boolean(rawDatosExtra.es_proveedor_extranjero_ue);
     const countryName = rawDatosExtra.pais_emisor_nombre || rawDatosExtra.pais_emisor || '';
+    const cuentasImpuestosSugeridas: Record<string, string> = rawDatosExtra.cuentas_impuestos_sugeridas || {};
     const [cuentaCompra, setCuentaCompra] = useState<string | null>(null);
     const [isSavingAccount, setIsSavingAccount] = useState(false);
+    const [cuentaEditInput, setCuentaEditInput] = useState('');
+    const [isSavingImpuesto, setIsSavingImpuesto] = useState<number | null>(null); // impuestoId en curso
+    const [impuestosCC, setImpuestosCC] = useState<Record<number, string | null>>(
+        () => Object.fromEntries((doc.iva_details || []).map((imp: any) => [imp.id, imp.cuenta_contable ?? null]))
+    );
 
     useEffect(() => {
         const providerCif = provider?.identificador_fiscal || doc.cif;
@@ -149,6 +155,47 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
             console.error(err);
         } finally {
             setIsSavingAccount(false);
+        }
+    };
+
+    const handleSaveEntidadCuenta = async (cuenta: string) => {
+        const providerCif = provider?.identificador_fiscal || doc.cif;
+        if (!doc.empresa_id || !providerCif || !cuenta.trim()) return;
+        setIsSavingAccount(true);
+        try {
+            const res = await fetch('/api/entidades-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    empresaId: Number(doc.empresa_id),
+                    identificadorFiscal: providerCif,
+                    nombreReferencia: provider?.nombre || doc.proveedor || '',
+                    cuentaCompra: cuenta.trim(),
+                }),
+            });
+            if (res.ok) setCuentaCompra(cuenta.trim());
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSavingAccount(false);
+        }
+    };
+
+    const handleAceptarImpuestoCC = async (impuestoId: number, cuenta: string) => {
+        setIsSavingImpuesto(impuestoId);
+        try {
+            const res = await fetch(`/api/documents/${doc.id}/impuesto-cuenta`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ impuestoId, cuentaContable: cuenta }),
+            });
+            if (res.ok) {
+                setImpuestosCC(prev => ({ ...prev, [impuestoId]: cuenta }));
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSavingImpuesto(null);
         }
     };
 
@@ -411,6 +458,141 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
                             </Button>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ================================================================
+             * SECCIÓN CUENTAS CONTABLES
+             * Diferenciada visualmente. Solo para documentos facturables.
+             * ================================================================ */}
+            {doc.es_facturable !== false && (
+                <div className="mb-3 sm:mb-4 rounded-xl border border-violet-500/30 bg-violet-500/5 animate-fade-in overflow-hidden">
+                    <div className="px-4 py-3 border-b border-violet-500/20 flex items-center gap-2">
+                        <span className="text-base">📒</span>
+                        <span className="font-semibold text-violet-400 text-sm">Cuentas Contables</span>
+                        <span className="text-[10px] text-muted-foreground ml-auto">Sugerencias IA · Aceptar o editar cada cuenta</span>
+                    </div>
+
+                    <div className="p-4 flex flex-col gap-5">
+
+                        {/* — Cuenta contable de la Entidad — */}
+                        <div className="flex flex-col gap-1.5">
+                            <p className="text-xs font-medium text-violet-300">🏢 Entidad ({provider?.nombre || doc.proveedor || 'Proveedor/Cliente'})</p>
+                            {cuentaCompra ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-sm bg-violet-900/30 border border-violet-500/30 rounded px-2 py-0.5 text-violet-200">
+                                        {cuentaCompra}
+                                    </span>
+                                    <span className="text-[11px] text-green-400">✓ Asignada</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCuentaCompra(null)}
+                                        className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
+                                    >
+                                        Cambiar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {isForeign && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAssignAccount4100000}
+                                            disabled={isSavingAccount}
+                                            className="text-xs bg-blue-600 hover:bg-blue-500 text-white rounded px-2.5 py-1 disabled:opacity-50"
+                                        >
+                                            {isSavingAccount ? 'Guardando...' : '💡 Aceptar 4100000 (Acreedores ext.)'}
+                                        </button>
+                                    )}
+                                    <input
+                                        type="text"
+                                        placeholder="Ingresá la cuenta (ej. 4000000)"
+                                        value={cuentaEditInput}
+                                        onChange={e => setCuentaEditInput(e.target.value)}
+                                        className="h-7 text-xs bg-background border border-input rounded px-2 w-36 font-mono"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSaveEntidadCuenta(cuentaEditInput)}
+                                        disabled={isSavingAccount || !cuentaEditInput.trim()}
+                                        className="text-xs bg-violet-700 hover:bg-violet-600 text-white rounded px-2.5 py-1 disabled:opacity-40"
+                                    >
+                                        Guardar
+                                    </button>
+                                    <span className="text-[11px] text-muted-foreground">Sin cuenta asignada</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* — Cuentas contables de Impuestos — */}
+                        {doc.iva_details && doc.iva_details.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-xs font-medium text-violet-300">🧾 Impuestos del documento</p>
+                                <div className="rounded-lg border border-violet-500/20 overflow-hidden">
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="bg-violet-900/20 text-muted-foreground">
+                                                <th className="text-left px-3 py-2 font-medium">Tipo</th>
+                                                <th className="text-right px-3 py-2 font-medium">%</th>
+                                                <th className="text-right px-3 py-2 font-medium">Cuota</th>
+                                                <th className="text-left px-3 py-2 font-medium">Cuenta contable</th>
+                                                <th className="px-3 py-2"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-violet-500/10">
+                                            {(doc.iva_details as any[]).map((imp: any) => {
+                                                const key = `${imp.tipo_impuesto}_${Math.round(Number(imp.porcentaje))}`;
+                                                const sugerida = cuentasImpuestosSugeridas[key];
+                                                const asignada = impuestosCC[imp.id];
+                                                return (
+                                                    <tr key={imp.id} className="hover:bg-violet-500/5">
+                                                        <td className="px-3 py-2 font-medium">{imp.tipo_impuesto}</td>
+                                                        <td className="px-3 py-2 text-right">{Number(imp.porcentaje).toFixed(0)}%</td>
+                                                        <td className="px-3 py-2 text-right font-mono">{formatCurrency(imp.cuota)}</td>
+                                                        <td className="px-3 py-2">
+                                                            {asignada ? (
+                                                                <span className="font-mono bg-violet-900/30 border border-violet-500/30 rounded px-2 py-0.5 text-violet-200">
+                                                                    {asignada}
+                                                                </span>
+                                                            ) : sugerida ? (
+                                                                <span className="text-muted-foreground">
+                                                                    💡 <span className="font-mono">{sugerida}</span>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground italic">Sin asignar</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            {!asignada && sugerida && (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isSavingImpuesto === imp.id}
+                                                                    onClick={() => handleAceptarImpuestoCC(imp.id, sugerida)}
+                                                                    className="text-[11px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2 py-0.5 disabled:opacity-40"
+                                                                >
+                                                                    {isSavingImpuesto === imp.id ? '...' : 'Aceptar'}
+                                                                </button>
+                                                            )}
+                                                            {asignada && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleAceptarImpuestoCC(imp.id, '')}
+                                                                    className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                                                                >
+                                                                    Quitar
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
                 </div>
             )}
 

@@ -265,12 +265,16 @@ export function GroupedDocumentsView({
       if (doc.datos_extra) {
         try {
           const parsed = typeof doc.datos_extra === 'string' ? JSON.parse(doc.datos_extra) : doc.datos_extra;
-          if (parsed && (parsed.CATEGORIA_RAIZ || parsed.CATEGORIA)) {
-             const categoryFromAI = parsed.CATEGORIA_RAIZ || parsed.CATEGORIA;
-             const matchedDefault = DEFAULT_CATEGORIES.find(c => c.toLowerCase() === categoryFromAI.toLowerCase());
-             if (matchedDefault) {
+          if (parsed) {
+            // categoria_documento → campo que usa el worker para no-facturables
+            // CATEGORIA_RAIZ / CATEGORIA → campos legacy
+            const categoryFromAI = parsed.categoria_documento || parsed.CATEGORIA_RAIZ || parsed.CATEGORIA;
+            if (categoryFromAI) {
+              const matchedDefault = DEFAULT_CATEGORIES.find(c => c.toLowerCase() === categoryFromAI.toLowerCase());
+              if (matchedDefault) {
                 tipo = matchedDefault;
-             }
+              }
+            }
           }
         } catch (e) {
           // Ignorar errores de parseo

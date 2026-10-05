@@ -1438,6 +1438,10 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
 
   if (docs.length === 1) {
     const normalized = normalizeDocumento(docs[0], ingestion.cif);
+    // Forzamos es_facturable: false porque el prompt NF no emite ese campo
+    // pero el db-writer lo necesita para disparar el carril rápido de no-facturables.
+    (normalized as any).es_facturable = false;
+
     await dbWriterQueue.add(`db-writer-${ingestion.uploadId}`, {
       ingestion,
       aiResult: normalized
@@ -1446,6 +1450,7 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
       removeOnComplete: true,
       removeOnFail: 3,
     });
+
     
     await updateIngestionProgress(ingestion.uploadId, {
       status: 'procesando',
@@ -1461,6 +1466,8 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
       const randomHash = crypto.randomBytes(4).toString('hex');
       const subUploadId = `${ingestion.uploadId}_doc_${randomHash}`;
       const normalized = normalizeDocumento(doc, ingestion.cif);
+      // Forzamos es_facturable: false (el prompt NF no lo emite)
+      (normalized as any).es_facturable = false;
       return {
         name: `db-writer-non-${subUploadId}`,
         data: {
@@ -1476,6 +1483,7 @@ async function handleExtractNonFacturable(job: Job<ExtractionJobData>, fileBuffe
         opts: { jobId: `db-writer-non-${subUploadId}`, removeOnComplete: true, removeOnFail: 3 }
       };
     });
+
 
     // Registrar actividad hijo en BD para cada sub-documento
     const CHUNK_SIZE = 3;

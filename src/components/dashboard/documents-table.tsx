@@ -1340,7 +1340,7 @@ export function DocumentsTable({
 
       toast({
         title: '✅ Documento confirmado',
-        description: `El documento #${docToConfirm.numero_documento || docToConfirm.id_documento} ha sido confirmado. Tipo actualizado: "${result.tipo_nuevo}"`,
+        description: `El documento #${docToConfirm.numero_documento || docToConfirm.id_documento} ha sido confirmado. Tipo actualizado: "${result.detalles?.[0]?.tipo_nuevo ?? result.tipo_nuevo ?? '—'}"`,
       });
 
       if (onDocumentChanged) {

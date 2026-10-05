@@ -62,6 +62,7 @@ export const IvaDetailSchema = z.object({
   porcentaje: z.coerce.number(),
   base_imponible: z.coerce.number(),
   cuota: z.coerce.number(),
+  cuenta_contable: z.string().optional().nullable(),
 });
 export type IvaDetail = z.infer<typeof IvaDetailSchema>;
 

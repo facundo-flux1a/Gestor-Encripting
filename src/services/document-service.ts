@@ -196,11 +196,12 @@ async function mapDocumentPacketsToDocuments(documentRows: DocumentPacket[]): Pr
     const retentionImpuestos = currentImpuestos.filter(i => isRetentionOrRecargoType(i.tipo_impuesto));
 
     const iva_details: IvaDetail[] = currentImpuestos.map(i => ({
-      id: i.id,
+      id: Number(i.id), // BigInt → number para serializar correctamente a JSON
       tipo_impuesto: i.tipo_impuesto,
       porcentaje: i.porcentaje,
       base_imponible: i.base_imponible,
       cuota: i.cuota,
+      cuenta_contable: (i as any).cuenta_contable ?? null,
     }));
 
     // total_iva incluye solo IVA puro (no retenciones, que tienen cuota negativa y signo contrario)
