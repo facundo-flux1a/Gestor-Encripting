@@ -28,6 +28,7 @@ import { FiscalAuditConfirmDialog } from '@/components/dashboard/fiscal-audit-co
 import { useDocumentNavigation } from '@/hooks/useDocumentNavigation';
 import { useDemoMode } from '@/context/DemoModeContext';
 import { DEMO_DOCUMENTS } from '@/lib/demo-data';
+import { CifBatchDrawer } from '@/components/dashboard/cif-batch-drawer';
 
 
 function DocumentoPageContent() {
@@ -53,6 +54,19 @@ function DocumentoPageContent() {
   const [isAuditMode, setIsAuditMode] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isPreSaveDialogOpen, setIsPreSaveDialogOpen] = useState(false);
+  // ── Batch CIF drawer ──────────────────────────────────────────────
+  const [cifBatchOpen, setCifBatchOpen] = useState(false);
+  const [cifBatchNuevo, setCifBatchNuevo] = useState('');
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
+
+  const handleDrawerClose = useCallback(() => {
+    setCifBatchOpen(false);
+    if (pendingRedirect) {
+      const dest = pendingRedirect;
+      setPendingRedirect(null);
+      window.location.href = dest;
+    }
+  }, [pendingRedirect]);
 
   const form = useForm<DocumentUpdatePayload>({
     resolver: zodResolver(DocumentUpdateSchema),
@@ -265,8 +279,8 @@ function DocumentoPageContent() {
     }
   };
 
-  const executeSave = async (payload: DocumentUpdatePayload) => {
-    if (!doc) return;
+  const executeSave = async (payload: DocumentUpdatePayload): Promise<boolean> => {
+    if (!doc) return false;
     setIsSaving(true);
     try {
       const res = await fetch(`/api/documents/${doc.id_documento}`, {
@@ -300,8 +314,38 @@ function DocumentoPageContent() {
         className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white'
       });
       setIsEditing(false);
+
+      // ── Batch CIF: si el user guardó un CIF nuevo donde antes estaba vacío o era inválido, ofrecer batch ──
+      const cifGuardado = payload.cif?.trim() || (payload.entidades || []).find((e: any) => e.rol === 'proveedor' || e.rol === 'emisor')?.identificador_fiscal?.trim();
+      const provEntidad = (doc.entidades || []).find((e: any) => e.rol === 'proveedor' || e.rol === 'emisor');
+      const cifAnterior = provEntidad?.identificador_fiscal;
+      const cifEstabaVacio = !cifAnterior || cifAnterior === '' || cifAnterior.toUpperCase() === 'N/A';
+      // También cubrir docs con incidencia de CIF problemático (CIF_EMISOR_AUSENTE, CIF_INVALIDO)
+      // donde el campo no es null pero el valor almacenado es incorrecto
+      const tieneIncidenciaCif = !!(doc.incidencia_razon && (
+        doc.incidencia_razon.includes('CIF_EMISOR_AUSENTE') ||
+        doc.incidencia_razon.includes('CIF_INVALIDO')
+      ));
+
+      if (cifGuardado && (cifEstabaVacio || tieneIncidenciaCif)) {
+        try {
+          const resSim = await fetch(`/api/documents/${doc.id_documento}/cif-ausente-similares`);
+          if (resSim.ok) {
+            const dataSim = await resSim.json();
+            if (dataSim.candidatos && dataSim.candidatos.length > 0) {
+              setCifBatchNuevo(cifGuardado);
+              setCifBatchOpen(true);
+              return true;
+            }
+          }
+        } catch (simErr) {
+          console.error('⚠️ [executeSave] Error comprobando candidatos CIF:', simErr);
+        }
+      }
+      return false;
     } catch (error: any) {
       toast({ title: 'Error', description: error.message || 'No se pudo actualizar el documento.', variant: 'destructive' });
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -557,7 +601,7 @@ function DocumentoPageContent() {
       ...(resolutions.año ? { año_trimestre: resolutions.año } : {}),
       ...(resolutions.trimestre ? { num_trimestre: resolutions.trimestre } : {}),
     };
-    await executeSave(finalPayload);
+    const drawerAbierto = await executeSave(finalPayload);
 
     if (resolutions.validateAndRedirect && doc) {
       try {
@@ -571,7 +615,19 @@ function DocumentoPageContent() {
           description: 'El documento fue marcado como verificado y pasó a contabilidad.',
           className: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white',
         });
-        window.location.href = '/dashboard/health-check';
+        let redirectTarget = '/dashboard/auditoria';
+        try {
+          const origin = sessionStorage.getItem('document_origin_url');
+          if (origin && origin !== '/dashboard/health-check') {
+            redirectTarget = origin;
+          }
+        } catch {}
+
+        if (drawerAbierto) {
+          setPendingRedirect(redirectTarget);
+        } else {
+          window.location.href = redirectTarget;
+        }
       } catch (e) {
         console.error('Error al autoconfirmar documento:', e);
       }
@@ -622,6 +678,22 @@ function DocumentoPageContent() {
             issues={preSaveState.issues}
             quarterContext={preSaveState.quarterContext}
             healthTransition={preSaveState.healthTransition}
+          />
+        )}
+        {doc && (
+          <CifBatchDrawer
+            open={cifBatchOpen}
+            onClose={handleDrawerClose}
+            docId={doc.id_documento}
+            empresaId={doc.empresa_id!}
+            cifNuevo={cifBatchNuevo}
+            onSuccess={(count) => {
+              toast({
+                title: `CIF aplicado a ${count} documento${count !== 1 ? 's' : ''}`,
+                description: 'Podés revisarlos individualmente para confirmarlos.',
+                className: 'bg-gradient-to-br from-violet-600 to-purple-700 text-white',
+              });
+            }}
           />
         )}
       </>
@@ -707,6 +779,24 @@ function DocumentoPageContent() {
         })()}
         isConfirming={isValidating}
       />
+
+      {/* Batch CIF drawer — aparece tras guardar un CIF nuevo donde antes estaba vacío */}
+      {doc && (
+        <CifBatchDrawer
+          open={cifBatchOpen}
+          onClose={handleDrawerClose}
+          docId={doc.id_documento}
+          empresaId={doc.empresa_id!}
+          cifNuevo={cifBatchNuevo}
+          onSuccess={(count) => {
+            toast({
+              title: `CIF aplicado a ${count} documento${count !== 1 ? 's' : ''}`,
+              description: 'Podés revisarlos individualmente para confirmarlos.',
+              className: 'bg-gradient-to-br from-violet-600 to-purple-700 text-white',
+            });
+          }}
+        />
+      )}
     </MainLayout>
   );
 

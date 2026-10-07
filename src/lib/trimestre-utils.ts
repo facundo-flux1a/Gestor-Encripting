@@ -6,7 +6,10 @@ import { isApiIssuedDocument } from '@/lib/client-utils';
  * Parsea una fecha evitando desfases UTC en strings ISO (YYYY-MM-DD).
  */
 export function parseFechaLocal(fecha: Date | string): Date {
-  if (fecha instanceof Date) return fecha;
+  if (fecha instanceof Date) {
+    if (isNaN(fecha.getTime())) return fecha;
+    return new Date(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate());
+  }
   if (!fecha || typeof fecha !== 'string') return new Date(NaN);
   const trimmed = fecha.trim();
   if (!trimmed || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined' || trimmed.toLowerCase() === 'invalid date') {
@@ -22,7 +25,11 @@ export function parseFechaLocal(fecha: Date | string): Date {
     const d = new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
     if (!isNaN(d.getTime())) return d;
   }
-  return new Date(fecha);
+  const fallback = new Date(fecha);
+  if (!isNaN(fallback.getTime())) {
+    return new Date(fallback.getUTCFullYear(), fallback.getUTCMonth(), fallback.getUTCDate());
+  }
+  return fallback;
 }
 
 export function parseFechaLocalNullable(fecha: Date | string | null | undefined): Date | null {

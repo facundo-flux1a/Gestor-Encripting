@@ -7,16 +7,24 @@
  * Parsea una fecha evitando desfases UTC en strings ISO (YYYY-MM-DD).
  */
 export function parseFechaLocal(fecha: Date | string): Date {
-  if (fecha instanceof Date) return fecha;
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha.trim());
+  if (fecha instanceof Date) {
+    if (isNaN(fecha.getTime())) return fecha;
+    return new Date(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate());
+  }
+  const trimmed = typeof fecha === 'string' ? fecha.trim() : '';
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
   if (isoMatch) {
     return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
   }
-  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(fecha.trim());
+  const esMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(trimmed);
   if (esMatch) {
     return new Date(Number(esMatch[3]), Number(esMatch[2]) - 1, Number(esMatch[1]));
   }
-  return new Date(fecha);
+  const fallback = new Date(fecha);
+  if (!isNaN(fallback.getTime())) {
+    return new Date(fallback.getUTCFullYear(), fallback.getUTCMonth(), fallback.getUTCDate());
+  }
+  return fallback;
 }
 
 /**
