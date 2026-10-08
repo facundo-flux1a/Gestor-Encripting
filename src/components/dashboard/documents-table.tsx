@@ -929,7 +929,7 @@ const getColumns = (
         header: `Base ${rate}%`,
         ...noColumnFilter,
         cell: ({ row }: { row: Row<Document> }) => {
-          const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
+          const ivaDetail = row.original.iva_details.find(i => isRealIvaDetail(i) && Number(i.porcentaje) === rate);
           const value = ivaDetail?.base_imponible ?? 0;
           const formatted = formatCurrency(value);
           return (
@@ -940,7 +940,7 @@ const getColumns = (
         },
         footer: ({ table }: { table: TanstackTable<Document> }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
-            const detail = row.original.iva_details.find((d: IvaDetail) => Number(d.porcentaje) === rate);
+            const detail = row.original.iva_details.find((d: IvaDetail) => isRealIvaDetail(d) && Number(d.porcentaje) === rate);
             return sum + (Number(detail?.base_imponible) || 0);
           }, 0);
           const formatted = formatCurrency(total);
@@ -956,7 +956,7 @@ const getColumns = (
         header: `IVA ${rate}%`,
         ...noColumnFilter,
         cell: ({ row }: { row: Row<Document> }) => {
-          const ivaDetail = row.original.iva_details.find(i => Number(i.porcentaje) === rate);
+          const ivaDetail = row.original.iva_details.find(i => isRealIvaDetail(i) && Number(i.porcentaje) === rate);
           const value = ivaDetail?.cuota ?? 0;
           const formatted = formatCurrency(value);
           return (
@@ -967,7 +967,7 @@ const getColumns = (
         },
         footer: ({ table }: { table: TanstackTable<Document> }) => {
           const total = table.getFilteredRowModel().rows.reduce((sum: number, row: Row<Document>) => {
-            const detail = row.original.iva_details.find((d: IvaDetail) => Number(d.porcentaje) === rate);
+            const detail = row.original.iva_details.find((d: IvaDetail) => isRealIvaDetail(d) && Number(d.porcentaje) === rate);
             return sum + (Number(detail?.cuota) || 0);
           }, 0);
           const formatted = formatCurrency(total);

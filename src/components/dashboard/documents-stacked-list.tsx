@@ -29,8 +29,13 @@ const formatDate = (value: string | null | undefined): string => {
   });
 };
 
+const isRealIva = (i: IvaDetail) => {
+  const tipo = (i.tipo_impuesto || '').toLowerCase();
+  return !tipo.includes('retencion') && !tipo.includes('irpf') && !tipo.includes('recargo') && !tipo.includes('equivalencia');
+};
+
 const getIva = (details: IvaDetail[] | undefined, rate: number) => {
-  const detail = details?.find((i) => Number(i.porcentaje) === rate);
+  const detail = details?.find((i) => isRealIva(i) && Number(i.porcentaje) === rate);
   return {
     base: detail?.base_imponible ?? 0,
     cuota: detail?.cuota ?? 0,
