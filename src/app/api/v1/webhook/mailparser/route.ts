@@ -220,14 +220,29 @@ export async function POST(req: NextRequest) {
       return true;
     };
 
+    const effectiveParentUploadId = parentUploadId || (files && files[0]?.uploadId) || `batch_mail_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const seenHashesInBatch = new Set<string>();
+
     // 3. Procesar payload
     if (isZipContainer) {
       console.log(`[MailParser] 📦 Procesando ZIP container: ${zipFilename}`);
       const buffer = Buffer.from(content, 'base64');
-      await processFile(parentUploadId, zipFilename, body.hash, buffer, 'application/zip', true);
+      await processFile(effectiveParentUploadId, zipFilename, body.hash, buffer, 'application/zip', true);
     } else if (files && Array.isArray(files)) {
       console.log(`[MailParser] 📄 Procesando batch de ${files.length} archivos normales`);
       for (const file of files) {
+        if (file.hash && seenHashesInBatch.has(file.hash)) {
+          console.warn(`[MailParser] ⚠️ Archivo duplicado en el mismo envío ignorado: ${file.filename}`);
+          rejectedFiles.push({
+            filename: file.filename,
+            reason: 'Archivo duplicado adjunto en el mismo correo.',
+            time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          });
+          continue;
+        }
+        if (file.hash) {
+          seenHashesInBatch.add(file.hash);
+        }
         const buffer = Buffer.from(file.content, 'base64');
         await processFile(file.uploadId, file.filename, file.hash, buffer, file.mimeType, false);
       }
@@ -238,7 +253,7 @@ export async function POST(req: NextRequest) {
       console.log(`[MailParser] 📧 Encolando job de notificación diferida para ${cleanEmail}`);
       
       const notifData = {
-        parentUploadId,
+        parentUploadId: effectiveParentUploadId,
         uploadIds: acceptedUploadIds,
         emailFrom: cleanEmail,
         empresaId,
@@ -248,8 +263,8 @@ export async function POST(req: NextRequest) {
       };
 
       // Guardamos para que el worker de notificación los recoja 15 mins después
-      await notificationQueue.add(`notify-${parentUploadId}`, notifData, { 
-        jobId: `notify-${parentUploadId}`,
+      await notificationQueue.add(`notify-${effectiveParentUploadId}`, notifData, { 
+        jobId: `notify-${effectiveParentUploadId}`,
         delay: 15 * 60 * 1000 // 15 minutos en milisegundos
       });
     }

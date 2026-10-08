@@ -19,11 +19,19 @@ export function startNotificationWorker() {
 
       try {
         const acceptedFiles: { filename: string, status: string }[] = [];
+        const duplicateFiles: { filename: string, reason: string }[] = [];
         const rejectedFiles: { filename: string, reason: string }[] = [];
 
         // Agregar los rechazados tempranos (duplicados, formato no permitido, etc.)
         if (earlyRejectedFiles && earlyRejectedFiles.length > 0) {
-            rejectedFiles.push(...earlyRejectedFiles);
+            for (const file of earlyRejectedFiles) {
+                const isDup = /duplica|ya fue subido|previamente/i.test(file.reason);
+                if (isDup) {
+                    duplicateFiles.push(file);
+                } else {
+                    rejectedFiles.push(file);
+                }
+            }
         }
 
         // Consultar el estado final de todos los uploadIds en la tabla actividad
@@ -31,7 +39,7 @@ export function startNotificationWorker() {
             // Hacemos una consulta para traer el último estado de cada uploadId
             const placeholders = uploadIds.map(() => '?').join(',');
             const query = `
-                SELECT upload_id, documento_nombre, status, mensaje, progress 
+                SELECT upload_id, documento_nombre, status, step, mensaje, progress 
                 FROM ${dbName}.actividad 
                 WHERE upload_id IN (${placeholders})
             `;
@@ -40,8 +48,6 @@ export function startNotificationWorker() {
             for (const uploadId of uploadIds) {
                 // Como un uploadId de ZIP puede generar varios registros de actividad hijos,
                 // buscamos todos los registros asociados.
-                // Sin embargo, si uploadIds solo tiene el del padre, quizas haya que usar LIKE o buscar por padre.
-                // En nuestro diseño actual, uploadIds tiene los IDs directos encolados por el webhook.
                 const fileActivities = rows.filter(r => r.upload_id === uploadId || r.upload_id.startsWith(uploadId));
                 
                 if (fileActivities.length === 0) {
@@ -57,16 +63,75 @@ export function startNotificationWorker() {
                 }
 
                 for (const [filename, finalAct] of uniqueFiles.entries()) {
-                    if (finalAct.status === 'error' || finalAct.status === 'rechazado') {
-                        rejectedFiles.push({ filename, reason: finalAct.mensaje || 'Error desconocido durante el procesamiento' });
-                    } else if (finalAct.status === 'En revisión') {
-                        acceptedFiles.push({ filename, status: 'Requiere revisión manual (Incidencia detectada)' });
-                    } else if (finalAct.status === 'Finalizado' || finalAct.status === 'Validado') {
-                        acceptedFiles.push({ filename, status: 'Validado e integrado con éxito' });
-                    } else {
-                        // Si después de 15 minutos sigue en "iniciando" o "procesando", está atascado o es muy grande
-                        acceptedFiles.push({ filename, status: `Procesamiento demorado (${finalAct.progress}% - ${finalAct.mensaje})` });
+                    const statusLower = (finalAct.status || '').toLowerCase();
+                    const stepLower = (finalAct.step || '').toLowerCase();
+                    const msgLower = (finalAct.mensaje || '').toLowerCase();
+
+                    // 1. Duplicado (ignorado en DB writer o marcado como Duplicado)
+                    const isDup = 
+                        statusLower === 'duplicado' || 
+                        stepLower.includes('duplicado') || 
+                        msgLower.includes('ya procesado') || 
+                        msgLower.includes('duplicado');
+
+                    if (isDup) {
+                        duplicateFiles.push({
+                            filename,
+                            reason: finalAct.mensaje || 'Documento ya registrado anteriormente en la empresa.'
+                        });
+                        continue;
                     }
+
+                    // 2. Errores / Fallidos
+                    const isFailed = 
+                        statusLower === 'fallido' || 
+                        statusLower === 'failed' || 
+                        statusLower === 'error' || 
+                        statusLower === 'rechazado';
+
+                    if (isFailed) {
+                        rejectedFiles.push({
+                            filename,
+                            reason: finalAct.mensaje || 'Error durante el procesamiento.'
+                        });
+                        continue;
+                    }
+
+                    // 3. En revisión manual
+                    const isRevision = 
+                        statusLower === 'en revisión' || 
+                        statusLower === 'en revision' || 
+                        stepLower.includes('revisión') || 
+                        stepLower.includes('revision');
+
+                    if (isRevision) {
+                        acceptedFiles.push({
+                            filename,
+                            status: 'Requiere revisión manual (Incidencia detectada)'
+                        });
+                        continue;
+                    }
+
+                    // 4. Completado / Validado con éxito
+                    const isCompleted = 
+                        statusLower === 'completado' || 
+                        statusLower === 'completed' || 
+                        statusLower === 'finalizado' || 
+                        statusLower === 'validado';
+
+                    if (isCompleted) {
+                        acceptedFiles.push({
+                            filename,
+                            status: 'Validado e integrado con éxito'
+                        });
+                        continue;
+                    }
+
+                    // 5. Demorado o en proceso
+                    acceptedFiles.push({
+                        filename,
+                        status: `Procesamiento demorado (${finalAct.progress ?? 0}% - ${finalAct.mensaje || 'En cola'})`
+                    });
                 }
             }
         }
@@ -74,9 +139,9 @@ export function startNotificationWorker() {
         // Construir HTML y Enviar Correo
         const dateStr = new Date().toLocaleDateString('es-ES');
         
-        console.log(`[Notification Worker] 📧 Enviando resumen a ${emailFrom}: ${acceptedFiles.length} aceptados, ${rejectedFiles.length} rechazados.`);
+        console.log(`[Notification Worker] 📧 Enviando resumen a ${emailFrom}: ${acceptedFiles.length} aceptados, ${duplicateFiles.length} duplicados, ${rejectedFiles.length} rechazados.`);
         
-        const html = getIngestionSummaryEmailHtml(emailFrom, nombreEmpresa, dateStr, acceptedFiles, rejectedFiles);
+        const html = getIngestionSummaryEmailHtml(emailFrom, nombreEmpresa, dateStr, acceptedFiles, rejectedFiles, duplicateFiles);
         
         await sendEmail({
             to: emailFrom,

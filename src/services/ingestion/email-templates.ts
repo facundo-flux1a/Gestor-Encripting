@@ -346,9 +346,17 @@ export function getRejectedFilesEmailHtml(emailFrom: string, dateStr: string, re
 </html>`;
 }
 
-export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: string, dateStr: string, acceptedFiles: { filename: string, status: string }[], rejectedFiles: { filename: string, reason: string }[]): string {
-    const totalFiles = acceptedFiles.length + rejectedFiles.length;
-    const allSuccess = rejectedFiles.length === 0;
+export function getIngestionSummaryEmailHtml(
+    emailFrom: string, 
+    nombreEmpresa: string, 
+    dateStr: string, 
+    acceptedFiles: { filename: string, status: string }[], 
+    rejectedFiles: { filename: string, reason: string }[],
+    duplicateFiles: { filename: string, reason: string }[] = []
+): string {
+    const totalFiles = acceptedFiles.length + rejectedFiles.length + duplicateFiles.length;
+    const allSuccess = rejectedFiles.length === 0 && duplicateFiles.length === 0;
+    const hasDuplicatesOnly = rejectedFiles.length === 0 && duplicateFiles.length > 0;
 
     let acceptedHtml = '';
     if (acceptedFiles.length > 0) {
@@ -364,6 +372,29 @@ export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: s
                 </p>
                 <p style="color: #15803d; font-size: 12px; margin: 4px 0 0; font-weight: 500;">
                     Estado final: ${file.status}
+                </p>
+            </div>
+            `).join('')}
+        </div>`;
+    }
+
+    let duplicateHtml = '';
+    if (duplicateFiles.length > 0) {
+        duplicateHtml = `
+        <div style="margin-bottom: 24px;">
+            <p style="color: #d97706; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; margin: 0 0 14px; font-weight: 800;">
+                🔁 DUPLICADOS OMITIDOS (${duplicateFiles.length})
+            </p>
+            <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px; font-weight: 400;">
+                Estos documentos ya existían previamente en la empresa y no fueron duplicados para proteger la contabilidad.
+            </p>
+            ${duplicateFiles.map(file => `
+            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+                <p style="color: #1f2937; font-size: 14px; margin: 0; font-weight: 600;">
+                    ${file.filename}
+                </p>
+                <p style="color: #b45309; font-size: 12px; margin: 4px 0 0; font-weight: 500;">
+                    Observación: ${file.reason}
                 </p>
             </div>
             `).join('')}
@@ -389,6 +420,13 @@ export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: s
             `).join('')}
         </div>`;
     }
+
+    const badgeBg = allSuccess 
+        ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' 
+        : hasDuplicatesOnly 
+            ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+            : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    const badgeIcon = allSuccess ? '✅' : hasDuplicatesOnly ? 'ℹ️' : '⚠️';
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -417,8 +455,8 @@ export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: s
                                         </p>
                                     </td>
                                     <td style="text-align: right; vertical-align: middle;">
-                                        <div style="background: linear-gradient(135deg, ${allSuccess ? '#22c55e 0%, #16a34a' : '#f59e0b 0%, #d97706'} 100%); width: 85px; height: 85px; border-radius: 22px; display: inline-block; text-align: center; line-height: 85px; box-shadow: 0 12px 30px rgba(0,0,0, 0.2);">
-                                            <span style="font-size: 44px;">${allSuccess ? '✅' : '⚠️'}</span>
+                                        <div style="background: ${badgeBg}; width: 85px; height: 85px; border-radius: 22px; display: inline-block; text-align: center; line-height: 85px; box-shadow: 0 12px 30px rgba(0,0,0, 0.2);">
+                                            <span style="font-size: 44px;">${badgeIcon}</span>
                                         </div>
                                     </td>
                                 </tr>
@@ -456,10 +494,13 @@ export function getIngestionSummaryEmailHtml(emailFrom: string, nombreEmpresa: s
                             </div>
                             
                             <p style="color: #374151; font-size: 16px; line-height: 1.7; margin: 0 0 38px; font-weight: 500;">
-                                Hemos concluido el procesamiento de los <strong>${totalFiles} archivos</strong> que enviaste recientemente. A continuación, el reporte detallado:
+                                Hemos concluido el procesamiento de los <strong>${totalFiles} archivos</strong> que enviaste recientemente.
+                                ${duplicateFiles.length > 0 ? `<br><span style="color: #b45309; font-size: 14px; display: inline-block; margin-top: 6px;">⚠️ Se detectaron <strong>${duplicateFiles.length} documento(s) ya existente(s)</strong> que fueron omitidos para evitar duplicidad.</span>` : ''}
+                                A continuación, el reporte detallado:
                             </p>
                             
                             ${acceptedHtml}
+                            ${duplicateHtml}
                             ${rejectedHtml}
                             
                             <!-- Boton al Dashboard -->
