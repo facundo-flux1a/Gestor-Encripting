@@ -25,6 +25,7 @@ import { dbWriterQueue, DbWriterJobData, DB_WRITER_QUEUE_NAME } from '@/lib/queu
 import { updateIngestionProgress, updateParentProgress } from '@/lib/ingestion-progress';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import connection, { dbName } from '@/lib/db';
 import { calcularTrimestreExtendido, obtenerPrimerTrimestreAbiertoDelAnio, parseFechaLocal, parseFechaLocalNullable, resolverTrimestreContableImportacion } from '@/lib/trimestre-utils';
 import { wLog } from '@/lib/worker-logger';
 import {
@@ -252,8 +253,18 @@ export function startDbWriterWorker() {
         
         const importeTotal    = applySign(Number(rawImporteTotal) || 0);
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
-        const numeroDocumento = docInfo.numero_documento || aiResult.numero_documento || `Doc-${Date.now()}`;
-        const numeroDocumentoNorm = normalizeInvoiceNumber(numeroDocumento) || numeroDocumento;
+        const rawNumDoc = (docInfo.numero_documento || aiResult.numero_documento || '').toString().trim();
+        const hasRealInvoiceNumber =
+          rawNumDoc.length > 0 &&
+          !rawNumDoc.startsWith('Doc-') &&
+          !rawNumDoc.startsWith('NF-') &&
+          rawNumDoc !== '0' &&
+          rawNumDoc.toUpperCase() !== 'N/A' &&
+          rawNumDoc.toUpperCase() !== 'SIN NUMERO' &&
+          rawNumDoc.toUpperCase() !== 'S/N';
+
+        const numeroDocumento = hasRealInvoiceNumber ? rawNumDoc : null;
+        const numeroDocumentoNorm = numeroDocumento ? (normalizeInvoiceNumber(numeroDocumento) || numeroDocumento) : null;
         const fechaEmisionRaw = docInfo.fecha_emision || aiResult.fecha_emision || null;
         const fechaEmision = parseFechaLocalNullable(fechaEmisionRaw ? String(fechaEmisionRaw) : null);
         const fechaVencimientoRaw = docInfo.fecha_vencimiento || aiResult.fecha_vencimiento || null;
@@ -330,6 +341,87 @@ export function startDbWriterWorker() {
               cuota: Number(imp.cuota_iva) || 0,
             }))
           : [];
+
+        // =====================================================================
+        // DETECCIÓN DE DUPLICADO POR NÚMERO DE FACTURA
+        // =====================================================================
+        let duplicateMatchDoc: { id: bigint | number; numero_documento: string } | null = null;
+
+        if (hasRealInvoiceNumber && numeroDocumento) {
+          try {
+            const cleanNum = numeroDocumento.toLowerCase().replace(/\s+/g, '');
+            const cleanNorm = (numeroDocumentoNorm || '').toLowerCase().replace(/\s+/g, '');
+
+            if (esEmitida) {
+              const [existing] = await connection.query<any[]>(
+                `SELECT d.id, d.numero_documento 
+                 FROM ${dbName}.documentos d
+                 WHERE d.id_de_empresa = ? 
+                   AND d.numero_documento IS NOT NULL 
+                   AND d.numero_documento != ''
+                   AND (LOWER(REPLACE(d.numero_documento, ' ', '')) = ? OR LOWER(REPLACE(COALESCE(d.numero_documento_normalizado, ''), ' ', '')) = ?)
+                   AND (LOWER(d.tipo_documento) LIKE '%emitid%')
+                 ORDER BY d.id ASC
+                 LIMIT 1`,
+                [empresaId, cleanNum, cleanNorm || cleanNum]
+              );
+              if (existing && existing.length > 0) {
+                duplicateMatchDoc = { id: existing[0].id, numero_documento: existing[0].numero_documento };
+                wLog('DbWriterWorker', `⚠️ Duplicado por número detectado (Emitida): ${numeroDocumento} coincide con doc #${duplicateMatchDoc.id}`);
+              }
+            } else {
+              // Recibida / Gasto: verificar contra el mismo proveedor (CIF o nombre)
+              const [existing] = await connection.query<any[]>(
+                `SELECT d.id, d.numero_documento,
+                        e.identificador_fiscal as proveedor_cif,
+                        e.identificador_fiscal_hash as proveedor_cif_hash,
+                        e.nombre as proveedor_nombre,
+                        e.nombre_hash as proveedor_nombre_hash
+                 FROM ${dbName}.documentos d
+                 LEFT JOIN ${dbName}.entidades_documento e ON (d.id = e.documento_id AND e.rol IN ('proveedor', 'emisor'))
+                 WHERE d.id_de_empresa = ? 
+                   AND d.numero_documento IS NOT NULL 
+                   AND d.numero_documento != ''
+                   AND (LOWER(REPLACE(d.numero_documento, ' ', '')) = ? OR LOWER(REPLACE(COALESCE(d.numero_documento_normalizado, ''), ' ', '')) = ?)
+                   AND (LOWER(d.tipo_documento) LIKE '%recibid%' OR LOWER(d.tipo_documento) LIKE '%gasto%')
+                 ORDER BY d.id ASC
+                 LIMIT 5`,
+                [empresaId, cleanNum, cleanNorm || cleanNum]
+              );
+
+              if (existing && existing.length > 0) {
+                const currentCifClean = cleanCif(cifEmisor);
+                const currentCifHash = getSha256(cifEmisor);
+                const currentNombreClean = (emisor.nombre || '').toString().trim().toLowerCase();
+                const currentNombreHash = getSha256(emisor.nombre);
+
+                for (const row of existing) {
+                  const rowCif = (row.proveedor_cif || '').toString().trim().toUpperCase();
+                  const rowCifHash = row.proveedor_cif_hash;
+                  const rowNombre = (row.proveedor_nombre || '').toString().trim().toLowerCase();
+                  const rowNombreHash = row.proveedor_nombre_hash;
+
+                  let isSameProvider = false;
+                  if (currentCifClean && (rowCif || rowCifHash)) {
+                    if (rowCif && rowCif === currentCifClean.toUpperCase()) isSameProvider = true;
+                    if (currentCifHash && rowCifHash && currentCifHash === rowCifHash) isSameProvider = true;
+                  } else if (currentNombreClean && (rowNombre || rowNombreHash)) {
+                    if (rowNombre && rowNombre === currentNombreClean) isSameProvider = true;
+                    if (currentNombreHash && rowNombreHash && currentNombreHash === rowNombreHash) isSameProvider = true;
+                  }
+
+                  if (isSameProvider) {
+                    duplicateMatchDoc = { id: row.id, numero_documento: row.numero_documento };
+                    wLog('DbWriterWorker', `⚠️ Duplicado por número detectado (Recibida): ${numeroDocumento} de proveedor coincide con doc #${duplicateMatchDoc.id}`);
+                    break;
+                  }
+                }
+              }
+            }
+          } catch (err: any) {
+            console.warn(`[DbWriterWorker] ⚠️ Error comprobando duplicados por número (no bloqueante):`, err?.message);
+          }
+        }
 
         // =====================================================================
         // TRANSACCIÓN ATÓMICA DE PRISMA
@@ -709,6 +801,42 @@ export function startDbWriterWorker() {
             console.log(`[DbWriterWorker] ⚠️ Incidencia registrada para ${fileName}: ${descripcionFinal.substring(0, 80)}...`);
           }
 
+          // 11. Incidencia de número de factura duplicado (registrado con trazabilidad)
+          if (duplicateMatchDoc) {
+            const descDuplicado = `Número de factura duplicado: "${numeroDocumento}". También presente en documentos: ${duplicateMatchDoc.id}`;
+            await tx.incidencias_documento.create({
+              data: {
+                documento_id: doc.id,
+                id_de_empresa: BigInt(empresaId),
+                descripcion: descDuplicado,
+                incidencia: true,
+                validado: false,
+              }
+            });
+            console.log(`[DbWriterWorker] ⚠️ Incidencia de duplicado por número registrada para doc #${doc.id}: ${descDuplicado}`);
+
+            // Asegurar que el documento previo también quede registrado en el grupo de duplicados si no lo está
+            try {
+              const prevIncs: any[] = await tx.$queryRawUnsafe(
+                `SELECT id FROM ${dbName}.incidencias_documento WHERE documento_id = ? AND descripcion LIKE '%factura duplicado:%' AND validado = 0 LIMIT 1`,
+                duplicateMatchDoc.id
+              );
+              if (!prevIncs || prevIncs.length === 0) {
+                await tx.incidencias_documento.create({
+                  data: {
+                    documento_id: BigInt(duplicateMatchDoc.id),
+                    id_de_empresa: BigInt(empresaId),
+                    descripcion: `Número de factura duplicado: "${duplicateMatchDoc.numero_documento}". También presente en documentos: ${doc.id}`,
+                    incidencia: true,
+                    validado: false,
+                  }
+                });
+              }
+            } catch (e: any) {
+              console.warn(`[DbWriterWorker] ⚠️ No se pudo vincular incidencia en doc previo #${duplicateMatchDoc.id} (ignorado):`, e?.message);
+            }
+          }
+
           console.log(`[DbWriterWorker] ✅ Transacción Prisma completada con éxito (Doc ID: ${doc.id})`);
         }, {
           maxWait: 10000,
@@ -724,10 +852,13 @@ export function startDbWriterWorker() {
         // ÉXITO: marcar el hijo como completado (VALIDADO o REVISION — archivo siempre queda)
         await updateIngestionProgress(uploadId, {
           status: 'Completado',
-          step: resolvedFiscalStatus === FiscalStatus.REVISION ? 'Guardado en revisión' : 'Guardado',
+          step: duplicateMatchDoc
+            ? 'Guardado con incidencia (número duplicado)'
+            : resolvedFiscalStatus === FiscalStatus.REVISION ? 'Guardado en revisión' : 'Guardado',
           progress: 100,
-          mensaje:
-            resolvedFiscalStatus === FiscalStatus.REVISION
+          mensaje: duplicateMatchDoc
+            ? `Factura ${numeroDocumento} duplicada (coincide con doc #${duplicateMatchDoc.id}). Guardada con incidencia para revisión.`
+            : resolvedFiscalStatus === FiscalStatus.REVISION
               ? 'Documento guardado en REVISIÓN (excluido de agregados hasta corregir).'
               : 'Documento procesado y validado correctamente.',
           documentoId: savedDocumentoId ?? undefined,
@@ -743,9 +874,18 @@ export function startDbWriterWorker() {
           if (userIds.length === 0) return;
 
           const proveedorNombre = (aiResult.empresa_emisora?.nombre || aiResult.cliente?.nombre || '').toString();
-          const numDoc = numeroDocumento;
+          const numDoc = numeroDocumento || 'Sin nº';
 
-          if (resolvedFiscalStatus === FiscalStatus.REVISION) {
+          if (duplicateMatchDoc) {
+            await createNotification({
+              userIds,
+              empresaId: Number(empresaId),
+              tipo: 'documento_revision',
+              titulo: `Factura duplicada detectada`,
+              mensaje: `La factura ${numDoc}${proveedorNombre ? ` de ${proveedorNombre}` : ''} tiene un número duplicado (coincide con doc #${duplicateMatchDoc.id}). Guardada con incidencia para revisión.`,
+              metadata: { uploadId, documentoId: savedDocumentoId?.toString(), numeroDocumento: numDoc, duplicadoDocId: duplicateMatchDoc.id.toString() },
+            });
+          } else if (resolvedFiscalStatus === FiscalStatus.REVISION) {
             await createNotification({
               userIds,
               empresaId: Number(empresaId),
@@ -771,6 +911,7 @@ export function startDbWriterWorker() {
             String(aiResult.incidencia ?? '').toUpperCase() === 'TRUE';
 
           if (
+            !duplicateMatchDoc &&
             resolvedFiscalStatus !== FiscalStatus.REVISION &&
             !tieneIncidenciaBlandaNotif &&
             !evalFecha.requiereConfirmacion &&
