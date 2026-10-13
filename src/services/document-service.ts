@@ -3132,12 +3132,13 @@ export async function runDocumentAnalysis(empresaIds?: number[]): Promise<Incide
   let query = 'SELECT d.id FROM documentos d';
   const params: any[] = [];
 
-  // ✅ NUEVO: Filtro de tipo de documento (facturas Y abonos)
+  // ✅ NUEVO: Filtro de tipo de documento (facturas, abonos y tickets)
   const conditions: string[] = [`(
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )`];
 
   // ✅ NUEVO: Filtrar por empresas si se especifican
@@ -3198,6 +3199,7 @@ export async function getDashboardAnalytics(
 OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
@@ -4178,6 +4180,7 @@ export async function getTrimestresList(
             OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
 AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)
@@ -4475,6 +4478,7 @@ export async function getDocumentosByTrimestre(
       OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
       OR (LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
       OR (LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+      OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
     )
     AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`);
@@ -4773,6 +4777,7 @@ d.trimestre_cerrado = 1,
             OR(LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR(LOWER(d.tipo_documento) LIKE '%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
 )
     AND d.id NOT IN (SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)

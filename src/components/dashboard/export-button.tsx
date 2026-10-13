@@ -21,7 +21,7 @@ interface ExportButtonProps {
     columns: Column<any, unknown>[];
     data: Row<any>[];
     filename: string;
-    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros';
     includeSummary?: boolean;
 }
 

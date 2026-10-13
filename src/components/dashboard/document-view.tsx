@@ -542,7 +542,9 @@ export function DocumentView({ doc, isEditing, form, hideLines = false }: Docume
                                         <tbody className="divide-y divide-violet-500/10">
                                             {(doc.iva_details as any[]).map((imp: any) => {
                                                 const key = `${imp.tipo_impuesto}_${Math.round(Number(imp.porcentaje))}`;
-                                                const sugerida = cuentasImpuestosSugeridas[key];
+                                                const fallbackSop = imp.tipo_impuesto?.includes('SOPORTADO') ? `472000${Math.round(Number(imp.porcentaje)).toString().padStart(2, '0')}` : null;
+                                                const fallbackRep = imp.tipo_impuesto?.includes('REPERCUTIDO') ? `477000${Math.round(Number(imp.porcentaje)).toString().padStart(2, '0')}` : null;
+                                                const sugerida = cuentasImpuestosSugeridas[key] || fallbackSop || fallbackRep;
                                                 const asignada = impuestosCC[imp.id];
                                                 return (
                                                     <tr key={imp.id} className="hover:bg-violet-500/5">

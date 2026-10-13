@@ -160,6 +160,13 @@ export async function PATCH(
       };
 
       await prisma.$transaction(async (tx: any) => {
+        // Limpiar impuestos INTRA (y cualquier otro) que hubieran quedado del período extranjero.
+        // Sin esto, filas IVA_INTRA_SOPORTADO / IVA_INTRA_REPERCUTIDO quedan huérfanas
+        // y pueden generar descuadres contables aunque el flag ya sea false.
+        await tx.impuestos_documento.deleteMany({
+          where: { documento_id: BigInt(documentId) },
+        });
+
         await tx.documentos.update({
           where: { id: BigInt(documentId) },
           data: {

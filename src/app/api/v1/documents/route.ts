@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { extractRetencionFromImpuestos } from '@/lib/tax-helpers';
 import { formatEntityData, buildFileUrl, formatDocumentLine, parseFlexibleDate } from '@/lib/api-v1-helpers';
 import { getPresignedUrl, getApiPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
+import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,8 @@ export async function GET(request: NextRequest) {
     const año = añoParam ? Number(añoParam) : null;
     const proveedor = proveedorParam?.trim() || null;
     const cliente = clienteParam?.trim() || null;
-    const tipo = tipoParam.toLowerCase() as 'emitidas' | 'recibidas' | 'todas';
+    const tipo = tipoParam.toLowerCase();
+    const ALLOWED_TIPOS = ['emitidas', 'recibidas', 'extranjeras', 'tickets', 'todas'];
 
     // Validaciones básicas
     if (desdeId !== null && (isNaN(desdeId) || desdeId < 0)) {
@@ -79,9 +81,9 @@ export async function GET(request: NextRequest) {
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
       return NextResponse.json({ error: '"trimestre" debe ser 1, 2, 3 o 4.' }, { status: 400 });
     }
-    if (!['emitidas', 'recibidas', 'todas'].includes(tipo)) {
+    if (!ALLOWED_TIPOS.includes(tipo)) {
       return NextResponse.json(
-        { error: '"tipo" debe ser "emitidas", "recibidas" o "todas".' },
+        { error: `"tipo" debe ser uno de: ${ALLOWED_TIPOS.map(t => `'${t}'`).join(', ')}.` },
         { status: 400 }
       );
     }
@@ -285,6 +287,18 @@ export async function GET(request: NextRequest) {
         else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtra = doc.datos_extra;
       } catch { datosExtra = {}; }
 
+      const emisorCifVal = (entidades.emisor?.cif || entidades.proveedor?.cif || '').trim();
+      const countryInfo = detectCountryFromCIF(emisorCifVal || null);
+      const isForeign = Boolean(
+        datosExtra.es_proveedor_extranjero_ue ||
+        datosExtra.zona_emisor === 'UE' ||
+        datosExtra.zona_emisor === 'TERCER_PAIS' ||
+        datosExtra.region === 'USA' ||
+        (countryInfo && countryInfo.isForeign)
+      );
+      const pais = datosExtra.pais_emisor || countryInfo?.countryCode || (isForeign ? 'EXTRANJERO' : 'ES');
+      const zonaFiscal = datosExtra.zona_emisor || countryInfo?.region || (isForeign ? (countryInfo?.isEuropeanUnion ? 'UE' : 'TERCER_PAIS') : 'NACIONAL');
+
       const baseSujeta      = Number(doc.importe_sin_impuestos) || 0;
       const baseNoSujeta    = Number(datosExtra.base_no_sujeta) || 0;
       const descuentoGlobal = Number(datosExtra.descuento_global) || 0;
@@ -342,6 +356,10 @@ export async function GET(request: NextRequest) {
         descuento_global: descuentoGlobal,
         entidades: entidades,
         is_issued: isIssued,
+        // --- Clasificación fiscal y territorial ---
+        es_extranjero: isForeign,
+        pais: pais,
+        zona_fiscal: zonaFiscal,
         url_archivo: presignedUrl || proxyUrl,
         ...(incluirPermalink ? { permalink: proxyUrl } : {}),
         impuestos,
@@ -351,9 +369,13 @@ export async function GET(request: NextRequest) {
 
     // 8. Filtrar por tipo si se especifica
     if (tipo !== 'todas') {
-      enriched = enriched.filter((doc: any) =>
-        tipo === 'emitidas' ? doc.is_issued : !doc.is_issued
-      );
+      enriched = enriched.filter((doc: any) => {
+        if (tipo === 'emitidas') return doc.is_issued;
+        if (tipo === 'recibidas') return !doc.is_issued && !doc.es_extranjero && !String(doc.tipo_documento || '').toLowerCase().includes('ticket');
+        if (tipo === 'extranjeras') return doc.es_extranjero;
+        if (tipo === 'tickets') return String(doc.tipo_documento || '').toLowerCase().includes('ticket');
+        return true;
+      });
     }
 
     // 9. Filtrar en memoria por proveedor/cliente (partial match)
@@ -406,7 +428,6 @@ export async function GET(request: NextRequest) {
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import { calcularTrimestreExtendido, resolverTrimestreContableImportacion, obtenerPrimerTrimestreAbiertoDelAnio, estaTrimestreCerrado } from '@/lib/trimestre-utils';
-import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 import { runHealthChecksForDocument } from '@/services/health-check-service';
 import connection, { dbName } from '@/lib/db';
 
@@ -962,18 +983,68 @@ export async function POST(request: NextRequest) {
                 }),
               });
             }
+          } else if (countryInfo.isEuropeanUnion) {
+            // Caso UE: Inversión del sujeto pasivo (espejo 472/477)
+            const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'UE';
+            const impuestos = Array.isArray(doc.impuestos) ? doc.impuestos : [];
+            const cuentasSugeridasUE: Record<string, string> = {};
+            if (impuestos.length > 0) {
+              const espejoRows: any[] = [];
+              for (const imp of impuestos) {
+                const tipoImp = (imp.tipo_impuesto || 'IVA').toUpperCase();
+                const porcentaje = Number(imp.porcentaje) || 0;
+                const base = Number(imp.base ?? imp.base_imponible) || 0;
+                const cuota = Number(imp.cuota) || 0;
+
+                espejoRows.push({
+                  documento_id: savedDocId,
+                  id_de_empresa: BigInt(empresaId),
+                  tipo_impuesto: `${tipoImp}_INTRA_SOPORTADO`,
+                  porcentaje,
+                  base_imponible: base,
+                  cuota,
+                  total_con_impuesto: base + cuota,
+                });
+                espejoRows.push({
+                  documento_id: savedDocId,
+                  id_de_empresa: BigInt(empresaId),
+                  tipo_impuesto: `${tipoImp}_INTRA_REPERCUTIDO`,
+                  porcentaje,
+                  base_imponible: base,
+                  cuota: -cuota,
+                  total_con_impuesto: base - cuota,
+                });
+                cuentasSugeridasUE[`${tipoImp}_${Math.round(porcentaje)}_SOPORTADO`] = `472000${Math.round(porcentaje).toString().padStart(2, '0')}`;
+                cuentasSugeridasUE[`${tipoImp}_${Math.round(porcentaje)}_REPERCUTIDO`] = `477000${Math.round(porcentaje).toString().padStart(2, '0')}`;
+              }
+              if (espejoRows.length > 0) {
+                await tx.impuestos_documento.createMany({ data: espejoRows });
+              }
+            }
+            // Incidencia informativa validada
+            const descIntra = `Proveedor intracomunitario (${paisNombre}). Se aplicó inversión del sujeto pasivo: IVA auto-repercutido (espejo 472/477).`;
+            await tx.incidencias_documento.create({
+              data: {
+                documento_id: savedDocId,
+                id_de_empresa: BigInt(empresaId),
+                descripcion: descIntra,
+                incidencia: false,
+                validado: true,
+              }
+            });
           } else {
+            // Extracomunitario (USA/Anthropic, no UE): 100% gasto, 0 IVA en Modelo 303, incidencia informativa validada
             const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'Extranjero';
             const paisCodigo = countryInfo.countryCode && countryInfo.countryCode !== paisNombre ? ` (${countryInfo.countryCode})` : '';
-            const descExtranjero = `Proveedor extranjero detectado: ${paisNombre}${paisCodigo}. Factura de origen internacional. El IVA de origen no es deducible en España (Modelo 303), por lo que el total computa íntegramente como gasto contable. Requiere validación.`;
+            const descExtranjero = `Proveedor extracomunitario detectado: ${paisNombre}${paisCodigo}. Factura internacional no UE. El total computa íntegramente como gasto contable.`;
 
             await tx.incidencias_documento.create({
               data: {
                 documento_id: savedDocId,
                 id_de_empresa: BigInt(empresaId),
                 descripcion: descExtranjero,
-                incidencia: true,
-                validado: false,
+                incidencia: false,
+                validado: true,
               }
             });
           }

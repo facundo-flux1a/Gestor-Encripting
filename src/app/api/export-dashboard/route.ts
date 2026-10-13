@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
         d.año_trimestre,
         d.num_trimestre
       FROM documentos d
-      WHERE LOWER(d.tipo_documento) LIKE '%factura%'
+      WHERE (
+        (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+        OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+      )
     `;
 
     const params: any[] = [];

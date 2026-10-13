@@ -171,7 +171,7 @@ export function DocumentosTutorial() {
           element: '[data-tutorial="tabs-filters"]',
           popover: {
             title: 'Paso 3: Categorías y Pestañas',
-            description: 'Clasifica tus comprobantes. Cambia entre Facturas Recibidas (gastos), Facturas Emitidas (ingresos), Otros tipos, y Sin Confirmar.',
+            description: 'Clasifica tus comprobantes. Cambia entre Facturas Recibidas (gastos), Facturas Emitidas (ingresos), Extranjeras (proveedores fuera de España), Tickets (gastos menores), Otros tipos y Sin Confirmar.',
             side: 'bottom', align: 'center'
           }
         },

@@ -741,15 +741,15 @@ export function startDbWriterWorker() {
             console.log(
               `[DbWriterWorker] 🌍 Proveedor extracomunitario (${paisNombre}): IVA no deducible — 100% gasto`
             );
-            const descExtranjero = `Proveedor extracomunitario: ${paisNombre}${paisCodigo}. Factura de origen internacional no UE. El IVA de origen no es deducible en España (Modelo 303), el total computa íntegramente como base del gasto contable. Requiere validación.`;
+            const descExtranjero = `Proveedor extracomunitario: ${paisNombre}${paisCodigo}. Factura de origen internacional no UE. El IVA de origen no es deducible en España (Modelo 303), el total computa íntegramente como base del gasto contable.`;
 
             await tx.incidencias_documento.create({
               data: {
                 documento_id: doc.id,
                 id_de_empresa: BigInt(empresaId),
                 descripcion: descExtranjero,
-                incidencia: true,
-                validado: false,
+                incidencia: false,
+                validado: true,
               }
             });
           }

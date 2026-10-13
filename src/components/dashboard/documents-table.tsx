@@ -1229,7 +1229,7 @@ export function DocumentsTable({
   customTypes?: string[],
   onMove?: (docIds: number[], targetTipo: string) => void,
   onDragStart?: (selectedIds: number[]) => void,
-  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros',
+  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros',
   footerValues?: {
     base: number;
     iva: number;

@@ -129,11 +129,12 @@ export async function POST(request: NextRequest) {
       }
 
       if (incluirSinConfirmar) {
-        query += ` AND (LOWER(d.tipo_documento) LIKE '%factura%' OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%nota%cr%dito%')`;
+        query += ` AND (LOWER(d.tipo_documento) LIKE '%factura%' OR LOWER(d.tipo_documento) LIKE '%abono%' OR LOWER(d.tipo_documento) LIKE '%ticket%' OR LOWER(d.tipo_documento) LIKE '%nota%cr%dito%')`;
       } else {
         query += ` AND (
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         )`;
       }
@@ -203,6 +204,21 @@ export async function POST(request: NextRequest) {
           doc.tipo_documento?.toLowerCase().includes('emitida') ||
           !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
 
+        // Detectar extranjero desde datos_extra
+        let datosExtraDoc: any = {};
+        try {
+          if (typeof doc.datos_extra === 'string') datosExtraDoc = JSON.parse(doc.datos_extra);
+          else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtraDoc = doc.datos_extra;
+        } catch { datosExtraDoc = {}; }
+        const isForeign = Boolean(
+          datosExtraDoc.es_proveedor_extranjero_ue ||
+          datosExtraDoc.zona_emisor === 'UE' ||
+          datosExtraDoc.zona_emisor === 'TERCER_PAIS' ||
+          datosExtraDoc.region === 'USA'
+        );
+        const pais = datosExtraDoc.pais_emisor || (isForeign ? 'EXTRANJERO' : 'ES');
+        const zonaFiscal = datosExtraDoc.zona_emisor || (isForeign ? 'TERCER_PAIS' : 'NACIONAL');
+
         return {
           id: doc.id,
           tipo_documento: doc.tipo_documento,
@@ -217,6 +233,10 @@ export async function POST(request: NextRequest) {
           año: doc.año_trimestre,
           trimestre: doc.num_trimestre,
           is_issued: isIssued,
+          // --- Clasificación fiscal y territorial ---
+          es_extranjero: isForeign,
+          pais: pais,
+          zona_fiscal: zonaFiscal,
           url_archivo: publicUrl,
           entidades: entities,
           impuestos: impByDoc[doc.id] || [],
@@ -225,7 +245,13 @@ export async function POST(request: NextRequest) {
       });
 
       if (tipo !== 'todas') {
-        enriched = enriched.filter(d => tipo === 'emitidas' ? d.is_issued : !d.is_issued);
+        enriched = enriched.filter((d: any) => {
+          if (tipo === 'emitidas') return d.is_issued;
+          if (tipo === 'recibidas') return !d.is_issued && !d.es_extranjero && !String(d.tipo_documento || '').toLowerCase().includes('ticket');
+          if (tipo === 'extranjeras') return d.es_extranjero;
+          if (tipo === 'tickets') return String(d.tipo_documento || '').toLowerCase().includes('ticket');
+          return true;
+        });
       }
 
       if (proveedor) {

@@ -214,7 +214,9 @@ export function runFiscalGuards(
         message: `Proveedor extranjero (${countryInfo.countryName || countryInfo.countryCode}): IVA no deducible en España`,
         details: { cif: cifEmisor, countryCode: countryInfo.countryCode, countryName: countryInfo.countryName },
       });
-    } else {
+    } else if (!esTicket) {
+      // Tickets: el NIF del emisor puede ser un código interno del TPV, fecha, o formato no estándar.
+      // No se considera incidencia bloqueante — el gasto ya es deducible con el ticket físico.
       failures.push({
         code: 'CIF_FORMATO_INVALIDO',
         message: `CIF emisor con formato inválido: ${cifEmisor}`,
@@ -225,7 +227,8 @@ export function runFiscalGuards(
 
   if (!esTicket && tipoInfo.esEmitida && !cifReceptor) {
     failures.push({ code: 'CIF_RECEPTOR_AUSENTE', message: 'CIF del receptor/cliente ausente en factura emitida' });
-  } else if (cifReceptor && !looksLikeSpanishTaxId(cifReceptor)) {
+  } else if (!esTicket && cifReceptor && !looksLikeSpanishTaxId(cifReceptor)) {
+    // Tickets: el CIF del receptor (empresa) tampoco suele ser validable desde el ticket físico.
     failures.push({
       code: 'CIF_FORMATO_INVALIDO',
       message: `CIF receptor con formato inválido: ${cifReceptor}`,

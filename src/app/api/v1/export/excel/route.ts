@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
 import { getPresignedUrl, getExcelPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
-import { normalizeInvoiceNumber } from '@/services/ingestion/normalize';
+import { normalizeInvoiceNumber, detectCountryFromCIF } from '@/services/ingestion/normalize';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +14,15 @@ export const dynamic = 'force-dynamic';
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Excluye Retenciones, Recargos y aplazamientos — solo cuenta filas de IVA puro
+// Excluye Retenciones, Recargos, aplazamientos e IVA espejo intracomunitario — solo cuenta filas de IVA comercial
 const isRealIvaDetail = (detail: any): boolean => {
   const tipo = (detail.tipo_impuesto || '').toUpperCase();
   return (
     !tipo.includes('RECARGO') &&
     !tipo.includes('RETENCION') &&
     !tipo.includes('IRPF') &&
-    !tipo.includes('APLAZO')
+    !tipo.includes('APLAZO') &&
+    !tipo.includes('INTRA')
   );
 };
 
@@ -124,7 +125,8 @@ export async function POST(request: NextRequest) {
     const año: number | null = añoRaw ? Number(añoRaw) : null;
     const proveedor: string | null = proveedorRaw?.trim() || null;
     const cliente: string | null = clienteRaw?.trim() || null;
-    const tipo: 'emitidas' | 'recibidas' | 'todas' = (tipoRaw as any) || 'todas';
+    const ALLOWED_TIPOS = ['emitidas', 'recibidas', 'extranjeras', 'tickets', 'todas'];
+    const tipo = ((tipoRaw as string) || 'todas').toLowerCase();
 
     const expiresRaw = body.url_expires_in ?? body.expires_in ?? searchParams.get('url_expires_in') ?? searchParams.get('expires_in');
     const urlExpiresIn = parsePresignedExpiresParam(expiresRaw, getExcelPresignedUrlExpires());
@@ -133,9 +135,9 @@ export async function POST(request: NextRequest) {
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
       return NextResponse.json({ error: '"trimestre" debe ser 1, 2, 3 o 4.' }, { status: 400 });
     }
-    if (!['emitidas', 'recibidas', 'todas'].includes(tipo)) {
+    if (!ALLOWED_TIPOS.includes(tipo)) {
       return NextResponse.json(
-        { error: '"tipo" debe ser "emitidas", "recibidas" o "todas".' },
+        { error: `"tipo" debe ser uno de: ${ALLOWED_TIPOS.map(t => `'${t}'`).join(', ')}.` },
         { status: 400 }
       );
     }
@@ -165,6 +167,7 @@ export async function POST(request: NextRequest) {
         AND (
           (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+          OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
           OR (LOWER(d.tipo_documento) LIKE '%nota%cr%dito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
         )
         AND d.id NOT IN (
@@ -272,13 +275,37 @@ export async function POST(request: NextRequest) {
         !!(empresaCifGlobal && emisorCif && emisorCif === empresaCifGlobal);
       const iva_details = ivaByDoc[doc.doc_id] || [];
 
-      return { ...doc, entidades, isIssued, iva_details, nombre_de_empresa: empresaNombreGlobal };
+      let datosExtraDoc: any = {};
+      try {
+        if (typeof doc.datos_extra === 'string') datosExtraDoc = JSON.parse(doc.datos_extra);
+        else if (doc.datos_extra && typeof doc.datos_extra === 'object') datosExtraDoc = doc.datos_extra;
+      } catch { datosExtraDoc = {}; }
+
+      const countryInfo = detectCountryFromCIF(emisorCif || null);
+      const isForeign = Boolean(
+        datosExtraDoc.es_proveedor_extranjero_ue ||
+        datosExtraDoc.zona_emisor === 'UE' ||
+        datosExtraDoc.zona_emisor === 'TERCER_PAIS' ||
+        datosExtraDoc.region === 'USA' ||
+        (countryInfo && countryInfo.isForeign)
+      );
+      const isUE = Boolean(datosExtraDoc.zona_emisor === 'UE' || (countryInfo && countryInfo.isEuropeanUnion));
+      const countryCode = datosExtraDoc.pais_emisor || countryInfo?.countryCode || (isForeign ? 'EXTRANJERO' : 'ES');
+
+      return { ...doc, entidades, isIssued, isForeign, isUE, countryCode, iva_details, nombre_de_empresa: empresaNombreGlobal };
     });
 
     // 8. Filtrar por tipo si se especifica
-    let filtered = tipo === 'todas'
-      ? enriched
-      : enriched.filter((d: any) => tipo === 'emitidas' ? d.isIssued : !d.isIssued);
+    let filtered = enriched;
+    if (tipo === 'emitidas') {
+      filtered = enriched.filter((d: any) => d.isIssued);
+    } else if (tipo === 'recibidas') {
+      filtered = enriched.filter((d: any) => !d.isIssued && !d.isForeign && !String(d.tipo_documento || '').toLowerCase().includes('ticket'));
+    } else if (tipo === 'extranjeras') {
+      filtered = enriched.filter((d: any) => d.isForeign);
+    } else if (tipo === 'tickets') {
+      filtered = enriched.filter((d: any) => String(d.tipo_documento || '').toLowerCase().includes('ticket'));
+    }
 
     if (proveedor) {
       const term = proveedor.toLowerCase();
@@ -316,12 +343,23 @@ export async function POST(request: NextRequest) {
     // ── HOJA 1: DOCUMENTOS ──────────────────────────────────────────────────
     // ── Descubrimiento dinámico de tasas de IVA desde los datos reales ─────
     const _discoveredRates = new Set<number>([21, 15, 10, 4, 0]); // fallback tasas estándar
+    // Tasas INTRA descubiertas dinámicamente (p.ej. 19% para docs alemanes)
+    const _discoveredIntraRates = new Set<number>();
     filtered.forEach((doc: any) => {
       (doc.iva_details || []).forEach((i: any) => {
-        if (isRealIvaDetail(i)) _discoveredRates.add(Math.round(Number(i.porcentaje)));
+        if (isRealIvaDetail(i)) {
+          _discoveredRates.add(Math.round(Number(i.porcentaje)));
+        } else {
+          const tipo = (i.tipo_impuesto || '').toUpperCase();
+          // Solo registrar INTRA_SOPORTADO (el que tiene importe real positivo)
+          if (tipo.includes('INTRA') && tipo.includes('SOPORTADO')) {
+            _discoveredIntraRates.add(Math.round(Number(i.porcentaje)));
+          }
+        }
       });
     });
     const VAT_RATES = Array.from(_discoveredRates).sort((a, b) => b - a);
+    const INTRA_RATES = Array.from(_discoveredIntraRates).sort((a, b) => b - a);
 
     const dataRows = filtered.map((doc: any) => {
       let rowDatosExtra: any = {};
@@ -350,6 +388,8 @@ export async function POST(request: NextRequest) {
         'CIF Emisor': doc.entidades.emisor?.cif || doc.entidades.proveedor?.cif || '',
         'Receptor / Cliente': doc.entidades.receptor?.nombre || doc.entidades.cliente?.nombre || '',
         'CIF Receptor': doc.entidades.receptor?.cif || doc.entidades.cliente?.cif || '',
+        'Extranjero': doc.isForeign ? (doc.isUE ? 'UE' : 'Extracomunitario') : 'No',
+        'País': doc.countryCode || (doc.isForeign ? 'Extranjero' : 'ES'),
         'Moneda': doc.moneda || 'EUR',
         'Observaciones': doc.observaciones || '',
         'Enlace PDF': presignedUrl,
@@ -367,6 +407,16 @@ export async function POST(request: NextRequest) {
         if (rate > 0) {
           row[`IVA ${rate}%`] = detail ? Number(detail.cuota) || 0 : 0;
         }
+      });
+
+      // Columnas IVA INTRA (espejo) — autorepercusión intracomunitaria
+      // Se muestra por separado para no mezclar con el IVA comercial normal
+      INTRA_RATES.forEach(rate => {
+        const intraDetail = (doc.iva_details || []).find((i: any) => {
+          const tipo = (i.tipo_impuesto || '').toUpperCase();
+          return tipo.includes('INTRA') && tipo.includes('SOPORTADO') && Math.round(Number(i.porcentaje)) === rate;
+        });
+        row[`IVA INTRA ${rate}% (espejo)`] = intraDetail ? Math.abs(Number(intraDetail.cuota) || 0) : 0;
       });
 
       // Retenciones
@@ -408,6 +458,7 @@ export async function POST(request: NextRequest) {
     // Columnas numéricas dinámicas (una por tasa descubierta)
     const numCols = [
       ...VAT_RATES.flatMap(r => r > 0 ? [`Base ${r}%`, `IVA ${r}%`] : [`Base ${r}%`]),
+      ...INTRA_RATES.map(r => `IVA INTRA ${r}% (espejo)`),
       'Base No Sujeta', 'Retención', 'Recargo de Equiv.', 'Descuento', 'Base Imponible', 'Total Factura'
     ];
     const totalsRow: Record<string, any> = { 'Tipo': 'TOTALES' };
@@ -444,6 +495,17 @@ export async function POST(request: NextRequest) {
             (i.tipo_impuesto || '').toUpperCase().includes('RECARGO')
           );
           return sum + (r ? Math.abs(Number(r.cuota) || 0) : 0);
+        }
+        // Columnas IVA INTRA (espejo)
+        if (col.includes('INTRA') && col.includes('espejo')) {
+          const rateMatchIntra = col.match(/\d+/);
+          if (!rateMatchIntra) return sum;
+          const intraRate = Number(rateMatchIntra[0]);
+          const intraD = (doc.iva_details || []).find((i: any) => {
+            const tipo = (i.tipo_impuesto || '').toUpperCase();
+            return tipo.includes('INTRA') && tipo.includes('SOPORTADO') && Math.round(Number(i.porcentaje)) === intraRate;
+          });
+          return sum + (intraD ? Math.abs(Number(intraD.cuota) || 0) : 0);
         }
         const rateMatch = col.match(/\d+/);
         if (!rateMatch) return sum;

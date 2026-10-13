@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         AND (
             (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(d.tipo_documento) LIKE '%abono%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
+            OR (LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(d.tipo_documento) LIKE '%nota%crédito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(d.tipo_documento) LIKE '%nota%credito%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
             OR (LOWER(d.tipo_documento) LIKE '%albar%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -260,6 +261,18 @@ export async function POST(request: NextRequest) {
         const cliente = docEntidades.find(e => e.rol === 'cliente' || e.rol === 'receptor');
         const empresaInfo = empresaMap.get(d.id_de_empresa);
 
+        let dExtra: any = {};
+        try {
+          if (typeof d.datos_extra === 'string') dExtra = JSON.parse(d.datos_extra);
+          else if (d.datos_extra && typeof d.datos_extra === 'object') dExtra = d.datos_extra;
+        } catch { dExtra = {}; }
+        const isForeign = Boolean(
+          dExtra.es_proveedor_extranjero_ue ||
+          dExtra.zona_emisor === 'UE' ||
+          dExtra.zona_emisor === 'TERCER_PAIS' ||
+          dExtra.region === 'USA'
+        );
+
         return {
           id: d.id,
           tipo: d.tipo_documento,
@@ -279,6 +292,8 @@ export async function POST(request: NextRequest) {
           trimestre_cerrado: d.trimestre_cerrado,
           incidencia: d.tiene_incidencia === 1,
           incidencia_razon: '',
+          es_extranjero: isForeign,
+          pais: dExtra.pais_emisor || (isForeign ? 'Extranjero' : 'ES'),
           emisor: emisor?.nombre || '',
           emisor_cif: emisor?.identificador_fiscal || '',
           cliente: cliente?.nombre || '',

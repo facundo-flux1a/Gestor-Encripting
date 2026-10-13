@@ -3,8 +3,10 @@
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { Document } from '@/lib/types'
-import { Receipt } from 'lucide-react'
+import { Receipt, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { generateAdvancedExport } from '@/lib/export-utils'
 
 interface TicketsViewProps {
   documents: Document[]
@@ -36,6 +38,19 @@ export function TicketsView({ documents }: TicketsViewProps) {
   const router = useRouter();
   const activeColumns = React.useMemo(() => detectActiveColumns(documents), [documents]);
 
+  const handleExportTickets = (format: 'excel' | 'csv') => {
+    generateAdvancedExport(
+      documents,
+      activeColumns.map(c => ({ id: c.key, header: c.label })),
+      {
+        filename: 'tickets',
+        format,
+        exportContext: 'documentos_tickets',
+        includeFileUrls: true,
+      }
+    );
+  };
+
   if (documents.length === 0) {
     return (
       <div className="text-center py-12 px-4">
@@ -58,7 +73,7 @@ export function TicketsView({ documents }: TicketsViewProps) {
   return (
     <div className="space-y-3">
       {/* Resumen rápido */}
-      <div className="flex flex-wrap gap-3 pb-1">
+      <div className="flex flex-wrap items-center gap-3 pb-1">
         <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5">
           <Receipt className="h-3.5 w-3.5 text-orange-500" />
           <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
@@ -77,6 +92,17 @@ export function TicketsView({ documents }: TicketsViewProps) {
             <span className="text-xs font-mono font-semibold">{totalIva.toFixed(2)} €</span>
           </div>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExportTickets('excel')}
+            className="h-8 text-xs gap-1.5 hover:border-orange-500/40"
+          >
+            <Download className="h-3.5 w-3.5 text-orange-500" />
+            Exportar Excel
+          </Button>
+        </div>
       </div>
 
       {/* Tabla dinámica */}

@@ -16,7 +16,7 @@ export interface ExportOptions {
     includeFileUrls?: boolean; // Incluir columna de enlace al archivo original en MinIO
     includeEntities?: boolean; // Incluir pestaña con el directorio completo de entidades
     trimestre?: number | null; // Trimestre específico o null para todo el año
-    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+    exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros';
 }
 
 // ==========================================
@@ -135,6 +135,41 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
         return (rawPath ? buildFileUrl(rawPath) : '') || '';
     }
 
+    if (columnId === 'extranjero' || columnId === 'es_extranjero') {
+        const docObj = item?.original || item || {};
+        let dExtra: any = {};
+        try {
+            if (typeof docObj.datos_extra === 'string') dExtra = JSON.parse(docObj.datos_extra);
+            else if (docObj.datos_extra && typeof docObj.datos_extra === 'object') dExtra = docObj.datos_extra;
+        } catch { dExtra = {}; }
+        const isForeign = Boolean(
+            dExtra.es_proveedor_extranjero_ue ||
+            dExtra.zona_emisor === 'UE' ||
+            dExtra.zona_emisor === 'TERCER_PAIS' ||
+            dExtra.region === 'USA' ||
+            docObj.es_extranjero
+        );
+        const isUE = Boolean(dExtra.zona_emisor === 'UE');
+        return isForeign ? (isUE ? 'UE' : 'Extracomunitario') : 'No';
+    }
+
+    if (columnId === 'pais') {
+        const docObj = item?.original || item || {};
+        let dExtra: any = {};
+        try {
+            if (typeof docObj.datos_extra === 'string') dExtra = JSON.parse(docObj.datos_extra);
+            else if (docObj.datos_extra && typeof docObj.datos_extra === 'object') dExtra = docObj.datos_extra;
+        } catch { dExtra = {}; }
+        const isForeign = Boolean(
+            dExtra.es_proveedor_extranjero_ue ||
+            dExtra.zona_emisor === 'UE' ||
+            dExtra.zona_emisor === 'TERCER_PAIS' ||
+            dExtra.region === 'USA' ||
+            docObj.es_extranjero
+        );
+        return dExtra.pais_emisor || docObj.pais || (isForeign ? 'Extranjero' : 'ES');
+    }
+
     if (columnId === '__entidad__') {
         const docObj = item?.original || item || {};
         const entidades = Array.isArray(docObj.entidades) ? docObj.entidades : [];
@@ -198,7 +233,8 @@ const isRealIvaDetail = (detail: any): boolean => {
     return !tipo.includes('retencion') &&
            !tipo.includes('irpf') &&
            !tipo.includes('recargo') &&
-           !tipo.includes('equivalencia');
+           !tipo.includes('equivalencia') &&
+           !tipo.includes('intra');
 };
 
 const getTaxColumnValue = (doc: any, columnId: string, format?: ExportFormat): string | number => {
@@ -359,6 +395,16 @@ export const generateAdvancedExport = (
     }
     if (options.includeFileUrls && !effectiveColumns.some(c => c.id === 'enlace_documento' || c.id === 'url_archivo' || c.id === 'archivo')) {
         effectiveColumns.push({ id: 'enlace_documento', header: 'Enlace Documento' });
+    }
+
+    // Inyectar columnas Extranjero y País si no existen en la tabla para exportaciones de documentos
+    if (!effectiveColumns.some(c => c.id === 'extranjero' || c.id === 'es_extranjero')) {
+        const afterEntidadIdx = effectiveColumns.findIndex(c => c.id === '__entidad__' || c.id === 'proveedor' || c.id === 'cif');
+        const insertPos = afterEntidadIdx !== -1 ? afterEntidadIdx + 1 : effectiveColumns.length;
+        effectiveColumns.splice(insertPos, 0,
+            { id: 'extranjero', header: 'Extranjero' },
+            { id: 'pais', header: 'País' }
+        );
     }
 
     // ── Inyección dinámica de columnas IVA faltantes ──────────────────────
@@ -836,6 +882,8 @@ const generateIvaSummarySheet = (data: any[], options?: ExportOptions): XLSX.Wor
 
         if (ctx === 'documentos_recibidas' && isIssued) return;
         if (ctx === 'documentos_emitidas' && !isIssued) return;
+        if (ctx === 'documentos_extranjero' && isIssued) return;
+        if (ctx === 'documentos_tickets' && isIssued) return;
 
         const targetSum = isIssued ? ingresosSum : gastosSum;
         const absSign = esAbono ? -1 : 1;

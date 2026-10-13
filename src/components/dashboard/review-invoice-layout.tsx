@@ -469,8 +469,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </button>
               </div>
 
-              {/* Sugerencia de cuenta 4100000 */}
-              {cuentaCompra !== '4100000' && (
+              {/* Sugerencia de cuenta 4100000 — solo para no extranjeras.
+                  Para extranjeras ya aparece en el bloque de Cuentas Contables (entidad). */}
+              {!isForeign && cuentaCompra !== '4100000' && (
                 <div className="pt-2 border-t border-blue-500/20 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>💡</span>
@@ -631,8 +632,8 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                   )}
                 </div>
 
-                {/* Impuestos: ocultar para proveedores extranjeros (IVA no deducible) */}
-                {!isForeign && doc.iva_details && doc.iva_details.length > 0 && (
+                {/* Impuestos: mostrar cuando existan líneas fiscales (incluye IVA espejo intracomunitario 472/477) */}
+                {doc.iva_details && doc.iva_details.length > 0 && (
                   <div className="flex flex-col gap-1.5">
                     <p className="text-[11px] font-medium text-violet-300">🧾 Impuestos del documento</p>
                     <div className="rounded-lg border border-violet-500/20 overflow-hidden">
@@ -649,7 +650,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                         <tbody className="divide-y divide-violet-500/10">
                           {(doc.iva_details as any[]).map((imp: any) => {
                             const key = `${imp.tipo_impuesto}_${Math.round(Number(imp.porcentaje))}`;
-                            const sugerida = cuentasImpuestosSugeridas[key];
+                            const fallbackSop = imp.tipo_impuesto?.includes('SOPORTADO') ? `472000${Math.round(Number(imp.porcentaje)).toString().padStart(2, '0')}` : null;
+                            const fallbackRep = imp.tipo_impuesto?.includes('REPERCUTIDO') ? `477000${Math.round(Number(imp.porcentaje)).toString().padStart(2, '0')}` : null;
+                            const sugerida = cuentasImpuestosSugeridas[key] || fallbackSop || fallbackRep;
                             const asignada = impuestosCC[imp.id];
                             const enEdicion = impuestoEditMode === imp.id;
 

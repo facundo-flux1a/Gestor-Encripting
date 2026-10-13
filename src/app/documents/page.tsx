@@ -13,13 +13,14 @@ import { Button } from '@/components/ui/button'
 import { UploadDialog } from '@/components/dashboard/upload-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useDocumentEvents } from '@/hooks/useDocumentEvents'
-import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown, Receipt } from 'lucide-react'
+import { Upload, Loader2, FileText, AlertCircle, TrendingUp, TrendingDown, Receipt, Globe } from 'lucide-react'
+import { detectCountryFromCIF } from '@/services/ingestion/normalize'
 import { TicketsView } from '@/components/dashboard/tickets-view'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { DocumentosTutorialRouter } from '@/components/tutorials/DocumentosTutorialRouter'
 import { useTutorial } from '@/context/tutorial-context'
+import { useDocumentEvents } from '@/hooks/useDocumentEvents'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Suspense } from 'react'
@@ -144,13 +145,14 @@ function DocumentsPageContent() {
   }, [selectedCompanyIds, key, refreshKey, isDemoMode]);
 
   // ✅ CLASIFICACIÓN CORREGIDA: Validación de CIF para abonos
-  const { facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
+  const { facturasEmitidas, facturasRecibidas, facturasExtranjeras, tickets, otrosDocumentos, sinConfirmar } = React.useMemo(() => {
     console.log('═══════════════════════════════════════════════════════');
     console.log('🔍 [CLASIFICACIÓN] INICIO');
     console.log('═══════════════════════════════════════════════════════');
 
     const facturasEmitidas: Document[] = [];
     const facturasRecibidas: Document[] = [];
+    const facturasExtranjeras: Document[] = [];
     const tickets: Document[] = [];
     const otrosDocumentos: Document[] = [];
     const sinConfirmar: Document[] = [];
@@ -181,25 +183,33 @@ function DocumentsPageContent() {
         return;
       }
 
-      // ✅ CLASIFICACIÓN: usar is_issued del backend (misma lógica que Trimestres/Dashboard)
-      // is_issued = 1 → emitida (ingreso), 0 → recibida (gasto)
-      // Fallback: si undefined (doc sin entidades/CIF), usar signo del total
+      // ✅ CLASIFICACIÓN: usar is_issued del backend
       let esEmitida: boolean;
       if (doc.is_issued !== undefined) {
         esEmitida = doc.is_issued === 1;
       } else {
-        // Fallback legacy: facturas emitidas suelen tener total positivo
         esEmitida = (doc.total || 0) > 0;
       }
 
+      // PASO 4: Facturas extranjeras (UE o extracomunitarias)
+      const esExtranjero = Boolean(
+        doc.datos_extra?.es_proveedor_extranjero_ue ||
+        doc.datos_extra?.zona_emisor === 'UE' ||
+        doc.datos_extra?.zona_emisor === 'TERCER_PAIS' ||
+        doc.datos_extra?.region === 'USA' ||
+        (doc.cif && detectCountryFromCIF(doc.cif)?.isForeign)
+      );
+
       if (esEmitida) {
         facturasEmitidas.push(doc);
+      } else if (esExtranjero) {
+        facturasExtranjeras.push(doc);
       } else {
         facturasRecibidas.push(doc);
       }
     });
 
-    return { facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos, sinConfirmar };
+    return { facturasEmitidas, facturasRecibidas, facturasExtranjeras, tickets, otrosDocumentos, sinConfirmar };
   }, [documents]);
 
   const computedFooters = React.useMemo(() => {
@@ -257,10 +267,11 @@ function DocumentsPageContent() {
       sinConfirmar: computeForDocs(sinConfirmar),
       emitidas: computeForDocs(facturasEmitidas),
       recibidas: computeForDocs(facturasRecibidas),
+      extranjeras: computeForDocs(facturasExtranjeras),
       tickets: computeForDocs(tickets),
       otros: computeForDocs(otrosDocumentos)
     };
-  }, [sinConfirmar, facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos]);
+  }, [sinConfirmar, facturasEmitidas, facturasRecibidas, facturasExtranjeras, tickets, otrosDocumentos]);
 
   // Columnas de IVA a ocultar en la pestaña "Otros" (nóminas, contratos, etc.).
   // Computado dinámicamente para incluir cualquier tasa extra que aparezca en los documentos
@@ -302,12 +313,13 @@ function DocumentsPageContent() {
     if (loading || documents.length === 0) return 'sin-confirmar';
 
     if (facturasRecibidas.length > 0) return 'recibidas';
+    if (facturasExtranjeras.length > 0) return 'extranjero';
     if (facturasEmitidas.length > 0) return 'emitidas';
     if (tickets.length > 0) return 'tickets';
     if (otrosDocumentos.length > 0) return 'otros';
 
     return 'sin-confirmar';
-  }, [tabFromUrl, loading, documents.length, facturasRecibidas.length, facturasEmitidas.length, tickets.length, otrosDocumentos.length]);
+  }, [tabFromUrl, loading, documents.length, facturasRecibidas.length, facturasExtranjeras.length, facturasEmitidas.length, tickets.length, otrosDocumentos.length]);
 
   const currentDocuments = React.useMemo(() => {
     switch (activeTab) {
@@ -317,6 +329,8 @@ function DocumentsPageContent() {
         return facturasEmitidas;
       case 'recibidas':
         return facturasRecibidas;
+      case 'extranjero':
+        return facturasExtranjeras;
       case 'tickets':
         return tickets;
       case 'otros':
@@ -324,7 +338,7 @@ function DocumentsPageContent() {
       default:
         return [];
     }
-  }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, tickets, otrosDocumentos]);
+  }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, facturasExtranjeras, tickets, otrosDocumentos]);
 
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {
@@ -379,6 +393,8 @@ function DocumentsPageContent() {
         'sin-confirmar': 'pending',
         'emitidas': 'emitidas',
         'recibidas': 'recibidas',
+        'extranjero': 'extranjero',
+        'tickets': 'tickets',
         'otros': 'others'
       };
 
@@ -689,6 +705,18 @@ function DocumentsPageContent() {
                       </div>
                     </SelectItem>
 
+                    <SelectItem value="extranjero" className="cursor-pointer py-2.5">
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="flex items-center gap-2 font-medium">
+                          <Globe className="h-4 w-4 text-cyan-500 shrink-0" />
+                          Extranjero
+                        </span>
+                        <Badge variant="secondary" className="ml-auto bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20">
+                          {facturasExtranjeras.length}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+
                     <SelectItem value="tickets" className="cursor-pointer py-2.5">
                       <div className="flex items-center justify-between w-full gap-4">
                         <span className="flex items-center gap-2 font-medium">
@@ -783,6 +811,22 @@ function DocumentsPageContent() {
                       className="ml-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 transition-all duration-300 hover:scale-110 hover:bg-blue-500/20"
                     >
                       {facturasRecibidas.length}
+                    </Badge>
+                  </TabsTrigger>
+
+                  {/* Facturas Extranjeras */}
+                  <TabsTrigger
+                    value="extranjero"
+                    disabled={isTutorialActive && currentStep === 3}
+                    className="flex items-center gap-2 transition-all duration-300 hover:scale-105 data-[state=active]:bg-cyan-500/10 data-[state=active]:text-cyan-600 dark:data-[state=active]:text-cyan-400 data-[state=active]:shadow-lg data-[state=active]:shadow-cyan-500/20"
+                  >
+                    <Globe className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12 text-cyan-500" />
+                    <span className="whitespace-nowrap">Extranjero</span>
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20 transition-all duration-300 hover:scale-110 hover:bg-cyan-500/20"
+                    >
+                      {facturasExtranjeras.length}
                     </Badge>
                   </TabsTrigger>
 
@@ -935,7 +979,7 @@ function DocumentsPageContent() {
                     No hay facturas recibidas
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Aún no se han registrado facturas recibidas
+                    Aún no se han registrado facturas recibidas locales
                   </p>
                 </div>
               ) : (
@@ -949,6 +993,45 @@ function DocumentsPageContent() {
                     onDocumentChanged={handleDocumentChanged}
                     onDragStart={handleDragStart}
                     footerValues={computedFooters.recibidas}
+                  />
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Facturas Extranjeras */}
+            <TabsContent value="extranjero" className="space-y-4 animate-in fade-in duration-300">
+              {isTabChanging ? (
+                <div className="flex items-center justify-center py-24">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-cyan-500" />
+                    <p className="text-sm text-muted-foreground animate-pulse">
+                      Cargando facturas extranjeras...
+                    </p>
+                  </div>
+                </div>
+              ) : facturasExtranjeras.length === 0 ? (
+                <div className="text-center py-12 px-4">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4 transition-all duration-300 hover:bg-cyan-500/10 hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-110">
+                    <Globe className="h-6 w-6 text-muted-foreground transition-all duration-300 hover:text-cyan-500 hover:scale-110" />
+                  </div>
+                  <h3 className="text-base font-semibold mb-2 transition-colors duration-300 hover:text-cyan-600">
+                    No hay facturas de proveedores extranjeros
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Las facturas de proveedores de la UE y extracomunitarios aparecerán aquí
+                  </p>
+                </div>
+              ) : (
+                <div data-tutorial="documents-table">
+                  <DocumentsTable
+                    documents={facturasExtranjeras}
+                    filename="facturas_extranjeras"
+                    exportContext="documentos_extranjero"
+                    viewId="documentos-facturas-extranjeras"
+                    enableColumnPersistence={true}
+                    onDocumentChanged={handleDocumentChanged}
+                    onDragStart={handleDragStart}
+                    footerValues={computedFooters.extranjeras}
                   />
                 </div>
               )}
