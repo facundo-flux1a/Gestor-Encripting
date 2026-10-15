@@ -406,25 +406,66 @@ Un ticket (o "factura simplificada") es un comprobante de compra emitido por un 
 **REGLA FISCAL IMPORTANTE:**
 - Tickets sin CIF receptor → IVA NO deducible (Hacienda no lo permite sin factura completa)
 - Restaurantes y hostelería → IVA NUNCA deducible, aunque exista factura completa con CIF (restricción expresa de la Ley del IVA española, art. 96)
-- En ambos casos: TODO el importe es gasto. No se separa base ni IVA.
+- "IVA INCLUIDO: X%" sin desglose numérico → NO es suficiente para deducir (Hacienda lo rechaza). En estos casos el IVA va incluido en el gasto total y no se separa.
+- Solo es válido para deducción el IVA que aparece con base imponible y cuota desglosadas en euros en el propio ticket.
 
 **COMPORTAMIENTO OBLIGATORIO AL DETECTAR UN TICKET:**
 1. tipo_documento: SIEMPRE "TICKET" (exactamente así, en mayúsculas, sin variantes)
-2. importe_total: el total del ticket tal como aparece
-3. importe_sin_iva: igual que importe_total (todo es gasto, no hay IVA deducible)
-4. totales_por_impuesto: array vacío []
-5. NO intentar clasificar como EMITIDA/RECIBIDA
-6. ⚠️ REGLA CRÍTICA DE INCIDENCIAS EN TICKETS: La ausencia de CIF o nombre del cliente en un ticket es COMPLETAMENTE NORMAL y NO genera incidencia bajo ningún concepto. NUNCA marques incidencia solo porque falta el cliente en un ticket.
-7. empresa_emisora: extraer nombre, CIF del negocio, dirección si aparecen
-8. cliente: Si el ticket incluye explícitamente el CIF o nombre del cliente (ticket nominal), extráelos. Si no aparecen, deja el objeto cliente vacío — es lo habitual y correcto.
+   ⚠️ TICKET RECTIFICATIVO: Si el documento dice "FACTURA RECTIFICATIVA SIMPLIFICADA", "ticket de anulación", "ticket de abono" o similar, el tipo_documento sigue siendo "TICKET". Adicionalmente debes añadir: es_abono: true (campo extra de referencia interna, no cambia el tipo).
 
-**EJEMPLO DE SALIDA PARA UN TICKET DE RESTAURANTE:**
+2. importe_total: el total del ticket tal como aparece (negativo si es una anulación/rectificativa)
+
+3. totales_por_impuesto y importe_sin_iva — sigue estas reglas en orden:
+
+   **CASO A — El ticket tiene CIF/NIF del cliente/receptor Y tiene base imponible y cuota desglosadas en euros (ej: "BASE: 74,38 € | IVA 21%: 15,62 €"):**
+   → totales_por_impuesto: extrae el desglose real: [{ "tipo_iva": "IVA", "porcentaje": 21, "base_imponible": 74.38, "cuota_iva": 15.62 }]
+   → importe_sin_iva: la base imponible real (ej: 74.38)
+   NOTA: Solo aplica cuando los importes de base y cuota están explícitos con valores numéricos en el documento.
+
+   **CASO B — Todo lo demás (sin CIF receptor, o solo dice "IVA INCLUIDO: X%", o es hostelería/restauración, o no hay desglose numérico):**
+   → totales_por_impuesto: []
+   → importe_sin_iva: igual que importe_total (todo es gasto)
+
+4. NO intentar clasificar como EMITIDA/RECIBIDA
+5. ⚠️ REGLA CRÍTICA DE INCIDENCIAS EN TICKETS: La ausencia de CIF o nombre del cliente en un ticket es COMPLETAMENTE NORMAL y NO genera incidencia bajo ningún concepto. NUNCA marques incidencia solo porque falta el cliente en un ticket.
+6. empresa_emisora: extraer nombre, CIF del negocio, dirección si aparecen
+7. cliente: Si el ticket incluye explícitamente el CIF o nombre del cliente (ticket nominal), extráelos. Si no aparecen, deja el objeto cliente vacío — es lo habitual y correcto.
+8. categoria_operacion: OBLIGATORIO. Clasifica el ticket con EXACTAMENTE UNO de los siguientes valores fijos (PROHIBIDO inventar texto libre o usar valores distintos):
+
+**VALORES PERMITIDOS PARA categoria_operacion (copiar exacto, sin ninguna variación):**
+- "venta_al_por_menor" — tiendas al por menor, comercios, kioscos, bazar
+- "venta_ambulancia" — venta ambulante, mercadillos, ferias
+- "servicio_domicilio" — servicios prestados en el domicilio del cliente
+- "transporte_personas" — taxi, VTC, autobús, tren, metro, barco, tranvía, avión
+- "hosteleria_restauracion" — restaurantes, bares, cafeterías, catering
+- "sala_baile_discoteca" — discotecas, salas de baile, clubs nocturnos
+- "telefonia_cabina" — llamadas de cabina telefónica, tarjetas anónimas
+- "peluqueria_belleza" — peluquerías, salones de belleza, estética, spa, manicura
+- "instalacion_deportiva" — gimnasios, piscinas, pistas de pádel, tenis, deportes
+- "revelado_fotografia" — revelado de fotos, estudios fotográficos
+- "aparcamiento" — aparcamientos, parkings, garajes, parking
+- "alquiler_peliculas" — alquiler de películas, videoclubs
+- "tintoreria_lavanderia" — tintorerías, lavanderías, limpiezas de ropa
+- "autopista_peaje" — peajes, autopistas de pago, autovías de pago
+- "servicios_profesionales" — abogados, gestores, asesores, arquitectos, consultores
+- "suministro_energia" — electricidad, gas, agua, energía, suministros
+- "farmacia_parafarmacia" — farmacias, parafarmacias
+- "combustible" — gasolineras, estaciones de servicio, carburante, gasoil, gasolina, diésel, combustibles
+- "alojamiento_hotel" — hoteles, hostales, apartamentos turísticos, alojamiento
+- "otro_no_listado" — cualquier sector que no encaje en ninguna categoría anterior
+- "desconocido" — cuando el tipo de negocio no puede determinarse con certeza
+
+9. categoria_operacion_confianza: número decimal entre 0.0 y 1.0. Si dudas, usa un valor bajo (< 0.60) y asigna "desconocido".
+
+**EJEMPLO CASO B — Ticket de restaurante (sin NIF receptor, sin desglose → todo gasto):**
 \`\`\`json
 {
   "tipo_documento": "TICKET",
   "importe_total": 122.60,
   "importe_sin_iva": 122.60,
   "totales_por_impuesto": [],
+  "categoria_operacion": "hosteleria_restauracion",
+  "categoria_operacion_confianza": 0.97,
   "empresa_emisora": {
     "nombre": "LA PIAZZA MAS CAMARENA",
     "cif": "B02723401",
@@ -437,7 +478,31 @@ Un ticket (o "factura simplificada") es un comprobante de compra emitido por un 
 }
 \`\`\`
 
+**EJEMPLO CASO A — Ticket de gasolinera con NIF receptor y desglose explícito (base + cuota en euros → IVA potencialmente deducible):**
+\`\`\`json
+{
+  "tipo_documento": "TICKET",
+  "importe_total": 90.00,
+  "importe_sin_iva": 74.38,
+  "totales_por_impuesto": [
+    { "tipo_iva": "IVA", "porcentaje": 21, "base_imponible": 74.38, "cuota_iva": 15.62 }
+  ],
+  "categoria_operacion": "combustible",
+  "categoria_operacion_confianza": 0.99,
+  "empresa_emisora": {
+    "nombre": "ESTACION DEMO ENERGIA",
+    "cif": "A00000010",
+    "direccion": "CTRA. FICTICIA KM 4, MADRID"
+  },
+  "cliente": {
+    "nombre": "DEMO CLIENTE S.L.",
+    "cif": "B00000002"
+  }
+}
+\`\`\`
+
 ---
+
 
 🔥 EXTRACCIÓN OBLIGATORIA Y EXHAUSTIVA: LÍNEAS DE PRODUCTOS (CRÍTICO - TOLERANCIA CERO)
 
@@ -791,6 +856,8 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
   "tipo_documento": "",
   "categoria_principal": "",
   "subcategoria": "",
+  "categoria_operacion": "",
+  "categoria_operacion_confianza": 1.0,
   "incidencia": false,
   "descripcion_incidencia": "",
   "tipos_incidencia": [],

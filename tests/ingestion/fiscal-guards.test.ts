@@ -122,4 +122,63 @@ describe('runFiscalGuards', () => {
     expect(r.ok).toBe(false);
     expect(r.failures.some((f) => f.code === 'FECHA_CALENDARIO_INVALIDA')).toBe(true);
   });
+
+  describe('tickets (facturas simplificadas)', () => {
+    it('acepta ticket restaurante <= 3.000 €', () => {
+      const doc = {
+        tipo_documento: 'TICKET',
+        categoria_operacion: 'hosteleria_restauracion',
+        categoria_operacion_confianza: 0.95,
+        empresa_emisora: { nombre: 'Restaurante SL', cif: 'B12345678' },
+        cliente: { nombre: '', cif: '' },
+        documento: {
+          importe_total: 150,
+          importe_sin_iva: 150,
+          fecha_emision: '2026-05-10',
+        },
+        totales_por_impuesto: [],
+      } as any;
+      const r = runFiscalGuards(doc, { now });
+      expect(r.ok).toBe(true);
+      expect((doc as any).iva_deducible).toBe(false);
+    });
+
+    it('rechaza ticket > 3.000 € por límite absoluto ilegal', () => {
+      const doc = {
+        tipo_documento: 'TICKET',
+        categoria_operacion: 'hosteleria_restauracion',
+        categoria_operacion_confianza: 0.95,
+        empresa_emisora: { nombre: 'Restaurante SL', cif: 'B12345678' },
+        cliente: { nombre: '', cif: '' },
+        documento: {
+          importe_total: 3500,
+          importe_sin_iva: 3500,
+          fecha_emision: '2026-05-10',
+        },
+        totales_por_impuesto: [],
+      } as any;
+      const r = runFiscalGuards(doc, { now });
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.code === 'TICKET_SUPERA_LIMITE_ABSOLUTO')).toBe(true);
+    });
+
+    it('rechaza ticket de sector no habilitado cuando supera 400 €', () => {
+      const doc = {
+        tipo_documento: 'TICKET',
+        categoria_operacion: 'servicios_profesionales',
+        categoria_operacion_confianza: 0.9,
+        empresa_emisora: { nombre: 'Despacho Legal', cif: 'B12345678' },
+        cliente: { nombre: '', cif: '' },
+        documento: {
+          importe_total: 800,
+          importe_sin_iva: 800,
+          fecha_emision: '2026-05-10',
+        },
+        totales_por_impuesto: [],
+      } as any;
+      const r = runFiscalGuards(doc, { now });
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.code === 'TICKET_SECTOR_NO_HABILITADO')).toBe(true);
+    });
+  });
 });

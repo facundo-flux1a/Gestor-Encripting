@@ -18,6 +18,7 @@ import {
   parseIsoDateParts,
   utcToday,
 } from './date-utils';
+import { validateTicketLimits } from './ticket-validator';
 
 export type FiscalGuardCode =
   | 'CIF_EMISOR_AUSENTE'
@@ -32,7 +33,11 @@ export type FiscalGuardCode =
   | 'SIN_IMPORTES'
   | 'FECHA_CALENDARIO_INVALIDA'
   | 'FECHA_EMISION_FUTURA'
-  | 'FECHA_EMISION_IMPLAUSIBLE';
+  | 'FECHA_EMISION_IMPLAUSIBLE'
+  | 'TICKET_SUPERA_LIMITE_ABSOLUTO'
+  | 'TICKET_SECTOR_NO_HABILITADO'
+  | 'TICKET_MONEDA_NO_EUR'
+  | 'TICKET_CATEGORIA_REVISAR';
 
 export interface FiscalGuardFailure {
   code: FiscalGuardCode;
@@ -244,6 +249,45 @@ export function runFiscalGuards(
     });
   }
 
+  // ── Validación de límites fiscales para tickets (RD 1619/2012 y Art. 96/97 LIVA) ──
+  if (esTicket) {
+    const nested = (doc as any).documento || {};
+    const categoriaOperacion = (doc as any).categoria_operacion ?? nested.categoria_operacion ?? null;
+    const categoriaConfianza = Number(
+      (doc as any).categoria_operacion_confianza ?? nested.categoria_operacion_confianza ?? 1
+    );
+    const moneda = (doc as any).moneda ?? nested.moneda ?? 'EUR';
+    const esRectificativa = Boolean(doc.es_abono || tipo.includes('ABONO') || tipo.includes('RECTIFICATIVA'));
+    const tieneNifReceptor = Boolean(cifReceptor && cifReceptor.length > 0);
+    const tieneCuotaDesglosada = impuestos.some((i) => Number(i.cuota_iva ?? 0) > 0);
+
+    const ticketResult = validateTicketLimits({
+      importeTotal: total,
+      categoriaOperacion,
+      categoriaConfianza,
+      moneda,
+      tieneNifReceptor,
+      tieneCuotaDesglosada,
+      esFacturaRectificativa: esRectificativa,
+    });
+
+    (doc as any).iva_deducible = ticketResult.iva_deducible;
+
+    if (ticketResult.status !== 'valido') {
+      failures.push({
+        code: ticketResult.guardCode || 'TICKET_CATEGORIA_REVISAR',
+        message: ticketResult.motivo,
+        details: {
+          status: ticketResult.status,
+          nivel: ticketResult.nivel,
+          categoriaOperacion,
+          categoriaConfianza,
+          iva_deducible: ticketResult.iva_deducible,
+        },
+      });
+    }
+  }
+
   if (!esTicket && opts?.empresaCif) {
     const empresaCif = normalizeCIF(opts.empresaCif);
     
@@ -276,10 +320,14 @@ export function runFiscalGuards(
     })
   );
 
-  if (impuestos.length > 0 || (total !== 0 && base !== 0)) {
-    const math = validateMathBalance(total, base, impuestos, 0.05, base_no_sujeta, descuento_global);
+  const impuestosBalance = (esTicket && !(doc as any).iva_deducible && base === total)
+    ? []
+    : impuestos;
+
+  if (impuestosBalance.length > 0 || (total !== 0 && base !== 0)) {
+    const math = validateMathBalance(total, base, impuestosBalance, 0.05, base_no_sujeta, descuento_global);
     // tolerancia un poco más holgada en guard duro global
-    const mathLoose = validateMathBalance(total, base, impuestos, 0.5, base_no_sujeta, descuento_global);
+    const mathLoose = validateMathBalance(total, base, impuestosBalance, 0.5, base_no_sujeta, descuento_global);
     if (!mathLoose.ok) {
       failures.push({
         code: 'MATH_BALANCE',

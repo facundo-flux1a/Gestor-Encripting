@@ -386,34 +386,51 @@ cliente.nombre = ""  ← no encontrado, pero no se duplica
 🎫 DETECCIÓN Y MANEJO DE TICKETS (CRÍTICO)
 
 **¿QUÉ ES UN TICKET?**
-Un ticket es un comprobante de compra emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, etc.) que NO incluye el CIF/NIF del comprador. También se llama "factura simplificada" en España.
+Un ticket es un comprobante de compra o factura simplificada (Art. 4 RD 1619/2012) emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, comercio, etc.).
 
 **SEÑALES PARA DETECTAR UN TICKET:**
-- No aparece CIF/NIF del receptor/comprador en ninguna parte del documento
-- Encabezado con nombre comercial y CIF del negocio pero sin sección "Cliente" ni "Facturar a"
-- Presencia de campos típicos de TPV: "Mesa", "Terr", "Nº Op.", "Comensales", "Camarero"
-- Palabras: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA", "FACTURA PROFORMA" en establecimientos de hostelería
-- Categoría del negocio: restaurante, bar, cafetería, pizzería, hamburguesería, parking, peaje, gasolinera, supermercado
+- Título o encabezado: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA", "SIMPLIFICADA", "TPV", datos de camarero/mesa/caja.
+- Ausencia frecuente de sección "Cliente" o datos fiscales del comprador (salvo que sea cualificada).
 
-**REGLA FISCAL IMPORTANTE:**
-- Tickets sin CIF receptor → IVA NO deducible (Hacienda no lo permite sin factura completa)
-- Restaurantes y hostelería → IVA NUNCA deducible, aunque exista factura completa con CIF (restricción expresa de la Ley del IVA española, art. 96)
-- En ambos casos: TODO el importe es gasto. No se separa base ni IVA.
+**CATEGORÍA DE OPERACIÓN (ENUM ESTRICTO — Art. 4.2 RD 1619/2012):**
+Al detectar un TICKET, debes clasificarlo con exactamente UNO de estos 21 valores en "categoria_operacion" (PROHIBIDO inventar texto libre):
+- "venta_al_por_menor"      : Comercio al por menor a consumidor final (tienda, supermercado, ropa, etc.)
+- "venta_ambulancia"        : Ventas en ambulancia
+- "servicio_domicilio"      : Ventas o servicios a domicilio del consumidor
+- "transporte_personas"     : Transportes de personas y sus equipajes (taxi, autobús, etc.)
+- "hosteleria_restauracion" : Restaurantes, bares, cafeterías, chocolaterías, comidas para consumo inmediato
+- "sala_baile_discoteca"    : Salas de baile y discotecas
+- "telefonia_cabina"        : Servicios telefónicos de cabinas o tarjetas sin identificar usuario
+- "peluqueria_belleza"      : Peluquería e institutos de belleza
+- "instalacion_deportiva"   : Utilización de instalaciones deportivas (gimnasio, pistas, etc.)
+- "revelado_fotografia"     : Revelado de fotografías y estudios fotográficos
+- "aparcamiento"            : Aparcamiento y estacionamiento de vehículos
+- "alquiler_peliculas"      : Alquiler de películas
+- "tintoreria_lavanderia"   : Tintorería y lavandería
+- "autopista_peaje"         : Utilización de autopistas de peaje
+- "servicios_profesionales" : Servicios jurídicos, médicos, asesoría, consultoría (fuera de Art. 4.2)
+- "suministro_energia"      : Electricidad, gas, agua (fuera de Art. 4.2)
+- "farmacia_parafarmacia"   : Medicamentos y parafarmacia
+- "combustible"             : Estaciones de servicio / carburante
+- "alojamiento_hotel"       : Hotel / hostal / alojamiento turístico (separado de restauración)
+- "otro_no_listado"         : Otro sector no listado
+- "desconocido"             : No es posible determinar el sector del negocio
 
-**COMPORTAMIENTO OBLIGATORIO AL DETECTAR UN TICKET:**
-1. tipo_documento: SIEMPRE "TICKET" (exactamente así, en mayúsculas, sin variantes)
-2. importe_total: el total del ticket tal como aparece
-3. importe_sin_iva: igual que importe_total (todo es gasto, no hay IVA deducible)
-4. totales_por_impuesto: array vacío []
-5. NO intentar clasificar como EMITIDA/RECIBIDA
-6. NO marcar incidencia por falta de CIF del cliente (es normal en tickets)
-7. empresa_emisora: extraer nombre, CIF del negocio, dirección si aparecen
-8. cliente: dejar vacío (no aplica en tickets)
+"categoria_operacion_confianza": número decimal entre 0.0 y 1.0 indicando tu confianza en la categoría asignada (ej. 0.95). Si no estás seguro o es ambiguo, usa < 0.60 o "desconocido".
+
+**TRATAMIENTO FISCAL:**
+- Si es ticket ordinario SIN CIF del comprador (o si es hostelería/restauración): todo es gasto. importe_sin_iva = importe_total, totales_por_impuesto = [], cliente = { nombre: "", cif: "" }.
+- Si el ticket incluye explícitamente el CIF/NIF del comprador Y desglose de IVA (factura simplificada cualificada): extrae el CIF en cliente y las cuotas en totales_por_impuesto.
+- tipo_documento: SIEMPRE "TICKET" (exactamente así).
+- NO intentar clasificar como EMITIDA/RECIBIDA.
+- NO marcar incidencia por falta de CIF del cliente si es ticket estándar sin datos del comprador.
 
 **EJEMPLO DE SALIDA PARA UN TICKET DE RESTAURANTE:**
 \`\`\`json
 {
   "tipo_documento": "TICKET",
+  "categoria_operacion": "hosteleria_restauracion",
+  "categoria_operacion_confianza": 0.95,
   "importe_total": 122.60,
   "importe_sin_iva": 122.60,
   "totales_por_impuesto": [],
@@ -694,6 +711,8 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
   "tipo_documento": "",
   "categoria_principal": "",
   "subcategoria": "",
+  "categoria_operacion": "",
+  "categoria_operacion_confianza": 1.0,
   "incidencia": false,
   "descripcion_incidencia": "",
   "empresa_emisora": {
@@ -822,35 +841,51 @@ Busca el TOTAL por ETIQUETA primero ("TOTAL", "TOTAL FACTURA", "IMPORTE TOTAL", 
 🎫 DETECCIÓN Y MANEJO DE TICKETS (CRÍTICO)
 
 **¿QUÉ ES UN TICKET?**
-Un ticket es un comprobante de compra emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, etc.) que NO incluye el CIF/NIF del comprador. También se llama "factura simplificada" en España.
+Un ticket es un comprobante de compra o factura simplificada (Art. 4 RD 1619/2012) emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, comercio, etc.).
 
 **SEÑALES PARA DETECTAR UN TICKET:**
-- No aparece CIF/NIF del receptor/comprador en ninguna parte del documento
-- Encabezado con nombre comercial y CIF del negocio pero sin sección "Cliente" ni "Facturar a"
-- Presencia de campos típicos de TPV: "Mesa", "Terr", "Nº Op.", "Comensales", "Camarero"
-- Palabras: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA" en establecimientos de hostelería
-- Categoría del negocio: restaurante, bar, cafetería, pizzería, hamburguesería, parking, peaje, gasolinera, supermercado
+- Título o encabezado: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA", "SIMPLIFICADA", "TPV", datos de camarero/mesa/caja.
+- Ausencia frecuente de sección "Cliente" o datos fiscales del comprador (salvo que sea cualificada).
 
-**REGLA FISCAL IMPORTANTE:**
-- Tickets sin CIF receptor → IVA NO deducible (Hacienda no lo permite sin factura completa)
-- Restaurantes y hostelería → IVA NUNCA deducible, aunque exista factura completa con CIF (restricción expresa de la Ley del IVA española, art. 96)
-- En ambos casos: TODO el importe es gasto. No se separa base ni IVA.
+**CATEGORÍA DE OPERACIÓN (ENUM ESTRICTO — Art. 4.2 RD 1619/2012):**
+Al detectar un TICKET, debes clasificarlo con exactamente UNO de estos 21 valores en "CATEGORIA_OPERACION" (PROHIBIDO inventar texto libre):
+- "venta_al_por_menor"      : Comercio al por menor a consumidor final (tienda, supermercado, ropa, etc.)
+- "venta_ambulancia"        : Ventas en ambulancia
+- "servicio_domicilio"      : Ventas o servicios a domicilio del consumidor
+- "transporte_personas"     : Transportes de personas y sus equipajes (taxi, autobús, etc.)
+- "hosteleria_restauracion" : Restaurantes, bares, cafeterías, chocolaterías, comidas para consumo inmediato
+- "sala_baile_discoteca"    : Salas de baile y discotecas
+- "telefonia_cabina"        : Servicios telefónicos de cabinas o tarjetas sin identificar usuario
+- "peluqueria_belleza"      : Peluquería e institutos de belleza
+- "instalacion_deportiva"   : Utilización de instalaciones deportivas (gimnasio, pistas, etc.)
+- "revelado_fotografia"     : Revelado de fotografías y estudios fotográficos
+- "aparcamiento"            : Aparcamiento y estacionamiento de vehículos
+- "alquiler_peliculas"      : Alquiler de películas
+- "tintoreria_lavanderia"   : Tintorería y lavandería
+- "autopista_peaje"         : Utilización de autopistas de peaje
+- "servicios_profesionales" : Servicios jurídicos, médicos, asesoría, consultoría (fuera de Art. 4.2)
+- "suministro_energia"      : Electricidad, gas, agua (fuera de Art. 4.2)
+- "farmacia_parafarmacia"   : Medicamentos y parafarmacia
+- "combustible"             : Estaciones de servicio / carburante
+- "alojamiento_hotel"       : Hotel / hostal / alojamiento turístico (separado de restauración)
+- "otro_no_listado"         : Otro sector no listado
+- "desconocido"             : No es posible determinar el sector del negocio
 
-**COMPORTAMIENTO OBLIGATORIO AL DETECTAR UN TICKET:**
-1. TIPO_DOCUMENTO: SIEMPRE "TICKET" (exactamente así, en mayúsculas, sin variantes)
-2. IMPORTE_TOTAL: el total del ticket tal como aparece
-3. IMPORTE_SIN_IMPUESTOS: igual que IMPORTE_TOTAL (todo es gasto, no hay IVA deducible)
-4. DESGLOSE_IVA: array vacío []
-5. NO intentar clasificar como EMITIDA/RECIBIDA
-6. NO marcar incidencia por falta de CIF del receptor (es normal en tickets)
-7. EMPRESA_EMISORA: extraer nombre, CIF del negocio, dirección si aparecen
-8. EMPRESA_RECEPTORA: dejar vacío (no aplica en tickets)
-9. ES_ABONO: false
+"CATEGORIA_OPERACION_CONFIANZA": número decimal entre 0.0 y 1.0 indicando tu confianza en la categoría asignada (ej. 0.95). Si no estás seguro o es ambiguo, usa < 0.60 o "desconocido".
+
+**TRATAMIENTO FISCAL:**
+- Si es ticket ordinario SIN CIF del comprador (o si es hostelería/restauración): todo es gasto. IMPORTE_SIN_IMPUESTOS = IMPORTE_TOTAL, DESGLOSE_IVA = [], EMPRESA_RECEPTORA = {"NOMBRE": "", "CIF": "", "DIRECCION": ""}.
+- Si el ticket incluye explícitamente el CIF/NIF del comprador Y desglose de IVA (factura simplificada cualificada): extrae el CIF en EMPRESA_RECEPTORA y las cuotas en DESGLOSE_IVA.
+- TIPO_DOCUMENTO: SIEMPRE "TICKET" (exactamente así).
+- NO intentar clasificar como EMITIDA/RECIBIDA.
+- NO marcar incidencia por falta de CIF del cliente si es ticket estándar sin datos del comprador.
 
 **EJEMPLO DE SALIDA PARA UN TICKET:**
 \`\`\`json
 {
   "TIPO_DOCUMENTO": "TICKET",
+  "CATEGORIA_OPERACION": "hosteleria_restauracion",
+  "CATEGORIA_OPERACION_CONFIANZA": 0.95,
   "INCIDENCIA": false,
   "NUMERO_DOCUMENTO": "00042",
   "FECHA_EMISION": "2024-03-15",
@@ -1166,6 +1201,8 @@ CAMPOS A EXTRAER (por cada documento):
 
 {
   "TIPO_DOCUMENTO": "",
+  "CATEGORIA_OPERACION": "",
+  "CATEGORIA_OPERACION_CONFIANZA": 1.0,
   "NUMERO_DOCUMENTO": "",
   "FECHA_EMISION": "",
   "FECHA_VENCIMIENTO": "",
@@ -1307,35 +1344,51 @@ Busca el TOTAL por ETIQUETA primero ("TOTAL", "TOTAL FACTURA", "IMPORTE TOTAL", 
 🎫 DETECCIÓN Y MANEJO DE TICKETS (CRÍTICO)
 
 **¿QUÉ ES UN TICKET?**
-Un ticket es un comprobante de compra emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, etc.) que NO incluye el CIF/NIF del comprador. También se llama "factura simplificada" en España.
+Un ticket es un comprobante de compra o factura simplificada (Art. 4 RD 1619/2012) emitido por un establecimiento (restaurante, bar, cafetería, parking, gasolinera, peaje, supermercado, comercio, etc.).
 
 **SEÑALES PARA DETECTAR UN TICKET:**
-- No aparece CIF/NIF del receptor/comprador en ninguna parte del documento
-- Encabezado con nombre comercial y CIF del negocio pero sin sección "Cliente" ni "Facturar a"
-- Presencia de campos típicos de TPV: "Mesa", "Terr", "Nº Op.", "Comensales", "Camarero"
-- Palabras: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA" en establecimientos de hostelería
-- Categoría del negocio: restaurante, bar, cafetería, pizzería, hamburguesería, parking, peaje, gasolinera, supermercado
+- Título o encabezado: "TICKET", "RECIBO", "FACTURA SIMPLIFICADA", "SIMPLIFICADA", "TPV", datos de camarero/mesa/caja.
+- Ausencia frecuente de sección "Cliente" o datos fiscales del comprador (salvo que sea cualificada).
 
-**REGLA FISCAL IMPORTANTE:**
-- Tickets sin CIF receptor → IVA NO deducible (Hacienda no lo permite sin factura completa)
-- Restaurantes y hostelería → IVA NUNCA deducible, aunque exista factura completa con CIF (restricción expresa de la Ley del IVA española, art. 96)
-- En ambos casos: TODO el importe es gasto. No se separa base ni IVA.
+**CATEGORÍA DE OPERACIÓN (ENUM ESTRICTO — Art. 4.2 RD 1619/2012):**
+Al detectar un TICKET, debes clasificarlo con exactamente UNO de estos 21 valores en "CATEGORIA_OPERACION" (PROHIBIDO inventar texto libre):
+- "venta_al_por_menor"      : Comercio al por menor a consumidor final (tienda, supermercado, ropa, etc.)
+- "venta_ambulancia"        : Ventas en ambulancia
+- "servicio_domicilio"      : Ventas o servicios a domicilio del consumidor
+- "transporte_personas"     : Transportes de personas y sus equipajes (taxi, autobús, etc.)
+- "hosteleria_restauracion" : Restaurantes, bares, cafeterías, chocolaterías, comidas para consumo inmediato
+- "sala_baile_discoteca"    : Salas de baile y discotecas
+- "telefonia_cabina"        : Servicios telefónicos de cabinas o tarjetas sin identificar usuario
+- "peluqueria_belleza"      : Peluquería e institutos de belleza
+- "instalacion_deportiva"   : Utilización de instalaciones deportivas (gimnasio, pistas, etc.)
+- "revelado_fotografia"     : Revelado de fotografías y estudios fotográficos
+- "aparcamiento"            : Aparcamiento y estacionamiento de vehículos
+- "alquiler_peliculas"      : Alquiler de películas
+- "tintoreria_lavanderia"   : Tintorería y lavandería
+- "autopista_peaje"         : Utilización de autopistas de peaje
+- "servicios_profesionales" : Servicios jurídicos, médicos, asesoría, consultoría (fuera de Art. 4.2)
+- "suministro_energia"      : Electricidad, gas, agua (fuera de Art. 4.2)
+- "farmacia_parafarmacia"   : Medicamentos y parafarmacia
+- "combustible"             : Estaciones de servicio / carburante
+- "alojamiento_hotel"       : Hotel / hostal / alojamiento turístico (separado de restauración)
+- "otro_no_listado"         : Otro sector no listado
+- "desconocido"             : No es posible determinar el sector del negocio
 
-**COMPORTAMIENTO OBLIGATORIO AL DETECTAR UN TICKET:**
-1. TIPO_DOCUMENTO: SIEMPRE "TICKET" (exactamente así, en mayúsculas, sin variantes)
-2. IMPORTE_TOTAL: el total del ticket tal como aparece
-3. IMPORTE_SIN_IMPUESTOS: igual que IMPORTE_TOTAL (todo es gasto, no hay IVA deducible)
-4. DESGLOSE_IVA: array vacío []
-5. NO intentar clasificar como EMITIDA/RECIBIDA
-6. NO marcar incidencia por falta de CIF del receptor (es normal en tickets)
-7. EMPRESA_EMISORA: extraer nombre, CIF del negocio, dirección si aparecen (si hay un tercero logístico/intermediario con "Expedido por", ignóralo, prioriza al negocio real)
-8. EMPRESA_RECEPTORA: dejar vacío (no aplica en tickets)
-9. ES_ABONO: false
+"CATEGORIA_OPERACION_CONFIANZA": número decimal entre 0.0 y 1.0 indicando tu confianza en la categoría asignada (ej. 0.95). Si no estás seguro o es ambiguo, usa < 0.60 o "desconocido".
+
+**TRATAMIENTO FISCAL:**
+- Si es ticket ordinario SIN CIF del comprador (o si es hostelería/restauración): todo es gasto. IMPORTE_SIN_IMPUESTOS = IMPORTE_TOTAL, DESGLOSE_IVA = [], EMPRESA_RECEPTORA = {"NOMBRE": "", "CIF": "", "DIRECCION": ""}.
+- Si el ticket incluye explícitamente el CIF/NIF del comprador Y desglose de IVA (factura simplificada cualificada): extrae el CIF en EMPRESA_RECEPTORA y las cuotas en DESGLOSE_IVA.
+- TIPO_DOCUMENTO: SIEMPRE "TICKET" (exactamente así).
+- NO intentar clasificar como EMITIDA/RECIBIDA.
+- NO marcar incidencia por falta de CIF del cliente si es ticket estándar sin datos del comprador.
 
 **EJEMPLO DE SALIDA PARA UN TICKET:**
 \`\`\`json
 {
   "TIPO_DOCUMENTO": "TICKET",
+  "CATEGORIA_OPERACION": "hosteleria_restauracion",
+  "CATEGORIA_OPERACION_CONFIANZA": 0.95,
   "INCIDENCIA": false,
   "NUMERO_DOCUMENTO": "00042",
   "FECHA_EMISION": "2024-03-15",
@@ -1644,6 +1697,8 @@ CAMPOS A EXTRAER (el documento es UNO SOLO — devuelve un único objeto, NO un 
 
 {
   "TIPO_DOCUMENTO": "",
+  "CATEGORIA_OPERACION": "",
+  "CATEGORIA_OPERACION_CONFIANZA": 1.0,
   "NUMERO_DOCUMENTO": "",
   "FECHA_EMISION": "",
   "FECHA_VENCIMIENTO": "",

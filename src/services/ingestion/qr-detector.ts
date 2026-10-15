@@ -13,7 +13,7 @@
  * Nunca lanza; todos los errores son silenciosos (log + retorna null).
  */
 
-import Jimp from 'jimp';
+import { Jimp } from 'jimp';
 import jsQR from 'jsqr';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 

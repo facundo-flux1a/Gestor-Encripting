@@ -122,15 +122,8 @@ function DocumentsPageContent() {
         const data = await response.json();
         const docs = data.documents || data;
         setDocuments(docs);
-        if (Array.isArray(docs) && docs.length > 0) {
-          try {
-            const ids = docs.map((d: any) => d.id_documento).filter(Boolean);
-            sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
-            sessionStorage.setItem('document_origin_url', '/documents');
-          } catch (e) {
-            console.warn('⚠️ [DocumentsPage] Error guardando navegación:', e);
-          }
-        }
+        // Guardamos todos los IDs como fallback inicial; el efecto de tab los sobreescribirá
+        // en cuanto se calcule el tab activo (ver useEffect de navegación por tab abajo).
         console.log(`⏱️ [PERF:client] DocumentsPage.fetch | ${Math.round(performance.now() - t0)}ms | docs=${Array.isArray(docs) ? docs.length : '?'} companies=${selectedCompanyIds.join(',')}`);
       } catch (err) {
         console.error('❌ [DocumentsPage] Error loading documents:', err);
@@ -339,6 +332,21 @@ function DocumentsPageContent() {
         return [];
     }
   }, [activeTab, sinConfirmar, facturasEmitidas, facturasRecibidas, facturasExtranjeras, tickets, otrosDocumentos]);
+
+  // 🧭 Sincronizar IDs de navegación con el tab activo.
+  // Se ejecuta cuando currentDocuments cambia (al cargar docs o al cambiar de tab).
+  // Esto es lo que hace que el navegador < X / N > dentro del documento individual
+  // muestre solo los N docs del tab desde el que se entró, y no el total global.
+  React.useEffect(() => {
+    if (currentDocuments.length === 0) return;
+    try {
+      const ids = currentDocuments.map((d: any) => d.id_documento).filter(Boolean);
+      sessionStorage.setItem('document_navigation_ids', JSON.stringify(ids));
+      sessionStorage.setItem('document_origin_url', `/documents?tab=${activeTab}`);
+    } catch (e) {
+      console.warn('⚠️ [DocumentsPage] Error sincronizando navegación por tab:', e);
+    }
+  }, [currentDocuments, activeTab]);
 
   const handleTabChange = (value: string) => {
     if (value !== activeTab) {

@@ -136,6 +136,17 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   // Emitida o recibida → determina qué CC de entidad usar
   const tipoDocUpper = (doc.tipo_documento || '').toUpperCase();
   const esEmitida = tipoDocUpper.includes('EMITIDA') || tipoDocUpper.includes('EMITIDO');
+  const isTicketDoc = tipoDocUpper.includes('TICKET');
+  const totalAmount = Number((doc as any).total ?? (doc as any).importe_total ?? 0);
+  const importeTotalAmount = Number((doc as any).importe_total ?? (doc as any).total ?? 0);
+  const isTicketRectificativo = isTicketDoc && (
+    totalAmount < 0 ||
+    importeTotalAmount < 0 ||
+    Boolean(rawDatosExtra?.es_abono) ||
+    Boolean(rawDatosExtra?.is_abono) ||
+    tipoDocUpper.includes('RECTIFIC') ||
+    tipoDocUpper.includes('ABONO')
+  );
   const ccSugeridaEntidad = isForeign
     ? '4100000'
     : esEmitida
@@ -381,7 +392,14 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           </div>
           <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
             <div className="flex items-center justify-center gap-1.5">
-              <p className="text-sm font-bold">Revisar factura</p>
+              <p className="text-sm font-bold">
+                {isTicketDoc ? (isTicketRectificativo ? 'Revisar ticket rectificativo' : 'Revisar ticket') : 'Revisar factura'}
+              </p>
+              {isTicketRectificativo && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                  Rectificativo
+                </span>
+              )}
               {((doc as any)?.datos_extra?.canal_origen === 'api' || (doc as any)?.dashboard_correo === 'api') && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 font-mono" title="Ingresado vía API síncrona">
                   API
@@ -927,6 +945,14 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                   )} />
                 : <EInput value={doc.tipo_documento || '—'} className="font-medium text-foreground" />}
 
+              {/* Chip visual: ticket rectificativo (solo frontend, no altera tipo_documento) */}
+              {isTicketRectificativo && (
+                <div className="mt-2 text-xs flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                  <span>↩️</span>
+                  <span className="font-medium">Ticket Rectificativo</span>
+                  <span className="text-muted-foreground">— anula o corrige un ticket anterior</span>
+                </div>
+              )}
               {rawDatosExtra?.factura_rectificada && (
                 <div className="mt-2 text-xs flex items-center gap-1.5 p-2 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
                   <span>🔗 Rectifica a:</span>

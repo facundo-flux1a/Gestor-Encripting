@@ -40,6 +40,9 @@ export interface DocumentoExtraido {
   forma_pago?: string;
   observaciones?: string;
   es_abono?: boolean;
+  categoria_operacion?: string;
+  categoria_operacion_confianza?: number;
+  iva_deducible?: boolean;
   empresa_emisora?: EmpresaDoc;
   empresa_receptora?: EmpresaDoc;
   cliente?: EmpresaDoc;
@@ -423,6 +426,13 @@ export function normalizeDocumento(doc: DocumentoExtraido, empresaCif?: string):
   const rawTipo = String(normalized.tipo_documento || (normalized.documento as any)?.tipo_documento || '').toUpperCase();
   const rawTotal = Number(normalized.importe_total ?? (normalized.documento as any)?.importe_total ?? 0);
   const esAbono = Boolean(normalized.es_abono) || rawTipo.includes('ABONO') || rawTipo.includes('RECTIFICATIVA') || rawTotal < 0;
+
+  // ✅ Solo para TICKETS: persistir es_abono para que fiscal-guards salte el límite de importe.
+  // Las facturas ordinarias (abono o no) no se tocan.
+  const esTicketDoc = rawTipo === 'TICKET' || rawTipo.startsWith('TICKET');
+  if (esTicketDoc && esAbono) {
+    normalized.es_abono = true;
+  }
 
   if (normalized.desglose_iva && Array.isArray(normalized.desglose_iva)) {
     normalized.desglose_iva = validateRetenciones(normalized.desglose_iva as Impuesto[], esAbono);

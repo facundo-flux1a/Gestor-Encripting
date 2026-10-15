@@ -37,6 +37,7 @@ import {
 } from '@/lib/document-fiscal-status';
 import { evaluarFechaContable } from '@/lib/fecha-contable-utils';
 import { formatGuardFailures } from '@/services/ingestion/fiscal-guards';
+import { validateTicketLimits } from '@/services/ingestion/ticket-validator';
 import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/services/ingestion/normalize';
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
@@ -253,6 +254,22 @@ export function startDbWriterWorker() {
         
         const importeTotal    = applySign(Number(rawImporteTotal) || 0);
         const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
+
+        const isTicketDeducible = esTicketDoc && (
+          aiResult.iva_deducible !== undefined
+            ? Boolean(aiResult.iva_deducible)
+            : validateTicketLimits({
+                importeTotal,
+                categoriaOperacion: aiResult.categoria_operacion,
+                categoriaConfianza: aiResult.categoria_operacion_confianza,
+                moneda: aiResult.moneda,
+                tieneNifReceptor: Boolean(cifCliente),
+                tieneCuotaDesglosada: (aiResult.totales_por_impuesto || aiResult.desglose_iva || []).some(
+                  (i: any) => Number(i.cuota_iva ?? i.cuota ?? 0) > 0
+                ),
+                esFacturaRectificativa: isAbono,
+              }).iva_deducible
+        );
         const rawNumDoc = (docInfo.numero_documento || aiResult.numero_documento || '').toString().trim();
         const hasRealInvoiceNumber =
           rawNumDoc.length > 0 &&
@@ -441,7 +458,9 @@ export function startDbWriterWorker() {
               fecha_emision: fechaEmision,
               fecha_vencimiento: fechaVencimiento,
               importe_total: importeTotal,
-              importe_sin_impuestos: esExtranjeroRecibido ? importeTotal : importeSinIva,
+              importe_sin_impuestos: esExtranjeroRecibido
+                ? importeTotal
+                : (esTicketDoc && !isTicketDeducible ? importeTotal : importeSinIva),
               moneda: (aiResult.moneda || 'EUR').toString().toUpperCase(),
               id_de_empresa: BigInt(empresaId),
               is_new: 1,
@@ -460,6 +479,12 @@ export function startDbWriterWorker() {
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
                 descuento_global: esExtranjeroRecibido ? 0 : descuentoGlobal,
                 base_no_sujeta: esExtranjeroRecibido ? 0 : baseNoSujeta,
+                ...(esTicketDoc ? {
+                  es_ticket: true,
+                  iva_deducible: isTicketDeducible,
+                  categoria_operacion: aiResult.categoria_operacion || '',
+                  categoria_operacion_confianza: aiResult.categoria_operacion_confianza ?? null,
+                } : {}),
                 ...(esExtranjeroRecibido ? {
                   es_proveedor_extranjero_ue: true,
                   zona_emisor: countryInfo.region,
@@ -601,8 +626,8 @@ export function startDbWriterWorker() {
           console.log(`[DbWriterWorker] 💰 [Paso 5/5] Líneas guardadas. Procesando impuestos y cierre...`);
 
           // 9. Impuestos / IVA (nuevo: totales_por_impuesto, legacy: desglose_iva)
-          if (!esExtranjeroRecibido) {
-            // ── Caso normal (proveedor nacional) ──────────────────────────────
+          if (!esExtranjeroRecibido && (!esTicketDoc || isTicketDeducible)) {
+            // ── Caso normal (proveedor nacional o ticket cualificado deducible) ─
             const totales = aiResult.totales_por_impuesto || aiResult.desglose_iva;
             const cuentasSugeridas: Record<string, string> = {};
 
@@ -655,6 +680,10 @@ export function startDbWriterWorker() {
                 },
               });
             }
+
+          } else if (esTicketDoc && !isTicketDeducible) {
+            // Ticket con IVA no deducible (Art. 96 o sin NIF/desglose) — 100% gasto, sin cuenta 472
+            wLog('DbWriterWorker', `🎫 Ticket con IVA no deducible: 100% gasto (${importeTotal} €), sin desglose 472`);
 
           } else if (esIntracomunitario) {
             // ── Caso UE: inversión del sujeto pasivo (espejo IVA) ────────────
