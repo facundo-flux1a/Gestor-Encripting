@@ -61,6 +61,23 @@ export const notificationQueue = new Queue(NOTIFICATION_QUEUE_NAME, {
   },
 });
 
+/**
+ * Obtiene el delay en milisegundos para los resúmenes de notificación.
+ * Configurable mediante NOTIFICATION_DELAY_SECONDS o NOTIFICATION_DELAY_MS.
+ * Por defecto: defaultMinutes (10 mins para front, 15 mins para mailparser).
+ */
+export function getNotificationSummaryDelayMs(defaultMinutes = 10): number {
+  if (process.env.NOTIFICATION_DELAY_SECONDS) {
+    const sec = parseInt(process.env.NOTIFICATION_DELAY_SECONDS, 10);
+    if (!isNaN(sec) && sec >= 0) return sec * 1000;
+  }
+  if (process.env.NOTIFICATION_DELAY_MS) {
+    const ms = parseInt(process.env.NOTIFICATION_DELAY_MS, 10);
+    if (!isNaN(ms) && ms >= 0) return ms;
+  }
+  return defaultMinutes * 60 * 1000;
+}
+
 export interface IngestionJobData {
   uploadId: string;
   parentUploadId: string;
@@ -157,6 +174,6 @@ export interface NotificationJobData {
   emailFrom: string;         // Correo del remitente
   empresaId: string;
   nombreEmpresa: string;
-  batchTimestamp: string;    // Fecha de recepción del correo
+  batchTimestamp: string | number;    // Fecha o timestamp de inicio del lote
   earlyRejectedFiles?: Array<{ filename: string; reason: string }>; // Archivos que fallaron inmediatamente
 }

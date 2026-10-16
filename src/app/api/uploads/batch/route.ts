@@ -35,6 +35,52 @@ export async function POST(req: NextRequest) {
       }))
     );
 
+    // Si la empresa tiene habilitada la notificación de resumen de subida por email,
+    // programamos la tarea en notificationQueue con 10 minutos de delay
+    try {
+      const { prisma } = await import('@/lib/prisma');
+      const empresa = await prisma.empresas.findUnique({
+        where: { id: BigInt(empresaId) },
+        select: {
+          nombre_de_empresa: true,
+          notificar_resumen_subida: true,
+          email_notificaciones: true,
+          mail_de_carga: true,
+        },
+      });
+
+      if (empresa?.notificar_resumen_subida) {
+        const emailDestino =
+          empresa.email_notificaciones?.trim() ||
+          empresa.mail_de_carga?.trim() ||
+          session.email?.trim();
+
+        if (emailDestino) {
+          const { notificationQueue, getNotificationSummaryDelayMs } = await import('@/lib/queue');
+          const delayMs = getNotificationSummaryDelayMs(10);
+          await notificationQueue.add(
+            `notify-${result.batchId}`,
+            {
+              parentUploadId: result.batchId,
+              uploadIds: result.items.map((it) => it.uploadId),
+              emailFrom: emailDestino,
+              empresaId: String(empresaId),
+              nombreEmpresa: empresa.nombre_de_empresa || 'Su Empresa',
+              batchTimestamp: Date.now(),
+            },
+            {
+              jobId: `notify-${result.batchId}`,
+              delay: delayMs,
+              removeOnComplete: true,
+            }
+          );
+          console.log(`📧 [API-UPLOADS-BATCH] Resumen de subida programado (${delayMs / 1000}s) para ${emailDestino} (batch ${result.batchId})`);
+        }
+      }
+    } catch (notifErr) {
+      console.warn('⚠️ [API-UPLOADS-BATCH] No se pudo encolar la notificación de resumen:', notifErr);
+    }
+
     return NextResponse.json({
       success: true,
       batchId: result.batchId,

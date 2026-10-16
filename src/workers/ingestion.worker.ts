@@ -14,7 +14,7 @@
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
 import { ingestionQueue, extractionQueue, IngestionJobData, INGESTION_QUEUE_NAME } from '@/lib/queue';
-import { updateIngestionProgress, PROGRESS, createIngestionRecord } from '@/lib/ingestion-progress';
+import { updateIngestionProgress, PROGRESS, createIngestionRecord, handleWorkerJobFailed } from '@/lib/ingestion-progress';
 import { wLog } from '@/lib/worker-logger';
 import { getFileBuffer } from '@/lib/s3-client';
 
@@ -220,9 +220,8 @@ export function startIngestionWorker() {
     wLog('IngestionWorker', `✅ Job completado: ${job.id}`, 'success');
   });
 
-  worker.on('failed', (job, err) => {
-    console.error(`[IngestionWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
-    wLog('IngestionWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
+  worker.on('failed', async (job, err) => {
+    await handleWorkerJobFailed('IngestionWorker', job, err);
   });
 
   worker.on('error', (err) => {

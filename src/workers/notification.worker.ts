@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
 import connection, { dbName } from '@/lib/db';
-import { NOTIFICATION_QUEUE_NAME, NotificationJobData } from '@/lib/queue';
+import { NOTIFICATION_QUEUE_NAME, NotificationJobData, notificationQueue, getNotificationSummaryDelayMs } from '@/lib/queue';
 import { sendEmail } from '@/services/email-service';
 import { getIngestionSummaryEmailHtml } from '@/services/ingestion/email-templates';
 
@@ -15,12 +15,20 @@ export function startNotificationWorker() {
     NOTIFICATION_QUEUE_NAME,
     async (job: Job<NotificationJobData>) => {
       const { parentUploadId, uploadIds, emailFrom, empresaId, nombreEmpresa, batchTimestamp, earlyRejectedFiles } = job.data;
-      console.log(`\n🔔 [Notification Worker] Procesando resumen para batch ${parentUploadId} (Destino: ${emailFrom})`);
+      console.log(`\n🔔 [Notification Worker] Procesando verificación de resumen para batch ${parentUploadId} (Destino: ${emailFrom})`);
 
       try {
         const acceptedFiles: { filename: string, status: string }[] = [];
         const duplicateFiles: { filename: string, reason: string }[] = [];
         const rejectedFiles: { filename: string, reason: string }[] = [];
+        const inProgressFiles: { filename: string, progress: number, mensaje: string }[] = [];
+
+        const MAX_BATCH_WAIT_MS = 3 * 60 * 60 * 1000; // 3 horas de tiempo máximo de seguridad
+        const batchTime = typeof batchTimestamp === 'number'
+          ? batchTimestamp
+          : batchTimestamp ? (Number(batchTimestamp) || new Date(batchTimestamp).getTime() || Date.now()) : Date.now();
+        const elapsed = Date.now() - batchTime;
+        const isTimeExceeded = elapsed >= MAX_BATCH_WAIT_MS;
 
         // Agregar los rechazados tempranos (duplicados, formato no permitido, etc.)
         if (earlyRejectedFiles && earlyRejectedFiles.length > 0) {
@@ -51,8 +59,11 @@ export function startNotificationWorker() {
                 const fileActivities = rows.filter(r => r.upload_id === uploadId || r.upload_id.startsWith(uploadId));
                 
                 if (fileActivities.length === 0) {
-                    // Si por alguna razón no hay actividad, asumimos error
-                    rejectedFiles.push({ filename: `Archivo no identificado (${uploadId})`, reason: 'El archivo desapareció del sistema de colas antes de procesarse' });
+                    if (isTimeExceeded) {
+                        rejectedFiles.push({ filename: `Archivo (${uploadId})`, reason: 'La transferencia de este archivo no se completó en el servidor (tiempo agotado).' });
+                    } else {
+                        inProgressFiles.push({ filename: `Archivo (${uploadId})`, progress: 0, mensaje: 'Pendiente de transferencia' });
+                    }
                     continue;
                 }
 
@@ -127,12 +138,43 @@ export function startNotificationWorker() {
                         continue;
                     }
 
-                    // 5. Demorado o en proceso
-                    acceptedFiles.push({
+                    // 5. En progreso / pendiente
+                    inProgressFiles.push({
                         filename,
-                        status: `Procesamiento demorado (${finalAct.progress ?? 0}% - ${finalAct.mensaje || 'En cola'})`
+                        progress: finalAct.progress ?? 0,
+                        mensaje: finalAct.mensaje || 'En procesamiento'
                     });
                 }
+            }
+        }
+
+        // Si todavía quedan archivos en proceso y no superamos el tiempo de seguridad:
+        if (inProgressFiles.length > 0 && !isTimeExceeded) {
+            // La postergación se hace en lapsos fijos de 5 minutos (o NOTIFICATION_RECHECK_SECONDS si se define para pruebas)
+            const nextDelayMs = process.env.NOTIFICATION_RECHECK_SECONDS
+                ? parseInt(process.env.NOTIFICATION_RECHECK_SECONDS, 10) * 1000
+                : 5 * 60 * 1000; // 5 minutos fijos (300.000 ms)
+            console.log(`⏳ [Notification Worker] Lote ${parentUploadId}: aún quedan ${inProgressFiles.length} archivos en proceso de ${uploadIds?.length || 0}. Postergando revisión ${nextDelayMs / 1000}s...`);
+
+            await notificationQueue.add(
+                `notify-${parentUploadId}`,
+                job.data,
+                {
+                    jobId: `notify-${parentUploadId}-${Date.now()}`,
+                    delay: nextDelayMs,
+                    removeOnComplete: true,
+                }
+            );
+            return;
+        }
+
+        // Si superamos el tiempo de espera de seguridad pero todavía quedan archivos en progreso:
+        if (inProgressFiles.length > 0) {
+            for (const prog of inProgressFiles) {
+                acceptedFiles.push({
+                    filename: prog.filename,
+                    status: `Tiempo de espera agotado (${prog.progress}% - ${prog.mensaje})`
+                });
             }
         }
 

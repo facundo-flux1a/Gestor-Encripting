@@ -33,6 +33,8 @@ export async function GET() {
         CIF: true,
         mail_de_carga: true,
         recargo: true,
+        notificar_resumen_subida: true,
+        email_notificaciones: true,
         id_de_usuario: true,
         config_roles: true
       }
@@ -52,6 +54,8 @@ export async function GET() {
         CIF: row.CIF,
         mail_de_carga: row.mail_de_carga,
         recargo: !!row.recargo,
+        notificar_resumen_subida: !!row.notificar_resumen_subida,
+        email_notificaciones: row.email_notificaciones || null,
       }))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }));
 

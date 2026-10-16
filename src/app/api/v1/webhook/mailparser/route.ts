@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/services/email-service';
 import { getUnauthorizedSenderEmailHtml, getRejectedFilesEmailHtml } from '@/services/ingestion/email-templates';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { ingestionQueue, notificationQueue, IngestionJobData } from '@/lib/queue';
+import { ingestionQueue, notificationQueue, IngestionJobData, getNotificationSummaryDelayMs } from '@/lib/queue';
 import { hashField } from '@/lib/encryption';
 
 // Configuración S3
@@ -262,10 +262,11 @@ export async function POST(req: NextRequest) {
         earlyRejectedFiles: rejectedFiles.length > 0 ? rejectedFiles : undefined
       };
 
-      // Guardamos para que el worker de notificación los recoja 15 mins después
+      // Guardamos para que el worker de notificación los recoja después del delay configurado
+      const delayMs = getNotificationSummaryDelayMs(15);
       await notificationQueue.add(`notify-${effectiveParentUploadId}`, notifData, { 
         jobId: `notify-${effectiveParentUploadId}`,
-        delay: 15 * 60 * 1000 // 15 minutos en milisegundos
+        delay: delayMs
       });
     }
 

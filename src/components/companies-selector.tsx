@@ -58,6 +58,8 @@ interface Company {
   CIF?: string | null;       // ← API retorna 'CIF' en mayúsculas
   mail_de_carga?: string | null;
   recargo?: boolean | number | null;
+  notificar_resumen_subida?: boolean | number | null;
+  email_notificaciones?: string | null;
 }
 
 // Función de validación de email
@@ -227,7 +229,10 @@ const EditCompanyFormComponent = React.memo(({
   const [localCIF, setLocalCIF] = React.useState(company.CIF || company.cif || '');
   const [localEmail, setLocalEmail] = React.useState(company.mail_de_carga ?? '');
   const [localRecargo, setLocalRecargo] = React.useState(!!company.recargo);
+  const [localNotificarResumen, setLocalNotificarResumen] = React.useState(!!company.notificar_resumen_subida);
+  const [localEmailNotif, setLocalEmailNotif] = React.useState(company.email_notificaciones ?? '');
   const [emailError, setEmailError] = React.useState<string>('');
+  const [emailNotifError, setEmailNotifError] = React.useState<string>('');
 
   React.useEffect(() => {
     setLocalName(company.name || '');
@@ -235,6 +240,8 @@ const EditCompanyFormComponent = React.memo(({
     setLocalCIF(company.CIF || company.cif || '');
     setLocalEmail(company.mail_de_carga || '');
     setLocalRecargo(!!company.recargo);
+    setLocalNotificarResumen(!!company.notificar_resumen_subida);
+    setLocalEmailNotif(company.email_notificaciones || '');
   }, [company]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -356,6 +363,69 @@ const EditCompanyFormComponent = React.memo(({
           value={localRecargo ? 'true' : 'false'}
         />
       </div>
+
+      {/* Switch Resumen de Subidas por Email */}
+      <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-muted/20">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="edit-notificar-resumen-switch" className="text-base cursor-pointer">
+              Resumen de subidas por email
+            </Label>
+            <span title="Si activas esto, se enviará un email con el resultado consolidado (facturas procesadas, duplicadas o incidencias) al subir lotes desde el dashboard." className="cursor-help">
+              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground max-w-[220px] leading-tight mt-1">
+            Envía un correo automático tras procesar lotes subidos desde el dashboard.
+          </div>
+        </div>
+        <Switch
+          id="edit-notificar-resumen-switch"
+          checked={localNotificarResumen}
+          onCheckedChange={setLocalNotificarResumen}
+        />
+        <input
+          type="hidden"
+          name="notificarResumenSubida"
+          value={localNotificarResumen ? 'true' : 'false'}
+        />
+      </div>
+
+      {/* Campo opcional de email para notificaciones */}
+      {localNotificarResumen && (
+        <div className="space-y-2 p-3 rounded-lg border bg-muted/10">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="edit-email-notificaciones" className="text-sm font-medium">
+              Email de destino <span className="text-muted-foreground">(opcional)</span>
+            </Label>
+            <span title="Email donde recibir los resúmenes. Si lo dejás vacío, se usará el email de carga de la empresa." className="cursor-help">
+              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            </span>
+          </div>
+          <Input
+            id="edit-email-notificaciones"
+            name="emailNotificaciones"
+            type="email"
+            placeholder={localEmail || "Por defecto: el email de carga"}
+            value={localEmailNotif}
+            onChange={(e) => {
+              const val = e.target.value;
+              setLocalEmailNotif(val);
+              if (val && !isValidEmail(val)) {
+                setEmailNotifError('Formato de email inválido');
+                onEmailValidation(false);
+              } else {
+                setEmailNotifError('');
+                onEmailValidation(true);
+              }
+            }}
+            autoComplete="off"
+          />
+          {emailNotifError && (
+            <p className="text-sm text-destructive">{emailNotifError}</p>
+          )}
+        </div>
+      )}
     </form>
   );
 });
@@ -736,6 +806,8 @@ export function CompaniesSelector() {
       const cif = (formData.get('cif') as string)?.trim();
       const mailDeCarga = (formData.get('mailDeCarga') as string)?.trim();
       const recargo = formData.get('recargo') === 'true';
+      const notificarResumenSubida = formData.get('notificarResumenSubida') === 'true';
+      const emailNotificaciones = (formData.get('emailNotificaciones') as string)?.trim();
 
       console.log('🔍 [handleSaveCompany] Debug:', {
         name,
@@ -743,6 +815,10 @@ export function CompaniesSelector() {
         recargoFormData: formData.get('recargo'),
         recargoParsed: recargo,
         originalRecargo: originalCompany.recargo,
+        notificarResumenSubida,
+        originalNotificar: originalCompany.notificar_resumen_subida,
+        emailNotificaciones,
+        originalEmailNotif: originalCompany.email_notificaciones,
         localRecargoState: document.querySelector('input[name="recargo"]')?.getAttribute('value')
       });
 
@@ -751,13 +827,17 @@ export function CompaniesSelector() {
       const cifChanged = cif !== (originalCompany.cif || '');
       const emailChanged = mailDeCarga !== (originalCompany.mail_de_carga || '');
       const recargoChanged = recargo !== (!!originalCompany.recargo);
+      const notificarChanged = notificarResumenSubida !== (!!originalCompany.notificar_resumen_subida);
+      const emailNotifChanged = emailNotificaciones !== (originalCompany.email_notificaciones || '');
 
       console.log('🔍 [handleSaveCompany] Changes:', {
         nameChanged,
-        recargoChanged
+        recargoChanged,
+        notificarChanged,
+        emailNotifChanged
       });
 
-      if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged && !recargoChanged) {
+      if (!nameChanged && !fiscalChanged && !cifChanged && !emailChanged && !recargoChanged && !notificarChanged && !emailNotifChanged) {
         toast({
           title: 'Sin cambios',
           description: 'No se detectaron cambios en la empresa',
@@ -780,7 +860,16 @@ export function CompaniesSelector() {
       if (emailChanged && mailDeCarga && !isValidEmail(mailDeCarga)) {
         toast({
           title: 'Error',
-          description: 'El formato del email es inválido',
+          description: 'El formato del email de carga es inválido',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (emailNotifChanged && emailNotificaciones && !isValidEmail(emailNotificaciones)) {
+        toast({
+          title: 'Error',
+          description: 'El formato del email de notificaciones es inválido',
           variant: 'destructive',
         });
         return;
@@ -806,6 +895,14 @@ export function CompaniesSelector() {
 
       if (recargoChanged) {
         payload.recargo = recargo;
+      }
+
+      if (notificarChanged) {
+        payload.notificarResumenSubida = notificarResumenSubida;
+      }
+
+      if (emailNotifChanged) {
+        payload.emailNotificaciones = emailNotificaciones || null;
       }
 
       setIsCreating(true);

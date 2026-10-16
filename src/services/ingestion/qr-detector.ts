@@ -266,7 +266,11 @@ async function renderPdfPageToBuffer(
     if (pageNum < 1) return null;
 
     const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2.0 });
+    const unscaledViewport = page.getViewport({ scale: 1.0 });
+    // Limitar dimensiones a máx 2048px para evitar que @napi-rs/canvas (Skia) consuma memoria excesiva o haga panic
+    const maxDimension = 2048;
+    const computedScale = Math.min(2.0, maxDimension / Math.max(unscaledViewport.width, unscaledViewport.height, 1));
+    const viewport = page.getViewport({ scale: Math.max(computedScale, 0.5) });
 
     let canvasModule: any;
     try {
@@ -287,6 +291,12 @@ async function renderPdfPageToBuffer(
     } as any).promise;
 
     const pngBuffer = canvas.toBuffer('image/png');
+    try {
+      await page.cleanup();
+      await (pdfDoc as any).cleanup?.();
+      await loadingTask.destroy?.();
+    } catch { /* ignorar cleanup errors */ }
+
     return pngBuffer;
   } catch (err: any) {
     console.warn(`[QrDetector] ⚠️ Error renderizando página ${pageNumber} del PDF con pdfjs: ${err?.message}`);
@@ -476,6 +486,7 @@ export async function detectQrVerifactu(
         const loadingTask = pdfjs.getDocument({ data: new Uint8Array(fileBuffer), verbosity: 0 });
         const pdfDoc = await loadingTask.promise;
         const totalPages = pdfDoc.numPages;
+        try { await loadingTask.destroy?.(); } catch { /* ignore */ }
         console.log(`[QrDetector] 📋 PDF tiene ${totalPages} página(s). QR no encontrado en pág 1.`);
         if (totalPages > 1) {
           console.log(`[QrDetector] 🔍 Buscando QR en última página (${totalPages})...`);

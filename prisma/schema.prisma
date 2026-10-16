@@ -69,6 +69,8 @@ model empresas {
   /// @encrypted
   mail_de_carga         String?                 @db.Text
   recargo               Boolean                 @default(false)
+  notificar_resumen_subida Boolean              @default(false)
+  email_notificaciones    String?               @db.VarChar(255)
   config_roles          Json?                   @default(dbgenerated("(json_object())"))
   cif_hash              String?                 @db.VarChar(64)
   mail_de_carga_hash    String?                 @unique(map: "mail_de_carga_hash") @db.VarChar(64)

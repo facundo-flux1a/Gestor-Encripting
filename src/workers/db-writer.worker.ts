@@ -22,7 +22,7 @@
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
 import { dbWriterQueue, DbWriterJobData, DB_WRITER_QUEUE_NAME } from '@/lib/queue';
-import { updateIngestionProgress, updateParentProgress } from '@/lib/ingestion-progress';
+import { updateIngestionProgress, updateParentProgress, handleWorkerJobFailed } from '@/lib/ingestion-progress';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import connection, { dbName } from '@/lib/db';
@@ -1017,9 +1017,8 @@ export function startDbWriterWorker() {
     console.log(`[DbWriterWorker] ✅ Job completado: ${job.id}`);
     wLog('DbWriterWorker', `✅ Guardado OK: ${job.id}`, 'success');
   });
-  worker.on('failed', (job, err) => {
-    console.error(`[DbWriterWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
-    wLog('DbWriterWorker', `❌ Fallido: ${job?.id} — ${err.message}`, 'error');
+  worker.on('failed', async (job, err) => {
+    await handleWorkerJobFailed('DbWriterWorker', job, err);
   });
 
   console.log(`[DbWriterWorker] 🚀 Arrancado con concurrency=${DB_WRITER_CONCURRENCY}`);

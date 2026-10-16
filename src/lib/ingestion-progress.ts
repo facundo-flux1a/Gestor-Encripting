@@ -9,6 +9,8 @@
  *   { uploadId, status, step, progress, message, documentId? }
  */
 import { prisma } from './prisma';
+import { wLog } from '@/lib/worker-logger';
+import { humanizeIngestionError } from '@/services/ingestion/error-humanizer';
 
 export type IngestionStatus =
   | 'waiting'
@@ -250,3 +252,58 @@ export const INGESTION_ERRORS = {
 } as const;
 
 export type IngestionErrorCode = keyof typeof INGESTION_ERRORS;
+
+/**
+ * Maneja el fallo de un job en worker.on('failed').
+ * - Si aún le quedan reintentos en BullMQ: actualiza a 'Reintentando' sin parpadear a 'failed'.
+ * - Si ya se agotaron los intentos O es un stall/crash fatal de BullMQ:
+ *   actualiza a 'failed' en la base de datos para no dejar nunca el documento en 'procesando' huérfano.
+ */
+export async function handleWorkerJobFailed(
+  workerTag: string,
+  job: { id?: string; opts?: { attempts?: number }; attemptsMade?: number; data?: any } | undefined,
+  err: Error
+): Promise<void> {
+  const attemptsMade = job?.attemptsMade ?? 0;
+  const maxAttempts = job?.opts?.attempts ?? 1;
+  const isStalled = err?.message?.toLowerCase().includes('job stalled');
+  const isFinal = !job || attemptsMade >= maxAttempts || isStalled;
+
+  console.error(`[${workerTag}] ❌ Job fallido: ${job?.id} (intento ${attemptsMade}/${maxAttempts}, final=${isFinal}) | ${err?.message}`);
+  wLog(workerTag, `❌ Job fallido: ${job?.id} (intento ${attemptsMade}/${maxAttempts}, final=${isFinal}) — ${err?.message}`, 'error');
+
+  const uploadId: string | undefined =
+    job?.data?.ingestion?.uploadId ||
+    job?.data?.uploadId;
+
+  if (!uploadId) return;
+
+  if (isFinal) {
+    const fileName = job?.data?.ingestion?.fileName || job?.data?.fileName;
+    const humanized = await humanizeIngestionError(err?.message || '', {
+      fileName,
+      workerTag,
+      isStalled,
+    });
+
+    const userMessage = humanized.sugerencia
+      ? `${humanized.mensaje} ${humanized.sugerencia}`
+      : humanized.mensaje;
+
+    await updateIngestionProgress(uploadId, {
+      status: 'failed',
+      step: isStalled ? 'Servidor interrumpido' : 'Error en análisis',
+      progress: 0,
+      mensaje: userMessage,
+      errorCode: isStalled ? 'WORKER_CRASHED_OR_STALLED' : 'JOB_FAILED',
+      errorDetalle: `${humanized.mensaje}\n\nSugerencia: ${humanized.sugerencia}\n\n[Diagnóstico técnico: ${err?.message}]`,
+    });
+  } else {
+    await updateIngestionProgress(uploadId, {
+      status: 'Reintentando',
+      step: `Reintentando (${attemptsMade + 1}/${maxAttempts})`,
+      progress: Math.max(10, (job?.data?.progress || 30)),
+      mensaje: `Reintentando análisis (${attemptsMade + 1} de ${maxAttempts})...`,
+    });
+  }
+}

@@ -169,6 +169,14 @@ export async function PATCH(
       updateData.recargo = (rawRecargo === true || rawRecargo === 1 || rawRecargo === 'true');
       console.log(`🔌 [API-UPDATE] Recargo parsing: raw=${rawRecargo} (${typeof rawRecargo}) -> db=${updateData.recargo}`);
     }
+    if ('notificarResumenSubida' in body || 'notificar_resumen_subida' in body) {
+      const rawVal = body.notificarResumenSubida ?? body.notificar_resumen_subida;
+      updateData.notificar_resumen_subida = (rawVal === true || rawVal === 1 || rawVal === 'true');
+    }
+    if ('emailNotificaciones' in body || 'email_notificaciones' in body) {
+      const emailVal = (body.emailNotificaciones ?? body.email_notificaciones)?.trim() || null;
+      updateData.email_notificaciones = emailVal;
+    }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -195,7 +203,9 @@ export async function PATCH(
       nombre_fiscal: updatedRecord.nombre_fiscal,
       CIF: updatedRecord.CIF,
       mail_de_carga: updatedRecord.mail_de_carga,
-      recargo: updatedRecord.recargo
+      recargo: updatedRecord.recargo,
+      notificar_resumen_subida: updatedRecord.notificar_resumen_subida,
+      email_notificaciones: updatedRecord.email_notificaciones,
     };
 
     console.log('✅ [API-UPDATE-COMPANY] Empresa actualizada exitosamente');

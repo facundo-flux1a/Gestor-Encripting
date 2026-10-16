@@ -8,7 +8,13 @@
 import { Worker, Job } from 'bullmq';
 import { redis } from '@/lib/redis';
 import { extractionQueue, ExtractionJobData, ingestionQueue, dbWriterQueue, EXTRACTION_QUEUE_NAME } from '@/lib/queue';
-import { updateIngestionProgress, createIngestionRecord, updateParentProgress } from '@/lib/ingestion-progress';
+import {
+  updateIngestionProgress,
+  createIngestionRecord,
+  updateParentProgress,
+  handleWorkerJobFailed,
+} from '@/lib/ingestion-progress';
+import { humanizeIngestionError } from '@/services/ingestion/error-humanizer';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getPresignedUrl, getFileBuffer } from '@/lib/s3-client';
 import * as crypto from 'crypto';
@@ -141,22 +147,25 @@ export function startExtractionWorker() {
         const isLastAttempt = (job.attemptsMade + 1) >= maxAttempts;
         
         if (isLastAttempt) {
-          // Es el último intento, marcar como Fallido definitivamente
+          // Es el último intento, marcar como Fallido definitivamente con error humanizado
           wLog('ExtractionWorker', `❌ Error final en job ${job.id} (${fileName}) tras ${maxAttempts} intentos: ${error.message}`, 'error');
+          const humanized = await humanizeIngestionError(error.message, { fileName, workerTag: 'ExtractionWorker' });
+          const userMessage = humanized.sugerencia ? `${humanized.mensaje} ${humanized.sugerencia}` : humanized.mensaje;
           await updateIngestionProgress(uploadId, {
-            status: 'Fallido',
-            step: `Error IA (${type})`,
+            status: 'failed',
+            step: `Error en análisis`,
             progress: 0,
-            mensaje: `Fallo definitivo tras ${maxAttempts} intentos: ${error.message}`,
+            mensaje: userMessage,
+            errorDetalle: `${humanized.mensaje}\n\nSugerencia: ${humanized.sugerencia}\n\n[Diagnóstico técnico: ${error.message}]`,
           }).catch(() => {});
         } else {
-          // Aún hay intentos disponibles en BullMQ
+          // Aún hay intentos disponibles en BullMQ: mensaje limpio sin tecnicismos
           wLog('ExtractionWorker', `⚠️ Error en job ${job.id} (intento ${job.attemptsMade + 1}/${maxAttempts}): ${error.message}`, 'warn');
           await updateIngestionProgress(uploadId, {
             status: 'Reintentando',
             step: `Reintentando (${type})`,
             progress: 10,
-            mensaje: `Fallo temporal, programado para reintento: ${error.message.substring(0, 50)}...`,
+            mensaje: `Reintentando análisis (${job.attemptsMade + 1} de ${maxAttempts})...`,
           }).catch(() => {});
         }
         
@@ -179,9 +188,8 @@ export function startExtractionWorker() {
     console.log(`[ExtractionWorker] ✅ Job completado: ${job.id}`);
     wLog('ExtractionWorker', `✅ Job completado: ${job.id}`, 'success');
   });
-  worker.on('failed', (job, err) => {
-    console.error(`[ExtractionWorker] ❌ Job fallido: ${job?.id} | ${err.message}`);
-    wLog('ExtractionWorker', `❌ Job fallido: ${job?.id} — ${err.message}`, 'error');
+  worker.on('failed', async (job, err) => {
+    await handleWorkerJobFailed('ExtractionWorker', job, err);
   });
   
   console.log(

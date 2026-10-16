@@ -317,6 +317,8 @@ export type Company = {
   cif?: string;
   mail_de_carga?: string | null;
   recargo?: boolean | number | null;
+  notificar_resumen_subida?: boolean | number | null;
+  email_notificaciones?: string | null;
   id_de_usuario?: number[] | string | null;
   config_roles?: any;
   members?: any[];
