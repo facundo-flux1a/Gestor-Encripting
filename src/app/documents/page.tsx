@@ -294,7 +294,8 @@ function DocumentsPageContent() {
   const companiesForUpload = React.useMemo(() => {
     return companies.map(company => ({
       id: company.id,
-      nombre: company.name || (`Empresa ${company.id}` as string)
+      nombre: company.name || (`Empresa ${company.id}` as string),
+      cif: company.CIF || company.cif || '',
     }));
   }, [companies]);
 

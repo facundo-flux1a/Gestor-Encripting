@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { type Document } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Printer, Sparkles, AlertTriangle, Building2, User, Receipt, ShieldCheck, FileSpreadsheet } from 'lucide-react';
+import { Printer, Sparkles, AlertTriangle, Building2, User, Receipt, ShieldCheck, FileSpreadsheet, Upload, Loader2, FileText } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface SyntheticInvoiceViewerProps {
   doc: Document;
@@ -32,6 +33,13 @@ const fmtDate = (d: string | null | undefined) => {
 
 export function SyntheticInvoiceViewer({ doc }: SyntheticInvoiceViewerProps) {
   const [template, setTemplate] = useState<TemplateType>('dark');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const isManual = (doc as any)?.datos_extra?.creacion_manual === true ||
+                   (doc as any)?.dashboard_correo === 'manual' ||
+                   String((doc as any)?.file_hash || '').startsWith('manual_');
 
   // Separar entidades
   const emisor = doc.entidades?.find(e => e.rol === 'emisor' || e.rol === 'proveedor');
@@ -61,13 +69,63 @@ export function SyntheticInvoiceViewer({ doc }: SyntheticInvoiceViewerProps) {
     window.print();
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const docId = doc.id_documento || (doc as any).id;
+    if (!docId) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo identificar el ID del documento.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`/api/documents/${docId}/attach-file`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'No se pudo adjuntar el archivo');
+      }
+
+      toast({
+        title: '✅ Archivo adjuntado',
+        description: 'El archivo se subió e integró con éxito. Actualizando vista...',
+      });
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
+    } catch (err: any) {
+      toast({
+        title: 'Error al adjuntar archivo',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden relative">
       {/* ═══ BARRA SUPERIOR DE HERRAMIENTAS (No imprimible) ═══ */}
       <div className="no-print flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 text-white shrink-0 gap-3 z-10 backdrop-blur-md">
-        <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
-          <Sparkles className="h-4 w-4 animate-pulse" />
-          <span className="hidden sm:inline">Factura Sintética (API)</span>
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <Sparkles className={cn('h-4 w-4', isManual ? 'text-primary' : 'text-emerald-400 animate-pulse')} />
+          <span className={cn('hidden sm:inline', isManual ? 'text-primary font-semibold' : 'text-emerald-400')}>
+            {isManual ? 'Comprobante Digital (Carga Manual)' : 'Factura Sintética (API)'}
+          </span>
         </div>
 
         {/* Selector de Plantilla */}
@@ -132,30 +190,96 @@ export function SyntheticInvoiceViewer({ doc }: SyntheticInvoiceViewerProps) {
             template === 'compact' && 'bg-slate-900 text-slate-100 border border-slate-800'
           )}
         >
-          {/* BANNER DE RECONSTRUCCIÓN FISCAL API */}
-          <div
-            className={cn(
-              'mb-6 px-4 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between border gap-2',
-              template === 'dark' && 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300',
-              template === 'paper' && 'bg-amber-50 border-amber-300 text-amber-900',
-              template === 'compact' && 'bg-indigo-950/50 border-indigo-500/30 text-indigo-300'
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>
-                <strong>Reconstrucción gráfica de datos API (Verifactu/SII):</strong> Sin archivo original adjunto.
-              </span>
-            </div>
-            <span
+          {/* BANNER DIFERENCIADO: CARGA MANUAL VS API */}
+          {isManual ? (
+            <div
               className={cn(
-                'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono tracking-wider shrink-0',
-                template === 'paper' ? 'bg-amber-200 text-amber-900' : 'bg-white/10 text-white'
+                'mb-6 px-4 py-3 rounded-lg text-xs font-medium flex flex-wrap items-center justify-between border gap-3',
+                template === 'dark' && 'bg-primary/10 border-primary/30 text-primary-foreground',
+                template === 'paper' && 'bg-teal-50 border-teal-300 text-teal-950',
+                template === 'compact' && 'bg-slate-800/90 border-primary/30 text-primary'
               )}
             >
-              CANAL: API
-            </span>
-          </div>
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 shrink-0 text-primary" />
+                <span>
+                  <strong>Documento de Carga Manual / Asistida:</strong> Registrado sin archivo físico original.
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="application/pdf,image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="px-2.5 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  title="Subir PDF o foto del comprobante"
+                >
+                  {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {isUploading ? 'Subiendo...' : 'Adjuntar PDF / Foto'}
+                </button>
+                <span
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono tracking-wider shrink-0',
+                    template === 'paper'
+                      ? 'bg-teal-200 text-teal-900'
+                      : 'bg-primary/20 text-primary border border-primary/30'
+                  )}
+                >
+                  CARGA MANUAL
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                'mb-6 px-4 py-3 rounded-lg text-xs font-medium flex flex-wrap items-center justify-between border gap-3',
+                template === 'dark' && 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300',
+                template === 'paper' && 'bg-amber-50 border-amber-300 text-amber-900',
+                template === 'compact' && 'bg-indigo-950/50 border-indigo-500/30 text-indigo-300'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  <strong>Reconstrucción gráfica de datos API (Verifactu/SII):</strong> Sin archivo original adjunto.
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="application/pdf,image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  title="Adjuntar PDF o imagen a esta factura de API"
+                >
+                  {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {isUploading ? 'Subiendo...' : 'Adjuntar Archivo'}
+                </button>
+                <span
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono tracking-wider shrink-0',
+                    template === 'paper' ? 'bg-amber-200 text-amber-900' : 'bg-white/10 text-white'
+                  )}
+                >
+                  CANAL: API
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* CABECERA: TÍTULO DOCUMENTO + METADATOS */}
           <div className="flex flex-col sm:flex-row justify-between items-start border-b pb-6 gap-4 border-current/15">

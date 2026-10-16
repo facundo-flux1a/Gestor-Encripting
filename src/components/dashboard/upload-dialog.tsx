@@ -4,15 +4,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, X, AlertCircle, Camera } from 'lucide-react';
+import { Upload, X, AlertCircle, Camera, Sparkles } from 'lucide-react';
 import { enqueueClientUploadBatch } from '@/lib/client-upload-queue';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ManualDocumentModal } from './manual-document-modal';
 
 interface UploadDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  companies: Array<{ id: number; nombre: string }>;
+  companies: Array<{ id: number; nombre: string; cif?: string }>;
   onUploadComplete?: () => void;
   defaultCompanyId?: string;
 }
@@ -31,10 +32,28 @@ export function UploadDialog({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [companyError, setCompanyError] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { toast } = useToast();
+
+  const handleOpenManualCreation = () => {
+    if (!selectedCompanyId) {
+      setCompanyError(true);
+      toast({
+        title: 'Selecciona una empresa',
+        description: 'Por favor elige la empresa destino antes de cargar manualmente.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const currentCompId = selectedCompanyId;
+    handleClose();
+    // Restaurar empresa seleccionada para la modal manual
+    setSelectedCompanyId(currentCompId);
+    setIsManualModalOpen(true);
+  };
 
   // Auto-select company when modal opens and there is a single sidebar selection
   useEffect(() => {
@@ -516,6 +535,15 @@ export function UploadDialog({
                 <Camera className="h-3.5 w-3.5" />
                 Tomar foto
               </Button>
+              <Button
+                variant="outline"
+                className="cursor-pointer h-7 sm:h-8 text-xs sm:text-sm gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary shadow-sm"
+                onClick={handleOpenManualCreation}
+                type="button"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Cargar manualmente
+              </Button>
             </div>
             <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500 mt-1.5 sm:mt-2">
               PDF, ZIP e imágenes (máx. 10 MB por archivo)
@@ -617,6 +645,17 @@ export function UploadDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    <ManualDocumentModal
+      isOpen={isManualModalOpen}
+      onClose={() => setIsManualModalOpen(false)}
+      companyId={selectedCompanyId}
+      companyName={companies.find((c) => String(c.id) === selectedCompanyId)?.nombre || ''}
+      companyCif={companies.find((c) => String(c.id) === selectedCompanyId)?.cif || ''}
+      onDocumentCreated={() => {
+        onUploadComplete?.();
+      }}
+    />
     </>
   );
 }
