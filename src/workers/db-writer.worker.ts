@@ -511,10 +511,15 @@ export function startDbWriterWorker() {
                   : {}),
                 // ── Veri*Factu QR (si se detectó un QR válido) ───────────────────
                 ...(verifactu ? {
-                  verifactu_verificado: true,
+                  // true SOLO si AEAT respondió resultado '00' (factura encontrada y confirmada)
+                  verifactu_verificado: verifactu.aeatCodigo === '00',
                   verifactu_url: verifactu.url,
                   verifactu_campos: verifactu.params,
                   verifactu_fetch_ok: verifactu.fetchOk,
+                  verifactu_estado: verifactu.aeatEstado ?? 'ERROR_CONSULTA',
+                  verifactu_codigo: verifactu.aeatCodigo ?? null,
+                  ...(verifactu.aeatError ? { verifactu_error_aeat: verifactu.aeatError } : {}),
+                  verifactu_fecha_consulta: verifactu.aeatFechaConsulta ?? new Date().toISOString(),
                   ...(verifactu.discrepanciaImporte ? {
                     verifactu_discrepancia_importe: verifactu.discrepanciaImporte,
                   } : {}),

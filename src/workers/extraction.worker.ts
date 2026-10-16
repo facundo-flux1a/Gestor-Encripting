@@ -21,7 +21,7 @@ import {
   PROMPT_EXTRACTOR_NO_FACTURABLE
 } from '@/services/ingestion/prompts_v2';
 import { parseLlmResponse, normalizeDocumento, DocumentoExtraido } from '@/services/ingestion/normalize';
-import { analyzeInvoiceDocument, isAzureDiConfigured } from '@/services/ingestion/azure-di';
+import { analyzeInvoiceDocument, isAzureDiConfigured, extractQrFromAzureDiResult } from '@/services/ingestion/azure-di';
 import {
   azureDiLooksLikeInvoice,
   buildAzureDiContext,
@@ -43,7 +43,7 @@ import {
 import { runFiscalGuards, formatGuardFailures, isRepairableGuardFailure } from '@/services/ingestion/fiscal-guards';
 import { FiscalStatus } from '@/lib/document-fiscal-status';
 import { wLog } from '@/lib/worker-logger';
-import { detectQrVerifactu, type VerifactuQrResult } from '@/services/ingestion/qr-detector';
+import { detectQrVerifactu, processVerifactuUrl, type VerifactuQrResult } from '@/services/ingestion/qr-detector';
 
 assertAzureOpenAiConfigured();
 const EXTRACTION_CONCURRENCY = parseInt(
@@ -840,6 +840,7 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
   let rawParsed: DocumentoExtraido | Record<string, unknown>;
   let usedExtractor: 'azure-di' | 'azure-di-hybrid' | 'azure-openai' = 'azure-openai';
   let ocrText = ''; // disponible para el fallback de visión en todos los paths
+  let azureDiQrUrl: string | null = null;
 
   if (canUseAzureDi) {
     try {
@@ -850,6 +851,10 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
         mensaje: isHybrid ? 'Ejecutando OCR avanzado...' : 'Analizando estructura del documento...',
       });
       const diResult = await analyzeInvoiceDocument(finalBuffer, ingestion.mimeType);
+      azureDiQrUrl = extractQrFromAzureDiResult(diResult);
+      if (azureDiQrUrl) {
+        wLog('ExtractionWorker', `🔲 QR detectado por Azure DI: ${azureDiQrUrl.slice(0, 100)}`, 'info');
+      }
 
       if (isHybrid) {
         wLog('ExtractionWorker', `✅ Azure DI Layout OK. Enviando OCR a LLM (${ingestion.fileName})`);
@@ -1034,9 +1039,20 @@ async function handleExtractFacturable(job: Job<ExtractionJobData>, fileBuffer: 
   ) || null;
   let verifactuResult: VerifactuQrResult | null = null;
   try {
-    verifactuResult = await detectQrVerifactu(finalBuffer, ingestion.mimeType, ocrImporteTotal);
+    if (azureDiQrUrl) {
+      wLog('QrDetector', `🚀 Procesando QR detectado por Azure DI (${ingestion.fileName})`);
+      verifactuResult = await processVerifactuUrl(azureDiQrUrl, ocrImporteTotal);
+    }
+    // Si Azure DI no detectó QR o no era válido como Veri*Factu, fallback al detector local
+    if (!verifactuResult) {
+      if (azureDiQrUrl) {
+        wLog('QrDetector', `⚠️ QR de Azure DI no procesable, intentando detector local fallback...`);
+      }
+      verifactuResult = await detectQrVerifactu(finalBuffer, ingestion.mimeType, ocrImporteTotal);
+    }
+
     if (verifactuResult) {
-      wLog('QrDetector', `✅ QR Veri*Factu detectado para ${ingestion.fileName} | NIF=${verifactuResult.params.nif} | importe=${verifactuResult.params.importe} | fetchOk=${verifactuResult.fetchOk}${verifactuResult.discrepanciaImporte ? ` | ⚠️ DISCREPANCIA: OCR=${verifactuResult.discrepanciaImporte.ocrImporte} QR=${verifactuResult.discrepanciaImporte.qrImporte}` : ''}`);
+      wLog('QrDetector', `✅ QR Veri*Factu detectado para ${ingestion.fileName} | NIF=${verifactuResult.params.nif} | importe=${verifactuResult.params.importe} | estado=${verifactuResult.aeatEstado ?? '?'} | codigo=${verifactuResult.aeatCodigo ?? '—'} | fetchOk=${verifactuResult.fetchOk}${verifactuResult.discrepanciaImporte ? ` | ⚠️ DISCREPANCIA: OCR=${verifactuResult.discrepanciaImporte.ocrImporte} QR=${verifactuResult.discrepanciaImporte.qrImporte}` : ''}`);
     }
   } catch (qrErr: any) {
     console.warn(`[QrDetector] ⚠️ Error en detección QR (no crítico): ${qrErr?.message}`);

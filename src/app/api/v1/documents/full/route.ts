@@ -427,6 +427,10 @@ export async function GET(request: NextRequest) {
         verifactu_url: datosExtra.verifactu_url ?? null,
         verifactu_campos: datosExtra.verifactu_campos ?? null,
         verifactu_discrepancia_importe: datosExtra.verifactu_discrepancia_importe ?? null,
+        verifactu_estado: datosExtra.verifactu_estado ?? null,
+        verifactu_codigo: datosExtra.verifactu_codigo ?? null,
+        verifactu_error_aeat: datosExtra.verifactu_error_aeat ?? null,
+        verifactu_fecha_consulta: datosExtra.verifactu_fecha_consulta ?? null,
       };
     });
 

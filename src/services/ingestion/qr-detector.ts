@@ -13,6 +13,7 @@
  * Nunca lanza; todos los errores son silenciosos (log + retorna null).
  */
 
+import { spawn } from 'child_process';
 import { Jimp } from 'jimp';
 import jsQR from 'jsqr';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -27,13 +28,28 @@ export interface VerifactuParams {
   huella?: string;
 }
 
+/** Estado semántico del resultado de la consulta a AEAT */
+export type VerifactuAeatEstado =
+  | 'ENCONTRADA'        // resultado: '00' — AEAT confirmó la factura
+  | 'NO_ENCONTRADA'     // resultado: '01' — AEAT no la tiene (anulada o no registrada)
+  | 'NO_CONTRASTABLE'   // resultado: '02' — sistema No Veri*Factu, custodia propia
+  | 'ERROR_CONSULTA';   // error de red, timeout, KO de AEAT o rate-limit (3002)
+
 export interface VerifactuQrResult {
   url: string;
   params: VerifactuParams;
-  /** true si el fetch a AEAT devolvió respuesta (puede ser vacía o de error no-fiscal) */
+  /** true si HTTP respondió OK (no implica que la factura esté registrada en AEAT) */
   fetchOk: boolean;
   /** Texto plano de la respuesta AEAT (para debugging) */
   fetchBody?: string;
+  /** Estado semántico del resultado AEAT */
+  aeatEstado?: VerifactuAeatEstado;
+  /** Código crudo devuelto por AEAT: '00', '01', '02', o null si no hubo JSON */
+  aeatCodigo?: '00' | '01' | '02' | null;
+  /** Código de error AEAT en caso de KO (ej: '3002', '1003.1004') */
+  aeatError?: string | null;
+  /** ISO timestamp del momento de la consulta */
+  aeatFechaConsulta?: string;
   /** Diferencia de importe detectada entre OCR y QR (null = no hay discrepancia o no se pudo comparar) */
   discrepanciaImporte?: {
     ocrImporte: number;
@@ -55,6 +71,17 @@ const VERIFACTU_ALLOWED_HOSTS = new Set([
   'www.araba.eus',                  // Araba/Álava
   'www.nafarroa.eus',               // Navarra (por si acaso)
 ]);
+
+export function isVerifactuAllowedHost(host: string): boolean {
+  if (VERIFACTU_ALLOWED_HOSTS.has(host)) return true;
+  // Sandbox/preproducción AEAT — se activa dinámicamente si VERIFACTU_ALLOW_SANDBOX=true
+  if (process.env.VERIFACTU_ALLOW_SANDBOX === 'true') {
+    if (host === 'prewww2.aeat.es' || host === 'prewww1.aeat.es' || host === 'prewww.aeat.es') {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Parámetros mínimos requeridos en la URL de Veri*Factu (AEAT)
 const REQUIRED_PARAMS_AEAT = ['nif', 'numserie', 'fecha', 'importe'] as const;
@@ -85,7 +112,7 @@ export function isVerifactuUrl(rawUrl: string): boolean {
   if (parsed.protocol !== 'https:') return false;
 
   const host = parsed.hostname.toLowerCase();
-  if (!VERIFACTU_ALLOWED_HOSTS.has(host)) return false;
+  if (!isVerifactuAllowedHost(host)) return false;
 
   const params = parsed.searchParams;
 
@@ -134,7 +161,7 @@ async function detectQrInImageBuffer(imgBuffer: Buffer): Promise<string | null> 
     const { data, width, height } = image.bitmap;
     console.log(`[QrDetector] 🖼️ Imagen cargada: ${width}x${height}px`);
 
-    const clampedData = new Uint8ClampedArray(data.buffer);
+    const clampedData = new Uint8ClampedArray(data.buffer, data.byteOffset, data.length);
     const code = jsQR(clampedData, width, height, {
       inversionAttempts: 'attemptBoth',
     });
@@ -153,7 +180,7 @@ async function detectQrInImageBuffer(imgBuffer: Buffer): Promise<string | null> 
       try {
         const parsed = new URL(url);
         if (parsed.protocol !== 'https:') failReason = `protocolo no es https (es ${parsed.protocol})`;
-        else if (!VERIFACTU_ALLOWED_HOSTS.has(parsed.hostname)) failReason = `host no en whitelist (${parsed.hostname})`;
+        else if (!isVerifactuAllowedHost(parsed.hostname.toLowerCase())) failReason = `host no en whitelist (${parsed.hostname})`;
         else failReason = 'parámetros mínimos faltantes (nif/numserie/fecha/importe)';
       } catch { failReason = 'URL malformada'; }
       console.log(`[QrDetector] ⛔ QR NO es Veri*Factu: ${failReason}`);
@@ -168,20 +195,66 @@ async function detectQrInImageBuffer(imgBuffer: Buffer): Promise<string | null> 
   }
 }
 
-// ─── Renderizado de PDF a imagen con pdfjs ────────────────────────────────────
+// ─── Renderizado de PDF a imagen ──────────────────────────────────────────────
 
 /**
- * Renderiza una página de un PDF a un buffer PNG usando pdfjs-dist (legacy/Node).
+ * Renderiza una página de un PDF a buffer PNG usando pdftoppm (nativo, rápido, 100% fiel).
+ * Retorna null si falla o si pdftoppm no está disponible en el sistema.
+ */
+async function renderPdfPageWithPdftoppm(
+  pdfBuffer: Buffer,
+  pageNumber: number
+): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn('pdftoppm', [
+        '-png',
+        '-r', '200',
+        '-f', String(pageNumber),
+        '-l', String(pageNumber),
+      ]);
+      const chunks: Buffer[] = [];
+      child.stdout.on('data', (chunk) => chunks.push(chunk));
+      child.stderr.on('data', () => {});
+      child.on('error', () => resolve(null));
+      child.on('close', (code) => {
+        if (code === 0 && chunks.length > 0) {
+          resolve(Buffer.concat(chunks));
+        } else {
+          resolve(null);
+        }
+      });
+      child.stdin.write(pdfBuffer);
+      child.stdin.end();
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Renderiza una página de un PDF a un buffer PNG.
+ * 1. Intenta pdftoppm (Poppler / nativo en Linux, 100% fiel con vectores/QR).
+ * 2. Fallback a pdfjs-dist / canvas / extracción de imagen embebida.
  * Retorna null si falla.
  */
 async function renderPdfPageToBuffer(
   pdfBuffer: Buffer,
   pageNumber: number
 ): Promise<Buffer | null> {
+  // 1. Intentar primero con pdftoppm
   try {
-    // pdfjs-dist en Node no tiene canvas nativo — usamos el helper de NodeCanvasFactory
-    // si está disponible, o fallback a extracción de bytes directamente.
-    // En ausencia de canvas, extraemos el contenido rasterizado si el PDF tiene XObjects de imagen.
+    const popplerBuffer = await renderPdfPageWithPdftoppm(pdfBuffer, pageNumber);
+    if (popplerBuffer && popplerBuffer.length > 0) {
+      console.log(`[QrDetector] 📄 Página ${pageNumber} renderizada exitosamente con pdftoppm (${popplerBuffer.length} bytes)`);
+      return popplerBuffer;
+    }
+  } catch (err: any) {
+    console.warn(`[QrDetector] ⚠️ pdftoppm no disponible o falló: ${err?.message}`);
+  }
+
+  // 2. Fallback con pdfjs-dist
+  try {
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(pdfBuffer),
       verbosity: 0,
@@ -193,14 +266,12 @@ async function renderPdfPageToBuffer(
     if (pageNum < 1) return null;
 
     const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2.0 }); // 2x = mejor resolución QR
+    const viewport = page.getViewport({ scale: 2.0 });
 
-    // Intentar renderizar con canvas si está disponible en el entorno
     let canvasModule: any;
     try {
       canvasModule = await import('canvas');
     } catch {
-      // canvas no disponible — fallback: extraemos imágenes embebidas del PDF
       console.warn(`[QrDetector] ⚠️ 'canvas' no disponible. Intentando extracción de imagen embebida...`);
       return await extractEmbeddedImageFromPdf(pdfBuffer, pageNum);
     }
@@ -212,12 +283,13 @@ async function renderPdfPageToBuffer(
     await page.render({
       canvasContext: ctx as any,
       viewport,
-    }).promise;
+      canvas: canvas as any,
+    } as any).promise;
 
     const pngBuffer = canvas.toBuffer('image/png');
     return pngBuffer;
   } catch (err: any) {
-    console.warn(`[QrDetector] ⚠️ Error renderizando página ${pageNumber} del PDF: ${err?.message}`);
+    console.warn(`[QrDetector] ⚠️ Error renderizando página ${pageNumber} del PDF con pdfjs: ${err?.message}`);
     return null;
   }
 }
@@ -279,28 +351,88 @@ async function extractEmbeddedImageFromPdf(
 
 // ─── Fetch a AEAT ──────────────────────────────────────────────────────────────
 
+/** Resultado parseado de la respuesta JSON de la AEAT */
+interface AeatJsonResponse {
+  fetchOk: boolean;
+  fetchBody: string;
+  aeatEstado: VerifactuAeatEstado;
+  aeatCodigo: '00' | '01' | '02' | null;
+  aeatError: string | null;
+}
+
 /**
- * Hace GET a la URL de Veri*Factu. Retorna { ok, body }.
- * No lanza — cualquier error de red retorna { ok: false }.
+ * Hace GET a la URL de Veri*Factu con &formato=json.
+ * Parsea la respuesta de la AEAT y mapea el campo `resultado` al estado semántico.
+ * No lanza — cualquier error de red o parseo retorna ERROR_CONSULTA.
  */
-async function fetchVerifactuUrl(url: string): Promise<{ ok: boolean; body: string }> {
+async function fetchVerifactuUrl(url: string): Promise<AeatJsonResponse> {
+  const aeatFechaConsulta = new Date().toISOString();
+  // Construir URL con formato=json (nunca va en el QR impreso, solo en consultas automáticas)
+  const jsonUrl = url.includes('formato=') ? url : `${url}&formato=json`;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), VERIFACTU_FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
+    const res = await fetch(jsonUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; GestorDocumental/1.0)',
-        'Accept': 'text/html,application/xhtml+xml',
+        'Accept': 'application/json,text/html',
       },
     });
     clearTimeout(timeout);
     const body = await res.text().catch(() => '');
     console.log(`[QrDetector] 📡 Fetch Veri*Factu → HTTP ${res.status} (${body.length} bytes)`);
-    return { ok: res.ok, body };
+
+    // Intentar parsear el JSON de respuesta de la AEAT
+    let aeatEstado: VerifactuAeatEstado = 'ERROR_CONSULTA';
+    let aeatCodigo: '00' | '01' | '02' | null = null;
+    let aeatError: string | null = null;
+
+    if (res.ok && body) {
+      try {
+        const json = JSON.parse(body);
+        if (json?.status === 'OK' && json?.respuesta?.resultado) {
+          const resultado = String(json.respuesta.resultado);
+          if (resultado === '00') {
+            aeatEstado = 'ENCONTRADA';
+            aeatCodigo = '00';
+          } else if (resultado === '01') {
+            aeatEstado = 'NO_ENCONTRADA';
+            aeatCodigo = '01';
+          } else if (resultado === '02') {
+            aeatEstado = 'NO_CONTRASTABLE';
+            aeatCodigo = '02';
+          } else {
+            // Resultado desconocido — tratamos como ERROR_CONSULTA
+            aeatEstado = 'ERROR_CONSULTA';
+            aeatError = `resultado_desconocido:${resultado}`;
+          }
+        } else if (json?.status === 'KO') {
+          aeatEstado = 'ERROR_CONSULTA';
+          aeatError = json?.codigo_error ? String(json.codigo_error) : 'KO_sin_codigo';
+          if (aeatError?.includes('3002')) {
+            console.error('[QrDetector] 🚨 AEAT rate-limit excedido (3002). Se recomienda no consultar más hoy.');
+          }
+        } else {
+          // Respuesta inesperada (HTML u otro formato) — no sabemos el resultado
+          aeatEstado = 'ERROR_CONSULTA';
+          aeatError = 'respuesta_no_json';
+        }
+      } catch {
+        // JSON.parse falló — la AEAT devolvió HTML u otro formato
+        aeatEstado = 'ERROR_CONSULTA';
+        aeatError = 'parse_error';
+      }
+    } else if (!res.ok) {
+      aeatEstado = 'ERROR_CONSULTA';
+      aeatError = `http_${res.status}`;
+    }
+
+    console.log(`[QrDetector] 🔎 AEAT estado=${aeatEstado} | codigo=${aeatCodigo ?? '—'} | error=${aeatError ?? 'ninguno'}`);
+    return { fetchOk: res.ok, fetchBody: body.slice(0, 500), aeatEstado, aeatCodigo, aeatError };
   } catch (err: any) {
     console.warn(`[QrDetector] ⚠️ Fetch Veri*Factu falló: ${err?.message}`);
-    return { ok: false, body: '' };
+    return { fetchOk: false, fetchBody: '', aeatEstado: 'ERROR_CONSULTA', aeatCodigo: null, aeatError: err?.message ?? 'network_error' };
   }
 }
 
@@ -367,18 +499,35 @@ export async function detectQrVerifactu(
     return null;
   }
 
-  const params = parseVerifactuParams(qrUrl);
+  return await processVerifactuUrl(qrUrl, ocrImporte);
+}
+
+/**
+ * Procesa una URL de Veri*Factu ya detectada (ej: vía Azure DI o externa):
+ * Valida la URL, consulta a la AEAT y compara importes con el OCR.
+ */
+export async function processVerifactuUrl(
+  qrUrl: string,
+  ocrImporte?: number | null
+): Promise<VerifactuQrResult | null> {
+  const url = qrUrl.trim();
+  if (!isVerifactuUrl(url)) {
+    console.log(`[QrDetector] ⛔ URL no es Veri*Factu válida: ${url.slice(0, 100)}`);
+    return null;
+  }
+
+  const params = parseVerifactuParams(url);
   if (!params) {
-    console.log(`[QrDetector] ⚠️ URL Veri*Factu válida pero no se pudieron parsear los parámetros: ${qrUrl}`);
+    console.log(`[QrDetector] ⚠️ URL Veri*Factu válida pero no se pudieron parsear los parámetros: ${url}`);
     return null;
   }
 
   console.log(`[QrDetector] 📋 Parámetros Veri*Factu: nif=${params.nif} | numserie=${params.numserie} | fecha=${params.fecha} | importe=${params.importe}`);
 
-  // Fetch obligatorio a AEAT
-  console.log(`[QrDetector] 🌐 Haciendo fetch a AEAT: ${qrUrl.slice(0, 100)}...`);
-  const { ok: fetchOk, body: fetchBody } = await fetchVerifactuUrl(qrUrl);
-  console.log(`[QrDetector] 📡 Fetch resultado: ok=${fetchOk} | body=${fetchBody?.length ?? 0} bytes`);
+  // Fetch obligatorio a AEAT (con &formato=json para obtener respuesta estructurada)
+  console.log(`[QrDetector] 🌐 Haciendo fetch a AEAT: ${url.slice(0, 100)}...`);
+  const aeatFechaConsulta = new Date().toISOString();
+  const { fetchOk, fetchBody, aeatEstado, aeatCodigo, aeatError } = await fetchVerifactuUrl(url);
 
   // Comparar importe del QR con el del OCR
   let discrepanciaImporte: VerifactuQrResult['discrepanciaImporte'] = null;
@@ -405,13 +554,17 @@ export async function detectQrVerifactu(
   }
 
   const result: VerifactuQrResult = {
-    url: qrUrl,
+    url,
     params,
     fetchOk,
-    fetchBody: fetchBody ? fetchBody.slice(0, 500) : undefined,
+    fetchBody,
+    aeatEstado,
+    aeatCodigo,
+    aeatError,
+    aeatFechaConsulta,
     discrepanciaImporte,
   };
 
-  console.log(`[QrDetector] 🌟 RESULTADO FINAL: verifactu_verificado=true | discrepancia=${discrepanciaImporte ? `SÍ (${discrepanciaImporte.diferencia}€)` : 'NO'}`);
+  console.log(`[QrDetector] 🌟 RESULTADO FINAL: estado=${aeatEstado} | codigo=${aeatCodigo ?? '—'} | verificado=${aeatCodigo === '00'} | discrepancia=${discrepanciaImporte ? `SÍ (${discrepanciaImporte.diferencia}€)` : 'NO'}`);
   return result;
 }

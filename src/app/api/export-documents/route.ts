@@ -298,7 +298,11 @@ export async function POST(request: NextRequest) {
           emisor_cif: emisor?.identificador_fiscal || '',
           cliente: cliente?.nombre || '',
           cliente_cif: cliente?.identificador_fiscal || '',
-          iva_details: ivaByDocument[d.id] || []
+          iva_details: ivaByDocument[d.id] || [],
+          // Veri*Factu (se incluye para consistencia con otros endpoints)
+          verifactu_verificado: dExtra.verifactu_verificado ?? false,
+          verifactu_estado: dExtra.verifactu_estado ?? null,
+          verifactu_codigo: dExtra.verifactu_codigo ?? null,
         };
       }),
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/export-callback`

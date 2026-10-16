@@ -128,6 +128,14 @@ export interface DbWriterJobData {
     params: { nif: string; numserie: string; fecha: string; importe: string; huella?: string };
     fetchOk: boolean;
     fetchBody?: string;
+    /** Estado semántico del resultado AEAT */
+    aeatEstado?: 'ENCONTRADA' | 'NO_ENCONTRADA' | 'NO_CONTRASTABLE' | 'ERROR_CONSULTA';
+    /** Código crudo devuelto por AEAT: '00', '01', '02', o null */
+    aeatCodigo?: '00' | '01' | '02' | null;
+    /** Código de error AEAT en caso de KO (ej: '3002', '1003.1004') */
+    aeatError?: string | null;
+    /** ISO timestamp de la consulta */
+    aeatFechaConsulta?: string;
     discrepanciaImporte?: { ocrImporte: number; qrImporte: number; diferencia: number } | null;
   } | null;
 }

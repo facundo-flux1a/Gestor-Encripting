@@ -158,20 +158,32 @@ export async function POST(request: NextRequest) {
         beneficio
       },
       // ✅ Lista completa de documentos
-      documentos: documentosEnriquecidos.map((d: any) => ({
-        id: d.id,
-        tipo: d.tipo_documento,
-        numero: d.numero_documento,
-        fecha: d.fecha_emision,
-        importe_total: d.importe_total,
-        importe_sin_iva: d.importe_sin_impuestos,
-        moneda: d.moneda,
-        empresa: d.nombre_de_empresa,
-        emisor: d.datos_extra?.EMPRESA_EMISORA?.NOMBRE || '',
-        emisor_cif: d.datos_extra?.EMPRESA_EMISORA?.CIF || '',
-        cliente: d.datos_extra?.CLIENTE?.NOMBRE || '',
-        cliente_cif: d.datos_extra?.CLIENTE?.CIF || ''
-      })),
+      documentos: documentosEnriquecidos.map((d: any) => {
+        // Parsear datos_extra para leer campos dinámicos (Verifactu, etc.)
+        let dExtra: any = {};
+        try {
+          if (typeof d.datos_extra === 'string') dExtra = JSON.parse(d.datos_extra);
+          else if (d.datos_extra && typeof d.datos_extra === 'object') dExtra = d.datos_extra;
+        } catch { dExtra = {}; }
+        return {
+          id: d.id,
+          tipo: d.tipo_documento,
+          numero: d.numero_documento,
+          fecha: d.fecha_emision,
+          importe_total: d.importe_total,
+          importe_sin_iva: d.importe_sin_impuestos,
+          moneda: d.moneda,
+          empresa: d.nombre_de_empresa,
+          emisor: dExtra?.EMPRESA_EMISORA?.NOMBRE || d.datos_extra?.EMPRESA_EMISORA?.NOMBRE || '',
+          emisor_cif: dExtra?.EMPRESA_EMISORA?.CIF || d.datos_extra?.EMPRESA_EMISORA?.CIF || '',
+          cliente: dExtra?.CLIENTE?.NOMBRE || d.datos_extra?.CLIENTE?.NOMBRE || '',
+          cliente_cif: dExtra?.CLIENTE?.CIF || d.datos_extra?.CLIENTE?.CIF || '',
+          // Veri*Factu (para consistencia con otros endpoints de exportación)
+          verifactu_verificado: dExtra.verifactu_verificado ?? false,
+          verifactu_estado: dExtra.verifactu_estado ?? null,
+          verifactu_codigo: dExtra.verifactu_codigo ?? null,
+        };
+      }),
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/export-callback`
     };
 

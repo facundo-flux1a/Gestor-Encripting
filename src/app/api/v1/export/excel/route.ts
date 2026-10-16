@@ -393,9 +393,22 @@ export async function POST(request: NextRequest) {
         'Moneda': doc.moneda || 'EUR',
         'Observaciones': doc.observaciones || '',
         'Enlace PDF': presignedUrl,
-        'Veri*Factu': rowDatosExtra.verifactu_verificado
-          ? (rowDatosExtra.verifactu_discrepancia_importe ? '⚠ DISC' : '✓')
-          : '—',
+        'Veri*Factu': (() => {
+          const estado: string | undefined = rowDatosExtra.verifactu_estado;
+          const disc = rowDatosExtra.verifactu_discrepancia_importe;
+          // Docs históricos sin verifactu_estado: comportamiento anterior
+          if (!estado) {
+            return rowDatosExtra.verifactu_verificado
+              ? (disc ? '⚠ DISC' : '✓')
+              : '—';
+          }
+          // Docs nuevos: semaforización real por estado AEAT
+          if (estado === 'ENCONTRADA')      return disc ? '⚠ DISC' : '✓ Verificada';
+          if (estado === 'NO_ENCONTRADA')   return '⚠ No en AEAT';
+          if (estado === 'NO_CONTRASTABLE') return '🟡 No Veri*Factu';
+          if (estado === 'ERROR_CONSULTA')  return '— Error consulta';
+          return '—';
+        })(),
       };
 
       // Columnas Base XX% e IVA XX%

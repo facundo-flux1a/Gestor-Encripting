@@ -30,6 +30,19 @@ function apiKey(): string {
   return key;
 }
 
+export type AzureDiBarcode = {
+  kind?: string;
+  value?: string;
+  confidence?: number;
+  polygon?: number[];
+};
+
+export type AzureDiPage = {
+  pageNumber?: number;
+  barcodes?: AzureDiBarcode[];
+  [key: string]: unknown;
+};
+
 export type AzureDiAnalyzeResult = {
   modelId?: string;
   documents?: Array<{
@@ -38,8 +51,26 @@ export type AzureDiAnalyzeResult = {
     confidence?: number;
   }>;
   content?: string;
-  pages?: unknown[];
+  pages?: AzureDiPage[];
 };
+
+/**
+ * Extrae el primer código QR encontrado en las páginas del resultado de Azure DI.
+ */
+export function extractQrFromAzureDiResult(result: AzureDiAnalyzeResult): string | null {
+  if (!result?.pages || !Array.isArray(result.pages)) return null;
+  for (const page of result.pages) {
+    const barcodes = page.barcodes;
+    if (Array.isArray(barcodes)) {
+      for (const bc of barcodes) {
+        if (bc?.value && (bc.kind === 'QRCode' || !bc.kind)) {
+          return bc.value;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export type AzureDiField = {
   type?: string;
@@ -78,9 +109,9 @@ export async function analyzeInvoiceDocument(
 
   const analyzeUrl =
     `${base}/documentintelligence/documentModels/${encodeURIComponent(model)}:analyze` +
-    `?api-version=${API_VERSION}&locale=es-ES`;
+    `?api-version=${API_VERSION}&locale=es-ES&features=barcodes`;
 
-  wLog('AzureDI', `analyze model=${model} bytes=${buffer.length} mime=${contentType}`);
+  wLog('AzureDI', `analyze model=${model} bytes=${buffer.length} mime=${contentType} (features=barcodes)`);
 
   const startRes = await fetch(analyzeUrl, {
     method: 'POST',
