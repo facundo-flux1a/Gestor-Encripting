@@ -13,9 +13,10 @@ import {
     DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Download, FileSpreadsheet, FileType, FileJson } from "lucide-react";
+import { Download, FileSpreadsheet, FileType, FileJson, Package } from "lucide-react";
 import { type Column, type Row } from '@tanstack/react-table';
 import { generateAdvancedExport } from '@/lib/export-utils';
+import { ExportMaestroDialog } from './export-maestro-dialog';
 
 interface ExportButtonProps {
     columns: Column<any, unknown>[];
@@ -23,6 +24,12 @@ interface ExportButtonProps {
     filename: string;
     exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros';
     includeSummary?: boolean;
+    /** Pre-rellenar el dialog Maestro (opcional) */
+    defaultTrimestre?: number | null;
+    defaultAño?: number | null;
+    defaultTipo?: 'emitidas' | 'recibidas' | 'todas';
+    mailDeCarga?: string | null;
+    empresaNombre?: string;
 }
 
 const getHeaderName = (col: Column<any, unknown>): string => {
@@ -33,9 +40,10 @@ const getHeaderName = (col: Column<any, unknown>): string => {
     return readableId.charAt(0).toUpperCase() + readableId.slice(1);
 };
 
-export function ExportButton({ columns, data, filename, exportContext, includeSummary }: ExportButtonProps) {
+export function ExportButton({ columns, data, filename, exportContext, includeSummary, defaultTrimestre, defaultAño, defaultTipo, mailDeCarga, empresaNombre }: ExportButtonProps) {
     const [includeFileUrls, setIncludeFileUrls] = React.useState(false);
     const [includeEntities, setIncludeEntities] = React.useState(false);
+    const [showMaestro, setShowMaestro] = React.useState(false);
 
     const handleExport = (format: 'excel' | 'csv' | 'json') => {
         const exportableColumns = columns.filter(col => col.id !== 'select' && col.id !== 'actions');
@@ -59,6 +67,7 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
     const showExcelOptions = !exportContext || ['trimestres', 'documentos', 'documentos_emitidas', 'documentos_recibidas', 'otros'].includes(exportContext);
 
     return (
+        <>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button
@@ -138,6 +147,15 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
                         <span>Excel (.xlsx)</span>
                     </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                {/* ── Export Maestro (server-side ZIP + Excel) ── */}
+                <DropdownMenuItem
+                    onClick={() => setShowMaestro(true)}
+                    className="text-xs sm:text-sm gap-2 cursor-pointer text-violet-400 hover:text-violet-300 focus:text-violet-300"
+                >
+                    <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span>Export Maestro (ZIP)</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => handleExport('csv')}
                     className="text-xs sm:text-sm gap-2 cursor-pointer"
@@ -154,5 +172,17 @@ export function ExportButton({ columns, data, filename, exportContext, includeSu
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Dialog Export Maestro */}
+        <ExportMaestroDialog
+            open={showMaestro}
+            onOpenChange={setShowMaestro}
+            defaultTrimestre={defaultTrimestre}
+            defaultAño={defaultAño}
+            defaultTipo={defaultTipo}
+            mailDeCarga={mailDeCarga}
+            empresaNombre={empresaNombre}
+        />
+    </>
     );
 }

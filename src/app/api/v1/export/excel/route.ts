@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma';
 import { hashField, normalizeEntityName } from '@/lib/encryption';
 import { getPresignedUrl, getExcelPresignedUrlExpires, parsePresignedExpiresParam } from '@/lib/s3-client';
 import { normalizeInvoiceNumber, detectCountryFromCIF } from '@/services/ingestion/normalize';
+import { generateZipJobId, triggerZipGeneration } from '@/services/zip-export-service';
+import { randomBytes } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -228,7 +230,7 @@ export async function POST(request: NextRequest) {
       }),
       prisma.empresas.findUnique({
         where: { id: empresaId },
-        select: { CIF: true, nombre_de_empresa: true }
+        select: { CIF: true, nombre_de_empresa: true, mail_de_carga: true }
       })
     ]);
 
@@ -534,7 +536,39 @@ export async function POST(request: NextRequest) {
     });
     dataRows.push(totalsRow);
 
-    const dataSheet = XLSX.utils.json_to_sheet(dataRows);
+    // ─── Pre-reservar ZIP key en MinIO y generar Master Link ────────────────────
+    // La URL se incluye en el Excel aunque el ZIP aún no exista (fire-and-forget).
+    const zipDocumentIds = filtered.map((d: any) => Number(d.doc_id));
+    const zipFileName = `export_${Date.now()}_${randomBytes(4).toString('hex')}.zip`;
+    const s3ZipKey = `exports/${empresaId}/${zipFileName}`;
+    // Presigned GET URL pre-reservada — válida para la misma duración que las URLs del Excel
+    const masterLinkUrl = await getPresignedUrl(s3ZipKey, urlExpiresIn).catch(() => '');
+
+    // Disparar ZIP en background (fire-and-forget) con mail si hay mail_de_carga
+    const mailDeCarga: string | null = (empresaData as any)?.mail_de_carga || null;
+    const zipJobId = generateZipJobId();
+    triggerZipGeneration(zipJobId, {
+      documentIds: zipDocumentIds,
+      empresaId: Number(empresaId),
+      s3ZipKey,
+      expiresInSec: urlExpiresIn,
+      notifyEmail: mailDeCarga || null,
+      empresaNombre: empresaNombre,
+    });
+
+    const dataSheet = XLSX.utils.json_to_sheet([]);  // hoja vacía temporal
+
+    // Fila 1: Fila de información con el Link Maestro ZIP
+    if (masterLinkUrl) {
+      XLSX.utils.sheet_add_aoa(dataSheet, [
+        ['📦 LINK MAESTRO ZIP', masterLinkUrl, `Válido ${Math.round(urlExpiresIn / 86400)} día(s) | Incluye ${zipDocumentIds.length} doc(s)`, `Job ID: ${zipJobId}`, '(El ZIP se genera en segundo plano — el link estará activo en minutos)'],
+        [],  // fila vacía separadora
+      ], { origin: 'A1' });
+      // Añadir los datos de documentos a partir de la fila 3
+      XLSX.utils.sheet_add_json(dataSheet, dataRows, { origin: 'A3', skipHeader: false });
+    } else {
+      XLSX.utils.sheet_add_json(dataSheet, dataRows, { origin: 'A1', skipHeader: false });
+    }
     applyNumberFormat(dataSheet);
     adjustColumnWidths(dataSheet);
     XLSX.utils.book_append_sheet(workbook, dataSheet, 'Documentos');
