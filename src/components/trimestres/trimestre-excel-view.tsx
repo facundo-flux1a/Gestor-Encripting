@@ -174,11 +174,12 @@ const calculateAnnualSummary = (data: Document[], selectedPeriodos?: Set<string>
                 docIvaSum += Math.abs(cuota);
 
                 const theoreticalIva = Math.round(base * rate) / 100;
-                // ✅ IVA_INTRA_REPERCUTIDO: la cuota es negativizada intencionalmente
-                // (espejo de la cuenta 477 en la inversión del sujeto pasivo UE).
+                // ✅ ISP REPERCUTIDO (INTRA y EXTRA): la cuota es negativizada intencionalmente
+                // como espejo de la cuenta 477 en la inversión del sujeto pasivo (Art. 84 LIVA).
+                // Aplica tanto a IVA_INTRA_REPERCUTIDO (UE) como IVA_EXTRA_REPERCUTIDO (extracomunitario).
                 // No es un error matemático — saltear el registro de descuadre para esta fila.
-                const esIntraRepercutido = tipoIva === 'iva_intra_repercutido';
-                if (!esIntraRepercutido && Math.abs(cuota - theoreticalIva) > 0.01) {
+                const esIspRepercutido = tipoIva.includes('repercutido');
+                if (!esIspRepercutido && Math.abs(cuota - theoreticalIva) > 0.01) {
                     const docId = doc.numero_documento || `ID:${doc.id_documento || (doc as any).id}`;
                     const info = `${docId} (${cuota.toFixed(2)}€ vs teor. ${theoreticalIva.toFixed(2)}€)`;
                     targetSum.iva_docs[rate][q].push(info);
