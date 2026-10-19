@@ -984,45 +984,61 @@ export async function POST(request: NextRequest) {
               });
             }
           } else if (countryInfo.isEuropeanUnion) {
-            // Caso UE: Inversión del sujeto pasivo (espejo 472/477)
+            // Caso UE: ISP al 21% IVA español — SIEMPRE, sin importar el IVA de origen
             const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'UE';
-            const impuestos = Array.isArray(doc.impuestos) ? doc.impuestos : [];
-            const cuentasSugeridasUE: Record<string, string> = {};
-            if (impuestos.length > 0) {
-              const espejoRows: any[] = [];
-              for (const imp of impuestos) {
-                const tipoImp = (imp.tipo_impuesto || 'IVA').toUpperCase();
-                const porcentaje = Number(imp.porcentaje) || 0;
-                const base = Number(imp.base ?? imp.base_imponible) || 0;
-                const cuota = Number(imp.cuota) || 0;
 
-                espejoRows.push({
-                  documento_id: savedDocId,
-                  id_de_empresa: BigInt(empresaId),
-                  tipo_impuesto: `${tipoImp}_INTRA_SOPORTADO`,
-                  porcentaje,
-                  base_imponible: base,
-                  cuota,
-                  total_con_impuesto: base + cuota,
-                });
-                espejoRows.push({
-                  documento_id: savedDocId,
-                  id_de_empresa: BigInt(empresaId),
-                  tipo_impuesto: `${tipoImp}_INTRA_REPERCUTIDO`,
-                  porcentaje,
-                  base_imponible: base,
-                  cuota: -cuota,
-                  total_con_impuesto: base - cuota,
-                });
-                cuentasSugeridasUE[`${tipoImp}_${Math.round(porcentaje)}_SOPORTADO`] = `472000${Math.round(porcentaje).toString().padStart(2, '0')}`;
-                cuentasSugeridasUE[`${tipoImp}_${Math.round(porcentaje)}_REPERCUTIDO`] = `477000${Math.round(porcentaje).toString().padStart(2, '0')}`;
-              }
-              if (espejoRows.length > 0) {
-                await tx.impuestos_documento.createMany({ data: espejoRows });
-              }
+            // Detectar si el proveedor cobró IVA extranjero (no debería en B2B UE — Art. 84 LIVA)
+            const impuestosDoc = Array.isArray(doc.impuestos) ? doc.impuestos : [];
+            const ivaExtranjeroTotal = impuestosDoc.reduce(
+              (sum: number, imp: any) => sum + (Number(imp.cuota) || 0), 0
+            );
+            const hayIvaExtranjero = Math.abs(ivaExtranjeroTotal) > 0.001;
+
+            // Base ISP: si hay IVA extranjero usar baseSinImpuestos (neto); si no, totalConImpuestos
+            const ispBase = hayIvaExtranjero ? baseSinImpuestos : totalConImpuestos;
+
+            const ispCuota21 = Number((Math.abs(ispBase) * 0.21).toFixed(2));
+            const ispCuotaSigned = ispBase < 0 ? -ispCuota21 : ispCuota21;
+
+            if (ispCuota21 > 0) {
+              await tx.impuestos_documento.createMany({
+                data: [
+                  {
+                    documento_id: savedDocId,
+                    id_de_empresa: BigInt(empresaId),
+                    tipo_impuesto: 'IVA_INTRA_SOPORTADO',
+                    porcentaje: 21,
+                    base_imponible: ispBase,
+                    cuota: ispCuotaSigned,
+                    total_con_impuesto: ispBase + ispCuotaSigned,
+                  },
+                  {
+                    documento_id: savedDocId,
+                    id_de_empresa: BigInt(empresaId),
+                    tipo_impuesto: 'IVA_INTRA_REPERCUTIDO',
+                    porcentaje: 21,
+                    base_imponible: ispBase,
+                    cuota: -ispCuotaSigned,
+                    total_con_impuesto: ispBase - ispCuotaSigned,
+                  },
+                ],
+              });
             }
-            // Incidencia informativa validada
-            const descIntra = `Proveedor intracomunitario (${paisNombre}). Se aplicó inversión del sujeto pasivo: IVA auto-repercutido (espejo 472/477).`;
+            // Actualizar cuentas_impuestos_sugeridas en datos_extra
+            await tx.documentos.update({
+              where: { id: savedDocId },
+              data: {
+                datos_extra: {
+                  ...(datosExtra as Record<string, any> || {}),
+                  cuentas_impuestos_sugeridas: {
+                    'IVA_21_SOPORTADO':  '47210000',
+                    'IVA_21_REPERCUTIDO': '47720000',
+                  },
+                },
+              },
+            });
+            // Incidencia informativa validada (siempre)
+            const descIntra = `Proveedor intracomunitario (${paisNombre}). ISP aplicado: IVA español 21% autorrepercutido sobre base ${ispBase.toFixed(2)}€ (espejo 472/477, neto 0€). Modelo 303 casillas 10/11 y 36/37. Modelo 349.`;
             await tx.incidencias_documento.create({
               data: {
                 documento_id: savedDocId,
@@ -1032,12 +1048,69 @@ export async function POST(request: NextRequest) {
                 validado: true,
               }
             });
+            // Incidencia bloqueante si el proveedor cobró IVA extranjero indebidamente
+            if (hayIvaExtranjero) {
+              const pctExtranjero = impuestosDoc.length > 0
+                ? impuestosDoc.map((i: any) => `${Number(i.porcentaje) || 0}%`).join(', ')
+                : 'desconocido';
+              const descIvaExterno = `⚠️ IVA extranjero detectado: el proveedor (${paisNombre}) cobró ${Math.abs(ivaExtranjeroTotal).toFixed(2)}€ de IVA de origen (${pctExtranjero}), lo cual no corresponde en una operación B2B intracomunitaria (Art. 84 LIVA). Opciones: (A) Solicitar factura rectificativa sin IVA al proveedor. (B) Si no es posible, recuperar vía Modelo 360. El ISP español 21% se aplicó sobre la base neta (${Math.abs(ispBase).toFixed(2)}€).`;
+              await tx.incidencias_documento.create({
+                data: {
+                  documento_id: savedDocId,
+                  id_de_empresa: BigInt(empresaId),
+                  descripcion: descIvaExterno,
+                  incidencia: true,
+                  validado: false,
+                }
+              });
+            }
           } else {
-            // Extracomunitario (USA/Anthropic, no UE): 100% gasto, 0 IVA en Modelo 303, incidencia informativa validada
+            // Extracomunitario (USA/Anthropic, All Base, no UE): ISP al 21% IVA español
+            // Modelo 303 casillas 12/13 (devengado) y 28/29 (deducible). NO Modelo 349.
             const paisNombre = countryInfo.countryName || countryInfo.countryCode || 'Extranjero';
             const paisCodigo = countryInfo.countryCode && countryInfo.countryCode !== paisNombre ? ` (${countryInfo.countryCode})` : '';
-            const descExtranjero = `Proveedor extracomunitario detectado: ${paisNombre}${paisCodigo}. Factura internacional no UE. El total computa íntegramente como gasto contable.`;
 
+            const ispBase = totalConImpuestos;
+            const ispCuota21 = Number((Math.abs(ispBase) * 0.21).toFixed(2));
+            const ispCuotaSigned = ispBase < 0 ? -ispCuota21 : ispCuota21;
+
+            if (ispCuota21 > 0) {
+              await tx.impuestos_documento.createMany({
+                data: [
+                  {
+                    documento_id: savedDocId,
+                    id_de_empresa: BigInt(empresaId),
+                    tipo_impuesto: 'IVA_EXTRA_SOPORTADO',
+                    porcentaje: 21,
+                    base_imponible: ispBase,
+                    cuota: ispCuotaSigned,
+                    total_con_impuesto: ispBase + ispCuotaSigned,
+                  },
+                  {
+                    documento_id: savedDocId,
+                    id_de_empresa: BigInt(empresaId),
+                    tipo_impuesto: 'IVA_EXTRA_REPERCUTIDO',
+                    porcentaje: 21,
+                    base_imponible: ispBase,
+                    cuota: -ispCuotaSigned,
+                    total_con_impuesto: ispBase - ispCuotaSigned,
+                  },
+                ],
+              });
+            }
+            await tx.documentos.update({
+              where: { id: savedDocId },
+              data: {
+                datos_extra: {
+                  ...(datosExtra as Record<string, any> || {}),
+                  cuentas_impuestos_sugeridas: {
+                    'IVA_21_SOPORTADO':  '47200021',
+                    'IVA_21_REPERCUTIDO': '47700021',
+                  },
+                },
+              },
+            });
+            const descExtranjero = `Proveedor extracomunitario: ${paisNombre}${paisCodigo}. ISP aplicado: IVA español 21% autorrepercutido (espejo 472/477, neto 0€). Modelo 303 casillas 12/13 y 28/29. NO incluir en Modelo 349.`;
             await tx.incidencias_documento.create({
               data: {
                 documento_id: savedDocId,

@@ -1104,17 +1104,79 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </div>
               )) : doc.iva_details.length === 0
                 ? <div className="py-4 border border-dashed border-border/50 rounded-md text-center"><p className="text-xs text-muted-foreground">Sin desglose de IVA</p></div>
-                : doc.iva_details.filter((iva) => {
-                    const tipo = (iva.tipo_impuesto || '').toLowerCase();
-                    return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
-                  }).map((iva, i) => (
-                  <div key={i} className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                    <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
-                    <EInput value={`${iva.porcentaje}%`} className="text-center text-muted-foreground" />
-                    <EInput value={fmtEur(iva.cuota)} className="text-right tabular-nums text-foreground font-semibold" />
-                    <span />
-                  </div>
-                ))
+                : isForeign
+                  // ── Documento extranjero UE: mostrar IVA origen (si existe) + ISP España ──
+                  ? (() => {
+                      const ivaOrigenRows = (backupFiscalImpuestos as any[]).filter(
+                        (imp: any) => Math.abs(Number(imp.cuota) || 0) > 0.001
+                      );
+                      const ispRows = doc.iva_details.filter((iva) => {
+                        const tipo = (iva.tipo_impuesto || '').toUpperCase();
+                        return tipo.includes('INTRA') || tipo.includes('EXTRA');
+                      });
+                      return (
+                        <div className="space-y-2">
+                          {/* IVA origen del proveedor — solo si cobró IVA indebidamente */}
+                          {ivaOrigenRows.length > 0 && (
+                            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 overflow-hidden">
+                              <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-amber-500/20">
+                                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">⚠️ IVA origen proveedor ({countryName}) — INDEBIDO</span>
+                                <span className="text-[10px] text-amber-400/70 ml-auto">No computa en Mod. 303</span>
+                              </div>
+                              {ivaOrigenRows.map((imp: any, i: number) => (
+                                <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                                  <EInput value={fmtEur(imp.base)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
+                                  <EInput value={`${Math.abs(Number(imp.porcentaje) || 0)}%`} className="text-center text-amber-300/70 line-through decoration-amber-500/50" />
+                                  <EInput value={fmtEur(imp.cuota)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
+                                  <span />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* ISP España — filas del 21% auto-repercutido */}
+                          <div className="rounded-md border border-blue-500/30 bg-blue-500/5 overflow-hidden">
+                            <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-blue-500/20">
+                              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">🇪🇸 ISP España — IVA autorrepercutido (neto 0€)</span>
+                              <span className="text-[10px] text-blue-400/70 ml-auto">Mod. 303 · Mod. 349</span>
+                            </div>
+                            {ispRows.map((iva, i) => {
+                              const esRepercutido = (iva.tipo_impuesto || '').toUpperCase().includes('REPERCUTIDO');
+                              return (
+                                <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                                  <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
+                                  <EInput value={`${iva.porcentaje}%`} className="text-center text-blue-300" />
+                                  <EInput
+                                    value={fmtEur(iva.cuota)}
+                                    className={`text-right tabular-nums font-semibold ${esRepercutido ? 'text-emerald-400' : 'text-blue-300'}`}
+                                  />
+                                  <span className="flex items-center justify-center">
+                                    <span className="text-[9px] text-muted-foreground font-mono leading-none">
+                                      {esRepercutido ? 'REP' : 'SOP'}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            <div className="px-3 py-1 border-t border-blue-500/20 flex justify-between items-center">
+                              <span className="text-[10px] text-muted-foreground">Neto ISP</span>
+                              <span className="text-[11px] font-bold text-blue-300 font-mono">0,00 €</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  // ── Documento normal: render original sin cambios ──
+                  : doc.iva_details.filter((iva) => {
+                      const tipo = (iva.tipo_impuesto || '').toLowerCase();
+                      return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+                    }).map((iva, i) => (
+                    <div key={i} className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                      <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
+                      <EInput value={`${iva.porcentaje}%`} className="text-center text-muted-foreground" />
+                      <EInput value={fmtEur(iva.cuota)} className="text-right tabular-nums text-foreground font-semibold" />
+                      <span />
+                    </div>
+                  ))
               }
             </div>
           </div>

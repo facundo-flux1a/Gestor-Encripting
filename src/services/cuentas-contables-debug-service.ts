@@ -171,19 +171,22 @@ export async function getDocumentsAccountingDebugList(empresaIds: number[]): Pro
     const docDatosExtra = (doc.datos_extra as Record<string, any>) || {};
     const esProveedorExtranjero = Boolean(docDatosExtra.es_proveedor_extranjero_ue);
 
-    // Para proveedores extranjeros UE (autorepercusión intracomunitaria), el proveedor
-    // NO cobra IVA español. El worker almacena:
-    //   importe_total = base_real + IVA_INTRA_soportado
-    // Pero las líneas solo contienen base_real. Por eso el Tercero (Proveedor)
-    // debe ser: importe_total - Σ(cuotas IVA_INTRA_SOPORTADO).
-    // Esto es GENÉRICO: funciona para cualquier porcentaje de IVA, cualquier doc extranjero.
+    // Para proveedores extranjeros (UE o extracomunitarios), el proveedor
+    // NO cobra IVA español. El worker almacena los rows ISP (SOPORTADO + REPERCUTIDO)
+    // que se anulan entre sí (neto 0). Por eso el Tercero (Proveedor)
+    // debe ser: importe_total - Σ(cuotas ISP_SOPORTADO).
+    // Funciona para cualquier porcentaje, para INTRA y EXTRA.
     // Para docs locales (esProveedorExtranjero = false): siempre usa doc.total sin cambios.
     let importeTercero: number;
     if (esProveedorExtranjero) {
-      const ivaIntraSoportadoTotal = currentImpuestosDb
-        .filter((i: any) => /intra/i.test(i.tipo_impuesto || '') && /soportado/i.test(i.tipo_impuesto || '') && !/repercutido/i.test(i.tipo_impuesto || ''))
+      const ivaIspSoportadoTotal = currentImpuestosDb
+        .filter((i: any) =>
+          (/intra/i.test(i.tipo_impuesto || '') || /extra/i.test(i.tipo_impuesto || '')) &&
+          /soportado/i.test(i.tipo_impuesto || '') &&
+          !/repercutido/i.test(i.tipo_impuesto || '')
+        )
         .reduce((sum: number, i: any) => sum + (Number(i.cuota) || 0), 0);
-      const computed = Number(doc.total || 0) - ivaIntraSoportadoTotal;
+      const computed = Number(doc.total || 0) - ivaIspSoportadoTotal;
       // Fallback: si por algún error el resultado es ≤0, usar doc.total tal cual
       importeTercero = computed > 0 ? Number(computed.toFixed(2)) : Number(doc.total || 0);
     } else {
@@ -430,12 +433,16 @@ export async function getDocumentsAccountingDebugList(empresaIds: number[]): Pro
               ? `H.P. Retenciones y pagos a cuenta (${pct}%)`
               : `H.P. Acreedora por retenciones practicadas (${pct}%)`;
           } else if (isRepercutido) {
-            // PGC: 4772 = IVA repercutido por inversión del sujeto pasivo (ISP intracomunitario)
-            //       4770 = IVA repercutido operaciones interiores normales
+            // PGC: 4772 = IVA repercutido por ISP intracomunitario (UE)
+            //       4770 = IVA repercutido por ISP extracomunitario (no UE, casillas 12/13)
             const isIntraRep = /intra/i.test(tipo);
+            const isExtraRep = /extra/i.test(tipo);
             if (isIntraRep) {
               codigoTax = '4772000';
               nombreTax = `H.P. IVA repercutido ISP intracomunitario ${pct}%`;
+            } else if (isExtraRep) {
+              codigoTax = pct === 10 ? '4770010' : pct === 4 ? '4770004' : '4770021';
+              nombreTax = `H.P. IVA repercutido ISP extracomunitario ${pct}%`;
             } else {
               codigoTax = pct === 10 ? '4770010' : pct === 4 ? '4770004' : '4770021';
               nombreTax = `H.P. IVA repercutido (autorepercusión) ${pct}%`;
@@ -444,12 +451,16 @@ export async function getDocumentsAccountingDebugList(empresaIds: number[]): Pro
             codigoTax = pct === 10 ? '4770010' : pct === 4 ? '4770004' : '4770021';
             nombreTax = `H.P. IVA repercutido ${pct}%`;
           } else {
-            // PGC: 4721 = IVA soportado adquisiciones intracomunitarias de bienes/servicios
-            //       4720 = IVA soportado operaciones interiores normales
+            // PGC: 4721 = IVA soportado adquisiciones intracomunitarias de bienes/servicios (UE)
+            //       4720 = IVA soportado operaciones interiores / ISP extracomunitario
             const isIntraSop = /intra/i.test(tipo);
+            const isExtraSop = /extra/i.test(tipo);
             if (isIntraSop) {
               codigoTax = '4721000';
               nombreTax = `H.P. IVA soportado adquisición intracomunitaria ${pct}%`;
+            } else if (isExtraSop) {
+              codigoTax = pct === 10 ? '4720010' : pct === 4 ? '4720004' : '4720021';
+              nombreTax = `H.P. IVA soportado ISP extracomunitario ${pct}%`;
             } else {
               codigoTax = pct === 10 ? '4720010' : pct === 4 ? '4720004' : '4720021';
               nombreTax = `H.P. IVA soportado ${pct}%`;
@@ -476,11 +487,15 @@ export async function getDocumentsAccountingDebugList(empresaIds: number[]): Pro
               ? 'Cuenta PGC de retenciones fiscales IRPF'
               : isRepercutido
                 ? (/intra/i.test(tipo)
-                    ? `PGC 4772 — IVA repercutido por inversión del sujeto pasivo intracomunitario ${pct}%`
-                    : `Autorepercusión IVA ${pct}% → Haber (477)`)
+                    ? `PGC 4772 — IVA repercutido por ISP intracomunitario ${pct}%`
+                    : /extra/i.test(tipo)
+                      ? `PGC 4770 — IVA repercutido por ISP extracomunitario ${pct}% (casillas 12/13 Mod.303)`
+                      : `Autorepercusión IVA ${pct}% → Haber (477)`)
                 : (/intra/i.test(tipo)
                     ? `PGC 4721 — IVA soportado adquisición intracomunitaria ${pct}%`
-                    : `Subcuenta PGC estándar de IVA soportado al ${pct}%`),
+                    : /extra/i.test(tipo)
+                      ? `PGC 4720 — IVA soportado ISP extracomunitario ${pct}% (casillas 28/29 Mod.303)`
+                      : `Subcuenta PGC estándar de IVA soportado al ${pct}%`),
             origen: 'heuristica_pgc',
             referencia_id: Number(imp.id)
           });
