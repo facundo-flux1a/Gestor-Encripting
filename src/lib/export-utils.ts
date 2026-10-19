@@ -12,11 +12,15 @@ export type ExportFormat = 'excel' | 'csv' | 'json';
 export interface ExportOptions {
     filename: string;
     format: ExportFormat;
-    includeSummary?: boolean; // Incluir hoja de resumen IVA
-    includeFileUrls?: boolean; // Incluir columna de enlace al archivo original en MinIO
-    includeEntities?: boolean; // Incluir pestaña con el directorio completo de entidades
-    trimestre?: number | null; // Trimestre específico o null para todo el año
+    includeSummary?: boolean;
+    includeFileUrls?: boolean;
+    includeEntities?: boolean;
+    trimestre?: number | null;
     exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros';
+    /** Link maestro del ZIP — se inyecta como fila fija de cabecera en el Excel */
+    masterLink?: string;
+    /** TTL en segundos del link maestro (para mostrar en la celda) */
+    masterLinkTtlSec?: number;
 }
 
 // ==========================================
@@ -120,7 +124,13 @@ export const getValueForExport = (item: any, columnId: string, format?: ExportFo
 
     let value: any;
     if (item && typeof item.getValue === 'function') {
-        value = item.getValue(columnId);
+        try {
+            value = item.getValue(columnId);
+        } catch {
+            // Columna inyectada dinámicamente (extranjero, pais, descuento_global…)
+            // no existe como columna real de la tabla; los handlers específicos abajo la resuelven.
+            value = undefined;
+        }
     } else {
         value = item[columnId];
     }
@@ -263,7 +273,13 @@ const getNumericValue = (item: any, columnId: string): number => {
     // Lógica para obtener valor numérico
     let val: any;
     if (item && typeof item.getValue === 'function') {
-        val = item.getValue(columnId);
+        try {
+            val = item.getValue(columnId);
+        } catch {
+            // La columna puede ser inyectada dinámicamente (descuento_global, extranjero, pais…)
+            // y no existir como columna real de la tabla. Los handlers específicos abajo la resuelven.
+            val = undefined;
+        }
     } else {
         val = item[columnId];
     }
@@ -542,6 +558,17 @@ export const generateAdvancedExport = (
             rows.push(totalRowData);
         }
 
+        // Si hay masterLink, la hoja usa aoa + json para dejar el link en la primera fila
+        if (options.masterLink) {
+            const sheet = XLSX.utils.json_to_sheet([]);
+            const ttlDias = options.masterLinkTtlSec ? Math.round(options.masterLinkTtlSec / 86400) : 7;
+            XLSX.utils.sheet_add_aoa(sheet, [
+                ['📦 LINK MAESTRO ZIP', options.masterLink, `Válido ${ttlDias} día(s) — ${sheetData.length} doc(s)`, '(El ZIP se genera en segundo plano — estará activo en minutos)'],
+                [],
+            ], { origin: 'A1' });
+            XLSX.utils.sheet_add_json(sheet, rows, { origin: 'A3', skipHeader: false });
+            return sheet;
+        }
         return XLSX.utils.json_to_sheet(rows);
     };
 

@@ -554,6 +554,14 @@ export async function POST(request: NextRequest) {
       expiresInSec: urlExpiresIn,
       notifyEmail: mailDeCarga || null,
       empresaNombre: empresaNombre,
+      source: 'api',
+      exportLabel: [
+        trimestre ? `T${trimestre}` : null,
+        año ? String(año) : null,
+        tipo !== 'todas' ? tipo : null,
+        proveedor ? `proveedor: ${proveedor}` : null,
+        cliente ? `cliente: ${cliente}` : null,
+      ].filter(Boolean).join(' · ') || 'todos los documentos',
     });
 
     const dataSheet = XLSX.utils.json_to_sheet([]);  // hoja vacía temporal

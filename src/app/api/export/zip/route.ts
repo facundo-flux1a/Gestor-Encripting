@@ -32,8 +32,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (!(user as any)?.empresaId) {
+  if (!user) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
   }
 
@@ -54,13 +53,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const u = user as any;
-  if (!u?.empresaId) {
+  if (!user) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
   }
-
-  const empresaId = Number(u.empresaId);
 
   let body: any = {};
   try { body = await request.json(); } catch { /* body vacío OK */ }
@@ -77,6 +72,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Máximo 500 documentos por ZIP.' }, { status: 400 });
   }
 
+  // Derivar empresaId del primer documento (evita tener que pasarlo desde el cliente)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const empresaIdFromSession = (user as any)?.empresaId;
+  let empresaId: number;
+  if (empresaIdFromSession) {
+    empresaId = Number(empresaIdFromSession);
+  } else {
+    // Para usuarios con múltiples empresas (organization_rol), derivar del primer doc
+    const primerDoc = await prisma.documentos.findUnique({
+      where: { id: BigInt(documentIds[0]) },
+      select: { id_de_empresa: true },
+    });
+    if (!primerDoc?.id_de_empresa) {
+      return NextResponse.json({ error: 'No se pudo determinar la empresa.' }, { status: 400 });
+    }
+    empresaId = Number(primerDoc.id_de_empresa);
+  }
+
   // TTL: default 7 días, máximo 7 días
   const expiresInSec = Math.min(
     Math.max(Number(body.expiresInSec || 0) || 604800, 3600),
@@ -89,7 +102,7 @@ export async function POST(request: NextRequest) {
   // Nombre de empresa para el mail
   const empresa = await prisma.empresas.findUnique({
     where: { id: empresaId },
-    select: { nombre: true },
+    select: { nombre_de_empresa: true },
   });
 
   // Pre-reservar key en MinIO
@@ -110,7 +123,7 @@ export async function POST(request: NextRequest) {
     s3ZipKey,
     expiresInSec,
     notifyEmail,
-    empresaNombre: empresa?.nombre || undefined,
+    empresaNombre: empresa?.nombre_de_empresa || undefined,
   });
 
   return NextResponse.json({

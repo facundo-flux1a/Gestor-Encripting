@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, Download, FileText, Calendar, CheckSquare, Square, Filter } from 'lucide-react';
+import { Loader2, Download, FileText, Calendar, CheckSquare, Square, Filter, Package, Mail } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import type { Trimestre } from '@/lib/types';
 import { generateAdvancedExport } from '@/lib/export-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -54,6 +55,10 @@ export function ExportQuartersDialog({
   // 🆕 Opciones de exportación
   const [includeFileUrls, setIncludeFileUrls] = React.useState(false);
   const [includeEntities, setIncludeEntities] = React.useState(false);
+  // ZIP link maestro
+  const [includeZipLink, setIncludeZipLink] = React.useState(true);
+  const [sendMail, setSendMail] = React.useState(false);
+  const [mailEmail, setMailEmail] = React.useState('');
 
   // 🔄 Cargar todos los trimestres desde la BD
   React.useEffect(() => {
@@ -348,6 +353,53 @@ export function ExportQuartersDialog({
         ? `Exportacion_Trimestres_${yearsSet[0]}`
         : `Exportacion_Trimestres_${yearsSet.join('_')}`;
 
+      // ── Link maestro ZIP (opcional) ─────────────────────────────────────
+      let masterLink = '';
+      const masterLinkTtlSec = 604800;
+      console.log('[Trimestres Export] ZIP check:', { includeZipLink, allDocsLen: allDocs.length });
+      if (includeZipLink && allDocs.length > 0) {
+        try {
+          const docIds = allDocs
+            .map((d: any) => Number(d.id_documento ?? d.id))
+            .filter((n: number) => !isNaN(n) && n > 0);
+          console.log('[Trimestres Export] docIds para ZIP:', docIds);
+          if (docIds.length > 0) {
+            const zipResp = await fetch('/api/export/zip', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                documentIds: docIds,
+                expiresInSec: masterLinkTtlSec,
+                notifyEmail: sendMail && mailEmail ? mailEmail : null,
+              }),
+            });
+            console.log('[Trimestres Export] ZIP resp status:', zipResp.status);
+            if (zipResp.ok) {
+              const zipJson = await zipResp.json();
+              masterLink = zipJson.masterLink || '';
+              console.log('[Trimestres Export] masterLink obtenido:', masterLink.slice(0, 60) + '...');
+            } else {
+              const errBody = await zipResp.json().catch(() => ({}));
+              toast({
+                title: 'ZIP no disponible',
+                description: `El Excel se generará sin link ZIP: ${errBody?.error || `HTTP ${zipResp.status}`}`,
+                variant: 'destructive',
+              });
+            }
+          } else {
+            console.warn('[Trimestres Export] docIds vacío — IDs de allDocs:', allDocs.slice(0,3).map((d:any) => d?.id));
+          }
+        } catch (err) {
+          console.error('[Trimestres Export] Error ZIP:', err);
+          toast({
+            title: 'ZIP no disponible',
+            description: 'No se pudo conectar al servicio ZIP. Exportando sin link.',
+            variant: 'destructive',
+          });
+        }
+      }
+
+
       generateAdvancedExport(processedData, exportColumns, {
         filename,
         format: 'excel',
@@ -355,6 +407,7 @@ export function ExportQuartersDialog({
         exportContext: 'trimestres',
         ...(includeFileUrls ? { includeFileUrls: true } : {}),
         ...(includeEntities ? { includeEntities: true } : {}),
+        ...(masterLink ? { masterLink, masterLinkTtlSec } : {}),
       });
 
       toast({
@@ -477,6 +530,61 @@ export function ExportQuartersDialog({
                   </p>
                 </div>
               </label>
+            </div>
+
+            {/* ZIP Link maestro */}
+            <div className="border rounded-lg p-3 bg-muted/20 space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <Package className="h-3 w-3 text-violet-400" />
+                Link Maestro ZIP
+              </p>
+              <label
+                htmlFor="trim-export-zip-link"
+                className="flex items-start gap-2.5 py-1 cursor-pointer select-none"
+                onClick={e => e.stopPropagation()}
+              >
+                <Checkbox
+                  id="trim-export-zip-link"
+                  checked={includeZipLink}
+                  onCheckedChange={v => setIncludeZipLink(!!v)}
+                  className="mt-0.5 shrink-0"
+                />
+                <div>
+                  <p className="text-xs font-medium leading-tight text-violet-400">Incluir link ZIP en el Excel</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                    El link se inserta en la primera fila del Excel. El ZIP se genera en background.
+                  </p>
+                </div>
+              </label>
+              {includeZipLink && (
+                <>
+                  <label
+                    htmlFor="trim-export-send-mail"
+                    className="flex items-start gap-2.5 py-1 cursor-pointer select-none"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      id="trim-export-send-mail"
+                      checked={sendMail}
+                      onCheckedChange={v => setSendMail(!!v)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="flex items-center gap-1">
+                      <Mail className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-xs font-medium leading-tight">Enviar ZIP por mail al terminar</p>
+                    </div>
+                  </label>
+                  {sendMail && (
+                    <Input
+                      type="email"
+                      placeholder="email@empresa.com"
+                      value={mailEmail}
+                      onChange={e => setMailEmail(e.target.value)}
+                      className="h-7 text-[11px] mt-1"
+                    />
+                  )}
+                </>
+              )}
             </div>
 
             {/* Lista por Años */}

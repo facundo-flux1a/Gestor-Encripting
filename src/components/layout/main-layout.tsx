@@ -33,6 +33,7 @@ import {
   Building2,
   UploadCloud,
   Landmark,
+  Archive,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -327,6 +328,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/documents', label: 'Documentos', icon: FileText },
+    { href: '/comprobantes', label: 'Comprobantes', icon: Archive },
     { href: '/dashboard/auditoria', label: 'Centro de Seguridad', icon: ShieldCheck },
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/sii', label: 'SII AEAT', icon: Landmark },

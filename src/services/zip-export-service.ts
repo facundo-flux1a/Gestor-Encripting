@@ -33,6 +33,10 @@ export interface ZipJobParams {
   expiresInSec: number;   // TTL de la presigned URL
   notifyEmail?: string | null;
   empresaNombre?: string;
+  /** 'api' → email de auditoría de exportación API; 'dashboard' (default) → ZIP genérico */
+  source?: 'api' | 'dashboard';
+  /** Resumen legible del filtro aplicado, ej. "T3 2026 · recibidas" */
+  exportLabel?: string;
 }
 
 export type ZipJobStatus = 'pending' | 'processing' | 'done' | 'error';
@@ -204,41 +208,70 @@ async function runZipGeneration(jobId: string, params: ZipJobParams) {
 
     await setJobState(jobId, { progress: 10 });
 
-    // 3. Construir ZIP
+    // ── Semáforo manual: limita descargas/renders concurrentes ────────────────
+    const CONCURRENCY = 10;
+    let active = 0;
+    const queue: (() => void)[] = [];
+    const acquire = () => new Promise<void>(resolve => {
+      if (active < CONCURRENCY) { active++; resolve(); }
+      else queue.push(() => { active++; resolve(); });
+    });
+    const release = () => {
+      active--;
+      if (queue.length > 0) queue.shift()!();
+    };
+
+    // 3. Construir ZIP con concurrencia limitada
     const zip = new AdmZip();
     let included = 0;
     let fallbacks = 0;
+    let processed = 0;
 
-    for (let i = 0; i < documentIds.length; i++) {
-      const docId = documentIds[i];
-      const info = docInfoById.get(docId);
-      const baseName = info ? `${info.tipo}_${info.numero}` : `doc_${docId}`;
-      const progress = 10 + Math.round((i / documentIds.length) * 75);
-      await setJobState(jobId, { progress });
+    await Promise.all(documentIds.map(async (docId) => {
+      await acquire();
+      try {
+        const info = docInfoById.get(docId);
+        const baseName = info ? `${info.tipo}_${info.numero}` : `doc_${docId}`;
 
-      const rutaArchivo = archivoByDocId.get(docId);
-      if (rutaArchivo) {
-        try {
-          const { buffer } = await getFileBuffer(rutaArchivo);
-          const ext = rutaArchivo.split('.').pop()?.toLowerCase() || 'pdf';
-          zip.addFile(`${baseName}.${ext}`, buffer);
-          included++;
-          continue;
-        } catch {
-          // fallthrough al fallback PDF
+        const rutaArchivo = archivoByDocId.get(docId);
+        if (rutaArchivo) {
+          try {
+            const { buffer } = await getFileBuffer(rutaArchivo);
+            const ext = rutaArchivo.split('.').pop()?.toLowerCase() || 'pdf';
+            zip.addFile(`${baseName}.${ext}`, buffer);
+            included++;
+          } catch {
+            // fallthrough al fallback PDF
+            const fallbackBuf = await buildFallbackPdf(docId);
+            if (fallbackBuf) {
+              zip.addFile(`${baseName}_reconstruccion.pdf`, fallbackBuf);
+              included++;
+              fallbacks++;
+            } else {
+              LOG(`⚠️ Doc #${docId} omitido (sin datos)`);
+            }
+          }
+        } else {
+          // Sin archivo en MinIO → PDF de reconstrucción
+          const fallbackBuf = await buildFallbackPdf(docId);
+          if (fallbackBuf) {
+            zip.addFile(`${baseName}_reconstruccion.pdf`, fallbackBuf);
+            included++;
+            fallbacks++;
+          } else {
+            LOG(`⚠️ Doc #${docId} omitido (sin datos)`);
+          }
+        }
+      } finally {
+        release();
+        processed++;
+        // Actualizar progreso cada 5%
+        if (processed % Math.max(1, Math.floor(documentIds.length / 20)) === 0) {
+          const pct = 10 + Math.round((processed / documentIds.length) * 78);
+          await setJobState(jobId, { progress: pct }).catch(() => {});
         }
       }
-
-      // Sin archivo → PDF de reconstrucción
-      const fallbackBuf = await buildFallbackPdf(docId);
-      if (fallbackBuf) {
-        zip.addFile(`${baseName}_reconstruccion.pdf`, fallbackBuf);
-        included++;
-        fallbacks++;
-      } else {
-        LOG(`⚠️ Doc #${docId} omitido (sin datos)`);
-      }
-    }
+    }));
 
     LOG(`ZIP listo: ${included} archivos (${fallbacks} reconstrucciones). Subiendo...`);
     await setJobState(jobId, { progress: 88 });
@@ -261,16 +294,61 @@ async function runZipGeneration(jobId: string, params: ZipJobParams) {
     // 6. Mail si corresponde
     if (notifyEmail) {
       const diasTtl = Math.round(expiresInSec / 86400);
-      const html = `
+      const isApi = params.source === 'api';
+
+      const html = isApi ? `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:auto;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+          <div style="background:#1e293b;padding:22px 28px">
+            <p style="margin:0;font-size:10px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase">Gestor Documental · Notificación automática de exportación</p>
+            <h2 style="margin:8px 0 0;color:#f1f5f9;font-size:18px;font-weight:700">📊 Exportación de documentos vía API</h2>
+          </div>
+          <div style="padding:24px 28px;background:#fff">
+            <p style="margin:0 0 18px;color:#475569;font-size:13px">
+              Se ha generado y descargado un archivo Excel de documentos a través de la integración API.
+              A continuación encontrará el resumen de la operación y el acceso al paquete ZIP adjunto.
+            </p>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;color:#1e293b;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+              <tr style="background:#f8fafc">
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:500;width:150px">Empresa</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-weight:600">${empresaNombre || `Empresa ${empresaId}`}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:500">Documentos exportados</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0"><strong>${included}</strong>${fallbacks > 0 ? ` (${fallbacks} sin archivo original)` : ''}</td>
+              </tr>
+              ${params.exportLabel ? `
+              <tr style="background:#f8fafc">
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:500">Filtro aplicado</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0">${params.exportLabel}</td>
+              </tr>` : ''}
+              <tr style="${params.exportLabel ? '' : 'background:#f8fafc'}">
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:500">Origen</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0">POST /api/v1/export/excel</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;color:#64748b;font-weight:500">Enlace válido hasta</td>
+                <td style="padding:10px 14px">${diasTtl} día${diasTtl !== 1 ? 's' : ''} desde la generación</td>
+              </tr>
+            </table>
+            <div style="margin:24px 0 8px">
+              <a href="${zipUrl}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">⬇ Descargar paquete ZIP</a>
+            </div>
+            <p style="color:#94a3b8;font-size:11px;margin:16px 0 0;line-height:1.5">
+              Esta notificación se ha enviado automáticamente porque la empresa tiene configurado un correo de carga.<br>
+              Si no ha iniciado esta exportación, le recomendamos revisar el acceso a la API key asociada.
+            </p>
+          </div>
+          <div style="background:#f1f5f9;padding:10px 28px">
+            <p style="margin:0;font-size:10px;color:#94a3b8">Gestor Documental &nbsp;·&nbsp; ${new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}</p>
+          </div>
+        </div>
+      ` : `
         <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;background:#fff">
           <h2 style="color:#7c3aed;margin-bottom:8px">📦 Tu exportación ZIP está lista</h2>
           <p style="color:#334155">Hola${empresaNombre ? ` (${empresaNombre})` : ''},</p>
           <p style="color:#334155">Tu paquete de <strong>${included} documento${included !== 1 ? 's' : ''}</strong> ha sido generado correctamente.</p>
           <p style="margin:20px 0">
-            <a href="${zipUrl}"
-               style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">
-              ⬇ Descargar ZIP
-            </a>
+            <a href="${zipUrl}" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">⬇ Descargar ZIP</a>
           </p>
           <p style="color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:20px">
             Enlace válido por <strong>${diasTtl} día${diasTtl !== 1 ? 's' : ''}</strong>.
@@ -278,13 +356,15 @@ async function runZipGeneration(jobId: string, params: ZipJobParams) {
           </p>
         </div>
       `;
-      await sendEmail({
-        to: notifyEmail,
-        subject: `📦 Exportación ZIP lista — ${empresaNombre || 'Gestor Documental'}`,
-        html,
-      });
+
+      const subject = isApi
+        ? `📊 Exportación API — ${included} documento${included !== 1 ? 's' : ''} · ${empresaNombre || `Empresa ${empresaId}`}`
+        : `📦 Exportación ZIP lista — ${empresaNombre || 'Gestor Documental'}`;
+
+      await sendEmail({ to: notifyEmail, subject, html });
       LOG(`Mail enviado a ${notifyEmail}`);
     }
+
 
     await setJobState(jobId, { status: 'done', progress: 100 });
     LOG(`✅ Completado.`);
