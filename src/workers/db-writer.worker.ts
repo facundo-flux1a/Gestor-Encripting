@@ -42,6 +42,7 @@ import { normalizeCIF, detectCountryFromCIF, normalizeInvoiceNumber } from '@/se
 import { forceAbonoSign } from '@/services/duplicates/canonical';
 import { createNotification, getUserIdsForEmpresa } from '@/services/notification-service';
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
+import { callAzureOpenAiChat } from '@/services/ingestion/azure-openai';
 
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
@@ -51,23 +52,35 @@ function getSha256(text: string | null | undefined): string | null {
   return crypto.createHash('sha256').update(cleanText).digest('hex');
 }
 
-/**
- * Devuelve la cuenta contable estándar sugerida para un impuesto.
- * No escribe en BD — es solo una sugerencia que el user valida en la UI.
- */
-function resolveCC(tipo: string, porcentaje: number, esEmitida: boolean): string | null {
+function resolveCC(
+  tipo: string,
+  porcentaje: number,
+  esEmitida: boolean,
+  taxConfig?: Record<string, any> | null
+): string | null {
   const t = tipo.toUpperCase();
-  const base = esEmitida ? '477' : '472';
+  const pct = Math.round(porcentaje);
+
+  if (taxConfig) {
+    if (t === 'IVA' || t.includes('IVA')) {
+      const key = esEmitida ? `iva_repercutido_${pct}` : `iva_soportado_${pct}`;
+      if (taxConfig[key]) return String(taxConfig[key]);
+    }
+    if (t === 'RETENCION' || t.includes('IRPF') || t.includes('RET')) {
+      const key = `retencion_irpf_${pct}`;
+      if (taxConfig[key]) return String(taxConfig[key]);
+    }
+  }
+
   if (t === 'RETENCION' || t.includes('IRPF') || t.includes('RET')) {
-    return esEmitida ? '4730000' : '4751000';
+    return esEmitida ? '47300000' : '47510000';
   }
   if (t === 'IVA' || t.includes('IVA')) {
-    const pct = Math.round(porcentaje);
-    return `${base}000${pct.toString().padStart(2, '0')}`;
+    // Cuenta genérica sin sufijo de tasa (Javier: "47700000" / "47200000")
+    return esEmitida ? '47700000' : '47200000';
   }
   if (t === 'RECARGO' || t.includes('RECARGO')) {
-    const pct = Math.round(porcentaje);
-    return `${base}000${pct.toString().padStart(2, '0')}`;
+    return esEmitida ? '47700000' : '47200000';
   }
   return null;
 }
@@ -349,6 +362,13 @@ export function startDbWriterWorker() {
         // Si es emitida o indeterminada, usamos el del cliente/receptor. Si es recibida, el del emisor/proveedor.
         const cifDocumento = (esEmitida || isSinConfirmar ? cifCliente : cifEmisor) || '';
 
+        // Configuración de cuentas contables de impuestos de la empresa
+        const empresaRecord = await prisma.empresas.findUnique({
+          where: { id: BigInt(empresaId) },
+          select: { config_cuentas_impuestos: true }
+        }).catch(() => null);
+        const taxAccountsConfig = (empresaRecord?.config_cuentas_impuestos as Record<string, any>) || null;
+
         const rawTotales = aiResult.totales_por_impuesto || aiResult.desglose_iva || [];
         const impuestosOriginales = Array.isArray(rawTotales)
           ? rawTotales.map((imp: any) => ({
@@ -549,6 +569,20 @@ export function startDbWriterWorker() {
             const rawDir    = emisor.direccion || '';
             const rawTel    = emisor.telefono || '';
             const rawEmail  = emisor.email || '';
+            const cifHash   = getSha256(rawCif);
+
+            // Lookup CC en entidades_config (recibidas: proveedor → cuenta_compra + cuenta_gasto)
+            let cuentaContableEmisor: string | null = null;
+            let cuentaGastoEmisor: string | null = null;
+            if (!esEmitida && cifHash) {
+              const config = await prisma.entidades_config.findUnique({
+                where: { empresa_id_identificador_fiscal_hash: { empresa_id: BigInt(empresaId), identificador_fiscal_hash: cifHash } },
+                select: { cuenta_compra: true, cuenta_gasto: true },
+              });
+              cuentaContableEmisor = config?.cuenta_compra ?? null;
+              cuentaGastoEmisor = config?.cuenta_gasto ?? null;
+            }
+
             await tx.entidades_documento.create({
               data: {
                 documento_id: doc.id,
@@ -560,7 +594,9 @@ export function startDbWriterWorker() {
                 telefono: rawTel || null,
                 email: rawEmail || null,
                 nombre_hash: getSha256(rawNombre),
-                identificador_fiscal_hash: getSha256(rawCif),
+                identificador_fiscal_hash: cifHash,
+                ...(cuentaContableEmisor ? { cuenta_contable: cuentaContableEmisor } : {}),
+                ...(cuentaGastoEmisor ? { cuenta_gasto: cuentaGastoEmisor } : {}),
               }
             });
           }
@@ -572,6 +608,20 @@ export function startDbWriterWorker() {
             const rawDir    = receptor.direccion || '';
             const rawTel    = receptor.telefono || '';
             const rawEmail  = receptor.email || '';
+            const cifHash   = getSha256(rawCif);
+
+            // Lookup CC en entidades_config (emitidas: cliente → cuenta_venta + cuenta_ingreso)
+            let cuentaContableReceptor: string | null = null;
+            let cuentaGastoReceptor: string | null = null;
+            if (esEmitida && cifHash) {
+              const config = await prisma.entidades_config.findUnique({
+                where: { empresa_id_identificador_fiscal_hash: { empresa_id: BigInt(empresaId), identificador_fiscal_hash: cifHash } },
+                select: { cuenta_venta: true, cuenta_ingreso: true },
+              });
+              cuentaContableReceptor = config?.cuenta_venta ?? null;
+              cuentaGastoReceptor = config?.cuenta_ingreso ?? null;
+            }
+
             await tx.entidades_documento.create({
               data: {
                 documento_id: doc.id,
@@ -583,7 +633,9 @@ export function startDbWriterWorker() {
                 telefono: rawTel || null,
                 email: rawEmail || null,
                 nombre_hash: getSha256(rawNombre),
-                identificador_fiscal_hash: getSha256(rawCif),
+                identificador_fiscal_hash: cifHash,
+                ...(cuentaContableReceptor ? { cuenta_contable: cuentaContableReceptor } : {}),
+                ...(cuentaGastoReceptor ? { cuenta_gasto: cuentaGastoReceptor } : {}),
               }
             });
           }
@@ -649,11 +701,11 @@ export function startDbWriterWorker() {
                   : applySign(Number(imp.base_imponible) || 0);
                 const porcentaje = Number(imp.porcentaje) || Number(imp.porcentaje_iva) || 0;
 
-                // Calcular sugerencia de CC (no se escribe en BD, se guarda en datos_extra)
-                const ccSugerida = resolveCC(tipo, porcentaje, esEmitida);
-                if (ccSugerida) {
+                // Resolver cuenta contable aprobada de la empresa (o PGC estándar)
+                const ccAsignada = resolveCC(tipo, porcentaje, esEmitida, taxAccountsConfig);
+                if (ccAsignada) {
                   const key = `${tipo}_${Math.round(porcentaje)}`;
-                  cuentasSugeridas[key] = ccSugerida;
+                  cuentasSugeridas[key] = ccAsignada;
                 }
 
                 return {
@@ -664,7 +716,7 @@ export function startDbWriterWorker() {
                   base_imponible: base,
                   cuota: cuota,
                   total_con_impuesto: base + cuota,
-                  // cuenta_contable queda NULL — el user la acepta/rechaza desde la UI
+                  ...(ccAsignada ? { cuenta_contable: ccAsignada } : {}),
                 };
               });
 
@@ -721,8 +773,8 @@ export function startDbWriterWorker() {
             const ispCuotaSigned = ispBase < 0 ? -ispCuota21 : ispCuota21;
 
             const cuentasSugeridasUE: Record<string, string> = {
-              'IVA_21_SOPORTADO':  '47210000', // PGC 4721 — soportado ISP intracomunitario
-              'IVA_21_REPERCUTIDO': '47720000', // PGC 4772 — repercutido ISP intracomunitario
+              'IVA_21_SOPORTADO':  taxAccountsConfig?.iva_intra_soportado_21 || '47210000',
+              'IVA_21_REPERCUTIDO': taxAccountsConfig?.iva_intra_repercutido_21 || '47720000',
             };
 
             if (ispCuota21 > 0) {
@@ -736,6 +788,7 @@ export function startDbWriterWorker() {
                     base_imponible: ispBase,
                     cuota: ispCuotaSigned,             // positivo → Debe 472
                     total_con_impuesto: ispBase + ispCuotaSigned,
+                    cuenta_contable: taxAccountsConfig?.iva_intra_soportado_21 || '47210000',
                   },
                   {
                     documento_id: doc.id,
@@ -745,6 +798,7 @@ export function startDbWriterWorker() {
                     base_imponible: ispBase,
                     cuota: -ispCuotaSigned,            // negativo → Haber 477 (anula al soportado)
                     total_con_impuesto: ispBase - ispCuotaSigned,
+                    cuenta_contable: taxAccountsConfig?.iva_intra_repercutido_21 || '47720000',
                   },
                 ],
               });
@@ -806,8 +860,8 @@ export function startDbWriterWorker() {
             const ispCuotaSigned = ispBase < 0 ? -ispCuota21 : ispCuota21;
 
             const cuentasSugeridasExtra: Record<string, string> = {
-              'IVA_21_SOPORTADO':  '47200021', // PGC 4720 — soportado ISP extracomunitario (casillas 28/29)
-              'IVA_21_REPERCUTIDO': '47700021', // PGC 4770 — repercutido ISP extracomunitario (casillas 12/13)
+              'IVA_21_SOPORTADO':  taxAccountsConfig?.iva_extra_soportado_21 || '47200021',
+              'IVA_21_REPERCUTIDO': taxAccountsConfig?.iva_extra_repercutido_21 || '47700021',
             };
 
             if (ispCuota21 > 0) {
@@ -821,6 +875,7 @@ export function startDbWriterWorker() {
                     base_imponible: ispBase,
                     cuota: ispCuotaSigned,
                     total_con_impuesto: ispBase + ispCuotaSigned,
+                    cuenta_contable: taxAccountsConfig?.iva_extra_soportado_21 || '47200021',
                   },
                   {
                     documento_id: doc.id,
@@ -830,6 +885,7 @@ export function startDbWriterWorker() {
                     base_imponible: ispBase,
                     cuota: -ispCuotaSigned,
                     total_con_impuesto: ispBase - ispCuotaSigned,
+                    cuenta_contable: taxAccountsConfig?.iva_extra_repercutido_21 || '47700021',
                   },
                 ],
               });
@@ -968,6 +1024,88 @@ export function startDbWriterWorker() {
         });
 
         // Si este job es un hijo de un lote, propagar el progreso al padre.
+        // --- Sugerencia IA de cuenta_gasto/cuenta_ingreso (fire-and-forget) ---
+        // Solo se ejecuta si el proveedor NO tiene cuenta_gasto guardada en entidades_config.
+        // El resultado se almacena en datos_extra del documento para mostrarlo en la UI.
+        if (savedDocumentoId) {
+          const cifParaGasto = !esEmitida ? cleanCif(emisor.cif || '') : cleanCif(receptor.cif || '');
+          const nombreParaGasto = !esEmitida ? (emisor.nombre || '') : (receptor.nombre || '');
+          const cifHashParaGasto = getSha256(cifParaGasto);
+
+          Promise.resolve().then(async () => {
+            try {
+              // Verificar si ya tiene cuenta_gasto guardada
+              if (cifHashParaGasto) {
+                const configExistente = await prisma.entidades_config.findUnique({
+                  where: { empresa_id_identificador_fiscal_hash: { empresa_id: BigInt(empresaId), identificador_fiscal_hash: cifHashParaGasto } },
+                  select: { cuenta_gasto: true, cuenta_ingreso: true },
+                });
+                if ((configExistente?.cuenta_gasto && !esEmitida) || (configExistente?.cuenta_ingreso && esEmitida)) {
+                  // Ya tiene cuenta guardada, no necesita sugerencia
+                  return;
+                }
+              }
+
+              // Construir descripción de líneas para contexto
+              const lineas = aiResult.lineas || aiResult.lineas_producto || [];
+              const descripcionLineas = Array.isArray(lineas)
+                ? lineas.flatMap((l: any) =>
+                    Array.isArray(l.articulos)
+                      ? l.articulos.map((a: any) => a.descripcion || '').filter(Boolean)
+                      : [l.descripcion || l.concepto || ''].filter(Boolean)
+                  ).slice(0, 5).join('; ')
+                : '';
+
+              const tipoDoc = esEmitida ? 'emitida (venta)' : 'recibida (compra/gasto)';
+              const cuentaGrupo = esEmitida ? 'ingresos (grupo 7 PGC español)' : 'gastos (grupo 6 PGC español)';
+              const ejemplos = esEmitida
+                ? '700000 Ventas de mercaderías, 705000 Prestaciones de servicios, 752000 Ingresos por arrendamientos'
+                : '600000 Compras mercaderías, 621000 Arrendamientos, 623000 Servicios profesionales, 625000 Primas de seguros, 628000 Suministros (luz/agua/gas/telecom), 629000 Otros servicios (SaaS/cloud/software)';
+
+              const prompt = `Eres un experto en contabilidad española (PGC). Necesito que determines la cuenta contable de ${cuentaGrupo} más apropiada para este proveedor/cliente.
+
+Nombre: ${nombreParaGasto || 'Desconocido'}
+CIF: ${cifParaGasto || 'N/A'}
+Tipo de factura: ${tipoDoc}
+Descripción de conceptos facturados: ${descripcionLineas || 'No disponible'}
+
+Cuentas de referencia más comunes:
+${ejemplos}
+
+Responde SOLO con JSON válido, sin markdown:
+{"codigo": "6XXXXXX", "nombre": "Nombre cuenta PGC", "justificacion": "motivo breve"}`;
+
+              const respuesta = await callAzureOpenAiChat({ prompt, json: true, maxCompletionTokens: 150 });
+              const respuestaRaw = typeof respuesta === 'string' ? respuesta : respuesta?.text ?? '';
+              let sugerencia: { codigo: string; nombre: string; justificacion: string } | null = null;
+              try {
+                sugerencia = JSON.parse(respuestaRaw);
+              } catch {
+                // Respuesta no parseable — ignorar
+              }
+
+              if (sugerencia?.codigo && savedDocumentoId) {
+                // Guardar en datos_extra del documento para la UI
+                const docActual = await prisma.documentos.findUnique({ where: { id: savedDocumentoId }, select: { datos_extra: true } });
+                await prisma.documentos.update({
+                  where: { id: savedDocumentoId },
+                  data: {
+                    datos_extra: {
+                      ...((docActual?.datos_extra as Record<string, any>) || {}),
+                      [esEmitida ? 'cuenta_ingreso_sugerida' : 'cuenta_gasto_sugerida']: sugerencia,
+                    },
+                  },
+                });
+                wLog('DbWriterWorker', `💡 CC gasto/ingreso sugerida para ${nombreParaGasto}: ${sugerencia.codigo} (${sugerencia.nombre})`);
+              }
+            } catch (err) {
+              // Silencioso — nunca interrumpe el flujo principal
+              wLog('DbWriterWorker', `⚠️ Error en sugerencia CC gasto (ignorado): ${err}`);
+            }
+          });
+        }
+        // -------------------------------------------------------------------------
+
         if (ingestion.parentUploadId) {
           await updateParentProgress(ingestion.parentUploadId).catch(() => {});
         }

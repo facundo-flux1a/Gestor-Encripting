@@ -128,7 +128,14 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const [isSavingImpuesto, setIsSavingImpuesto] = React.useState<number | null>(null);
   const [impuestoEditMode, setImpuestoEditMode] = React.useState<number | null>(null); // id del impuesto en edición
   const [impuestoEditInput, setImpuestoEditInput] = React.useState('');
+  // --- cuenta_gasto / cuenta_ingreso ---
+  const [cuentaGasto, setCuentaGasto] = React.useState<string | null>(null);
+  const [isSavingGasto, setIsSavingGasto] = React.useState(false);
+  const [cuentaGastoEditInput, setCuentaGastoEditInput] = React.useState('');
+  const [cuentaGastoEditMode, setCuentaGastoEditMode] = React.useState(false);
   const cuentasImpuestosSugeridas: Record<string, string> = rawDatosExtra.cuentas_impuestos_sugeridas || {};
+  const cuentaGastoSugerida: { codigo: string; nombre: string; justificacion?: string } | null =
+    rawDatosExtra.cuenta_gasto_sugerida || rawDatosExtra.cuenta_ingreso_sugerida || null;
   const [impuestosCC, setImpuestosCC] = React.useState<Record<number, string | null>>(
     () => Object.fromEntries((doc.iva_details || []).map((imp: any) => [imp.id, imp.cuenta_contable ?? null]))
   );
@@ -136,6 +143,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   // Emitida o recibida → determina qué CC de entidad usar
   const tipoDocUpper = (doc.tipo_documento || '').toUpperCase();
   const esEmitida = tipoDocUpper.includes('EMITIDA') || tipoDocUpper.includes('EMITIDO');
+  const ccGastoFieldName = esEmitida ? 'cuentaIngreso' : 'cuentaGasto';
   const isTicketDoc = tipoDocUpper.includes('TICKET');
   const totalAmount = Number((doc as any).total ?? (doc as any).importe_total ?? 0);
   const importeTotalAmount = Number((doc as any).importe_total ?? (doc as any).total ?? 0);
@@ -171,6 +179,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         // Leer el campo correcto según tipo de doc (compra o venta)
         const cc = data?.config?.[ccDbField];
         if (cc) setCuentaCompra(cc);
+        // Leer cuenta_gasto o cuenta_ingreso
+        const cg = data?.config?.[esEmitida ? 'cuenta_ingreso' : 'cuenta_gasto'];
+        if (cg) setCuentaGasto(cg);
       })
       .catch(() => {});
   }, [empresaId, provider?.identificador_fiscal, doc.cif, ccDbField]);
@@ -642,6 +653,120 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                           } finally { setIsSavingAccount(false); }
                         }}
                         disabled={isSavingAccount || !cuentaEditInput.trim()}
+                        className="text-[11px] bg-muted hover:bg-muted/80 text-foreground rounded px-2.5 py-1 disabled:opacity-40"
+                      >
+                        Guardar manual
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cuenta de Gastos / Ingresos — sugerida por IA, guardada por proveedor */}
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[11px] font-medium text-violet-300">
+                    {esEmitida ? '📈 Cuenta de Ingresos' : '📉 Cuenta de Gastos'}
+                    {cuentaGasto && <span className="ml-2 text-[10px] text-emerald-400 font-normal">✓ Asignada</span>}
+                  </p>
+
+                  {cuentaGasto && !cuentaGastoEditMode ? (
+                    // ── Cuenta guardada ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm text-foreground">{cuentaGasto}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCuentaGastoEditInput(cuentaGasto); setCuentaGastoEditMode(true); }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      >Cambiar</button>
+                    </div>
+                  ) : cuentaGastoEditMode ? (
+                    // ── Modo edición ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="text"
+                        value={cuentaGastoEditInput}
+                        onChange={e => setCuentaGastoEditInput(e.target.value)}
+                        className="h-7 text-xs bg-background border border-violet-500/50 rounded px-2 w-32 font-mono"
+                        autoFocus
+                        placeholder="ej. 6290000"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSavingGasto || !cuentaGastoEditInput.trim()}
+                        onClick={async () => {
+                          const providerCif = provider?.identificador_fiscal || doc.cif;
+                          if (!doc.empresa_id || !providerCif || !cuentaGastoEditInput.trim()) return;
+                          setIsSavingGasto(true);
+                          try {
+                            const res = await fetch('/api/entidades-config', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccGastoFieldName]: cuentaGastoEditInput.trim() }),
+                            });
+                            if (res.ok) { setCuentaGasto(cuentaGastoEditInput.trim()); setCuentaGastoEditMode(false); }
+                          } finally { setIsSavingGasto(false); }
+                        }}
+                        className="text-[11px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2.5 py-1 disabled:opacity-40"
+                      >
+                        {isSavingGasto ? '...' : 'Guardar'}
+                      </button>
+                      <button type="button" onClick={() => setCuentaGastoEditMode(false)} className="text-[10px] text-muted-foreground hover:text-foreground underline">Cancelar</button>
+                    </div>
+                  ) : (
+                    // ── Sin CC: mostrar sugerencia IA + input manual ──
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {cuentaGastoSugerida ? (
+                        <button
+                          type="button"
+                          disabled={isSavingGasto}
+                          onClick={async () => {
+                            const providerCif = provider?.identificador_fiscal || doc.cif;
+                            if (!doc.empresa_id || !providerCif) return;
+                            setIsSavingGasto(true);
+                            try {
+                              // 1. Guardar en entidades_documento (per-documento, sin propagar)
+                              await fetch(`/api/documents/${doc.id_documento}/entidad-gasto`, {
+                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ cuentaGasto: cuentaGastoSugerida.codigo }),
+                              });
+                              // 2. Guardar en entidades_config (default canónico para futuros docs)
+                              const res = await fetch('/api/entidades-config', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccGastoFieldName]: cuentaGastoSugerida.codigo }),
+                              });
+                              if (res.ok) setCuentaGasto(cuentaGastoSugerida.codigo);
+                            } finally { setIsSavingGasto(false); }
+                          }}
+                          className="text-[11px] bg-violet-700 hover:bg-violet-600 text-white rounded px-2.5 py-1 disabled:opacity-50 flex items-center gap-1"
+                          title={cuentaGastoSugerida.justificacion}
+                        >
+                          {isSavingGasto ? '...' : `💡 Aceptar ${cuentaGastoSugerida.codigo}`}
+                        </button>
+                      ) : null}
+                      {cuentaGastoSugerida && (
+                        <span className="text-[10px] text-muted-foreground">{cuentaGastoSugerida.nombre}</span>
+                      )}
+                      {cuentaGastoSugerida && <span className="text-[10px] text-muted-foreground/50">·</span>}
+                      <input
+                        type="text"
+                        placeholder="Cuenta manual"
+                        value={cuentaGastoEditInput}
+                        onChange={e => setCuentaGastoEditInput(e.target.value)}
+                        className="h-7 text-xs bg-background border border-input rounded px-2 w-28 font-mono"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSavingGasto || !cuentaGastoEditInput.trim()}
+                        onClick={async () => {
+                          const providerCif = provider?.identificador_fiscal || doc.cif;
+                          if (!doc.empresa_id || !providerCif || !cuentaGastoEditInput.trim()) return;
+                          setIsSavingGasto(true);
+                          try {
+                            const res = await fetch('/api/entidades-config', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ empresaId: Number(doc.empresa_id), identificadorFiscal: providerCif, nombreReferencia: provider?.nombre || '', [ccGastoFieldName]: cuentaGastoEditInput.trim() }),
+                            });
+                            if (res.ok) setCuentaGasto(cuentaGastoEditInput.trim());
+                          } finally { setIsSavingGasto(false); }
+                        }}
                         className="text-[11px] bg-muted hover:bg-muted/80 text-foreground rounded px-2.5 py-1 disabled:opacity-40"
                       >
                         Guardar manual

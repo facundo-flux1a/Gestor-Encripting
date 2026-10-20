@@ -72,6 +72,7 @@ model empresas {
   notificar_resumen_subida Boolean              @default(false)
   email_notificaciones    String?               @db.VarChar(255)
   config_roles          Json?                   @default(dbgenerated("(json_object())"))
+  config_cuentas_impuestos Json?
   cif_hash              String?                 @db.VarChar(64)
   mail_de_carga_hash    String?                 @unique(map: "mail_de_carga_hash") @db.VarChar(64)
   delsol_api_cliente    String?                 @db.VarChar(50)
@@ -112,6 +113,7 @@ model entidades_documento {
   fecha_creacion            DateTime?  @default(now()) @db.Timestamp(0)
   id_de_empresa             BigInt?
   cuenta_contable           String?    @db.VarChar(10)
+  cuenta_gasto              String?    @db.VarChar(20)
   identificador_fiscal_hash String?    @db.VarChar(64)
   nombre_hash               String?    @db.VarChar(64)
   documentos                documentos @relation(fields: [documento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_entidad_documento")
@@ -458,6 +460,8 @@ model entidades_config {
   nombre_referencia         String?  @db.VarChar(255)
   cuenta_venta              String?  @default("430") @db.VarChar(10)
   cuenta_compra             String?  @default("400") @db.VarChar(10)
+  cuenta_gasto              String?  @db.VarChar(20)
+  cuenta_ingreso            String?  @db.VarChar(20)
   fecha_modificacion        DateTime @default(now()) @db.Timestamp(0)
   empresas                  empresas @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_entconf_empresa")
 

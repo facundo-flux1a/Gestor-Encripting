@@ -34,6 +34,7 @@ import {
   UploadCloud,
   Landmark,
   Archive,
+  Scale,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -333,6 +334,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
     { href: '/trimestres', label: 'Trimestres', icon: Calendar },
     { href: '/dashboard/sii', label: 'SII AEAT', icon: Landmark },
     { href: '/proveedores', label: 'Entidades', icon: Users },
+    { href: '/cuentas-contables', label: 'Cuentas Contables', icon: Scale },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
     { href: '/docs', label: 'Docs', icon: BookOpen },
   ];
