@@ -64,6 +64,14 @@ export function UploadDialog({
   }, [isOpen, defaultCompanyId]);
 
   const validateFileSize = (file: File): boolean => {
+    if (!file || file.size === 0) {
+      toast({
+        title: "⚠️ Archivo vacío ignorado",
+        description: `"${file?.name || 'Archivo'}" pesa 0 bytes (puede ser un archivo en la nube no sincronizado o corrupto).`,
+        variant: "destructive",
+      });
+      return false;
+    }
     if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "❌ Archivo demasiado grande",
@@ -170,7 +178,18 @@ export function UploadDialog({
   };
 
   const processDroppedFiles = useCallback((droppedFiles: File[]) => {
-    const candidates = droppedFiles.filter((file) => file.size > 0 || file.name.includes('.'));
+    const emptyFiles = droppedFiles.filter(file => !file || file.size === 0);
+    if (emptyFiles.length > 0) {
+      const names = emptyFiles.map(f => f.name).slice(0, 3).join(', ');
+      const more = emptyFiles.length > 3 ? ` (+${emptyFiles.length - 3} más)` : '';
+      toast({
+        title: "⚠️ Archivos vacíos ignorados",
+        description: `${emptyFiles.length} archivo(s) pesan 0 bytes o no se han descargado al equipo local (${names}${more}).`,
+        variant: "destructive",
+      });
+    }
+
+    const candidates = droppedFiles.filter((file) => file && file.size > 0);
 
     const validFiles = candidates.filter(file => {
       const isValidType = isAcceptedFile(file);
@@ -191,7 +210,7 @@ export function UploadDialog({
         description: `Ignorados: ${names}${more}`,
         variant: "destructive",
       });
-    } else if (droppedFiles.length > 0 && validFiles.length === 0) {
+    } else if (droppedFiles.length > 0 && validFiles.length === 0 && emptyFiles.length === 0) {
       toast({
         title: "⚠️ No se encontraron archivos",
         description: "Si soltaste una carpeta, prueba de nuevo o selecciona los PDF con el botón.",

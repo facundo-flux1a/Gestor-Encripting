@@ -71,13 +71,22 @@ function getMimeTypeFromFileName(fileName: string): string {
 
 // ─── Hash y duplicados ─────────────────────────────────────────────────────────
 
+const EMPTY_SHA256_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
 async function calculateFileHash(fileBuffer: ArrayBuffer): Promise<string> {
+  if (!fileBuffer || fileBuffer.byteLength === 0) {
+    throw new Error('No se puede calcular hash de un archivo vacío (0 bytes)');
+  }
   const hash = crypto.createHash('sha256');
   hash.update(Buffer.from(fileBuffer));
   return hash.digest('hex');
 }
 
 async function checkDuplicate(fileHash: string, empresaId: string): Promise<any> {
+  if (!fileHash || fileHash === EMPTY_SHA256_HASH) {
+    console.warn(`[checkDuplicate] Ignorando verificación de duplicados para hash vacío o inválido: "${fileHash}"`);
+    return null;
+  }
   try {
     const [rows] = await connection.query(
       `SELECT file_hash, numero_documento as file_name, fecha_creacion as uploaded_at 
@@ -458,6 +467,29 @@ export async function uploadDocument(
   try {
     console.log(`[${normalizedFileName}] Leyendo archivo (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = await file.arrayBuffer();
+
+    if (!fileBuffer || fileBuffer.byteLength === 0) {
+      console.warn(`❌ [UploadService] Archivo vacío (0 bytes recibido): ${normalizedFileName}`);
+      await createActivityRecord(uploadId, empresaId, normalizedFileName, normalizedFileType, undefined, batchId, {
+        status: 'Fallido',
+        step: 'Archivo vacío',
+        mensaje: 'El archivo llegó vacío al servidor (0 bytes en disco o stub no sincronizado)',
+      });
+      await markUploadAsFailed(
+        uploadId,
+        '❌ El archivo llegó al servidor con 0 bytes. Verifique que esté descargado en su equipo y no sea un archivo en la nube no sincronizado.',
+        'Archivo vacío'
+      );
+      await notifyFrontendError(
+        uploadId,
+        '❌ Archivo vacío (0 bytes en disco)',
+        'Archivo vacío'
+      );
+      return {
+        success: false,
+        message: '❌ El archivo llegó al servidor vacío (0 bytes). Verifique que esté descargado en su equipo y no sea un archivo en la nube no sincronizado.',
+      };
+    }
 
     const mainFileHash = await calculateFileHash(fileBuffer);
     console.log(`[${normalizedFileName}] Hash: ${mainFileHash}`);

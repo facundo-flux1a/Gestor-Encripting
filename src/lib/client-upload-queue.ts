@@ -147,6 +147,10 @@ function bumpSummary(batchId: string, kind: 'ok' | 'dup' | 'error', detail?: str
 }
 
 async function uploadOne(rec: PendingUploadRecord): Promise<'ok' | 'dup'> {
+  if (!rec.blob || rec.blob.size === 0) {
+    throw new Error('El archivo está vacío (0 bytes en disco o stub no sincronizado)');
+  }
+
   const formData = new FormData();
   const file = new File([rec.blob], rec.fileName, {
     type: rec.mimeType || 'application/octet-stream',
@@ -239,15 +243,47 @@ export async function enqueueClientUploadBatch(opts: {
 }): Promise<BatchSummary> {
   const { empresaId, files } = opts;
 
+  // 1. Leer los bytes reales a memoria inmediatamente mientras el input / drag están activos en el SO
+  const validFilesWithBuffers: Array<{ file: File; buffer: ArrayBuffer }> = [];
+  const preErrorDetails: string[] = [];
+
+  for (const f of files) {
+    if (!f || f.size === 0) {
+      preErrorDetails.push(`${f?.name || 'Archivo'}: el archivo está vacío (0 bytes en disco o stub en la nube)`);
+      continue;
+    }
+    try {
+      const buf = await f.arrayBuffer();
+      if (!buf || buf.byteLength === 0) {
+        preErrorDetails.push(`${f.name}: el archivo está vacío (0 bytes en disco)`);
+        continue;
+      }
+      validFilesWithBuffers.push({ file: f, buffer: buf });
+    } catch (err: any) {
+      preErrorDetails.push(`${f.name}: error de lectura local (${err?.message || 'descriptor cerrado'})`);
+    }
+  }
+
+  if (validFilesWithBuffers.length === 0) {
+    console.warn('⚠️ [ClientUploadQueue] Ningún archivo válido con contenido (> 0 bytes).');
+    return {
+      batchId: 'empty-' + Date.now(),
+      successCount: 0,
+      duplicateCount: 0,
+      errorCount: preErrorDetails.length,
+      errorDetails: preErrorDetails,
+    };
+  }
+
   const batchRes = await fetch('/api/uploads/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       empresaId,
-      files: files.map((f) => ({
-        fileName: f.name,
-        size: f.size,
-        mimeType: f.type,
+      files: validFilesWithBuffers.map(({ file, buffer }) => ({
+        fileName: file.name,
+        size: buffer.byteLength,
+        mimeType: file.type,
       })),
     }),
   });
@@ -259,11 +295,11 @@ export async function enqueueClientUploadBatch(opts: {
   const batchId: string = batchJson.batchId;
   const batchItems: Array<{ uploadId: string; fileName: string }> = batchJson.items;
 
-  const filesByNorm = new Map<string, File[]>();
-  for (const f of files) {
-    const key = normalizeName(f.name);
+  const filesByNorm = new Map<string, Array<{ file: File; buffer: ArrayBuffer }>>();
+  for (const item of validFilesWithBuffers) {
+    const key = normalizeName(item.file.name);
     const list = filesByNorm.get(key) || [];
-    list.push(f);
+    list.push(item);
     filesByNorm.set(key, list);
   }
 
@@ -271,31 +307,33 @@ export async function enqueueClientUploadBatch(opts: {
     batchId,
     successCount: 0,
     duplicateCount: 0,
-    errorCount: 0,
-    errorDetails: [],
+    errorCount: preErrorDetails.length,
+    errorDetails: [...preErrorDetails],
   };
   batchSummaries.set(batchId, summary);
 
   const now = Date.now();
   for (const item of batchItems) {
     const list = filesByNorm.get(item.fileName) || filesByNorm.get(normalizeName(item.fileName));
-    const file = list?.shift();
-    if (!file) {
+    const pair = list?.shift();
+    if (!pair) {
       summary.errorCount++;
       summary.errorDetails.push(`${item.fileName}: no se encontró el archivo local`);
       continue;
     }
+    // Guardamos un Blob real creado a partir del ArrayBuffer en memoria, NO el File vivo con descriptor del SO
+    const realBlob = new Blob([pair.buffer], { type: pair.file.type || 'application/octet-stream' });
     await putPending({
       uploadId: item.uploadId,
       batchId,
       empresaId,
-      fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      blob: file,
+      fileName: pair.file.name,
+      mimeType: pair.file.type || 'application/octet-stream',
+      blob: realBlob,
       createdAt: now,
       attempts: 0,
     });
-    notifyProgress(item.uploadId, file.name, batchId);
+    notifyProgress(item.uploadId, pair.file.name, batchId);
   }
 
   console.log('📦 [ClientUploadQueue] Lote en IDB', {
