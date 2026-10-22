@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/layout/page-header';
+import { SiiTutorialProvider } from '@/context/SiiTutorialProvider';
+import { SiiTutorialRouter } from '@/components/tutorials/SiiTutorialRouter';
 import {
   Loader2, CheckCircle, XCircle, Upload, Search,
   Building2, User as UserIcon, RefreshCw, ShieldCheck,
@@ -541,124 +543,129 @@ export default function SIIDashboardPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <MainLayout>
-      <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full space-y-6">
+    <SiiTutorialProvider>
+      <SiiTutorialRouter isDataLoading={loadingInfo} />
+      <MainLayout>
+        <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full space-y-6">
 
-        {/* Modern Page Header */}
-        <PageHeader
-          title="SII AEAT — Libros Registro"
-          mobileTitle="SII AEAT"
-          icon={Landmark}
-        >
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Cert status pill */}
-            <button
-              type="button"
-              disabled={testingCert}
-              onClick={() => handleTestCert(false)}
-              title="Haz clic para comprobar la conexión con la AEAT (Ping)"
-              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold flex items-center gap-1 sm:gap-1.5 border shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                certValid === true
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                  : certValid === false
-                  ? 'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20'
-                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
-              }`}
-            >
-              {testingCert ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              ) : certValid === true ? (
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-              ) : certValid === false ? (
-                <XCircle className="h-3.5 w-3.5 text-destructive" />
-              ) : (
-                <Lock className="h-3.5 w-3.5 text-amber-500" />
-              )}
-              <span className="sm:hidden">
-                {testingCert
-                  ? 'Probando...'
-                  : certValid === true
-                  ? 'Conectado'
-                  : certValid === false
-                  ? 'Error'
-                  : 'Pendiente'}
-              </span>
-              <span className="hidden sm:inline">
-                {testingCert
-                  ? 'Comprobando conexión...'
-                  : certValid === true
-                  ? 'Certificado Conectado'
-                  : certValid === false
-                  ? 'Certificado Inválido'
-                  : 'Certificado Pendiente'}
-              </span>
-              <RefreshCw className={`h-3 w-3 ml-0.5 opacity-70 ${testingCert ? 'animate-spin' : ''}`} />
-            </button>
-
-            {/* Environment Badge */}
-            <Badge variant="outline" className="hidden xs:inline-flex font-mono text-[10px] sm:text-xs py-0.5 sm:py-1 px-2 sm:px-3 border-primary/20 bg-primary/5 text-primary">
-              <Globe className="h-3 w-3 mr-1" />
-              <span className="sm:hidden">PRUEBAS</span>
-              <span className="hidden sm:inline">AEAT PRUEBAS</span>
-            </Badge>
-          </div>
-        </PageHeader>
-
-        {/* Top Summary Stats Cards Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Facturas Pendientes</p>
-              <p className="text-2xl font-bold text-amber-500 mt-1">{userInfo?.estadisticas?.pendientes ?? 0}</p>
-            </div>
-            <div className="p-3 bg-amber-500/10 rounded-xl">
-              <Lock className="h-5 w-5 text-amber-500" />
-            </div>
-          </Card>
-
-          <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Registrados en AEAT</p>
-              <p className="text-2xl font-bold text-emerald-500 mt-1">{userInfo?.estadisticas?.enviados ?? 0}</p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 rounded-xl">
-              <CheckCircle className="h-5 w-5 text-emerald-500" />
-            </div>
-          </Card>
-
-          <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Empresa Seleccionada</p>
-              <p className="text-sm font-bold text-foreground truncate max-w-[180px] mt-1">{empresa?.nombre_fiscal || empresa?.nombre_de_empresa || 'No seleccionada'}</p>
-              {empresa?.cif && <p className="text-xs font-mono text-muted-foreground">NIF: {empresa.cif}</p>}
-            </div>
-            <div className="p-3 bg-primary/10 rounded-xl">
-              <Building2 className="h-5 w-5 text-primary" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Tab Navigation Pill Bar */}
-        <div className="flex flex-wrap gap-1.5 p-1.5 bg-muted/50 rounded-xl border border-border/60 backdrop-blur-md">
-          {([
-            { key: 'credenciales', label: 'Certificado Digital', icon: ShieldCheck },
-            { key: 'enviar', label: 'Enviar a la AEAT', icon: Send },
-            { key: 'documentos_locales', label: 'Documentos Gestor', icon: FileText },
-            { key: 'emitidas', label: 'Facturas Emitidas', icon: ArrowUpCircle },
-            { key: 'recibidas', label: 'Facturas Recibidas', icon: ArrowDownCircle },
-            { key: 'llaa', label: 'Estado Envíos (LLAA)', icon: BookOpen },
-          ] as { key: TabKey; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => {
-            const active = tab === key;
-            return (
+          {/* Modern Page Header */}
+          <PageHeader
+            title="SII AEAT — Libros Registro"
+            mobileTitle="SII AEAT"
+            icon={Landmark}
+            data-tutorial="sii-header"
+          >
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Cert status pill */}
               <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex-1 min-w-[140px] sm:min-w-[170px] px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${
-                  active
-                    ? 'bg-background text-primary shadow-sm ring-1 ring-border/80 font-semibold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                type="button"
+                data-tutorial="sii-cert-pill"
+                disabled={testingCert}
+                onClick={() => handleTestCert(false)}
+                title="Haz clic para comprobar la conexión con la AEAT (Ping)"
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold flex items-center gap-1 sm:gap-1.5 border shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  certValid === true
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                    : certValid === false
+                    ? 'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
                 }`}
               >
+                {testingCert ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                ) : certValid === true ? (
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                ) : certValid === false ? (
+                  <XCircle className="h-3.5 w-3.5 text-destructive" />
+                ) : (
+                  <Lock className="h-3.5 w-3.5 text-amber-500" />
+                )}
+                <span className="sm:hidden">
+                  {testingCert
+                    ? 'Probando...'
+                    : certValid === true
+                    ? 'Conectado'
+                    : certValid === false
+                    ? 'Error'
+                    : 'Pendiente'}
+                </span>
+                <span className="hidden sm:inline">
+                  {testingCert
+                    ? 'Comprobando conexión...'
+                    : certValid === true
+                    ? 'Certificado Conectado'
+                    : certValid === false
+                    ? 'Certificado Inválido'
+                    : 'Certificado Pendiente'}
+                </span>
+                <RefreshCw className={`h-3 w-3 ml-0.5 opacity-70 ${testingCert ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* Environment Badge */}
+              <Badge variant="outline" className="hidden xs:inline-flex font-mono text-[10px] sm:text-xs py-0.5 sm:py-1 px-2 sm:px-3 border-primary/20 bg-primary/5 text-primary">
+                <Globe className="h-3 w-3 mr-1" />
+                <span className="sm:hidden">PRUEBAS</span>
+                <span className="hidden sm:inline">AEAT PRUEBAS</span>
+              </Badge>
+            </div>
+          </PageHeader>
+
+          {/* Top Summary Stats Cards Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-tutorial="sii-stats-cards">
+            <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Facturas Pendientes</p>
+                <p className="text-2xl font-bold text-amber-500 mt-1">{userInfo?.estadisticas?.pendientes ?? 0}</p>
+              </div>
+              <div className="p-3 bg-amber-500/10 rounded-xl">
+                <Lock className="h-5 w-5 text-amber-500" />
+              </div>
+            </Card>
+
+            <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Registrados en AEAT</p>
+                <p className="text-2xl font-bold text-emerald-500 mt-1">{userInfo?.estadisticas?.enviados ?? 0}</p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 rounded-xl">
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
+              </div>
+            </Card>
+
+            <Card className="bg-card border-border/60 shadow-sm p-4 flex items-center justify-between rounded-xl">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Empresa Seleccionada</p>
+                <p className="text-sm font-bold text-foreground truncate max-w-[180px] mt-1">{empresa?.nombre_fiscal || empresa?.nombre_de_empresa || 'No seleccionada'}</p>
+                {empresa?.cif && <p className="text-xs font-mono text-muted-foreground">NIF: {empresa.cif}</p>}
+              </div>
+              <div className="p-3 bg-primary/10 rounded-xl">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+            </Card>
+          </div>
+
+          {/* Tab Navigation Pill Bar */}
+          <div className="flex flex-wrap gap-1.5 p-1.5 bg-muted/50 rounded-xl border border-border/60 backdrop-blur-md" data-tutorial="sii-tabs-bar">
+            {([
+              { key: 'credenciales', label: 'Certificado Digital', icon: ShieldCheck },
+              { key: 'enviar', label: 'Enviar a la AEAT', icon: Send },
+              { key: 'documentos_locales', label: 'Documentos Gestor', icon: FileText },
+              { key: 'emitidas', label: 'Facturas Emitidas', icon: ArrowUpCircle },
+              { key: 'recibidas', label: 'Facturas Recibidas', icon: ArrowDownCircle },
+              { key: 'llaa', label: 'Estado Envíos (LLAA)', icon: BookOpen },
+            ] as { key: TabKey; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => {
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  data-tutorial={`sii-tab-${key}`}
+                  onClick={() => setTab(key)}
+                  className={`flex-1 min-w-[140px] sm:min-w-[170px] px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${
+                    active
+                      ? 'bg-background text-primary shadow-sm ring-1 ring-border/80 font-semibold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  }`}
+                >
                 <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
                 <span>{label}</span>
               </button>
@@ -714,7 +721,7 @@ export default function SIIDashboardPage() {
                     </div>
 
                     <Button
-                      onClick={handleTestCert}
+                      onClick={() => handleTestCert()}
                       disabled={testingCert || !certB64 || !certPass}
                       className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-2.5 shadow-sm transition-all rounded-lg"
                     >
@@ -1868,6 +1875,7 @@ export default function SIIDashboardPage() {
           </main>
       </div>
     </MainLayout>
+    </SiiTutorialProvider>
   );
 }
 

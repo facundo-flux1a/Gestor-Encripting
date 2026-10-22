@@ -119,6 +119,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialDocs: z.number().optional(),
       tutorialUploadQueue: z.number().optional(),
       tutorialCuentasContables: z.number().optional(),
+      tutorialSii: z.number().optional(),
       organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
       exp: z.number(),
     }).safeParse(payload);
@@ -141,6 +142,7 @@ export async function decrypt(session: string | undefined = ''): Promise<Session
       tutorialDocs: parsedPayload.data.tutorialDocs,
       tutorialUploadQueue: parsedPayload.data.tutorialUploadQueue,
       tutorialCuentasContables: parsedPayload.data.tutorialCuentasContables,
+      tutorialSii: parsedPayload.data.tutorialSii,
       organization_rol: (parsedPayload.data.organization_rol as "ADMIN" | "EDITOR" | "VIEWER") || 'EDITOR',
       expires: new Date(parsedPayload.data.exp * 1000).toISOString(),
     };
@@ -230,7 +232,8 @@ export async function createSession(
   tutorialDocs: number = 0,
   organizationRol: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR',
   tutorialUploadQueue: number = 0,
-  tutorialCuentasContables: number = 0
+  tutorialCuentasContables: number = 0,
+  tutorialSii: number = 0
 ) {
   // Limpiar/actualizar inmediatamente el cache en memoria para este usuario
   activoCache.set(userId, { activo: true, expires: Date.now() + ACTIVO_TTL_MS });
@@ -241,7 +244,7 @@ export async function createSession(
     tutorialDocumentos, tutorialTrimestres, tutorialActividad,
     tutorialIndividual, tutorialIncidencias, tutorialProveedores,
     tutorialHealthCheck, tutorialWebhooks, tutorialDocs,
-    tutorialUploadQueue, tutorialCuentasContables,
+    tutorialUploadQueue, tutorialCuentasContables, tutorialSii,
     organization_rol: organizationRol
   });
 
@@ -662,7 +665,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       'tutorial_webhooks': 'tutorialWebhooks',
       'tutorial_docs': 'tutorialDocs',
       'tutorial_upload_queue': 'tutorialUploadQueue',
-      'tutorial_cuentas_contables': 'tutorialCuentasContables'
+      'tutorial_cuentas_contables': 'tutorialCuentasContables',
+      'tutorial_sii': 'tutorialSii'
     };
 
     const payloadField = fieldMap[field];
@@ -687,7 +691,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       updatedPayload.tutorialDocs ?? 0,
       (updatedPayload as any).organization_rol as any,
       (updatedPayload as any).tutorialUploadQueue ?? 0,
-      (updatedPayload as any).tutorialCuentasContables ?? 0
+      (updatedPayload as any).tutorialCuentasContables ?? 0,
+      (updatedPayload as any).tutorialSii ?? 0
     );
 
     console.log(`✅ [auth-service] ${field} actualizado exitosamente`);
@@ -744,4 +749,8 @@ export async function completeTutorialUploadQueue() {
 
 export async function completeTutorialCuentasContables() {
   return await updateUserTutorialField('tutorial_cuentas_contables', 0);
+}
+
+export async function completeTutorialSii() {
+  return await updateUserTutorialField('tutorial_sii', 0);
 }
