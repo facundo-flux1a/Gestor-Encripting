@@ -36,6 +36,8 @@ import {
 import { cn } from '@/lib/utils';
 import { DEFAULT_TAX_ACCOUNTS } from '@/types/tax-accounts';
 import type { TaxAccountsConfig, BalanceAccountRow, BalanceTotalsResponse } from '@/types/tax-accounts';
+import { CuentasContablesTutorialProvider } from '@/context/CuentasContablesTutorialProvider';
+import { CuentasContablesTutorialRouter } from '@/components/tutorials/CuentasContablesTutorialRouter';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -777,26 +779,29 @@ export default function CuentasContablesProveedoresPage() {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <MainLayout>
-        <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-                ⚖️ Cuentas Contables
-                <span className="text-xs font-normal text-muted-foreground bg-muted/40 border border-border px-2 py-0.5 rounded-full">
-                  PGC Español
-                </span>
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                Configuración canónica por entidad (41xxx/43xxx) e impuestos globales (472xxx/477xxx) para exportación a A3
-              </p>
-            </div>
+      <CuentasContablesTutorialProvider>
+        <CuentasContablesTutorialRouter isDataLoading={loading} />
+        <MainLayout>
+          <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 flex-wrap" data-tutorial="cc-header">
+              <div>
+                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  ⚖️ Cuentas Contables
+                  <span className="text-xs font-normal text-muted-foreground bg-muted/40 border border-border px-2 py-0.5 rounded-full">
+                    PGC Español
+                  </span>
+                </h1>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configuración canónica por entidad (41xxx/43xxx) e impuestos globales (472xxx/477xxx) para exportación a A3
+                </p>
+              </div>
 
-            {/* Selector de Pestañas Superiores */}
-            <div className="flex items-center p-1 bg-muted/40 border border-border rounded-lg text-xs font-medium">
+              {/* Selector de Pestañas Superiores */}
+              <div className="flex items-center p-1 bg-muted/40 border border-border rounded-lg text-xs font-medium" data-tutorial="cc-tabs">
               <button
                 onClick={() => setActiveTab('entidades')}
+                data-tutorial="cc-tab-entidades"
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
                   activeTab === 'entidades'
@@ -810,6 +815,7 @@ export default function CuentasContablesProveedoresPage() {
 
               <button
                 onClick={() => setActiveTab('impuestos')}
+                data-tutorial="cc-tab-impuestos"
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
                   activeTab === 'impuestos'
@@ -823,6 +829,7 @@ export default function CuentasContablesProveedoresPage() {
 
               <button
                 onClick={() => setActiveTab('totales')}
+                data-tutorial="cc-tab-totales"
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
                   activeTab === 'totales'
@@ -851,7 +858,7 @@ export default function CuentasContablesProveedoresPage() {
                   {/* Gestor de Columnas */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border hover:bg-muted/50">
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border hover:bg-muted/50" data-tutorial="cc-columns-btn">
                         <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                         <span>Columnas</span>
                       </Button>
@@ -962,7 +969,7 @@ export default function CuentasContablesProveedoresPage() {
 
               {/* Banner de Sugerencias IA si existen */}
               {stats.sugeridas > 0 && (
-                <div className="rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 via-violet-950/20 to-transparent p-4 flex items-center justify-between gap-4 flex-wrap shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+                <div data-tutorial="cc-ai-banner" className="rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 via-violet-950/20 to-transparent p-4 flex items-center justify-between gap-4 flex-wrap shadow-[0_0_20px_rgba(139,92,246,0.1)]">
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-xl bg-violet-600/25 border border-violet-500/50 flex items-center justify-center shrink-0 shadow-inner">
                       <Sparkles className="h-5 w-5 text-violet-300" />
@@ -999,7 +1006,7 @@ export default function CuentasContablesProveedoresPage() {
               )}
 
               {/* Filtros con Checkboxes */}
-              <div className="rounded-xl border border-border bg-card p-3.5 space-y-3 shadow-sm">
+              <div className="rounded-xl border border-border bg-card p-3.5 space-y-3 shadow-sm" data-tutorial="cc-filters">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
@@ -1141,7 +1148,7 @@ export default function CuentasContablesProveedoresPage() {
               </div>
 
               {/* Tabla Principal */}
-              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm" data-tutorial="cc-table">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -1213,23 +1220,31 @@ export default function CuentasContablesProveedoresPage() {
                       ) : filteredRows.length === 0 ? (
                         <tr>
                           <td colSpan={10} className="text-center py-14 text-muted-foreground">
-                            <div className="max-w-xs mx-auto space-y-2">
-                              <p className="font-semibold text-foreground text-sm">Sin resultados</p>
+                            <div className="max-w-md mx-auto space-y-2 px-4">
+                              <p className="font-semibold text-foreground text-sm">
+                                {entities.length === 0 ? 'No hay entidades contables aún' : 'Sin resultados'}
+                              </p>
                               <p className="text-xs text-muted-foreground">
-                                Ningún registro coincide con los filtros de rol o estado seleccionados.
+                                {entities.length === 0
+                                  ? 'Tus proveedores y clientes aparecerán aquí automáticamente al procesar facturas comerciales para asignarles sus subcuentas 410/430 y 6xx/7xx.'
+                                  : 'Ningún registro coincide con los filtros de rol o estado seleccionados.'}
                               </p>
                             </div>
                           </td>
                         </tr>
                       ) : (
-                        filteredRows.map(row => {
+                        filteredRows.map((row, rowIndex) => {
                           const isProveedor = row.rol === 'proveedor';
                           const defaultIvaAccount = isProveedor
                             ? (taxConfig.iva_soportado_21 || '47200000')
                             : (taxConfig.iva_repercutido_21 || '47700000');
 
                           return (
-                            <tr key={row.rowId} className="hover:bg-muted/20 transition-colors group">
+                            <tr
+                              key={row.rowId}
+                              data-tutorial={rowIndex === 0 ? "cc-first-row" : undefined}
+                              className="hover:bg-muted/20 transition-colors group"
+                            >
                               {/* Entidad */}
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
@@ -1387,7 +1402,7 @@ export default function CuentasContablesProveedoresPage() {
           {/* PESTAÑA 2: CUENTAS DE IMPUESTOS (IVA E IRPF POR EMPRESA)              */}
           {/* ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === 'impuestos' && (
-            <div className="space-y-6">
+            <div className="space-y-6" data-tutorial="cc-taxes-container">
               <div className="rounded-xl border border-border bg-card p-5 space-y-6 shadow-sm">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -1634,7 +1649,7 @@ export default function CuentasContablesProveedoresPage() {
           {/* PESTAÑA 3: BALANCE Y TOTALES DE CUENTAS CONTABLES                      */}
           {/* ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === 'totales' && (
-            <div className="space-y-5">
+            <div className="space-y-5" data-tutorial="cc-balance-container">
               {/* Card Principal */}
               <div className="p-6 rounded-2xl bg-card border border-border shadow-sm space-y-6">
                 {/* Header del Balance con Filtros */}
@@ -2011,6 +2026,7 @@ export default function CuentasContablesProveedoresPage() {
           </Dialog>
         </div>
       </MainLayout>
+      </CuentasContablesTutorialProvider>
     </TooltipProvider>
   );
 }

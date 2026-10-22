@@ -7,7 +7,7 @@ import { useFieldArray, useWatch } from 'react-hook-form';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { cn, fixMinioUrl } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye, Globe } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Loader2, Trash2, PlusCircle, Edit, Lock, X, AlertCircle, CheckCircle2, RefreshCw, Tag, ExternalLink, Eye, Globe, Folder } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DocumentTypeSelector } from './document-type-selector';
@@ -162,6 +162,27 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
       : '4000000'; // Proveedores (compra / recibida, default)
   const ccFieldName = esEmitida ? 'cuentaVenta' : 'cuentaCompra'; // campo a usar en entidades-config
   const ccDbField  = esEmitida ? 'cuenta_venta' : 'cuenta_compra'; // campo que devuelve el GET
+
+  // Detección de No Facturable ("Otros")
+  const esNoFacturable = useMemo(() => {
+    const isExplicitNF = rawDatosExtra?.es_facturable === false;
+    const isFiscal =
+      tipoDocUpper.includes('FACTURA') ||
+      tipoDocUpper.includes('ABONO') ||
+      tipoDocUpper.includes('TICKET') ||
+      tipoDocUpper.includes('ALBARAN') ||
+      tipoDocUpper.includes('ALBARÁN') ||
+      tipoDocUpper.includes('RECTIFIC');
+
+    if (isFiscal) return false;
+    return isExplicitNF || tipoDocUpper.includes('OTROS') || tipoDocUpper.includes('OTRO');
+  }, [rawDatosExtra?.es_facturable, tipoDocUpper]);
+
+  const categoriaNF = rawDatosExtra?.categoria_documento || rawDatosExtra?.categoria_principal || rawDatosExtra?.CATEGORIA || 'No clasificado';
+  const subcategoriaNF = rawDatosExtra?.subcategoria || '';
+  const valorReferenciaNF = Number(rawDatosExtra?.valor_referencia_no_fiscal || 0);
+  const conceptoReferenciaNF = rawDatosExtra?.concepto_valor_referencia || '';
+  const metadatosNF = rawDatosExtra?.metadatos || null;
 
   const countryName = rawDatosExtra.pais_emisor_nombre || rawDatosExtra.pais_emisor || '';
   const backupFiscalImpuestos = rawDatosExtra.backup_fiscal_origen?.impuestos_originales || [];
@@ -349,6 +370,15 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const statusLabel = doc.incidencia ? 'Revisión' : doc.verificado ? 'Validado' : 'Verificado';
   const statusColor = doc.incidencia ? '#f59e0b' : '#10b981';
 
+  // Solo para No Facturables: comprobar si trae datos económicos o retenciones reales
+  const hasNfEconomicData = esNoFacturable && (
+    liveRetencion > 0 ||
+    liveBase > 0 ||
+    liveTotal > 0 ||
+    liveBaseNS > 0 ||
+    Boolean(doc.iva_details && doc.iva_details.some((t: any) => Math.abs(Number(t.cuota) || 0) > 0.001 || Math.abs(Number(t.base_imponible) || 0) > 0.001))
+  );
+
   const handleClose = () => {
     if (form.formState.isDirty) {
       const confirmLeave = window.confirm(
@@ -404,9 +434,18 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           <div className="flex-1 text-center min-w-0 overflow-hidden px-2">
             <div className="flex items-center justify-center gap-1.5">
               <p className="text-sm font-bold">
-                {isTicketDoc ? (isTicketRectificativo ? 'Revisar ticket rectificativo' : 'Revisar ticket') : 'Revisar factura'}
+                {esNoFacturable
+                  ? 'Revisar documento'
+                  : isTicketDoc
+                    ? (isTicketRectificativo ? 'Revisar ticket rectificativo' : 'Revisar ticket')
+                    : 'Revisar factura'}
               </p>
-              {isTicketRectificativo && (
+              {esNoFacturable && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  {categoriaNF}
+                </span>
+              )}
+              {!esNoFacturable && isTicketRectificativo && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
                   Rectificativo
                 </span>
@@ -418,7 +457,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
               )}
             </div>
             <p className="text-[11px] font-medium truncate mt-0.5" style={{ color: statusColor }}>
-              {(provider?.nombre || '—').substring(0, 22)}{(provider?.nombre || '').length > 22 ? '…' : ''} · {statusLabel}
+              {esNoFacturable
+                ? `${doc.tipo_documento || 'Documento'} · ${statusLabel}`
+                : `${(provider?.nombre || '—').substring(0, 22)}${(provider?.nombre || '').length > 22 ? '…' : ''} · ${statusLabel}`}
             </p>
           </div>
 
@@ -467,80 +508,152 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
         {/* Scrollable form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 review-form-scrollbar">
 
-          {/* ── BANNER / TOGGLE PROVEEDOR EXTRANJERO ── */}
-          {isForeign ? (
-            <div className="mb-5 p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-xs flex flex-col gap-2.5">
+          {/* ── BANNER / METADATOS DOCUMENTO NO FACTURABLE ── */}
+          {esNoFacturable && (
+            <div className="mb-5 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <span className="text-lg leading-none mt-0.5">🌍</span>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                    <Folder className="h-5 w-5" />
+                  </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-blue-400">
-                        Proveedor Extranjero {countryName ? `(${countryName})` : ''}
-                      </p>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                        IVA NO DEDUCIBLE
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-sm text-foreground">
+                        {doc.tipo_documento || 'Documento No Facturable'}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        {categoriaNF}
                       </span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      El IVA de origen no es deducible en España (Modelo 303). El total computa íntegramente como gasto.
+                    {subcategoriaNF && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {subcategoriaNF}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/80 mt-1">
+                      Documento archivado en &ldquo;Otros&rdquo;. No genera cuotas fiscales de IVA ni obligaciones de Modelo 303.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowCaseBDialog(true)}
-                  disabled={isPendingToggle}
-                  className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-[11px] font-medium border border-border text-foreground transition-colors shrink-0 flex items-center gap-1"
-                >
-                  {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                  Cambiar a Local
-                </button>
               </div>
 
-              {/* Sugerencia de cuenta 4100000 — solo para no extranjeras.
-                  Para extranjeras ya aparece en el bloque de Cuentas Contables (entidad). */}
-              {!isForeign && cuentaCompra !== '4100000' && (
-                <div className="pt-2 border-t border-blue-500/20 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span>💡</span>
-                    <span>Subcuenta sugerida: <strong className="text-foreground font-mono">4100000</strong> (Acreedores)</span>
+              {/* Importe de referencia informativo (si existe) */}
+              {valorReferenciaNF > 0 && (
+                <div className="pt-2.5 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground font-medium">
+                      {conceptoReferenciaNF || 'Importe de referencia'}:
+                    </span>
+                    <span className="font-mono font-bold text-sm text-foreground">
+                      {fmtEur(valorReferenciaNF)}
+                    </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAssignAccount4100000}
-                    disabled={isSavingAccount}
-                    className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] shadow-sm transition-colors shrink-0 flex items-center gap-1"
-                  >
-                    {isSavingAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                    Asignar 4100000 en 1 clic
-                  </button>
+                  <span className="text-[10px] text-muted-foreground italic">
+                    Informativo (sin IVA computable)
+                  </span>
+                </div>
+              )}
+
+              {/* Metadatos adicionales de IA si existen */}
+              {metadatosNF && Object.keys(metadatosNF).length > 0 && (
+                <div className="pt-2 border-t border-emerald-500/15 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+                  {metadatosNF.numero_referencia && (
+                    <div className="text-muted-foreground">
+                      <span className="font-medium text-foreground/80">Ref:</span>{' '}
+                      <span className="font-mono">{metadatosNF.numero_referencia}</span>
+                    </div>
+                  )}
+                  {metadatosNF.estado && (
+                    <div className="text-muted-foreground">
+                      <span className="font-medium text-foreground/80">Estado:</span>{' '}
+                      <span>{metadatosNF.estado}</span>
+                    </div>
+                  )}
+                  {metadatosNF.periodo_fiscal && (
+                    <div className="text-muted-foreground">
+                      <span className="font-medium text-foreground/80">Período:</span>{' '}
+                      <span>{metadatosNF.periodo_fiscal}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          ) : (
-            <div className="mb-5 flex items-center justify-between px-3.5 py-2 rounded-lg border border-border/40 bg-muted/20 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span>🏢</span>
-                <span className="text-[11px] font-medium">Proveedor Nacional / Local (Régimen General)</span>
+          )}
+
+          {/* ── BANNER / TOGGLE PROVEEDOR EXTRANJERO (SOLO FACTURABLES) ── */}
+          {!esNoFacturable && (
+            isForeign ? (
+              <div className="mb-5 p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-xs flex flex-col gap-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-lg leading-none mt-0.5">🌍</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-blue-400">
+                          Proveedor Extranjero {countryName ? `(${countryName})` : ''}
+                        </p>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          IVA NO DEDUCIBLE
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        El IVA de origen no es deducible en España (Modelo 303). El total computa íntegramente como gasto.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCaseBDialog(true)}
+                    disabled={isPendingToggle}
+                    className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-[11px] font-medium border border-border text-foreground transition-colors shrink-0 flex items-center gap-1"
+                  >
+                    {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Cambiar a Local
+                  </button>
+                </div>
+
+                {!isForeign && cuentaCompra !== '4100000' && (
+                  <div className="pt-2 border-t border-blue-500/20 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span>💡</span>
+                      <span>Subcuenta sugerida: <strong className="text-foreground font-mono">4100000</strong> (Acreedores)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAssignAccount4100000}
+                      disabled={isSavingAccount}
+                      className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] shadow-sm transition-colors shrink-0 flex items-center gap-1"
+                    >
+                      {isSavingAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      Asignar 4100000 en 1 clic
+                    </button>
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCaseADialog(true)}
-                disabled={isPendingToggle}
-                className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-transparent hover:border-border flex items-center gap-1"
-              >
-                {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                <span>🌍</span> Marcar como Extranjero
-              </button>
-            </div>
+            ) : (
+              <div className="mb-5 flex items-center justify-between px-3.5 py-2 rounded-lg border border-border/40 bg-muted/20 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <span>🏢</span>
+                  <span className="text-[11px] font-medium">Proveedor Nacional / Local (Régimen General)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCaseADialog(true)}
+                  disabled={isPendingToggle}
+                  className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-transparent hover:border-border flex items-center gap-1"
+                >
+                  {isPendingToggle ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  <span>🌍</span> Marcar como Extranjero
+                </button>
+              </div>
+            )
           )}
 
           {/* ================================================================
            * SECCIÓN CUENTAS CONTABLES
            * Diferenciada visualmente. Solo visible para documentos facturables.
            * ================================================================ */}
-          {(doc as any)?.datos_extra?.es_facturable !== false && (
+          {!esNoFacturable && (
             <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
               <div className="px-4 py-2.5 border-b border-violet-500/20 flex items-center gap-2">
                 <span className="text-sm">📒</span>
@@ -968,21 +1081,21 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* PROVEEDOR + CIF */}
+          {/* PROVEEDOR / EMISOR + CIF */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="min-w-0"><SL>Proveedor</SL>
+            <div className="min-w-0"><SL>{esNoFacturable ? 'Emisor / Remitente' : 'Proveedor'}</SL>
               {isEditing
                 ? <FormField control={form.control} name="proveedor" render={({ field }) => (
                     <EInput readOnly={false} value={field.value ?? ''} onChange={v => field.onChange(v)} placeholder="—" />
                   )} />
-                : <EInput value={provider?.nombre || doc.proveedor || ''} placeholder="—" />}
+                : <EInput value={provider?.nombre || doc.proveedor || (esNoFacturable ? (rawDatosExtra?.metadatos?.remitente || '') : '')} placeholder="—" />}
             </div>
-            <div className="min-w-0"><SL>CIF</SL>
+            <div className="min-w-0"><SL>CIF / NIF</SL>
               {isEditing
                 ? <FormField control={form.control} name="cif" render={({ field }) => (
                     <EInput readOnly={false} value={field.value ?? ''} onChange={v => field.onChange(v)} className="font-mono text-foreground" placeholder="—" />
                   )} />
-                : <EInput value={provider?.identificador_fiscal || doc.cif || ''} className="font-mono text-muted-foreground" placeholder="—" />}
+                : <EInput value={provider?.identificador_fiscal || doc.cif || (esNoFacturable ? (rawDatosExtra?.metadatos?.nif_cif_relacionado || '') : '')} className="font-mono text-muted-foreground" placeholder="—" />}
             </div>
           </div>
 
@@ -991,7 +1104,7 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
           {/* Recibe tu empresa + Dirigida a */}
           <div className="space-y-4">
             <div>
-              <SL>Recibe tu empresa</SL>
+              <SL>{esNoFacturable ? 'Empresa de tu cuenta' : 'Recibe tu empresa'}</SL>
               {isEditing ? (
                 <FormField control={form.control} name="empresa_nombre" render={({ field }) => (
                   <EInput readOnly={false} value={field.value ?? doc.empresa_nombre ?? ''} onChange={v => field.onChange(v)} placeholder="Nombre de tu empresa" />
@@ -1004,20 +1117,22 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
               )}
             </div>
             <div>
-              <SL>Dirigida a (Cliente / Receptor)</SL>
+              <SL>{esNoFacturable ? 'Destinatario / Entidad relacionada' : 'Dirigida a (Cliente / Receptor)'}</SL>
               {isEditing ? (
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="cliente_nombre" render={({ field }) => (
-                    <EInput readOnly={false} value={field.value ?? client?.nombre ?? ''} onChange={v => field.onChange(v)} placeholder="Nombre del cliente/receptor" />
+                    <EInput readOnly={false} value={field.value ?? client?.nombre ?? ''} onChange={v => field.onChange(v)} placeholder="Nombre del destinatario" />
                   )} />
                   <FormField control={form.control} name="cliente_cif" render={({ field }) => (
-                    <EInput readOnly={false} value={field.value ?? client?.identificador_fiscal ?? ''} onChange={v => field.onChange(v)} className="font-mono" placeholder="CIF / NIF del cliente" />
+                    <EInput readOnly={false} value={field.value ?? client?.identificador_fiscal ?? ''} onChange={v => field.onChange(v)} className="font-mono" placeholder="CIF / NIF" />
                   )} />
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground mb-0.5">
-                  <span className="font-semibold text-foreground/90">{client?.nombre || '—'}</span>{' '}
-                  {client?.identificador_fiscal && <span className="font-mono text-[10px] text-muted-foreground">({client.identificador_fiscal})</span>}
+                  <span className="font-semibold text-foreground/90">{client?.nombre || (esNoFacturable ? (rawDatosExtra?.metadatos?.destinatario || '') : '') || '—'}</span>{' '}
+                  {(client?.identificador_fiscal || (esNoFacturable && rawDatosExtra?.metadatos?.destinatario && rawDatosExtra?.metadatos?.nif_cif_relacionado)) && (
+                    <span className="font-mono text-[10px] text-muted-foreground">({client?.identificador_fiscal || rawDatosExtra?.metadatos?.nif_cif_relacionado})</span>
+                  )}
                 </p>
               )}
             </div>
@@ -1025,9 +1140,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
 
           <Div />
 
-          {/* Nº FACTURA + FECHA EMISIÓN + FECHA VENCIMIENTO */}
-          <div className="grid grid-cols-3 gap-4">
-            <div><SL>Nº Factura</SL>
+          {/* Nº FACTURA/DOC + FECHA EMISIÓN + FECHA VENCIMIENTO */}
+          <div className={cn("grid gap-4", esNoFacturable && !isEditing && !doc.fecha_vencimiento ? "grid-cols-2" : "grid-cols-3")}>
+            <div><SL>{esNoFacturable ? 'Nº Documento / Ref.' : 'Nº Factura'}</SL>
               {isEditing
                 ? <FormField control={form.control} name="numero_documento" render={({ field, fieldState }) => (
                     <div>
@@ -1035,9 +1150,9 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                       {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
                     </div>
                   )} />
-                : <EInput value={doc.numero_documento || ''} className="font-mono text-foreground" />}
+                : <EInput value={doc.numero_documento || (esNoFacturable ? (rawDatosExtra?.metadatos?.numero_referencia || '') : '')} className="font-mono text-foreground" />}
             </div>
-            <div><SL>Fecha Emisión</SL>
+            <div><SL>{esNoFacturable ? 'Fecha Documento' : 'Fecha Emisión'}</SL>
               {isEditing
                 ? <FormField control={form.control} name="fecha_emision" render={({ field, fieldState }) => (
                     <div>
@@ -1046,19 +1161,21 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                       {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
                     </div>
                   )} />
-                : <EInput value={fmtDate(doc.fecha_emision)} />}
+                : <EInput value={fmtDate(doc.fecha_emision) || (esNoFacturable && doc.fecha_creacion ? fmtDate(doc.fecha_creacion) : '—')} placeholder="—" />}
             </div>
-            <div><SL>Fecha Vencimiento</SL>
-              {isEditing
-                ? <FormField control={form.control} name="fecha_vencimiento" render={({ field, fieldState }) => (
-                    <div>
-                      <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
-                        className={cn("w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50", fieldState.error && "border-destructive focus:ring-destructive")} />
-                      {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
-                    </div>
-                  )} />
-                : <EInput value={fmtDate(doc.fecha_vencimiento) || '—'} placeholder="—" />}
-            </div>
+            {(!esNoFacturable || isEditing || doc.fecha_vencimiento) && (
+              <div><SL>Fecha Vencimiento</SL>
+                {isEditing
+                  ? <FormField control={form.control} name="fecha_vencimiento" render={({ field, fieldState }) => (
+                      <div>
+                        <input type="date" value={toInputDate(field.value)} onChange={e => field.onChange(e.target.value || null)}
+                          className={cn("w-full px-2.5 py-2 text-sm rounded-md border border-border bg-background shadow-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50", fieldState.error && "border-destructive focus:ring-destructive")} />
+                        {fieldState.error && <p className="text-[11px] text-destructive mt-1 font-medium">{fieldState.error.message}</p>}
+                      </div>
+                    )} />
+                  : <EInput value={fmtDate(doc.fecha_vencimiento) || '—'} placeholder="—" />}
+              </div>
+            )}
           </div>
 
 
@@ -1115,291 +1232,381 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
             </div>
           </div>
 
-          <Div />
+          {/* ── SECCIONES FISCALES (SOLO FACTURABLES) ── */}
+          {!esNoFacturable && (
+            <>
+              <Div />
 
-          {/* DESGLOSE IVA — always input rows */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <SL>Desglose de IVA</SL>
-              {isEditing && (
-                <button type="button" onClick={() => appendIva({ tipo_impuesto: 'IVA', porcentaje: 21, base_imponible: 0, cuota: 0 })}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">
-                  <PlusCircle className="h-3.5 w-3.5" />Añadir
-                </button>
-              )}
-            </div>
-
-            {/* Sugerencia de cuotas respaldadas del documento original si está como local */}
-            {backupFiscalImpuestos.length > 0 && !isForeign && (
-              <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
-                    <span>💡</span> Cuotas detectadas en documento original (respaldo):
-                  </span>
-                  {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
-                        if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
-                          form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
-                        }
-                        form.setValue('iva_details', []);
-                        backupFiscalImpuestos.forEach((imp: any) => {
-                          appendIva({
-                            tipo_impuesto: imp.tipo || 'IVA',
-                            porcentaje: Number(imp.porcentaje) || 21,
-                            base_imponible: Number(imp.base) || 0,
-                            cuota: Number(imp.cuota) || 0,
-                          });
-                        });
-                        toast({
-                          title: '💡 Desglose aplicado',
-                          description: 'Se copiaron las cuotas originales del respaldo y se ajustó la base imponible.',
-                        });
-                      }}
-                      className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
-                    >
-                      Copiar al desglose
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onEdit();
-                        setTimeout(() => {
-                          const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
-                          if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
-                            form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
-                          }
-                          form.setValue('iva_details', []);
-                          backupFiscalImpuestos.forEach((imp: any) => {
-                            appendIva({
-                              tipo_impuesto: imp.tipo || 'IVA',
-                              porcentaje: Number(imp.porcentaje) || 21,
-                              base_imponible: Number(imp.base) || 0,
-                              cuota: Number(imp.cuota) || 0,
-                            });
-                          });
-                          toast({
-                            title: '💡 Desglose aplicado',
-                            description: 'Se activó la edición y se copiaron las cuotas originales.',
-                          });
-                        }, 50);
-                      }}
-                      className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
-                    >
-                      <Edit className="h-3 w-3" /> Editar y aplicar cuotas
+              {/* DESGLOSE IVA — always input rows */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <SL>Desglose de IVA</SL>
+                  {isEditing && (
+                    <button type="button" onClick={() => appendIva({ tipo_impuesto: 'IVA', porcentaje: 21, base_imponible: 0, cuota: 0 })}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">
+                      <PlusCircle className="h-3.5 w-3.5" />Añadir
                     </button>
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {backupFiscalImpuestos.map((imp: any, i: number) => (
-                    <span key={i} className="px-2 py-0.5 rounded bg-background/60 border border-amber-500/20 font-mono text-[10px] text-foreground">
-                      {imp.tipo} {imp.porcentaje}%: Base {fmtEur(imp.base)} → Cuota {fmtEur(imp.cuota)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              {/* header */}
-              <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1">Base</p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">%</p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right px-1">Total</p>
-                <span />
-              </div>
 
-              {isEditing ? ivaFields.map((field, idx) => (
-                <div key={field.id} className="grid gap-2 group" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                  <FormField control={form.control} name={`iva_details.${idx}.base_imponible`} render={({ field: f }) => (
-                    <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-right tabular-nums" />
-                  )} />
-                  <FormField control={form.control} name={`iva_details.${idx}.porcentaje`} render={({ field: f }) => (
-                    <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-center tabular-nums px-1" />
-                  )} />
-                  <FormField control={form.control} name={`iva_details.${idx}.cuota`} render={({ field: f }) => (
-                    <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-right tabular-nums" />
-                  )} />
-                  <button type="button" onClick={() => removeIva(idx)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive/70 hover:text-destructive flex items-center justify-center">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              )) : doc.iva_details.length === 0
-                ? <div className="py-4 border border-dashed border-border/50 rounded-md text-center"><p className="text-xs text-muted-foreground">Sin desglose de IVA</p></div>
-                : isForeign
-                  // ── Documento extranjero UE: mostrar IVA origen (si existe) + ISP España ──
-                  ? (() => {
-                      const ivaOrigenRows = (backupFiscalImpuestos as any[]).filter(
-                        (imp: any) => Math.abs(Number(imp.cuota) || 0) > 0.001
-                      );
-                      const ispRows = doc.iva_details.filter((iva) => {
-                        const tipo = (iva.tipo_impuesto || '').toUpperCase();
-                        return tipo.includes('INTRA') || tipo.includes('EXTRA');
-                      });
-                      return (
-                        <div className="space-y-2">
-                          {/* IVA origen del proveedor — solo si cobró IVA indebidamente */}
-                          {ivaOrigenRows.length > 0 && (
-                            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 overflow-hidden">
-                              <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-amber-500/20">
-                                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">⚠️ IVA origen proveedor ({countryName}) — INDEBIDO</span>
-                                <span className="text-[10px] text-amber-400/70 ml-auto">No computa en Mod. 303</span>
-                              </div>
-                              {ivaOrigenRows.map((imp: any, i: number) => (
-                                <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                                  <EInput value={fmtEur(imp.base)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
-                                  <EInput value={`${Math.abs(Number(imp.porcentaje) || 0)}%`} className="text-center text-amber-300/70 line-through decoration-amber-500/50" />
-                                  <EInput value={fmtEur(imp.cuota)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
-                                  <span />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {/* ISP España — filas del 21% auto-repercutido */}
-                          <div className="rounded-md border border-blue-500/30 bg-blue-500/5 overflow-hidden">
-                            <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-blue-500/20">
-                              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">🇪🇸 ISP España — IVA autorrepercutido (neto 0€)</span>
-                              <span className="text-[10px] text-blue-400/70 ml-auto">Mod. 303 · Mod. 349</span>
-                            </div>
-                            {ispRows.map((iva, i) => {
-                              const esRepercutido = (iva.tipo_impuesto || '').toUpperCase().includes('REPERCUTIDO');
-                              return (
-                                <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                                  <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
-                                  <EInput value={`${iva.porcentaje}%`} className="text-center text-blue-300" />
-                                  <EInput
-                                    value={fmtEur(iva.cuota)}
-                                    className={`text-right tabular-nums font-semibold ${esRepercutido ? 'text-emerald-400' : 'text-blue-300'}`}
-                                  />
-                                  <span className="flex items-center justify-center">
-                                    <span className="text-[9px] text-muted-foreground font-mono leading-none">
-                                      {esRepercutido ? 'REP' : 'SOP'}
-                                    </span>
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            <div className="px-3 py-1 border-t border-blue-500/20 flex justify-between items-center">
-                              <span className="text-[10px] text-muted-foreground">Neto ISP</span>
-                              <span className="text-[11px] font-bold text-blue-300 font-mono">0,00 €</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()
-                  // ── Documento normal: render original sin cambios ──
-                  : doc.iva_details.filter((iva) => {
-                      const tipo = (iva.tipo_impuesto || '').toLowerCase();
-                      return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
-                    }).map((iva, i) => (
-                    <div key={i} className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
-                      <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
-                      <EInput value={`${iva.porcentaje}%`} className="text-center text-muted-foreground" />
-                      <EInput value={fmtEur(iva.cuota)} className="text-right tabular-nums text-foreground font-semibold" />
-                      <span />
+                {/* Sugerencia de cuotas respaldadas del documento original si está como local */}
+                {backupFiscalImpuestos.length > 0 && !isForeign && (
+                  <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
+                        <span>💡</span> Cuotas detectadas en documento original (respaldo):
+                      </span>
+                      {isEditing ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
+                            if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
+                              form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
+                            }
+                            form.setValue('iva_details', []);
+                            backupFiscalImpuestos.forEach((imp: any) => {
+                              appendIva({
+                                tipo_impuesto: imp.tipo || 'IVA',
+                                porcentaje: Number(imp.porcentaje) || 21,
+                                base_imponible: Number(imp.base) || 0,
+                                cuota: Number(imp.cuota) || 0,
+                              });
+                            });
+                            toast({
+                              title: '💡 Desglose aplicado',
+                              description: 'Se copiaron las cuotas originales del respaldo y se ajustó la base imponible.',
+                            });
+                          }}
+                          className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
+                        >
+                          Copiar al desglose
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onEdit();
+                            setTimeout(() => {
+                              const originalBase = rawDatosExtra.backup_fiscal_origen?.importe_sin_impuestos_original;
+                              if (originalBase !== undefined && originalBase !== null && !isNaN(Number(originalBase))) {
+                                form.setValue('base_imponible', Number(originalBase), { shouldDirty: true });
+                              }
+                              form.setValue('iva_details', []);
+                              backupFiscalImpuestos.forEach((imp: any) => {
+                                appendIva({
+                                  tipo_impuesto: imp.tipo || 'IVA',
+                                  porcentaje: Number(imp.porcentaje) || 21,
+                                  base_imponible: Number(imp.base) || 0,
+                                  cuota: Number(imp.cuota) || 0,
+                                });
+                              });
+                              toast({
+                                title: '💡 Desglose aplicado',
+                                description: 'Se activó la edición y se copiaron las cuotas originales.',
+                              });
+                            }, 50);
+                          }}
+                          className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-[11px] transition-colors shrink-0 flex items-center gap-1 shadow-sm"
+                        >
+                          <Edit className="h-3 w-3" /> Editar y aplicar cuotas
+                        </button>
+                      )}
                     </div>
-                  ))
-              }
-            </div>
-          </div>
-
-          <Div />
-
-          {/* Base exenta, Retenciones y Descuento */}
-          <div className="grid grid-cols-2 gap-6 mt-6">
-            <div><SL>Base exenta / No sujeta</SL>
-              {isEditing
-                ? <FormField control={form.control} name="base_no_sujeta" render={({ field }) => (
-                    <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
-                  )} />
-                : <EInput value={fmtEur(liveBaseNS)} className="text-right tabular-nums text-muted-foreground" />}
-            </div>
-            <div><SL>Retención (IRPF)</SL>
-              {isEditing
-                ? <FormField control={form.control} name="retencion_irpf" render={({ field }) => (
-                    <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
-                  )} />
-                : <EInput value={fmtEur(liveRetencion)} className="text-right tabular-nums text-muted-foreground" />}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-6 mt-6">
-            <div><SL>Descuento Global</SL>
-              {isEditing
-                ? <FormField control={form.control} name="descuento_global" render={({ field }) => (
-                    <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums text-destructive" />
-                  )} />
-                : <EInput value={fmtEur(liveDescuento)} className="text-right tabular-nums text-muted-foreground" />}
-            </div>
-          </div>
-
-          <Div />
-
-          {/* Suma neta */}
-          <div className="grid grid-cols-2 gap-6">
-            <div><SL>Base Imponible</SL>
-              {isEditing
-                ? <FormField control={form.control} name="base_imponible" render={({ field }) => (
-                    <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
-                  )} />
-                : <EInput value={fmtEur(liveBase)} className="text-right tabular-nums text-muted-foreground" />}
-            </div>
-          </div>
-
-          {/* Summary table */}
-          <div className="rounded-md border border-border overflow-hidden shadow-sm mt-6">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr style={{ background: 'hsl(var(--muted)/0.5)' }}>
-                  <th className="text-center px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16">%</th>
-                  <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Base</th>
-                  <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">IVA</th>
-                  <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {liveIvaRows.map((iva: any, i: number) => (
-                  <tr key={i} className="border-t border-border/40 hover:bg-muted/10 transition-colors">
-                    <td className="px-3 py-2 text-center font-medium text-muted-foreground">{iva.porcentaje}%</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(iva.base_imponible)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(iva.cuota)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
-                      {fmtEur(Number(iva.base_imponible || 0) + Number(iva.cuota || 0))}
-                    </td>
-                  </tr>
-                ))}
-                
-                {liveBaseNS > 0 && (
-                  <tr className="border-t border-border/40">
-                    <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Base exenta / no sujeta</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(liveBaseNS)}</td>
-                  </tr>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {backupFiscalImpuestos.map((imp: any, i: number) => (
+                        <span key={i} className="px-2 py-0.5 rounded bg-background/60 border border-amber-500/20 font-mono text-[10px] text-foreground">
+                          {imp.tipo} {imp.porcentaje}%: Base {fmtEur(imp.base)} → Cuota {fmtEur(imp.cuota)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {liveDescuento > 0 && (
-                  <tr className="border-t border-border/40">
-                    <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Descuento Global</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-destructive">-{fmtEur(liveDescuento)}</td>
-                  </tr>
-                )}
-                {liveRetencion > 0 && (
-                  <tr className="border-t border-border/40">
-                    <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Retención (IRPF)</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-destructive">-{fmtEur(liveRetencion)}</td>
-                  </tr>
-                )}
+                <div className="space-y-2">
+                  <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1">Base</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">%</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right px-1">Total</p>
+                    <span />
+                  </div>
 
-                <tr className="border-t-2 border-primary/30" style={{ background: 'hsl(var(--primary)/0.08)' }}>
-                  <td className="px-3 py-3 font-bold text-sm tracking-wide">TOTAL</td>
-                  <td className="px-3 py-3 text-right tabular-nums font-semibold opacity-90">{fmtEur(liveBase)}</td>
-                  <td />
-                  <td className="px-3 py-3 text-right tabular-nums font-bold text-lg text-primary">{fmtEur(liveTotal)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  {isEditing ? ivaFields.map((field, idx) => (
+                    <div key={field.id} className="grid gap-2 group" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                      <FormField control={form.control} name={`iva_details.${idx}.base_imponible`} render={({ field: f }) => (
+                        <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-right tabular-nums" />
+                      )} />
+                      <FormField control={form.control} name={`iva_details.${idx}.porcentaje`} render={({ field: f }) => (
+                        <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-center tabular-nums px-1" />
+                      )} />
+                      <FormField control={form.control} name={`iva_details.${idx}.cuota`} render={({ field: f }) => (
+                        <EInput readOnly={false} type="number" value={f.value ?? 0} onChange={v => f.onChange(v)} className="text-right tabular-nums" />
+                      )} />
+                      <button type="button" onClick={() => removeIva(idx)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive/70 hover:text-destructive flex items-center justify-center">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )) : doc.iva_details.length === 0
+                    ? <div className="py-4 border border-dashed border-border/50 rounded-md text-center"><p className="text-xs text-muted-foreground">Sin desglose de IVA</p></div>
+                    : isForeign
+                      ? (() => {
+                          const ivaOrigenRows = (backupFiscalImpuestos as any[]).filter(
+                            (imp: any) => Math.abs(Number(imp.cuota) || 0) > 0.001
+                          );
+                          const ispRows = doc.iva_details.filter((iva) => {
+                            const tipo = (iva.tipo_impuesto || '').toUpperCase();
+                            return tipo.includes('INTRA') || tipo.includes('EXTRA');
+                          });
+                          return (
+                            <div className="space-y-2">
+                              {ivaOrigenRows.length > 0 && (
+                                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 overflow-hidden">
+                                  <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-amber-500/20">
+                                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">⚠️ IVA origen proveedor ({countryName}) — INDEBIDO</span>
+                                    <span className="text-[10px] text-amber-400/70 ml-auto">No computa en Mod. 303</span>
+                                  </div>
+                                  {ivaOrigenRows.map((imp: any, i: number) => (
+                                    <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                                      <EInput value={fmtEur(imp.base)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
+                                      <EInput value={`${Math.abs(Number(imp.porcentaje) || 0)}%`} className="text-center text-amber-300/70 line-through decoration-amber-500/50" />
+                                      <EInput value={fmtEur(imp.cuota)} className="text-right tabular-nums text-amber-300/70 line-through decoration-amber-500/50" />
+                                      <span />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="rounded-md border border-blue-500/30 bg-blue-500/5 overflow-hidden">
+                                <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-blue-500/20">
+                                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">🇪🇸 ISP España — IVA autorrepercutido (neto 0€)</span>
+                                  <span className="text-[10px] text-blue-400/70 ml-auto">Mod. 303 · Mod. 349</span>
+                                </div>
+                                {ispRows.map((iva, i) => {
+                                  const esRepercutido = (iva.tipo_impuesto || '').toUpperCase().includes('REPERCUTIDO');
+                                  return (
+                                    <div key={i} className="grid gap-2 px-1 py-1" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                                      <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
+                                      <EInput value={`${iva.porcentaje}%`} className="text-center text-blue-300" />
+                                      <EInput
+                                        value={fmtEur(iva.cuota)}
+                                        className={`text-right tabular-nums font-semibold ${esRepercutido ? 'text-emerald-400' : 'text-blue-300'}`}
+                                      />
+                                      <span className="flex items-center justify-center">
+                                        <span className="text-[9px] text-muted-foreground font-mono leading-none">
+                                          {esRepercutido ? 'REP' : 'SOP'}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                <div className="px-3 py-1 border-t border-blue-500/20 flex justify-between items-center">
+                                  <span className="text-[10px] text-muted-foreground">Neto ISP</span>
+                                  <span className="text-[11px] font-bold text-blue-300 font-mono">0,00 €</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      : doc.iva_details.filter((iva) => {
+                          const tipo = (iva.tipo_impuesto || '').toLowerCase();
+                          return !tipo.includes('retencion') && !tipo.includes('reten') && !tipo.includes('irpf');
+                        }).map((iva, i) => (
+                        <div key={i} className="grid gap-2" style={{ gridTemplateColumns: '1fr 64px 1fr 24px' }}>
+                          <EInput value={fmtEur(iva.base_imponible)} className="text-right tabular-nums text-muted-foreground" />
+                          <EInput value={`${iva.porcentaje}%`} className="text-center text-muted-foreground" />
+                          <EInput value={fmtEur(iva.cuota)} className="text-right tabular-nums text-foreground font-semibold" />
+                          <span />
+                        </div>
+                      ))
+                  }
+                </div>
+              </div>
+
+              <Div />
+
+              {/* Base exenta, Retenciones y Descuento */}
+              <div className="grid grid-cols-2 gap-6 mt-6">
+                <div><SL>Base exenta / No sujeta</SL>
+                  {isEditing
+                    ? <FormField control={form.control} name="base_no_sujeta" render={({ field }) => (
+                        <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
+                      )} />
+                    : <EInput value={fmtEur(liveBaseNS)} className="text-right tabular-nums text-muted-foreground" />}
+                </div>
+                <div><SL>Retención (IRPF)</SL>
+                  {isEditing
+                    ? <FormField control={form.control} name="retencion_irpf" render={({ field }) => (
+                        <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
+                      )} />
+                    : <EInput value={fmtEur(liveRetencion)} className="text-right tabular-nums text-muted-foreground" />}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6 mt-6">
+                <div><SL>Descuento Global</SL>
+                  {isEditing
+                    ? <FormField control={form.control} name="descuento_global" render={({ field }) => (
+                        <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums text-destructive" />
+                      )} />
+                    : <EInput value={fmtEur(liveDescuento)} className="text-right tabular-nums text-muted-foreground" />}
+                </div>
+              </div>
+
+              <Div />
+
+              {/* Suma neta */}
+              <div className="grid grid-cols-2 gap-6">
+                <div><SL>Base Imponible</SL>
+                  {isEditing
+                    ? <FormField control={form.control} name="base_imponible" render={({ field }) => (
+                        <EInput readOnly={false} type="number" value={field.value ?? 0} onChange={v => field.onChange(v)} className="text-right tabular-nums" />
+                      )} />
+                    : <EInput value={fmtEur(liveBase)} className="text-right tabular-nums text-muted-foreground" />}
+                </div>
+              </div>
+
+              {/* Summary table */}
+              <div className="rounded-md border border-border overflow-hidden shadow-sm mt-6">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr style={{ background: 'hsl(var(--muted)/0.5)' }}>
+                      <th className="text-center px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16">%</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Base</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">IVA</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {liveIvaRows.map((iva: any, i: number) => (
+                      <tr key={i} className="border-t border-border/40 hover:bg-muted/10 transition-colors">
+                        <td className="px-3 py-2 text-center font-medium text-muted-foreground">{iva.porcentaje}%</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(iva.base_imponible)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(iva.cuota)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
+                          {fmtEur(Number(iva.base_imponible || 0) + Number(iva.cuota || 0))}
+                        </td>
+                      </tr>
+                    ))}
+                    
+                    {liveBaseNS > 0 && (
+                      <tr className="border-t border-border/40">
+                        <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Base exenta / no sujeta</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtEur(liveBaseNS)}</td>
+                      </tr>
+                    )}
+                    {liveDescuento > 0 && (
+                      <tr className="border-t border-border/40">
+                        <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Descuento Global</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-destructive">-{fmtEur(liveDescuento)}</td>
+                      </tr>
+                    )}
+                    {liveRetencion > 0 && (
+                      <tr className="border-t border-border/40">
+                        <td colSpan={3} className="px-3 py-2 text-right font-medium text-xs text-muted-foreground">Retención (IRPF)</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-destructive">-{fmtEur(liveRetencion)}</td>
+                      </tr>
+                    )}
+
+                    <tr className="border-t-2 border-primary/30" style={{ background: 'hsl(var(--primary)/0.08)' }}>
+                      <td className="px-3 py-3 font-bold text-sm tracking-wide">TOTAL</td>
+                      <td className="px-3 py-3 text-right tabular-nums font-semibold opacity-90">{fmtEur(liveBase)}</td>
+                      <td />
+                      <td className="px-3 py-3 text-right tabular-nums font-bold text-lg text-primary">{fmtEur(liveTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* ── DATOS ECONÓMICOS DETECTADOS EN NO FACTURABLES (SI EXISTEN VALORES REALES) ── */}
+          {hasNfEconomicData && (
+            <div className="mt-6 space-y-3">
+              <Div />
+              <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <span>📊</span> Datos económicos detectados en el documento
+                  </span>
+                  <span className="text-[10px] text-muted-foreground italic">
+                    Informativo · Sin liquidación IVA
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                  {liveBase > 0 && (
+                    <div className="p-2 rounded-lg bg-background/60 border border-border/40">
+                      <p className="text-[10px] text-muted-foreground uppercase font-medium">Base / Importe</p>
+                      <p className="font-mono font-bold text-foreground mt-0.5">{fmtEur(liveBase)}</p>
+                    </div>
+                  )}
+                  {liveRetencion > 0 && (
+                    <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-[10px] text-amber-400 uppercase font-medium">Retención (IRPF)</p>
+                      <p className="font-mono font-bold text-amber-300 mt-0.5">{fmtEur(liveRetencion)}</p>
+                    </div>
+                  )}
+                  {liveBaseNS > 0 && (
+                    <div className="p-2 rounded-lg bg-background/60 border border-border/40">
+                      <p className="text-[10px] text-muted-foreground uppercase font-medium">Exenta / No sujeta</p>
+                      <p className="font-mono font-bold text-foreground mt-0.5">{fmtEur(liveBaseNS)}</p>
+                    </div>
+                  )}
+                  {liveTotal > 0 && (
+                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <p className="text-[10px] text-emerald-400 uppercase font-medium">Total</p>
+                      <p className="font-mono font-bold text-emerald-300 mt-0.5">{fmtEur(liveTotal)}</p>
+                    </div>
+                  )}
+                </div>
+
+                {doc.iva_details && doc.iva_details.filter((t: any) => Math.abs(Number(t.cuota) || 0) > 0.001).length > 0 && (
+                  <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium text-foreground/80">Cuotas detectadas:</span>
+                    {doc.iva_details.filter((t: any) => Math.abs(Number(t.cuota) || 0) > 0.001).map((imp: any, i: number) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-background/80 border border-border/40 font-mono text-[10px]">
+                        {imp.porcentaje}%: {fmtEur(imp.cuota)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── SECCIÓN NOTAS / OBSERVACIONES (DOCUMENTOS NO FACTURABLES) ── */}
+          {esNoFacturable && (
+            <div className="mt-6 space-y-3">
+              <Div />
+              <SL>Notas y Observaciones</SL>
+              {isEditing ? (
+                <FormField
+                  control={form.control}
+                  name="observaciones"
+                  render={({ field }) => (
+                    <textarea
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      placeholder="Añadir notas o descripción sobre este documento..."
+                      rows={3}
+                      className="w-full px-3 py-2 text-xs rounded-md border border-border bg-background text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground/40 resize-none font-medium"
+                    />
+                  )}
+                />
+              ) : (
+                <div className="p-3.5 rounded-lg border border-border/50 bg-muted/20 text-xs min-h-[64px]">
+                  {doc.observaciones || rawDatosExtra?.observaciones ? (
+                    <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                      {doc.observaciones || rawDatosExtra?.observaciones}
+                    </p>
+                  ) : (
+                    <p className="italic text-muted-foreground/60">
+                      Sin observaciones registradas para este documento. Puedes hacer clic en &ldquo;Editar&rdquo; para agregar notas.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Meta: Trimestre + CIF */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-6 text-xs text-muted-foreground">

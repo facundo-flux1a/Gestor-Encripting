@@ -11,7 +11,8 @@ const TUTORIALS = [
     { id: 'trimestres', name: 'Resumen Trimestral', path: '/trimestres', storageKey: 'force_tutorial_trimestres' },
     { id: 'incidencias', name: 'Gestión de Incidencias', path: '/incidents', storageKey: 'force_tutorial_incidencias' },
     { id: 'proveedores', name: 'Directorio de Entidades', path: '/proveedores', storageKey: 'force_tutorial_proveedores' },
-    { id: 'health-check', name: 'Salud Documental', path: '/dashboard/health-check', storageKey: 'force_tutorial_health_check' },
+    { id: 'health-check', name: 'Centro de Seguridad', path: '/dashboard/auditoria', storageKey: 'force_tutorial_health_check' },
+    { id: 'cuentas-contables', name: 'Cuentas Contables', path: '/cuentas-contables', storageKey: 'force_tutorial_cuentas_contables' },
 ];
 
 export function TutorialReplaySection() {
