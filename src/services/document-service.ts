@@ -3168,8 +3168,8 @@ export async function runSingleDocumentAnalysis(documentId: number): Promise<Inc
 }
 export async function getDashboardAnalytics(
   empresaIds?: number[],
-  año?: number,
-  trimestre?: number
+  año?: number | number[],
+  trimestre?: number | number[]
 ): Promise<DashboardAnalytics> {
   console.log('🔥 [getDashboardAnalytics] Parámetros recibidos:', { empresaIds, año, trimestre });
 
@@ -3190,9 +3190,6 @@ export async function getDashboardAnalytics(
   const MY_COMPANY_NAME_HASHES = MY_COMPANY_NAMES.map(n => require('crypto').createHash('sha256').update(normalizeEntityName(n)).digest('hex'));
 
   const hasEmpresaFilter = empresaIds && empresaIds.length > 0;
-  const hasTrimestreFilter = año !== undefined && trimestre !== undefined;
-
-  console.log('🎯 [getDashboardAnalytics] Filtros:', { hasEmpresaFilter, hasTrimestreFilter: año !== undefined && trimestre !== undefined, añoOnly: año !== undefined });
 
   const whereDocType = `AND(
   (LOWER(d.tipo_documento) LIKE '%factura%' AND LOWER(d.tipo_documento) NOT LIKE '%(sin confirmar)%')
@@ -3204,28 +3201,47 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
     AND d.id NOT IN(SELECT documento_id FROM incidencias_documento WHERE validado = 0)
     AND d.id NOT IN (SELECT documento_id FROM health_check_status WHERE verified = 0)`;
 
-  // ✅ CONSTRUCCIÓN DINÁMICA DE FILTRO TEMPORAL
+  // ✅ CONSTRUCCIÓN DINÁMICA DE FILTRO TEMPORAL (Soporta múltiples años y trimestres)
   let wherePeriodFilter = '';
   const periodQueryParams: any[] = [];
 
-  if (año !== undefined) {
-    if (trimestre !== undefined) {
-      // Filtro Año + Trimestre
-      wherePeriodFilter = `AND d.\`año_trimestre\` = ? AND d.\`num_trimestre\` = ?`;
-      periodQueryParams.push(año, trimestre);
+  const añosList: number[] = Array.isArray(año)
+    ? año.filter((a): a is number => typeof a === 'number' && !isNaN(a))
+    : (typeof año === 'number' && !isNaN(año) ? [año] : []);
+
+  const trimestresList: number[] = Array.isArray(trimestre)
+    ? trimestre.filter((t): t is number => typeof t === 'number' && !isNaN(t))
+    : (typeof trimestre === 'number' && !isNaN(trimestre) ? [trimestre] : []);
+
+  if (añosList.length > 0) {
+    if (añosList.length === 1) {
+      wherePeriodFilter += ` AND COALESCE(d.\`año_trimestre\`, YEAR(d.fecha_emision)) = ?`;
+      periodQueryParams.push(añosList[0]);
     } else {
-      // Filtro solo Año
-      wherePeriodFilter = `AND YEAR(d.fecha_emision) = ?`;
-      periodQueryParams.push(año);
+      const ph = añosList.map(() => '?').join(', ');
+      wherePeriodFilter += ` AND COALESCE(d.\`año_trimestre\`, YEAR(d.fecha_emision)) IN (${ph})`;
+      periodQueryParams.push(...añosList);
+    }
+  }
+
+  // Filtrar trimestres solo si se seleccionaron entre 1 y 3 (si son los 4 o ninguno, incluye todo el año)
+  if (trimestresList.length > 0 && trimestresList.length < 4) {
+    if (trimestresList.length === 1) {
+      wherePeriodFilter += ` AND COALESCE(d.\`num_trimestre\`, QUARTER(d.fecha_emision)) = ?`;
+      periodQueryParams.push(trimestresList[0]);
+    } else {
+      const ph = trimestresList.map(() => '?').join(', ');
+      wherePeriodFilter += ` AND COALESCE(d.\`num_trimestre\`, QUARTER(d.fecha_emision)) IN (${ph})`;
+      periodQueryParams.push(...trimestresList);
     }
   }
 
   // ✅ AUTO-DETECT LATEST YEAR if not provided
-  let yearToUse = año;
+  let yearToUse = añosList.length === 1 ? añosList[0] : undefined;
 
-  if (año === undefined) {
+  if (yearToUse === undefined) {
     const [yearRow] = await db.query<RowDataPacket[]>(
-      `SELECT MAX(YEAR(fecha_emision)) as maxYear FROM documentos ${hasEmpresaFilter ? 'WHERE id_de_empresa IN (?)' : ''
+      `SELECT MAX(COALESCE(año_trimestre, YEAR(fecha_emision))) as maxYear FROM documentos ${hasEmpresaFilter ? 'WHERE id_de_empresa IN (?)' : ''
       }`,
       hasEmpresaFilter ? [empresaIds] : []
     );
@@ -3539,35 +3555,21 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             SELECT 
                 d.id,
                 d.fecha_emision,
+                d.año_trimestre,
+                d.num_trimestre,
                 d.importe_total,
                 CASE 
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             WHERE 1=1
               AND (
@@ -3582,8 +3584,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
               -- No filters for period here, we want ALL available history
         )
         SELECT
-          YEAR(fecha_emision) as year,
-          CONCAT('T', QUARTER(fecha_emision)) as quarter,
+          COALESCE(año_trimestre, YEAR(fecha_emision)) as year,
+          CONCAT('T', COALESCE(num_trimestre, QUARTER(fecha_emision))) as quarter,
           COALESCE(SUM(CASE 
             WHEN is_issued = 1 AND es_abono = 0 THEN importe_total 
             ELSE 0 
@@ -3626,6 +3628,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             SELECT 
                 d.id,
                 d.fecha_emision,
+                d.año_trimestre,
+                d.num_trimestre,
                 d.importe_total,
                 CASE 
                     WHEN LOWER(d.tipo_documento) LIKE '%abono%' OR d.importe_total < 0 
@@ -3652,7 +3656,7 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
               -- No year filter for yearly summary strictly, unless we wanted to filter by range, but usually we want all years
         )
         SELECT
-          YEAR(fecha_emision) as year,
+          COALESCE(año_trimestre, YEAR(fecha_emision)) as year,
           COALESCE(SUM(CASE 
             WHEN is_issued = 1 AND es_abono = 0 THEN importe_total 
             ELSE 0 
@@ -3708,6 +3712,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             SELECT 
                 d.id,
                 d.fecha_emision,
+                d.año_trimestre,
+                d.num_trimestre,
                 d.importe_total,
                 i.cuota as iva_cuota,
                 CASE 
@@ -3736,7 +3742,7 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             ${wherePeriodFilter}
         )
         SELECT
-          CONCAT('T', QUARTER(fecha_emision)) as quarter,
+          CONCAT('T', COALESCE(num_trimestre, QUARTER(fecha_emision))) as quarter,
           COALESCE(SUM(CASE 
             WHEN is_issued = 1 AND es_abono = 0 
             THEN iva_cuota 
@@ -3789,6 +3795,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             SELECT 
                 d.id,
                 d.fecha_emision,
+                d.año_trimestre,
+                d.num_trimestre,
                 d.importe_total,
                 i.cuota as iva_cuota,
                 CASE 
@@ -3796,29 +3804,13 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
             WHERE i.tipo_impuesto NOT LIKE '%retencion%'
@@ -3832,8 +3824,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
-          YEAR(fecha_emision) as year,
-          CONCAT('T', QUARTER(fecha_emision)) as quarter,
+          COALESCE(año_trimestre, YEAR(fecha_emision)) as year,
+          CONCAT('T', COALESCE(num_trimestre, QUARTER(fecha_emision))) as quarter,
           COALESCE(SUM(CASE 
             WHEN is_issued = 1 AND es_abono = 0 THEN iva_cuota 
             ELSE 0 
@@ -3875,6 +3867,8 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             SELECT 
                 d.id,
                 d.fecha_emision,
+                d.año_trimestre,
+                d.num_trimestre,
                 d.importe_total,
                 i.cuota as iva_cuota,
                 CASE 
@@ -3882,29 +3876,13 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
                     THEN 1 
                     ELSE 0 
                 END as es_abono,
-                CASE
-                    WHEN LOWER(d.tipo_documento) REGEXP 'emitid[oa]' THEN 1
-                    WHEN LOWER(d.tipo_documento) REGEXP 'recibid[oa]' THEN 0
-                    WHEN LOWER(d.tipo_documento) LIKE '%albar%' THEN
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM entidades_documento e2 
-                                WHERE e2.documento_id = d.id 
-                                  AND e2.rol IN ('cliente', 'receptor')
-                            ) THEN 1
-                            ELSE 0
-                        END
-                    WHEN LOWER(d.tipo_documento) LIKE '%abono%' THEN
-                        CASE
-                            WHEN (SELECT COALESCE(e2.identificador_fiscal_hash, e2.identificador_fiscal) 
-                                  FROM entidades_documento e2 
-                                  WHERE e2.documento_id = d.id 
-                                    AND e2.rol IN ('emisor', 'proveedor') 
-                                  LIMIT 1) IN (${cifPlaceholders})
-                            THEN 1 ELSE 0
-                        END
-                    ELSE CASE WHEN d.importe_total < 0 THEN 1 ELSE 0 END
-                END as is_issued
+                -- ✅ CLASIFICACIÓN ROBUSTA (Igual a Trimestres)
+                (SELECT COALESCE(MAX(CASE 
+                    WHEN ed2.rol IN('emisor', 'proveedor') 
+                      AND COALESCE(ed2.identificador_fiscal_hash, ed2.identificador_fiscal) IN(${cifPlaceholders}) 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) FROM entidades_documento ed2 WHERE ed2.documento_id = d.id) as is_issued
             FROM documentos d
             JOIN impuestos_documento i ON d.id = i.documento_id
             WHERE i.tipo_impuesto NOT LIKE '%retencion%'
@@ -3918,7 +3896,7 @@ OR(LOWER(d.tipo_documento) LIKE '%ticket%' AND LOWER(d.tipo_documento) NOT LIKE 
             ${hasEmpresaFilter ? 'AND d.id_de_empresa IN (?)' : ''}
         )
         SELECT
-          YEAR(fecha_emision) as year,
+          COALESCE(año_trimestre, YEAR(fecha_emision)) as year,
           COALESCE(SUM(CASE 
             WHEN is_issued = 1 AND es_abono = 0 THEN iva_cuota 
             ELSE 0 

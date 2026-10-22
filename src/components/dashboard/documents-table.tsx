@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DataTable } from '@/components/ui/data-table';
+import { DocumentsQuickFilterBar } from './documents-quick-filter-bar';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { EditableCell } from './editable-cell';
@@ -1217,6 +1218,8 @@ export function DocumentsTable({
   onDragStart,
   exportContext = 'documentos',
   footerValues,
+  showQuickFilterBar,
+  showColumnFilters,
 }: {
   documents: Document[],
   hiddenColumns?: string[],
@@ -1241,7 +1244,229 @@ export function DocumentsTable({
       gastos: { base: number; iva: number; total: number; retencion?: number; recargo?: number };
     };
   };
+  showQuickFilterBar?: boolean;
+  showColumnFilters?: boolean;
 }) {
+  const effectiveShowQuickFilterBar = showQuickFilterBar ?? !isIncidentsPage;
+  const effectiveShowColumnFilters = showColumnFilters ?? !effectiveShowQuickFilterBar;
+
+  // ─── ESTADOS DE FILTRO RÁPIDO MULTI-SELECCIÓN ──────────────────────────────
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [selectedYears, setSelectedYears] = useState<number[]>(() => [new Date().getFullYear()]);
+  const [selectedTrimestres, setSelectedTrimestres] = useState<number[]>([]);
+  const [isMesActual, setIsMesActual] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  // Años disponibles derivados de los documentos + año actual
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    const currentYear = new Date().getFullYear();
+    years.add(currentYear);
+    documents.forEach((d) => {
+      if (d.año_trimestre) years.add(Number(d.año_trimestre));
+      if (d.fecha_emision) {
+        const y = new Date(d.fecha_emision).getFullYear();
+        if (!isNaN(y)) years.add(y);
+      }
+      const fechaCarga = (d as any).fecha_carga || d.fecha_creacion;
+      if (fechaCarga) {
+        const y = new Date(fechaCarga).getFullYear();
+        if (!isNaN(y)) years.add(y);
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [documents]);
+
+  const handleToggleYear = useCallback((year: number) => {
+    setSelectedYears((prev) => {
+      const isAll = prev.length === 0 || prev.length === availableYears.length;
+      if (isAll) {
+        // Si todos estaban activos, desmarcar este año deja todos los demás
+        return availableYears.filter((y) => y !== year);
+      }
+      if (prev.includes(year)) {
+        return prev.filter((y) => y !== year);
+      } else {
+        const next = [...prev, year].sort((a, b) => b - a);
+        if (next.length === availableYears.length) {
+          return [];
+        }
+        return next;
+      }
+    });
+  }, [availableYears]);
+
+  const handleToggleAllYears = useCallback(() => {
+    setSelectedYears((prev) => {
+      const isAll = prev.length === 0 || prev.length === availableYears.length;
+      if (isAll) {
+        return [new Date().getFullYear()];
+      } else {
+        return [];
+      }
+    });
+  }, [availableYears]);
+
+  const handleToggleTrimestre = useCallback((q: number) => {
+    setSelectedTrimestres((prev) => {
+      if (prev.includes(q)) {
+        return prev.filter((item) => item !== q);
+      } else {
+        return [...prev, q].sort((a, b) => a - b);
+      }
+    });
+  }, []);
+
+  const handleToggleAllTrimestres = useCallback(() => {
+    setSelectedTrimestres((prev) => {
+      if (prev.length === 4) {
+        return [];
+      } else {
+        return [1, 2, 3, 4];
+      }
+    });
+  }, []);
+
+  const handleToggleMesActual = useCallback(() => {
+    setIsMesActual((prev) => !prev);
+  }, []);
+
+  const handleClearAllFilters = useCallback(() => {
+    setGlobalSearch('');
+    setSelectedYears([]);
+    setSelectedTrimestres([]);
+    setIsMesActual(false);
+    setDateFrom('');
+    setDateTo('');
+  }, []);
+
+  // ─── FILTRADO MULTI-CRITERIO DETERMINÍSTICO ──────────────────────────────────
+  const filteredDocuments = useMemo(() => {
+    if (!effectiveShowQuickFilterBar) return documents;
+
+    return documents.filter((doc) => {
+      // 1. Excluir documentos anulados
+      const tipo = (doc.tipo_documento || '').toLowerCase();
+      if (
+        tipo.includes('anulad') ||
+        doc.datos_extra?.anulada === true ||
+        (doc as any).estado === 'anulada'
+      ) {
+        return false;
+      }
+
+      // 2. Filtro de Año (multi-selección sobre año_trimestre y fecha_emision)
+      if (selectedYears.length > 0 && selectedYears.length < availableYears.length) {
+        const trimAnio = doc.año_trimestre ? Number(doc.año_trimestre) : null;
+        const fechaAnio = doc.fecha_emision ? new Date(doc.fecha_emision).getFullYear() : null;
+        const matchesYear = selectedYears.some((y) => trimAnio === y || fechaAnio === y);
+        if (!matchesYear) return false;
+      }
+
+      // 3. Filtro de Trimestres (multi-selección sobre num_trimestre)
+      if (selectedTrimestres.length > 0 && selectedTrimestres.length < 4) {
+        const docQ = doc.num_trimestre
+          ? Number(doc.num_trimestre)
+          : doc.fecha_emision
+          ? Math.floor(new Date(doc.fecha_emision).getMonth() / 3) + 1
+          : null;
+        if (!docQ || !selectedTrimestres.includes(docQ)) return false;
+      }
+
+      // 4. Filtro Mes actual
+      if (isMesActual) {
+        const now = new Date();
+        const curY = now.getFullYear();
+        const curM = now.getMonth();
+        const cargaStr = (doc as any).fecha_carga || doc.fecha_creacion;
+        const cargaDate = cargaStr ? new Date(cargaStr) : null;
+        const emisionDate = doc.fecha_emision ? new Date(doc.fecha_emision) : null;
+        const matchesCarga =
+          cargaDate && cargaDate.getFullYear() === curY && cargaDate.getMonth() === curM;
+        const matchesEmision =
+          emisionDate && emisionDate.getFullYear() === curY && emisionDate.getMonth() === curM;
+        const matchesTrim =
+          doc.año_trimestre === curY && doc.num_trimestre === Math.floor(curM / 3) + 1;
+        if (!matchesCarga && !matchesEmision && !matchesTrim) return false;
+      }
+
+      // 5. Rango manual desde / hasta (basado en Fecha Contable - fecha_emision)
+      if (dateFrom || dateTo) {
+        const cargaStr = (doc as any).fecha_carga || doc.fecha_creacion || '';
+        const rawDate = (doc.fecha_emision || cargaStr).substring(0, 10);
+        if (!rawDate) return false;
+        if (dateFrom && rawDate < dateFrom) return false;
+        if (dateTo && rawDate > dateTo) return false;
+      }
+
+      // 6. Buscador global (número, cliente, CIF, proveedor, concepto, ID)
+      if (globalSearch.trim()) {
+        const q = globalSearch.toLowerCase().trim();
+        const numDoc = (doc.numero_documento || '').toLowerCase();
+        const cif = (doc.cif || '').toLowerCase();
+        const prov = (doc.proveedor || '').toLowerCase();
+        const conc = ((doc as any).concepto || doc.observaciones || '').toLowerCase();
+        const idStr = String(doc.id_documento || '');
+        const tipoDoc = (doc.tipo_documento || '').toLowerCase();
+        const emp = (doc.empresa_nombre || '').toLowerCase();
+
+        let clientMatch = false;
+        if (doc.entidades && Array.isArray(doc.entidades)) {
+          clientMatch = doc.entidades.some(
+            (e) =>
+              (e.nombre || '').toLowerCase().includes(q) ||
+              (e.identificador_fiscal || '').toLowerCase().includes(q)
+          );
+        }
+
+        const match =
+          numDoc.includes(q) ||
+          cif.includes(q) ||
+          prov.includes(q) ||
+          conc.includes(q) ||
+          idStr.includes(q) ||
+          tipoDoc.includes(q) ||
+          emp.includes(q) ||
+          clientMatch;
+
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }, [
+    documents,
+    effectiveShowQuickFilterBar,
+    selectedYears,
+    selectedTrimestres,
+    isMesActual,
+    dateFrom,
+    dateTo,
+    globalSearch,
+  ]);
+
+  // Totales en vivo para el pie de tabla
+  const dynamicFooterValues = useMemo(() => {
+    if (!effectiveShowQuickFilterBar) return footerValues;
+    let base = 0;
+    let iva = 0;
+    let recargo = 0;
+    let total = 0;
+    filteredDocuments.forEach((d) => {
+      base += Number(d.base_imponible || 0);
+      iva += Number(d.iva || 0);
+      recargo += Number((d as any).recargo || 0);
+      total += Number(d.total || 0);
+    });
+    return {
+      base,
+      iva,
+      recargo,
+      total,
+      label: `Total (${filteredDocuments.length})`,
+    };
+  }, [effectiveShowQuickFilterBar, footerValues, filteredDocuments]);
   const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const [selectedDocForSummary, setSelectedDocForSummary] = useState<Document | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1265,7 +1490,15 @@ export function DocumentsTable({
   const router = useRouter();
   const { toast } = useToast();
 
-  const { selectedCompanyIds } = useCompanyContext();
+  const { companies, selectedCompanyIds } = useCompanyContext();
+
+  const activeCompany = useMemo(() => {
+    if (!companies || companies.length === 0) return null;
+    return companies.find((c) => selectedCompanyIds?.includes(c.id)) || companies[0];
+  }, [companies, selectedCompanyIds]);
+
+  const mailDeCarga = activeCompany?.mail_de_carga || null;
+  const empresaNombre = activeCompany?.name || undefined;
 
   const duplicateCheckEmpresaId =
     selectedCompanyIds?.length === 1 ? selectedCompanyIds[0] : undefined;
@@ -1701,7 +1934,7 @@ export function DocumentsTable({
       duplicates,
       customTypes,
       onMove,
-      footerValues,
+      dynamicFooterValues,
       yearCriterion,
       handleToggleYearCriterion,
       vatRates
@@ -1727,7 +1960,7 @@ export function DocumentsTable({
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
-              {documents.length} documento(s)
+              {filteredDocuments.length} documento(s)
             </span>
             {duplicates.size > 0 && (
               <button 
@@ -1756,25 +1989,11 @@ export function DocumentsTable({
         </div>
 
         <div className="relative w-full group" data-tutorial="documents-table">
-          {/* VISTA CONDICIONAL LINEAS/TABLA — disponible si se necesita en el futuro
-          {viewMode === 'stacked' ? (
-            <DocumentsStackedList
-              documents={documents}
-              isIncidentsPage={isIncidentsPage}
-              showConfirmButton={showConfirmButton}
-              duplicates={duplicates}
-              onValidateIncident={handleValidateIncident}
-              onConfirm={handleConfirmClick}
-              onPreview={handlePreviewClick}
-              onDelete={handleDeleteClick}
-            />
-          ) : (
-          */}
           <div className="w-full rounded-lg border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md hover:border-border overflow-hidden">
             <DataTable
               key={`${selectedCompanyIds.join('_')}-${viewId || filename}`}
               columns={columns}
-              data={documents}
+              data={filteredDocuments}
               hiddenColumns={hiddenColumns}
               filename={filename}
               onRowClick={handleRowClick}
@@ -1785,6 +2004,37 @@ export function DocumentsTable({
               onDragStart={onDragStart}
               exportContext={exportContext}
               includeSummary={true}
+              showColumnFilters={effectiveShowColumnFilters}
+              customToolbar={
+                effectiveShowQuickFilterBar
+                  ? (table) => (
+                      <DocumentsQuickFilterBar
+                        table={table}
+                        documents={documents}
+                        filteredDocuments={filteredDocuments}
+                        filename={filename}
+                        globalSearch={globalSearch}
+                        onSearchChange={setGlobalSearch}
+                        selectedYears={selectedYears}
+                        onToggleYear={handleToggleYear}
+                        onToggleAllYears={handleToggleAllYears}
+                        availableYears={availableYears}
+                        selectedTrimestres={selectedTrimestres}
+                        onToggleTrimestre={handleToggleTrimestre}
+                        onToggleAllTrimestres={handleToggleAllTrimestres}
+                        isMesActual={isMesActual}
+                        onToggleMesActual={handleToggleMesActual}
+                        dateFrom={dateFrom}
+                        onDateFromChange={setDateFrom}
+                        dateTo={dateTo}
+                        onDateToChange={setDateTo}
+                        onClearAll={handleClearAllFilters}
+                        mailDeCarga={mailDeCarga}
+                        empresaNombre={empresaNombre}
+                      />
+                    )
+                  : undefined
+              }
             />
           </div>
 

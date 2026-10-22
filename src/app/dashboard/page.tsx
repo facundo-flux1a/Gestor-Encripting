@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { useDataRefresh } from '@/context/DataRefreshProvider';
 import { getSession } from '@/services/auth-service';
@@ -92,6 +92,8 @@ import {
 } from "@/components/ui/card";
 import { TopProviders } from '@/components/dashboard/top-providers';
 import { TopClients } from '@/components/dashboard/top-clients';
+import { ResultadoIvaCard } from '@/components/dashboard/resultado-iva-card';
+import { DashboardPeriodFilter } from '@/components/dashboard/dashboard-period-filter';
 
 
 export default function DashboardPage() {
@@ -103,8 +105,9 @@ export default function DashboardPage() {
   const [isCleaningDB, setIsCleaningDB] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
 
-  const [selectedAño, setSelectedAño] = useState<number | null>(null);
-  const [selectedTrimestre, setSelectedTrimestre] = useState<number | null>(null);
+  const [selectedAños, setSelectedAños] = useState<number[]>([]);
+  const [selectedTrimestres, setSelectedTrimestres] = useState<number[]>([]);
+  const selectedAño = selectedAños.length === 1 ? selectedAños[0] : null;
 
   const [isExporting, setIsExporting] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
@@ -126,8 +129,8 @@ export default function DashboardPage() {
 
         const data = await getDashboardAnalytics(
           companyIdsAsNumbers,
-          selectedAño ?? undefined,
-          selectedTrimestre ?? undefined
+          selectedAños.length > 0 ? selectedAños : undefined,
+          selectedTrimestres.length > 0 && selectedTrimestres.length < 4 ? selectedTrimestres : undefined
         );
 
         setAnalytics(data);
@@ -140,7 +143,7 @@ export default function DashboardPage() {
     }
 
     loadAnalytics();
-  }, [selectedCompanyIds, selectedAño, selectedTrimestre, refreshKey]);
+  }, [selectedCompanyIds, selectedAños, selectedTrimestres, refreshKey]);
 
   const handleExport = async () => {
     if (!dashboardRef.current) return;
@@ -222,8 +225,8 @@ export default function DashboardPage() {
         txt('Reporte Financiero', 12, 20, 22, WHITE, 'bold');
         txt('Dashboard de Gestión de Documentos', 12, 28, 10, MUTED);
 
-        const filterLabel = selectedAño
-          ? (selectedTrimestre ? `Período: Año ${selectedAño} — T${selectedTrimestre}` : `Período: Año ${selectedAño} completo`)
+        const filterLabel = selectedAños.length > 0
+          ? `Período: ${selectedAños.join(', ')} — ${selectedTrimestres.length > 0 && selectedTrimestres.length < 4 ? selectedTrimestres.map(t => 'T' + t).join(' + ') : 'Año completo'}`
           : 'Período: Todos los años';
         txt(filterLabel, 12, 37, 9, [180, 180, 220] as [number,number,number]);
         txt(`Generado el ${dateStr}`, 12, 44, 8, MUTED);
@@ -396,7 +399,7 @@ export default function DashboardPage() {
         txt(`Gestor de Documentos  ·  Página 2 de 2  ·  ${dateStr}`, W / 2, H - 4, 7, WHITE, 'normal', 'center');
 
         // ── Save ────────────────────────────────────────────────────
-        const filename = `Reporte_Dashboard_${selectedAño || 'General'}_${now.toISOString().split('T')[0]}.pdf`;
+        const filename = `Reporte_Dashboard_${selectedAños.length > 0 ? selectedAños.join('_') : 'General'}_${now.toISOString().split('T')[0]}.pdf`;
         pdf.save(filename);
 
         toast({
@@ -506,57 +509,21 @@ export default function DashboardPage() {
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4" data-tutorial="filters-mobile">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Año</label>
-            <Select
-              value={selectedAño?.toString() || 'all'}
-              onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
-            >
-              <SelectTrigger className="hover:bg-accent transition-colors duration-200">
-                <SelectValue placeholder="Año" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="2030">2030</SelectItem>
-                <SelectItem value="2029">2029</SelectItem>
-                <SelectItem value="2028">2028</SelectItem>
-                <SelectItem value="2027">2027</SelectItem>
-                <SelectItem value="2026">2026</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2023">2023</SelectItem>
-                <SelectItem value="2022">2022</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <DashboardPeriodFilter
+            selectedAños={selectedAños}
+            selectedTrimestres={selectedTrimestres}
+            onYearsChange={setSelectedAños}
+            onQuartersChange={setSelectedTrimestres}
+            className="flex-col items-stretch"
+          />
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Trimestre</label>
-            <Select
-              value={selectedTrimestre?.toString() || 'all'}
-              onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
-              disabled={!selectedAño}
-            >
-              <SelectTrigger className="hover:bg-accent transition-colors duration-200 disabled:cursor-not-allowed">
-                <SelectValue placeholder="Trimestre" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="1">T1</SelectItem>
-                <SelectItem value="2">T2</SelectItem>
-                <SelectItem value="3">T3</SelectItem>
-                <SelectItem value="4">T4</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(selectedAño || selectedTrimestre) && (
+          {(selectedAños.length > 0 || selectedTrimestres.length > 0) && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
-                setSelectedAño(null);
-                setSelectedTrimestre(null);
+                setSelectedAños([]);
+                setSelectedTrimestres([]);
               }}
               className="w-full hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
             >
@@ -899,42 +866,12 @@ export default function DashboardPage() {
           icon={LayoutDashboard}
         >
           <div data-tutorial="filters" className="hidden md:flex items-center gap-2">
-            <Select
-              value={selectedAño?.toString() || 'all'}
-              onValueChange={(value) => setSelectedAño(value === 'all' ? null : parseInt(value))}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Año fiscal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos (Auto)</SelectItem>
-                <SelectItem value="2030">2030</SelectItem>
-                <SelectItem value="2029">2029</SelectItem>
-                <SelectItem value="2028">2028</SelectItem>
-                <SelectItem value="2027">2027</SelectItem>
-                <SelectItem value="2026">2026</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2023">2023</SelectItem>
-                <SelectItem value="2022">2022</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedTrimestre?.toString() || 'all'}
-              onValueChange={(value) => setSelectedTrimestre(value === 'all' ? null : parseInt(value))}
-              disabled={!selectedAño}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Trimestre" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="1">T1</SelectItem>
-                <SelectItem value="2">T2</SelectItem>
-                <SelectItem value="3">T3</SelectItem>
-                <SelectItem value="4">T4</SelectItem>
-              </SelectContent>
-            </Select>
+            <DashboardPeriodFilter
+              selectedAños={selectedAños}
+              selectedTrimestres={selectedTrimestres}
+              onYearsChange={setSelectedAños}
+              onQuartersChange={setSelectedTrimestres}
+            />
 
             <CleanButton />
           </div>
@@ -1081,41 +1018,10 @@ export default function DashboardPage() {
                 </HoverCardContent>
               </HoverCard>
 
-              <HoverCard>
-                <HoverCardTrigger asChild>
-                  <Card className="hover:shadow-lg transition-all duration-200 cursor-default">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        Resultado IVA
-                      </CardTitle>
-                      <Euro className={`h-4 w-4 ${analytics.kpis.resultadoIva >= 0 ? "text-green-500" : "text-red-500"}`} />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatCurrency(analytics.kpis.resultadoIva || 0)}</div>
-                      <p className="text-xs text-muted-foreground">
-                        Repercutido - Soportado
-                      </p>
-                    </CardContent>
-                  </Card>
-                </HoverCardTrigger>
-                <HoverCardContent className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Desglose de IVA</h4>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IVA Neto:</span>
-                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-red-600 font-medium"}>
-                        {analytics.kpis.resultadoIva >= 0 ? '+' : ''}{formatCurrency(analytics.kpis.resultadoIva)}
-                      </span>
-                    </div>
-                    <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                      <span>Total Liquidación:</span>
-                      <span className={analytics.kpis.resultadoIva >= 0 ? "text-green-600" : "text-red-600 font-bold"}>
-                        {formatCurrency(analytics.kpis.resultadoIva)}
-                      </span>
-                    </div>
-                  </div>
-                </HoverCardContent>
-              </HoverCard>
+              <ResultadoIvaCard
+                analytics={analytics}
+                formatCurrency={formatCurrency}
+              />
               <Card className="hover:shadow-lg transition-all duration-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">

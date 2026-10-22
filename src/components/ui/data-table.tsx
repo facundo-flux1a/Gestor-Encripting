@@ -96,9 +96,11 @@ interface DataTableProps<TData, TValue> {
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
   // 🆕 CALLBACK PARA DRAG ENTRE TABS
   onDragStart?: (selectedIds: number[]) => void;
-  // 🆕 PROPS PARA EXPORTACIÓN CON RESUMEN IVA
-  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'otros';
+  exportContext?: 'trimestres' | 'documentos' | 'documentos_emitidas' | 'documentos_recibidas' | 'documentos_extranjero' | 'documentos_tickets' | 'otros';
   includeSummary?: boolean;
+  // 🆕 PROPS PARA CONTROLES Y FILTROS LIMPIOS
+  showColumnFilters?: boolean;
+  customToolbar?: (table: TanstackTable<TData>) => React.ReactNode;
 }
 
 
@@ -183,8 +185,10 @@ function Filter<TData, TValue>({
 // Draggable Header Cell Component
 const DraggableTableHeader = <TData, TValue>({
   header,
+  showColumnFilters = true,
 }: {
   header: TableHeaderType<TData, TValue>;
+  showColumnFilters?: boolean;
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `column-${header.column.id}`,
@@ -236,13 +240,15 @@ const DraggableTableHeader = <TData, TValue>({
               )}
             </div>
           </div>
-          <div className="min-h-9 px-2 pb-2 flex items-end">
-            {header.column.getCanFilter() ? (
-              <Filter column={header.column} table={header.getContext().table} />
-            ) : (
-              <FilterPlaceholder />
-            )}
-          </div>
+          {showColumnFilters && (
+            <div className="min-h-9 px-2 pb-2 flex items-end">
+              {header.column.getCanFilter() ? (
+                <Filter column={header.column} table={header.getContext().table} />
+              ) : (
+                <FilterPlaceholder />
+              )}
+            </div>
+          )}
         </div>
       )}
     </TableHead>
@@ -459,6 +465,8 @@ export function DataTable<TData extends object, TValue>({
   onDragStart, // 🎯 NUEVO - Drag callback
   exportContext, // 🆕 EXPORTACIÓN CON CONTEXTO
   includeSummary, // 🆕 EXPORTACIÓN CON RESUMEN
+  showColumnFilters = true,
+  customToolbar,
 }: DataTableProps<TData, TValue>) {
   const searchParams = useSearchParams();
   const highlightIdParam = searchParams?.get('highlight');
@@ -832,7 +840,11 @@ export function DataTable<TData extends object, TValue>({
                     strategy={horizontalListSortingStrategy}
                   >
                     {headerGroup.headers.map((header) => (
-                      <DraggableTableHeader key={header.id} header={header} />
+                      <DraggableTableHeader
+                        key={header.id}
+                        header={header}
+                        showColumnFilters={showColumnFilters}
+                      />
                     ))}
                   </SortableContext>
                 </TableRow>
@@ -903,8 +915,11 @@ export function DataTable<TData extends object, TValue>({
 
   return (
     <div className="space-y-4">
-      {/* Controls: Filter input and column visibility */}
-      <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
+      {customToolbar ? (
+        customToolbar(table)
+      ) : (
+        /* Controls: Filter input and column visibility */
+        <div className='flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row'>
         <div className="flex items-center gap-2 flex-1 w-full sm:w-auto flex-wrap">
           <div className="relative" data-tutorial="global-search">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1003,6 +1018,7 @@ export function DataTable<TData extends object, TValue>({
           />
         </div>
       </div>
+      )}
 
       {isMounted ? tableContent : skeletonContent}
 
