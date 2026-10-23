@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { Document } from '@/lib/types';
 import { PageHeader } from '@/components/layout/page-header';
+import { ComprobantesTutorialRouter } from '@/components/tutorials/ComprobantesTutorialRouter';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,13 +99,14 @@ function formatImporte(val: number | string | null | undefined, moneda = 'EUR'):
 interface ExportDialogProps {
   open: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   selectedCount: number;
   selectedIds: number[];
   empresaId: number;
   defaultEmail: string;
 }
 
-function ExportZipDialog({ open, onClose, selectedCount, selectedIds, empresaId, defaultEmail }: ExportDialogProps) {
+function ExportZipDialog({ open, onClose, onSuccess, selectedCount, selectedIds, empresaId, defaultEmail }: ExportDialogProps) {
   const [email, setEmail] = React.useState(defaultEmail);
   const [loading, setLoading] = React.useState(false);
   const { toast } = useToast();
@@ -141,6 +143,7 @@ function ExportZipDialog({ open, onClose, selectedCount, selectedIds, empresaId,
         title: '📦 ZIP en preparación',
         description: `Recibirás el enlace en ${email} cuando esté listo.`,
       });
+      onSuccess?.();
       onClose();
     } catch (err) {
       toast({ title: 'Error', description: String(err), variant: 'destructive' });
@@ -316,16 +319,18 @@ export function ComprobantesView() {
 
   return (
     <div className="flex flex-col h-full">
+      <ComprobantesTutorialRouter isDataLoading={loading} />
       <PageHeader
         title="Comprobantes"
         description="Seleccioná los documentos que querés exportar y envialos por correo"
         icon={Archive}
+        data-tutorial="comprobantes-header"
       />
 
       <div className="flex-1 overflow-auto px-4 pb-24 space-y-4 pt-2">
 
         {/* ── Filtros ─────────────────────────────────────────────── */}
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden" data-tutorial="comprobantes-filters">
           <button
             onClick={() => setShowFilters(v => !v)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
@@ -445,9 +450,9 @@ export function ComprobantesView() {
         </div>
 
         {/* ── Tabla ───────────────────────────────────────────────── */}
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden" data-tutorial="comprobantes-table">
           {/* Header de tabla */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30" data-tutorial="comprobantes-selection-bar">
             <div className="flex items-center gap-3">
               <button
                 onClick={toggleAll}
@@ -574,6 +579,7 @@ export function ComprobantesView() {
       <ExportZipDialog
         open={exportOpen}
         onClose={() => setExportOpen(false)}
+        onSuccess={() => setSelected(new Set())}
         selectedCount={selectedCount}
         selectedIds={selectedIds}
         empresaId={empresaId}

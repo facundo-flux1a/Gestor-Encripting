@@ -51,6 +51,7 @@ export const SessionPayloadSchema = z.object({
   tutorialUploadQueue: z.number().optional(),
   tutorialCuentasContables: z.number().optional(),
   tutorialSii: z.number().optional(),
+  tutorialComprobantes: z.number().optional(),
   organization_rol: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).optional(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
