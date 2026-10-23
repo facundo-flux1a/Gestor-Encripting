@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Euro, Percent, PlusCircle, Trash2, Plus } from "lucide-react";
+import { Euro, Percent, PlusCircle, Trash2, Plus, ArrowRight, BadgeInfo } from "lucide-react";
 import { type Document, type DocumentUpdatePayload } from "@/lib/types";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,14 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
     const rawDatosExtra = (doc as any)?.datos_extra || {};
     const isForeign = Boolean(rawDatosExtra.es_proveedor_extranjero_ue);
     const backupFiscalImpuestos = rawDatosExtra.backup_fiscal_origen?.impuestos_originales || [];
+    const divisaOriginal = rawDatosExtra.divisa_original as {
+        moneda: string;
+        importe_total_original: number;
+        importe_sin_impuestos_original: number;
+        tasa_cambio: number;
+        fecha_tasa: string;
+        fuente_tasa: string;
+    } | undefined;
 
     return (
         <Card className="transition-all duration-300 hover:shadow-lg">
@@ -57,6 +65,28 @@ export function FinancialDetailsCard({ doc, isEditing, form }: FinancialDetailsC
                     <span className="truncate">Detalles Financieros</span>
                 </CardTitle>
             </CardHeader>
+
+            {/* Banner de conversión de divisa extranjera */}
+            {divisaOriginal && (
+                <div className="mx-3 sm:mx-6 mb-3 sm:mb-4 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-800/50 dark:bg-amber-950/30">
+                    <BadgeInfo className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="min-w-0 text-xs text-amber-800 dark:text-amber-300">
+                        <p className="font-semibold leading-snug">Documento en divisa extranjera — convertido al tipo de cambio BCE</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono tabular-nums">
+                            <span className="font-bold">{divisaOriginal.importe_total_original.toFixed(2)} {divisaOriginal.moneda}</span>
+                            <ArrowRight className="h-3 w-3 text-amber-500" />
+                            <span className="font-bold text-green-700 dark:text-green-400">{Number(doc.total ?? 0).toFixed(2)} EUR</span>
+                            <span className="text-amber-600/70 dark:text-amber-400/60">·</span>
+                            <span>Tasa&nbsp;<strong>1 {divisaOriginal.moneda} = {divisaOriginal.tasa_cambio} EUR</strong></span>
+                            <span className="text-amber-600/70 dark:text-amber-400/60">·</span>
+                            <span>Fecha tasa: <strong>{divisaOriginal.fecha_tasa}</strong></span>
+                            <span className="text-amber-600/70 dark:text-amber-400/60">·</span>
+                            <span className="italic">{divisaOriginal.fuente_tasa}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <CardContent className="space-y-3 sm:space-y-4 text-xs sm:text-sm px-3 sm:px-6 pb-3 sm:pb-6">
                 {isEditing ? (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 px-1">

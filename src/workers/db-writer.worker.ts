@@ -44,6 +44,8 @@ import { createNotification, getUserIdsForEmpresa } from '@/services/notificatio
 import { checkAndNotifyPriceVariation } from '@/services/price-variation-checker';
 import { callAzureOpenAiChat } from '@/services/ingestion/azure-openai';
 
+import { getHistoricalExchangeRate, CurrencyExchangeError } from '@/services/currency-service';
+
 const DB_WRITER_CONCURRENCY = parseInt(process.env.DB_WRITER_CONCURRENCY || '10', 10);
 
 function getSha256(text: string | null | undefined): string | null {
@@ -265,8 +267,58 @@ export function startDbWriterWorker() {
         const rawImporteTotal = docInfo.importe_total ?? aiResult.importe_total ?? 0;
         const rawImporteSinIva = docInfo.importe_sin_iva ?? aiResult.importe_sin_impuestos ?? 0;
         
-        const importeTotal    = applySign(Number(rawImporteTotal) || 0);
-        const importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
+        let importeTotal    = applySign(Number(rawImporteTotal) || 0);
+        let importeSinIva   = applySign(Number(rawImporteSinIva) || 0);
+
+        // =====================================================================
+        // CONVERSIÓN DE DIVISA EXTRANJERA A EUR (BCE — Art. 79.Once Ley IVA)
+        // =====================================================================
+        const monedaOriginal = (docInfo.moneda || aiResult.moneda || 'EUR').toString().trim().toUpperCase();
+        let divisa_original: Record<string, any> | null = null;
+
+        if (monedaOriginal !== 'EUR') {
+          const fechaEmisionParaTC = docInfo.fecha_emision || aiResult.fecha_emision || null;
+
+          let exchangeResult;
+          try {
+            exchangeResult = await getHistoricalExchangeRate(monedaOriginal, fechaEmisionParaTC);
+          } catch (currencyError: any) {
+            const isMissingDate = currencyError instanceof CurrencyExchangeError && currencyError.code === 'MISSING_DATE';
+            const userMsg = isMissingDate
+              ? `No se puede procesar este documento: está en divisa extranjera (${monedaOriginal}) pero no contiene fecha de emisión legible. Sin fecha no es posible obtener el tipo de cambio oficial del BCE requerido por la normativa (Art. 79.Once Ley IVA).`
+              : `No se puede procesar este documento: está en divisa extranjera (${monedaOriginal}) y no fue posible obtener el tipo de cambio oficial del Banco Central Europeo. Motivo: ${currencyError.message}. Intenta subirlo de nuevo en unos minutos.`;
+
+            wLog('DbWriterWorker', `❌ Conversión divisa fallida (${monedaOriginal}): ${currencyError.message}`, 'error');
+            await updateIngestionProgress(uploadId, {
+              status: 'Fallido',
+              step: 'Error de conversión de divisa',
+              progress: 0,
+              mensaje: userMsg,
+            }).catch(() => {});
+
+            // Relanzar para que BullMQ no reintente (la causa es externa, no un bug)
+            const fatalErr = new Error(userMsg);
+            (fatalErr as any).currencyError = true;
+            throw fatalErr;
+          }
+
+          // Guardar datos originales antes de convertir
+          divisa_original = {
+            moneda: monedaOriginal,
+            importe_total_original: importeTotal,
+            importe_sin_impuestos_original: importeSinIva,
+            tasa_cambio: exchangeResult.rate,
+            fecha_tasa: exchangeResult.dateUsed,
+            fuente_tasa: exchangeResult.source,
+          };
+
+          // Convertir a EUR usando la tasa del BCE
+          const rate = exchangeResult.rate;
+          importeTotal  = Number((importeTotal  * rate).toFixed(2));
+          importeSinIva = Number((importeSinIva * rate).toFixed(2));
+
+          wLog('DbWriterWorker', `💱 Divisa ${monedaOriginal} → EUR (tasa ${rate}, fecha ${exchangeResult.dateUsed}): total ${divisa_original.importe_total_original} ${monedaOriginal} = ${importeTotal} EUR`);
+        }
 
         const isTicketDeducible = esTicketDoc && (
           aiResult.iva_deducible !== undefined
@@ -481,7 +533,7 @@ export function startDbWriterWorker() {
               importe_sin_impuestos: esExtranjeroRecibido
                 ? importeTotal
                 : (esTicketDoc && !isTicketDeducible ? importeTotal : importeSinIva),
-              moneda: (aiResult.moneda || 'EUR').toString().toUpperCase(),
+              moneda: 'EUR', // siempre guardamos en EUR (conversión BCE realizada arriba si era divisa extranjera)
               id_de_empresa: BigInt(empresaId),
               is_new: 1,
               trimestre_cerrado: false,
@@ -497,6 +549,7 @@ export function startDbWriterWorker() {
                 cif: cifDocumento,
                 valor_referencia_no_fiscal: aiResult.valor_referencia_no_fiscal || '',
                 concepto_valor_referencia: aiResult.concepto_valor_referencia || '',
+                ...(divisa_original ? { divisa_original } : {}),
                 descuento_global: esExtranjeroRecibido ? 0 : descuentoGlobal,
                 base_no_sujeta: esExtranjeroRecibido ? 0 : baseNoSujeta,
                 ...(esTicketDoc ? {
@@ -1196,6 +1249,9 @@ Responde SOLO con JSON válido, sin markdown:
         // ─── Error real ──────────────────────────────────────────────────────────
         wLog('DbWriterWorker', `❌ Error en job ${job.id} (${fileName}): ${error.message}`, 'error');
         console.error(error.stack);
+
+        // Si el error ya viene de la conversión de divisa, el mensaje ya fue enviado arriba
+        if ((error as any)?.currencyError) throw error;
 
         let userMsg = 'Error al guardar los datos del documento en la base de datos.';
         if ((error?.message || '').includes('fecha_vencimiento') || (error?.message || '').includes('fecha_emision')) {

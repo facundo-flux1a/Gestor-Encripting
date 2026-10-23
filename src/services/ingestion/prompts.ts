@@ -612,6 +612,26 @@ Los siguientes datos faltantes NO generan incidencia (son datos secundarios o de
 
 ---
 
+---
+
+💱 DETECCIÓN OBLIGATORIA: DIVISA (MONEDA) — CAMPO DENTRO DEL OBJETO \`documento\`
+
+**⛔ CAMPO OBLIGATORIO.** El objeto \`documento\` DEBE incluir siempre el campo \`moneda\` con el código ISO 4217 de 3 letras de la divisa del documento.
+
+- Documentos en euros (la mayoría de facturas españolas): \`"moneda": "EUR"\`
+- Si el documento está en otra divisa (dólares, libras, etc.), extráela en ISO 4217: \`"moneda": "USD"\`, \`"moneda": "GBP"\`, etc.
+- Busca indicios en: símbolo junto a los importes (£, $, CHF, ¥), encabezado, columna de totales, textos como "Amount in USD", "Total GBP", "Currency: $ USD", etc.
+- **Si no hay indicación de divisa distinta al euro → pon \`"moneda": "EUR"\`.**
+- **NUNCA uses el símbolo** (€, £, $). Siempre el código de 3 letras.
+- **NUNCA omitas este campo.** Aunque la divisa sea EUR, el campo debe estar siempre presente en el objeto \`documento\`.
+
+**Ejemplos de output correcto:**
+  \`"documento": { ..., "moneda": "GBP" }\`   ← factura en libras
+  \`"documento": { ..., "moneda": "USD" }\`   ← factura en dólares
+  \`"documento": { ..., "moneda": "EUR" }\`   ← factura en euros
+
+---
+
 REGLAS GENERALES DE EXTRACCIÓN
 1) Devuelve EXACTAMENTE el objeto con las claves y tipos definidos al final (estructura fija).
 2) Normalización estricta:
@@ -702,6 +722,7 @@ Las diferencias de cálculo entre la suma de líneas/productos y el subtotal del
 □ ¿El campo "cliente" está completo y correcto?
 □ ¿Convertí las retenciones a valores NEGATIVOS?
 □ ¿Normalicé fechas e importes al formato correcto?
+□ ¿Incluí el campo \`moneda\` DENTRO del objeto \`documento\`? (ISO 4217: EUR, USD, GBP… — NUNCA omitir este campo)
 □ ¿Escribí TODAS las incidencias en ESPAÑOL?
 
 Si respondiste NO a alguna pregunta → VUELVE A REVISAR ANTES DE RESPONDER
@@ -737,7 +758,8 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
     "comercial": "",
     "importe_total": 0,
     "importe_sin_iva": 0,
-    "fecha_vencimiento": ""
+    "fecha_vencimiento": "",
+    "moneda": "EUR"
   },
   "lineas": [
     {
@@ -1197,6 +1219,20 @@ NO crees objetos para tipos que NO aparezcan en el documento.
 
 ---
 
+---
+
+💱 DETECCIÓN OBLIGATORIA: DIVISA (MONEDA)
+
+**REGLA ABSOLUTA:** Para CADA documento del archivo, debes identificar y extraer la divisa en la que están expresados sus importes.
+
+- Por defecto, los documentos españoles están en **EUR (€)**.
+- Si un documento está en otra divisa, extráela como código **ISO 4217 de 3 letras** (ejemplos: USD, GBP, CHF, JPY, MXN, ARS, etc.).
+- Busca indicios de divisa en: el símbolo junto a los importes (£, $, CHF, ¥, etc.), en el encabezado del documento, en la columna de totales, o en textos como "Amount in USD", "Total GBP", "Importe en dólares", etc.
+- **Si no encuentras ninguna indicación de divisa distinta al euro → pon "EUR".**
+- **NUNCA uses el símbolo de moneda** (€, £, $). Usa siempre el código ISO de 3 letras.
+
+---
+
 CAMPOS A EXTRAER (por cada documento):
 
 {
@@ -1234,7 +1270,7 @@ CAMPOS A EXTRAER (por cada documento):
     }
   ],
   "IMPORTE_TOTAL": 0,
-  "MONEDA": "",
+  "MONEDA": "EUR",
   "FORMA_PAGO": "",
   "OBSERVACIONES": "",
   "ES_ABONO": false,
@@ -1278,6 +1314,7 @@ FORMATO DE SALIDA:
 □ ¿Marqué INCIDENCIA: true SOLO cuando corresponde? (CIF faltante, ninguna entidad coincide con dashboard, o error matemático fiscal — NUNCA por teléfono, email, forma de pago, CIF de receptor en tickets u otros datos secundarios)
 □ ¿Me aseguré de NO incluir en OBSERVACIONES diferencias entre suma de líneas e IMPORTE_SIN_IMPUESTOS?
 □ ¿Todas las observaciones e incidencias están en ESPAÑOL?
+□ ¿Identifiqué la MONEDA de cada documento? (ISO 4217: EUR, USD, GBP… — por defecto EUR si no hay indicación)
 □ ¿El valor de TIPO_DOCUMENTO expresa el tipo de documento Y su clasificación direccional combinados (para no-tickets), o "TICKET" para tickets?
 
 Si respondiste NO a alguna pregunta → VUELVE A REVISAR antes de entregar el resultado.`;
@@ -1730,7 +1767,7 @@ CAMPOS A EXTRAER (el documento es UNO SOLO — devuelve un único objeto, NO un 
     }
   ],
   "IMPORTE_TOTAL": 0,
-  "MONEDA": "",
+  "MONEDA": "EUR",
   "FORMA_PAGO": "",
   "OBSERVACIONES": "",
   "ES_ABONO": false,
@@ -1767,6 +1804,7 @@ FORMATO DE SALIDA (objeto único, sin envolver en array ni en clave "documentos"
 □ ¿Marqué INCIDENCIA: true SOLO cuando corresponde? (CIF faltante, ninguna entidad coincide con dashboard, o error matemático fiscal — NUNCA por teléfono, email, forma de pago, CIF de receptor en tickets u otros datos secundarios)
 □ ¿Me aseguré de NO incluir en OBSERVACIONES diferencias entre suma de líneas e IMPORTE_SIN_IMPUESTOS?
 □ ¿Todas las observaciones e incidencias están en ESPAÑOL?
+□ ¿Identifiqué la MONEDA del documento? (ISO 4217: EUR, USD, GBP… — por defecto EUR si no hay indicación)
 □ ¿El valor de TIPO_DOCUMENTO expresa el tipo de documento Y su clasificación direccional combinados (para no-tickets), o "TICKET" para tickets?
 □ ¿Devolví un ÚNICO objeto JSON, sin envolverlo en array ni en clave "documentos"?
 

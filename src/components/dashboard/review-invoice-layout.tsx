@@ -114,7 +114,17 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
   const empresaId = doc.empresa_id || (doc as any).id_de_empresa;
 
   const { toast } = useToast();
-  const rawDatosExtra = (doc as any)?.datos_extra || {};
+  const rawDatosExtra = typeof (doc as any)?.datos_extra === 'string'
+    ? (() => { try { return JSON.parse((doc as any)?.datos_extra || '{}'); } catch { return {}; } })()
+    : ((doc as any)?.datos_extra || {});
+  const divisaOriginal = rawDatosExtra?.divisa_original as {
+    moneda?: string;
+    importe_total_original?: number;
+    importe_sin_impuestos_original?: number;
+    tasa_cambio?: number;
+    fecha_tasa?: string;
+    fuente_tasa?: string;
+  } | undefined;
   const [isForeign, setIsForeign] = React.useState<boolean>(
     Boolean(rawDatosExtra.es_proveedor_extranjero_ue)
   );
@@ -647,6 +657,67 @@ export function ReviewInvoiceLayout({ doc, form, isEditing, isSaving, isDeleting
                 </button>
               </div>
             )
+          )}
+
+          {/* ── BANNER CONVERSIÓN DE DIVISA (BCE) ── */}
+          {divisaOriginal?.moneda && divisaOriginal.moneda !== 'EUR' && (
+            <div className="mb-5 p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs flex flex-col gap-2.5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-lg leading-none mt-0.5">💱</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-amber-400">
+                        Documento emitido en divisa extranjera ({divisaOriginal.moneda})
+                      </p>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        CONVERTIDO A EUR
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Conversión oficial obligatoria al tipo de cambio de referencia del Banco Central Europeo (Art. 79.Once Ley IVA).
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-amber-500/15 text-[10px] font-mono text-amber-300 border border-amber-500/30 shrink-0">
+                  {divisaOriginal.fuente_tasa || 'BCE / Frankfurter'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] pt-1.5 border-t border-amber-500/15">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Total original:</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {Number(divisaOriginal.importe_total_original ?? 0).toFixed(2)} {divisaOriginal.moneda}
+                  </span>
+                </div>
+                <span className="text-amber-500/40">•</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Tipo de cambio aplicado:</span>
+                  <span className="font-mono font-semibold text-amber-300">
+                    1 {divisaOriginal.moneda} = {Number(divisaOriginal.tasa_cambio ?? 0).toFixed(5)} EUR
+                  </span>
+                </div>
+                {divisaOriginal.fecha_tasa && (
+                  <>
+                    <span className="text-amber-500/40">•</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">Fecha cotización:</span>
+                      <span className="font-mono text-foreground">
+                        {divisaOriginal.fecha_tasa}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <span className="text-amber-500/40">•</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Total libros:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {fmtEur(liveTotal)}
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ================================================================

@@ -849,6 +849,24 @@ Devuelve el JSON completo con \`"es_facturable": true\` y \`"es_multiple": false
 
 ---
 
+💱 DETECCIÓN OBLIGATORIA: DIVISA (MONEDA) — CAMPO DENTRO DEL OBJETO \`documento\`
+
+**⛔ CAMPO OBLIGATORIO.** El objeto \`documento\` DEBE incluir siempre el campo \`moneda\` con el código ISO 4217 de 3 letras de la divisa del documento.
+
+- Documentos en euros (la mayoría de facturas españolas): \`"moneda": "EUR"\`
+- Si el documento está en otra divisa (dólares, libras, etc.), extráela en ISO 4217: \`"moneda": "USD"\`, \`"moneda": "GBP"\`, etc.
+- Busca indicios en: símbolo junto a los importes (£, $, CHF, ¥), encabezado, columna de totales, textos como "Amount in USD", "Total GBP", "Currency: $ USD", etc.
+- **Si no hay indicación de divisa distinta al euro → pon \`"moneda": "EUR"\`.**
+- **NUNCA uses el símbolo** (€, £, $). Siempre el código de 3 letras.
+- **NUNCA omitas este campo.** Aunque la divisa sea EUR, el campo debe estar siempre presente en el objeto \`documento\`.
+
+Ejemplos de output correcto:
+  \`"documento": { ..., "moneda": "GBP" }\`   ← factura en libras esterlinas
+  \`"documento": { ..., "moneda": "USD" }\`   ← factura en dólares estadounidenses
+  \`"documento": { ..., "moneda": "EUR" }\`   ← factura en euros
+
+---
+
 SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
 {
   "es_facturable": true,
@@ -885,7 +903,8 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
     "importe_sin_iva": 0,
     "descuento_global": 0,
     "base_no_sujeta": 0,
-    "fecha_vencimiento": ""
+    "fecha_vencimiento": "",
+    "moneda": "EUR"
   },
   "lineas": [
     {
@@ -949,6 +968,7 @@ SALIDA OBLIGATORIA (estructura fija). Devuelve SOLO este JSON:
 □ ¿Verifiqué que el CIF {{CIF_EMPRESA}} y el nombre {{NOMBRE_EMPRESA}} NO están asignados a la empresa externa del documento?
 □ ¿Si solo encontré un CIF, usé el nombre para determinar a quién pertenece antes de asignarlo?
 □ ¿Me aseguré de NO reportar incidencia por diferencias entre la suma de líneas y el importe_sin_iva?
+□ ¿Incluí el campo \`moneda\` DENTRO del objeto \`documento\`? (ISO 4217: EUR, USD, GBP… — NUNCA omitir este campo, aunque sea EUR)
 
 Si respondiste NO a alguna pregunta → VUELVE A REVISAR antes de entregar el resultado.\n\n---\n\n`;
 

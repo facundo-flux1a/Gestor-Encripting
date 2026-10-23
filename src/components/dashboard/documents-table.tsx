@@ -1184,9 +1184,22 @@ const getColumns = (
       cell: ({ row }: { row: any }) => {
         const value = Number(row.original.total) || 0;
         const formatted = formatCurrency(value);
+        const rawExtra = typeof row.original.datos_extra === 'string'
+          ? (() => { try { return JSON.parse(row.original.datos_extra); } catch { return null; } })()
+          : row.original.datos_extra;
+        const divisa = rawExtra?.divisa_original;
+
         return (
           <div className="text-right font-bold transition-colors duration-300 hover:text-primary">
-            {formatted}
+            <div>{formatted}</div>
+            {divisa?.moneda && divisa.moneda !== 'EUR' && (
+              <span
+                className="block text-[10px] text-amber-400 font-mono font-medium tracking-tight"
+                title={`Original: ${Number(divisa.importe_total_original).toFixed(2)} ${divisa.moneda} (TC BCE: ${divisa.tasa_cambio} al ${divisa.fecha_tasa})`}
+              >
+                {Number(divisa.importe_total_original).toFixed(2)} {divisa.moneda}
+              </span>
+            )}
           </div>
         );
       },
