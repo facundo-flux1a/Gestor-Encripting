@@ -48,10 +48,10 @@ const TUTORIAL_STYLES = `
     cursor: pointer !important;
   }
 
-  /* Highlight con glow violeta */
+  /* Highlight con glow esmeralda / primary */
   .driver-active-element {
-    outline: 3px solid #7c3aed !important;
-    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.35), 0 0 20px rgba(124, 58, 237, 0.2) !important;
+    outline: 4px solid hsl(var(--primary)) !important;
+    box-shadow: 0 0 0 4px hsla(var(--primary) / 0.3) !important;
     border-radius: 8px !important;
   }
 
@@ -59,10 +59,10 @@ const TUTORIAL_STYLES = `
   .driver-popover {
     background-color: rgba(15, 23, 42, 0.95) !important;
     backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(139, 92, 246, 0.45) !important;
+    border: 1px solid hsla(var(--primary) / 0.5) !important;
     border-radius: 14px !important;
     color: #f8fafc !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(139, 92, 246, 0.15) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px hsla(var(--primary) / 0.15) !important;
     padding: 18px !important;
     max-width: 400px !important;
   }
@@ -99,9 +99,9 @@ const TUTORIAL_STYLES = `
     gap: 8px !important;
   }
 
-  /* Botón Siguiente oficial unificado con los otros tutoriales (#6600A3) */
+  /* Botón Siguiente oficial unificado con Muvail primary */
   .driver-popover-next-btn {
-    background-color: #6600A3 !important;
+    background-color: hsl(var(--primary)) !important;
     color: #ffffff !important;
     border: none !important;
     text-shadow: none !important;
@@ -118,7 +118,7 @@ const TUTORIAL_STYLES = `
   }
 
   .driver-popover-next-btn:hover {
-    background-color: #7c3aed !important;
+    background-color: hsl(var(--primary) / 0.9) !important;
     transform: translateY(-1px) !important;
   }
 

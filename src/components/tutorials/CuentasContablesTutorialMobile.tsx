@@ -48,20 +48,20 @@ const MOBILE_TUTORIAL_STYLES = `
     cursor: pointer !important;
   }
 
-  /* Highlight con glow violeta en móvil */
+  /* Highlight con glow esmeralda / primary en móvil */
   .driver-active-element {
-    outline: 2px solid #7c3aed !important;
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.35) !important;
+    outline: 2px solid hsl(var(--primary)) !important;
+    box-shadow: 0 0 0 3px hsla(var(--primary) / 0.35) !important;
     border-radius: 8px !important;
   }
 
   /* Tarjeta Popover Glassmorphism Dark en móvil */
   .driver-popover {
     background-color: rgba(15, 23, 42, 0.96) !important;
-    border: 1px solid rgba(139, 92, 246, 0.5) !important;
+    border: 1px solid hsla(var(--primary) / 0.5) !important;
     border-radius: 14px !important;
     color: #f8fafc !important;
-    box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(139, 92, 246, 0.2) !important;
+    box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.8), 0 0 20px hsla(var(--primary) / 0.2) !important;
     padding: 16px !important;
     max-width: 90vw !important;
   }
@@ -101,15 +101,15 @@ const MOBILE_TUTORIAL_STYLES = `
   }
 
   .driver-popover-next-btn {
-    background-color: #6600A3 !important;
+    background-color: hsl(var(--primary)) !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 3px 10px rgba(102, 0, 163, 0.4) !important;
+    box-shadow: 0 3px 10px hsla(var(--primary) / 0.4) !important;
     transition: all 0.2s ease !important;
   }
 
   .driver-popover-next-btn:hover {
-    background-color: #7c3aed !important;
+    background-color: hsl(var(--primary) / 0.9) !important;
   }
 
   .driver-popover-prev-btn {

@@ -425,7 +425,7 @@ export function DocumentosTutorial() {
       }
 
       .driver-popover {
-        border: 1px solid rgba(139, 92, 246, 0.4) !important;
+        border: 1px solid hsla(var(--primary) / 0.5) !important;
         background-color: rgba(15, 23, 42, 0.95) !important;
         backdrop-filter: blur(16px) !important;
         border-radius: 14px !important;
@@ -476,7 +476,7 @@ export function DocumentosTutorial() {
       }
 
       .driver-popover-next-btn {
-        background-color: #6600A3 !important;
+        background-color: hsl(var(--primary)) !important;
         color: white !important;
         border: none !important;
         text-shadow: none !important;
@@ -492,7 +492,7 @@ export function DocumentosTutorial() {
       }
 
       .driver-popover-next-btn:hover {
-        background-color: #7c3aed !important;
+        background-color: hsl(var(--primary) / 0.9) !important;
         transform: translateY(-1px);
       }
 

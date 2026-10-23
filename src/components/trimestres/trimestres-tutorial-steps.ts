@@ -122,8 +122,8 @@ export function getTrimestresTutorialSteps(options?: { mobile?: boolean }): Driv
       popover: {
         title: 'Mostrar vacíos',
         description: 'Activa esta opción si quieres ver trimestres sin documentos. Por defecto solo se listan períodos con actividad.',
-        side: 'left',
-        align: 'start',
+        side: 'bottom',
+        align: 'center',
       },
     },
     {
@@ -131,8 +131,8 @@ export function getTrimestresTutorialSteps(options?: { mobile?: boolean }): Driv
       popover: {
         title: 'Cards dinámicas',
         description: 'Con este interruptor, las tarjetas de resumen siguen los filtros del listado de documentos. Desactivado, muestran siempre el total del período seleccionado.',
-        side: 'left',
-        align: 'start',
+        side: 'bottom',
+        align: 'center',
       },
     },
     {
@@ -229,6 +229,23 @@ export function getTrimestresTutorialSteps(options?: { mobile?: boolean }): Driv
 
 /** Expande paneles colapsados antes de highlight */
 export function prepareTrimestresTutorialStep(stepIndex: number): void {
+  // 🔽 Abrir/cerrar el <details> de "Vista" para los toggles
+  const vistaDetails = document.querySelector<HTMLDetailsElement>(
+    '[data-tutorial="trimestres-toggle"]'
+  )?.closest('details');
+
+  const needsVistaOpen =
+    stepIndex === TRIMESTRES_STEP.TOGGLE_EMPTY ||
+    stepIndex === TRIMESTRES_STEP.DYNAMIC_CARDS;
+
+  if (vistaDetails) {
+    if (needsVistaOpen) {
+      vistaDetails.open = true;
+    } else {
+      vistaDetails.open = false;
+    }
+  }
+
   const expandExcelView = () => {
     const excelView = document.querySelector(TRIMESTRES_TUTORIAL_TARGETS.EXCEL_VIEW);
     if (!excelView || excelView.querySelector('.ag-root')) return;

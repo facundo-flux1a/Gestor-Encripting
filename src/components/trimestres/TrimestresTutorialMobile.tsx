@@ -275,25 +275,76 @@ export function TrimestresTutorialMobile() {
       .driver-popover {
         border: 1px solid hsla(var(--primary) / 0.5) !important;
         background-color: rgba(15, 23, 42, 0.95) !important;
-        border-radius: 12px !important; color: white !important;
-        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3) !important;
+        backdrop-filter: blur(16px) !important;
+        border-radius: 14px !important;
+        color: white !important;
+        padding: 18px 20px !important;
+        min-width: 320px !important;
+        max-width: 400px !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px hsla(var(--primary) / 0.15) !important;
       }
 
-      .driver-popover-title { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; }
-      .driver-popover-description { color: rgba(255,255,255,0.9) !important; line-height: 1.5 !important; }
-      .driver-popover-progress-text { color: rgba(255,255,255,0.5) !important; }
+      .driver-popover-title { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; margin-bottom: 6px !important; }
+      .driver-popover-description { color: rgba(255,255,255,0.9) !important; font-size: 0.875rem !important; line-height: 1.5 !important; }
+
+      .driver-popover-footer {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        gap: 8px !important;
+        margin-top: 16px !important;
+      }
+
+      .driver-popover-progress-text {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+        margin: 0 4px !important;
+        display: inline-block !important;
+      }
+
+      .driver-popover-navigation-btns {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+      }
+
       .driver-popover-next-btn {
-        background-color: hsl(var(--primary)) !important; color: white !important;
-        border: none !important; font-weight: 600 !important; border-radius: 6px !important;
+        background-color: hsl(var(--primary)) !important;
+        color: white !important;
+        border: none !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        padding: 6px 14px !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
         touch-action: manipulation !important;
       }
       .driver-popover-prev-btn {
-        color: white !important; border: 1px solid rgba(255,255,255,0.2) !important;
-        background: transparent !important; border-radius: 6px !important; touch-action: manipulation !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        padding: 6px 12px !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
+        touch-action: manipulation !important;
       }
       .driver-popover-close-btn {
-        color: rgba(255,255,255,0.5) !important; touch-action: manipulation !important;
-        min-height: 44px !important; min-width: 44px !important;
+        color: rgba(255,255,255,0.5) !important;
+        touch-action: manipulation !important;
+        min-height: 44px !important;
+        min-width: 44px !important;
       }
     `;
         document.head.appendChild(style);

@@ -85,3 +85,13 @@
 [2026-10-22T21:49:36.913Z] USER: 6 | FIELD: tutorial | VALUE: 0
 [2026-10-23T12:34:24.447Z] USER: 6 | FIELD: tutorial_comprobantes | VALUE: 0
 [2026-10-23T12:36:28.000Z] USER: 6 | FIELD: tutorial_comprobantes | VALUE: 0
+[2026-10-23T13:04:17.235Z] USER: 6 | FIELD: tutorial | VALUE: 0
+[2026-10-23T13:07:39.938Z] USER: 6 | FIELD: tutorial_documentos | VALUE: 0
+[2026-10-23T13:21:17.989Z] USER: 6 | FIELD: tutorial_trimestres | VALUE: 0
+[2026-10-23T13:28:24.480Z] USER: 6 | FIELD: tutorial_trimestres | VALUE: 0
+[2026-10-23T13:29:09.475Z] USER: 6 | FIELD: tutorial_incidencias | VALUE: 0
+[2026-10-23T13:34:50.633Z] USER: 6 | FIELD: tutorial_proveedores | VALUE: 0
+[2026-10-23T13:44:50.124Z] USER: 6 | FIELD: tutorial_health_check | VALUE: 0
+[2026-10-23T13:46:15.116Z] USER: 6 | FIELD: tutorial_cuentas_contables | VALUE: 0
+[2026-10-23T13:47:19.501Z] USER: 6 | FIELD: tutorial_sii | VALUE: 0
+[2026-10-23T13:47:56.020Z] USER: 6 | FIELD: tutorial_comprobantes | VALUE: 0

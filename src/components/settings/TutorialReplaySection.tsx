@@ -9,7 +9,6 @@ const TUTORIALS = [
     { id: 'dashboard', name: 'Dashboard General', path: '/dashboard', storageKey: 'force_tutorial_dashboard' },
     { id: 'documentos', name: 'Gestión de Documentos', path: '/documents', storageKey: 'force_tutorial_documentos' },
     { id: 'trimestres', name: 'Resumen Trimestral', path: '/trimestres', storageKey: 'force_tutorial_trimestres' },
-    { id: 'incidencias', name: 'Gestión de Incidencias', path: '/incidents', storageKey: 'force_tutorial_incidencias' },
     { id: 'proveedores', name: 'Directorio de Entidades', path: '/proveedores', storageKey: 'force_tutorial_proveedores' },
     { id: 'health-check', name: 'Centro de Seguridad', path: '/dashboard/auditoria', storageKey: 'force_tutorial_health_check' },
     { id: 'cuentas-contables', name: 'Cuentas Contables', path: '/cuentas-contables', storageKey: 'force_tutorial_cuentas_contables' },
