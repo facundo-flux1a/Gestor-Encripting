@@ -412,7 +412,7 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-green-500" />
+              <Key className="h-5 w-5 text-primary" />
               Clave API generada
             </DialogTitle>
             <DialogDescription>
@@ -421,9 +421,9 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950/20 dark:border-amber-800">
-              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="text-xs">
                 Por seguridad, el token completo no se almacena. Si lo pierdes, deberás revocar esta clave y generar una nueva.
               </p>
             </div>
@@ -449,7 +449,7 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
                   className="h-8 w-8"
                   onClick={() => newRawKey && handleCopy(newRawKey)}
                 >
-                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
             </div>

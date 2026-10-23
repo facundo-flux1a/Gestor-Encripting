@@ -274,10 +274,10 @@ export function TeamManagement({
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'PENDING': return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100 border-yellow-200">Pendiente</Badge>;
-            case 'ACCEPTED': return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200">Aceptada</Badge>;
-            case 'REVOKED': return <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 border-gray-200">Revocada</Badge>;
-            case 'EXPIRED': return <Badge className="bg-red-100 text-red-600 hover:bg-red-100 border-red-200">Expirada</Badge>;
+            case 'PENDING': return <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-xs">Pendiente</Badge>;
+            case 'ACCEPTED': return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-xs">Aceptada</Badge>;
+            case 'REVOKED': return <Badge variant="outline" className="text-muted-foreground border-border text-xs">Revocada</Badge>;
+            case 'EXPIRED': return <Badge className="bg-destructive/15 text-destructive border-destructive/30 text-xs">Expirada</Badge>;
             default: return <Badge variant="outline">{status}</Badge>;
         }
     };
@@ -442,7 +442,7 @@ export function TeamManagement({
                                                                             <Button
                                                                                 variant="ghost"
                                                                                 size="sm"
-                                                                                className="text-red-500 hover:text-red-600 hover:bg-neutral-100 h-8 px-2"
+                                                                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
                                                                                 disabled={isRemovingMember === member.id}
                                                                                 onClick={() => setRemoveMemberConfirm({ companyId: company.id, member })}
                                                                             >
@@ -502,7 +502,7 @@ export function TeamManagement({
                                                                                                 variant="ghost"
                                                                                                 size="sm"
                                                                                                 title="Re-enviar email"
-                                                                                                className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
+                                                                                                className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
                                                                                                 disabled={isResending === inv.id}
                                                                                                 onClick={() => handleResendInvitation(inv.id!)}
                                                                                             >
@@ -512,7 +512,7 @@ export function TeamManagement({
                                                                                                 variant="ghost"
                                                                                                 size="sm"
                                                                                                 title="Revocar acceso"
-                                                                                                className="h-8 w-8 p-0 text-orange-600 hover:bg-orange-50"
+                                                                                                className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                                                                                                 disabled={isRevoking === inv.id}
                                                                                                 onClick={() => handleRevoke(inv.id!)}
                                                                                             >
@@ -525,7 +525,7 @@ export function TeamManagement({
                                                                                             variant="ghost"
                                                                                             size="sm"
                                                                                             title="Eliminar registro"
-                                                                                            className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"
+                                                                                            className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
                                                                                             disabled={isDeleting === inv.id}
                                                                                             onClick={() => setDeleteConfirmId(inv.id!)}
                                                                                         >
@@ -556,8 +556,8 @@ export function TeamManagement({
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <div className="flex items-center gap-3 mb-1">
-                            <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                                <Trash2 className="h-5 w-5 text-red-600" />
+                            <div className="h-10 w-10 rounded-full bg-destructive/15 flex items-center justify-center shrink-0">
+                                <Trash2 className="h-5 w-5 text-destructive" />
                             </div>
                             <DialogTitle className="text-lg">Eliminar Invitación</DialogTitle>
                         </div>
@@ -589,8 +589,8 @@ export function TeamManagement({
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <div className="flex items-center gap-3 mb-1">
-                            <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                                <Ban className="h-5 w-5 text-red-600" />
+                            <div className="h-10 w-10 rounded-full bg-destructive/15 flex items-center justify-center shrink-0">
+                                <Ban className="h-5 w-5 text-destructive" />
                             </div>
                             <DialogTitle className="text-lg">Remover Miembro</DialogTitle>
                         </div>

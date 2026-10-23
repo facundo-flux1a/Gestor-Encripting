@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { getWebhooks } from '@/services/webhook-service';
 import { prisma } from '@/lib/prisma';
 import { MainLayout } from '@/components/layout/main-layout';
+import { PageHeader } from '@/components/layout/page-header';
+import { Webhook } from 'lucide-react';
 import WebhooksClient from './webhooks-client';
 import WebhooksWrapper from './webhooks-wrapper';
 
@@ -39,8 +41,18 @@ export default async function WebhooksPage() {
 
   return (
     <MainLayout>
+      <PageHeader
+        title="Webhooks"
+        icon={Webhook}
+        data-tutorial="webhooks-header"
+      >
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          HMAC-SHA256 Active
+        </span>
+      </PageHeader>
       <WebhooksWrapper>
-        <div className="p-8 max-w-6xl mx-auto w-full">
+        <div className="flex-1 overflow-auto px-4 pb-24 space-y-6 pt-4 max-w-6xl mx-auto w-full">
           <WebhooksClient empresas={empRows} initialWebhooks={webhooks} />
         </div>
       </WebhooksWrapper>

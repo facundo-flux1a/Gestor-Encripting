@@ -65,8 +65,8 @@ export function TutorialReplaySection() {
                         </div>
                     ))}
                 </div>
-                <div className="mt-4 flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-400">
-                    <Info className="h-4 w-4 shrink-0" />
+                <div className="mt-4 flex items-start gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg text-xs text-muted-foreground">
+                    <Info className="h-4 w-4 shrink-0 text-primary" />
                     <p>
                         Para volver a ver el tutorial de un <strong>documento individual</strong>, simplemente abrí cualquier documento y, si no lo has visto antes, aparecerá automáticamente. Los tutoriales generales se pueden activar desde aquí.
                     </p>

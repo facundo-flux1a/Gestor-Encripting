@@ -152,20 +152,20 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
   };
 
   return (
-    <Card className="w-full border-slate-800 bg-slate-900/50 backdrop-blur-md shadow-xl">
+    <Card className="w-full border-border bg-card shadow-sm">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-xl font-bold flex items-center gap-2 text-slate-100">
-              <Building2 className="w-5 h-5 text-indigo-400" />
-              Integración Software DELSOL (JSON Multi-Módulo)
+            <CardTitle className="text-lg font-headline font-semibold flex items-center gap-2 text-foreground">
+              <Building2 className="w-5 h-5 text-primary" />
+              Integración Software DELSOL
             </CardTitle>
-            <CardDescription className="text-slate-400">
-              Configura los accesos independientes para FactuSOL (Ventas) y ContaSOL (Compras) mediante la estructura JSON de la empresa.
+            <CardDescription className="text-xs text-muted-foreground">
+              Configura los accesos para FactuSOL (Ventas) y ContaSOL (Compras) mediante la estructura oficial de la empresa.
             </CardDescription>
           </div>
-          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            JSON Dynamic Config
+          <span className="px-3 py-1 text-xs font-medium rounded-full bg-primary/10 text-primary border border-primary/20">
+            DELSOL API
           </span>
         </div>
       </CardHeader>
@@ -173,8 +173,8 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
       <form onSubmit={handleSaveAndTest}>
         <CardContent className="space-y-6">
           {isLoading ? (
-            <div className="flex items-center justify-center p-8 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              <Loader2 className="w-6 h-6 animate-spin mr-2 text-primary" />
               Cargando configuración DELSOL...
             </div>
           ) : (
@@ -182,8 +182,8 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Selección de Empresa */}
                 <div className="space-y-2">
-                  <Label htmlFor="empresaId" className="text-slate-200 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <Label htmlFor="empresaId" className="text-foreground text-xs font-medium flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-primary" />
                     Empresa a configurar
                   </Label>
                   {companies.length > 0 ? (
@@ -191,7 +191,7 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       id="empresaId"
                       value={empresaId}
                       onChange={(e) => setEmpresaId(e.target.value)}
-                      className="w-full h-10 px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full h-9 px-3 py-1 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                     >
                       {companies.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -205,7 +205,7 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       value={empresaId}
                       onChange={(e) => setEmpresaId(e.target.value)}
                       placeholder="Ej: 115"
-                      className="bg-slate-950 border-slate-800 text-slate-100"
+                      className="bg-background border-border text-foreground text-sm h-9"
                       required
                     />
                   )}
@@ -213,30 +213,30 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
 
                 {/* Código de Cliente DELSOL */}
                 <div className="space-y-2">
-                  <Label htmlFor="clienteCode" className="text-slate-200 flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-slate-400" />
-                    Código de Cliente API (Común)
+                  <Label htmlFor="clienteCode" className="text-foreground text-xs font-medium flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-primary" />
+                    Código de Cliente API
                   </Label>
                   <Input
                     id="clienteCode"
                     value={clienteCode}
                     onChange={(e) => setClienteCode(e.target.value)}
                     placeholder="Ej: 502281"
-                    className="bg-slate-950 border-slate-800 text-slate-100"
+                    className="bg-background border-border text-foreground text-sm h-9"
                     required
                   />
                 </div>
               </div>
 
               {/* Módulo Ventas (FactuSOL) */}
-              <div className="p-4 rounded-lg bg-slate-950/60 border border-indigo-500/20 space-y-4">
-                <div className="flex items-center gap-2 text-indigo-300 font-semibold text-sm">
-                  <ShoppingBag className="w-4 h-4 text-indigo-400" />
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-4">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  <ShoppingBag className="w-4 h-4 text-primary" />
                   Módulo Ventas / Facturación (FactuSOL)
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="baseDatosVentas" className="text-xs text-slate-300">
+                    <Label htmlFor="baseDatosVentas" className="text-xs font-medium text-foreground">
                       Base de Datos (Facturas Emitidas)
                     </Label>
                     <Input
@@ -244,14 +244,14 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       value={baseDatosVentas}
                       onChange={(e) => setBaseDatosVentas(e.target.value)}
                       placeholder="Ej: FS001"
-                      className="bg-slate-900 border-slate-800 text-slate-100"
+                      className="bg-background border-border text-foreground text-sm h-9"
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="passwordVentas" className="text-xs text-slate-300">
-                      Contraseña Ventas {hasPasswordVentas && <span className="text-xs text-emerald-400">(Configurada)</span>}
+                    <Label htmlFor="passwordVentas" className="text-xs font-medium text-foreground">
+                      Contraseña Ventas {hasPasswordVentas && <span className="text-xs text-primary">(Configurada)</span>}
                     </Label>
                     <Input
                       id="passwordVentas"
@@ -259,21 +259,21 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       value={passwordVentas}
                       onChange={(e) => setPasswordVentas(e.target.value)}
                       placeholder={hasPasswordVentas ? '•••••••• (dejar en blanco para no cambiar)' : 'Password FS001'}
-                      className="bg-slate-900 border-slate-800 text-slate-100"
+                      className="bg-background border-border text-foreground text-sm h-9"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Módulo Compras (ContaSOL) */}
-              <div className="p-4 rounded-lg bg-slate-950/60 border border-emerald-500/20 space-y-4">
-                <div className="flex items-center gap-2 text-emerald-300 font-semibold text-sm">
-                  <Receipt className="w-4 h-4 text-emerald-400" />
+              <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-4">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  <Receipt className="w-4 h-4 text-primary" />
                   Módulo Compras / Contabilidad (ContaSOL)
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="baseDatosCompras" className="text-xs text-slate-300">
+                    <Label htmlFor="baseDatosCompras" className="text-xs font-medium text-foreground">
                       Base de Datos (Facturas Recibidas)
                     </Label>
                     <Input
@@ -281,13 +281,13 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       value={baseDatosCompras}
                       onChange={(e) => setBaseDatosCompras(e.target.value)}
                       placeholder="Ej: CS001"
-                      className="bg-slate-900 border-slate-800 text-slate-100"
+                      className="bg-background border-border text-foreground text-sm h-9"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="passwordCompras" className="text-xs text-slate-300">
-                      Contraseña Compras {hasPasswordCompras && <span className="text-xs text-emerald-400">(Configurada)</span>}
+                    <Label htmlFor="passwordCompras" className="text-xs font-medium text-foreground">
+                      Contraseña Compras {hasPasswordCompras && <span className="text-xs text-primary">(Configurada)</span>}
                     </Label>
                     <Input
                       id="passwordCompras"
@@ -295,7 +295,7 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                       value={passwordCompras}
                       onChange={(e) => setPasswordCompras(e.target.value)}
                       placeholder={hasPasswordCompras ? '•••••••• (dejar en blanco para no cambiar)' : 'Password CS001'}
-                      className="bg-slate-900 border-slate-800 text-slate-100"
+                      className="bg-background border-border text-foreground text-sm h-9"
                     />
                   </div>
                 </div>
@@ -303,8 +303,8 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
 
               {/* Mensajes de Resultado */}
               {status.type === 'success' && (
-                <Alert className="bg-emerald-950/40 border-emerald-800/60 text-emerald-300">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <Alert className="bg-primary/10 border-primary/30 text-primary">
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
                   <AlertTitle className="font-semibold">Operación Exitosa</AlertTitle>
                   <AlertDescription className="text-xs mt-1 space-y-1">
                     <p>{status.message}</p>
@@ -313,8 +313,8 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
               )}
 
               {status.type === 'error' && (
-                <Alert className="bg-rose-950/40 border-rose-800/60 text-rose-300">
-                  <XCircle className="w-4 h-4 text-rose-400" />
+                <Alert className="bg-destructive/10 border-destructive/30 text-destructive">
+                  <XCircle className="w-4 h-4 text-destructive" />
                   <AlertTitle className="font-semibold">Error de Operación</AlertTitle>
                   <AlertDescription className="text-xs mt-1">
                     {status.message}
@@ -325,7 +325,7 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
           )}
         </CardContent>
 
-        <CardFooter className="flex justify-between items-center border-t border-slate-800/60 pt-4">
+        <CardFooter className="flex justify-between items-center border-t border-border pt-4">
           <div>
             {hasCredentials && (
               <Button
@@ -333,12 +333,12 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
                 variant="outline"
                 onClick={handleDeleteCredentials}
                 disabled={isDeleting || isSaving || isLoading}
-                className="border-rose-800/60 bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 text-xs gap-1.5"
+                className="border-destructive/30 text-destructive hover:bg-destructive/10 text-xs gap-1.5"
               >
                 {isDeleting ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <Trash2 className="w-3.5 h-3.5 text-destructive" />
                 )}
                 Eliminar Credenciales
               </Button>
@@ -348,15 +348,15 @@ export function DelsolConfigSection({ companies = [] }: DelsolConfigSectionProps
           <Button
             type="submit"
             disabled={isSaving || isDeleting || isLoading}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-600/20"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm"
           >
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Guardando Configuración JSON...
+                Guardando Configuración...
               </>
             ) : (
-              'Guardar Configuración JSON'
+              'Guardar Configuración'
             )}
           </Button>
         </CardFooter>

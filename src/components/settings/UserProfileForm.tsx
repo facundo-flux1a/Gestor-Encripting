@@ -94,7 +94,7 @@ export function UserProfileForm({ initialName, initialEmail, minimal }: UserProf
         return (
             <div className="space-y-4">
                 <h4 className="text-sm font-semibold flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-violet-500 opacity-0" /> {/* Spacer alignment */}
+                    <Loader2 className="w-4 h-4 opacity-0" /> {/* Spacer alignment */}
                     Perfil de Usuario
                 </h4>
                 {formContent}

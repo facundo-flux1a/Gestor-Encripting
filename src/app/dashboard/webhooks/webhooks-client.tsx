@@ -233,42 +233,26 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
 
   return (
     <>
-      {/* Header Superior */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8" data-tutorial="webhooks-header">
-        <div className="flex items-center gap-4">
-          <a
-            href="/dashboard"
-            className="flex items-center justify-center w-9 h-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-sm group"
-            title="Volver al Dashboard"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          </a>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Webhooks</h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                HMAC-SHA256 Active
-              </span>
-            </div>
-            <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-0.5">
-              Integración HTTP en tiempo real para sincronización automática con tu ERP o backend
-            </p>
-          </div>
+      {/* Subheader: Acciones y Descripción */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60 mb-6">
+        <div>
+          <p className="text-muted-foreground text-xs sm:text-sm">
+            Integración HTTP en tiempo real para sincronización automática con tu ERP o backend
+          </p>
         </div>
 
         <div className="flex items-center gap-3 self-end sm:self-auto">
           <a
             href="/docs#webhooks"
-            className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/90 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 shadow-sm transition-all"
+            className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-medium text-foreground bg-muted/40 hover:bg-muted/70 border border-border rounded-xl shadow-sm transition-all"
           >
-            <BookOpen className="w-4 h-4 text-emerald-500" />
+            <BookOpen className="w-4 h-4 text-primary" />
             Documentación
           </a>
           <button 
             data-tutorial="webhooks-create-btn"
             onClick={() => { setIsModalOpen(true); setErrorMsg(null); }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-medium shadow-md shadow-emerald-600/20 transition-all active:scale-95"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs sm:text-sm font-medium shadow-sm transition-all active:scale-95"
           >
             <Plus className="w-4 h-4" />
             Nuevo Webhook
@@ -278,42 +262,42 @@ export default function WebhooksClient({ empresas, initialWebhooks }: { empresas
 
       {/* KPI Cards summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
-        <div className="p-4 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/70 shadow-sm">
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Webhooks Activos</span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium">Webhooks Activos</span>
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
               <Webhook className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{activeWebhooks}</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">de {totalWebhooks} totales</span>
+            <span className="text-xl sm:text-2xl font-bold font-mono text-foreground">{activeWebhooks}</span>
+            <span className="text-xs text-muted-foreground">de {totalWebhooks} totales</span>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/70 shadow-sm">
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Empresas Vinculadas</span>
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium">Empresas Vinculadas</span>
+            <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
               <Building2 className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{uniqueEmpresasCount}</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">de {empresas.length} disponibles</span>
+            <span className="text-xl sm:text-2xl font-bold font-mono text-foreground">{uniqueEmpresasCount}</span>
+            <span className="text-xs text-muted-foreground">de {empresas.length} disponibles</span>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/70 shadow-sm">
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Eventos Activos</span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium">Eventos Activos</span>
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
               <Layers className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{totalSubscribedEvents}</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">suscripciones</span>
+            <span className="text-xl sm:text-2xl font-bold font-mono text-foreground">{totalSubscribedEvents}</span>
+            <span className="text-xs text-muted-foreground">suscripciones</span>
           </div>
         </div>
       </div>

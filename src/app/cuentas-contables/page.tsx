@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useCompanyContext } from '@/context/CompanyProvider';
 import { MainLayout } from '@/components/layout/main-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import {
   Search, RefreshCw, Check, Pencil, X,
   SlidersHorizontal, Sparkles, Building2, AlertCircle, CheckCircle2,
@@ -649,7 +650,7 @@ export default function CuentasContablesProveedoresPage() {
               if (e.key === 'Enter') triggerSaveCell(row, field, editValue);
               if (e.key === 'Escape') setEditingKey(null);
             }}
-            className="h-7 w-28 text-xs font-mono bg-background border-violet-500 focus-visible:ring-1 focus-visible:ring-violet-400"
+            className="h-7 w-28 text-xs font-mono bg-background border-primary/50 focus-visible:ring-1 focus-visible:ring-primary"
             autoFocus
             placeholder={placeholder}
           />
@@ -686,8 +687,8 @@ export default function CuentasContablesProveedoresPage() {
         <div className="flex items-center gap-2 group/cell py-0.5">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="font-mono text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shadow-sm cursor-default">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span className="font-mono text-xs font-medium text-foreground bg-muted/40 border border-border/70 hover:border-border px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-default">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                 {value}
               </span>
             </TooltipTrigger>
@@ -721,23 +722,23 @@ export default function CuentasContablesProveedoresPage() {
             <TooltipTrigger asChild>
               <div
                 onClick={() => triggerSaveCell(row, field, sugerida.codigo)}
-                className="inline-flex items-center gap-1.5 bg-violet-950/70 border border-violet-500/60 text-violet-200 px-2.5 py-1 rounded-md text-xs font-medium shadow-[0_0_10px_rgba(139,92,246,0.15)] cursor-pointer hover:border-violet-400 hover:bg-violet-900/60 transition-all"
+                className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/30 text-primary dark:text-emerald-300 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer hover:bg-primary/20 hover:border-primary/50 transition-all shadow-sm"
               >
-                <Sparkles className="h-3.5 w-3.5 text-violet-400 shrink-0 animate-pulse" />
-                <span className="font-mono font-bold tracking-wide text-violet-100">{sugerida.codigo}</span>
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 animate-pulse" />
+                <span className="font-mono font-bold tracking-wide text-foreground">{sugerida.codigo}</span>
                 {sugerida.nombre && (
-                  <span className="text-[10px] text-violet-300/80 max-w-[150px] truncate hidden sm:inline">
+                  <span className="text-[10px] text-muted-foreground max-w-[150px] truncate hidden sm:inline">
                     · {sugerida.nombre}
                   </span>
                 )}
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs space-y-1">
-              <p className="font-semibold text-violet-300">Sugerencia PGC: {sugerida.codigo} ({sugerida.nombre})</p>
+              <p className="font-semibold text-primary">Sugerencia PGC: {sugerida.codigo} ({sugerida.nombre})</p>
               {sugerida.justificacion && (
                 <p className="text-xs text-muted-foreground">{sugerida.justificacion}</p>
               )}
-              <p className="text-[10px] text-violet-400 pt-1 font-medium">Click para aceptar esta cuenta</p>
+              <p className="text-[10px] text-primary/80 pt-1 font-medium">Click para aceptar esta cuenta</p>
             </TooltipContent>
           </Tooltip>
 
@@ -767,7 +768,7 @@ export default function CuentasContablesProveedoresPage() {
               setEditingKey(cellKey);
               setEditValue('');
             }}
-            className="text-xs text-muted-foreground/60 hover:text-violet-400 transition-colors flex items-center gap-1 py-0.5 border border-dashed border-border/60 px-2 py-0.5 rounded hover:border-violet-500/40"
+            className="text-xs text-muted-foreground/60 hover:text-primary transition-colors flex items-center gap-1 py-0.5 border border-dashed border-border/60 px-2 py-0.5 rounded hover:border-primary/40"
           >
             <span className="text-[11px]">+ Asignar {label}</span>
           </button>
@@ -782,66 +783,70 @@ export default function CuentasContablesProveedoresPage() {
       <CuentasContablesTutorialProvider>
         <CuentasContablesTutorialRouter isDataLoading={loading} />
         <MainLayout>
-          <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 flex-wrap" data-tutorial="cc-header">
+          <PageHeader
+            title="Cuentas Contables"
+            icon={Scale}
+            data-tutorial="cc-header"
+          >
+            <span className="hidden sm:inline-flex text-xs font-normal text-muted-foreground bg-muted/50 border border-border px-2.5 py-1 rounded-full">
+              PGC Español
+            </span>
+          </PageHeader>
+
+          <div className="flex-1 overflow-auto px-4 pb-24 space-y-5 pt-3 max-w-7xl mx-auto w-full">
+            {/* Header Secundario: Descripción y Pestañas */}
+            <div className="flex items-center justify-between gap-4 flex-wrap border-b border-border/60 pb-3">
               <div>
-                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-                  ⚖️ Cuentas Contables
-                  <span className="text-xs font-normal text-muted-foreground bg-muted/40 border border-border px-2 py-0.5 rounded-full">
-                    PGC Español
-                  </span>
-                </h1>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground">
                   Configuración canónica por entidad (41xxx/43xxx) e impuestos globales (472xxx/477xxx) para exportación a A3
                 </p>
               </div>
 
               {/* Selector de Pestañas Superiores */}
-              <div className="flex items-center p-1 bg-muted/40 border border-border rounded-lg text-xs font-medium" data-tutorial="cc-tabs">
-              <button
-                onClick={() => setActiveTab('entidades')}
-                data-tutorial="cc-tab-entidades"
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
-                  activeTab === 'entidades'
-                    ? "bg-background text-foreground shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Building2 className="h-3.5 w-3.5 text-blue-400" />
-                <span>Cuentas por Entidad</span>
-              </button>
+              <div className="flex items-center p-1 bg-muted/50 border border-border/80 rounded-xl text-xs font-medium shadow-sm" data-tutorial="cc-tabs">
+                <button
+                  onClick={() => setActiveTab('entidades')}
+                  data-tutorial="cc-tab-entidades"
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all",
+                    activeTab === 'entidades'
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Building2 className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
+                  <span>Cuentas por Entidad</span>
+                </button>
 
-              <button
-                onClick={() => setActiveTab('impuestos')}
-                data-tutorial="cc-tab-impuestos"
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
-                  activeTab === 'impuestos'
-                    ? "bg-background text-foreground shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Coins className="h-3.5 w-3.5 text-amber-400" />
-                <span>Cuentas de Impuestos (IVA/IRPF)</span>
-              </button>
+                <button
+                  onClick={() => setActiveTab('impuestos')}
+                  data-tutorial="cc-tab-impuestos"
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all",
+                    activeTab === 'impuestos'
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Coins className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                  <span>Cuentas de Impuestos (IVA/IRPF)</span>
+                </button>
 
-              <button
-                onClick={() => setActiveTab('totales')}
-                data-tutorial="cc-tab-totales"
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
-                  activeTab === 'totales'
-                    ? "bg-background text-foreground shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Scale className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Balance y Totales CC</span>
-              </button>
+                <button
+                  onClick={() => setActiveTab('totales')}
+                  data-tutorial="cc-tab-totales"
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all",
+                    activeTab === 'totales'
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Scale className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Balance y Totales CC</span>
+                </button>
+              </div>
             </div>
-          </div>
 
           {/* ══════════════════════════════════════════════════════════════════════ */}
           {/* PESTAÑA 1: CUENTAS POR ENTIDAD (PROVEEDORES Y CLIENTES)               */}
@@ -937,7 +942,7 @@ export default function CuentasContablesProveedoresPage() {
                       <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
                         <button
                           onClick={() => resetColumnsPreset('minimal')}
-                          className="text-[11px] text-violet-400 hover:text-violet-300 font-semibold"
+                          className="text-[11px] text-primary hover:text-primary/80 font-semibold"
                         >
                           Vista 3-4 cols
                         </button>
@@ -969,16 +974,16 @@ export default function CuentasContablesProveedoresPage() {
 
               {/* Banner de Sugerencias IA si existen */}
               {stats.sugeridas > 0 && (
-                <div data-tutorial="cc-ai-banner" className="rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 via-violet-950/20 to-transparent p-4 flex items-center justify-between gap-4 flex-wrap shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+                <div data-tutorial="cc-ai-banner" className="rounded-xl border border-primary/25 bg-primary/[0.04] dark:bg-primary/[0.08] p-4 flex items-center justify-between gap-4 flex-wrap shadow-sm">
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-violet-600/25 border border-violet-500/50 flex items-center justify-center shrink-0 shadow-inner">
-                      <Sparkles className="h-5 w-5 text-violet-300" />
+                    <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/25 flex items-center justify-center shrink-0 shadow-sm">
+                      <Sparkles className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-violet-100 flex items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                         {stats.sugeridas} {stats.sugeridas === 1 ? 'registro tiene' : 'registros tienen'} sugerencias de cuentas contables listas
                       </p>
-                      <p className="text-xs text-violet-300/80 mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         La IA detectó las cuentas recomendadas (41xxx, 43xxx, 6xxx, 7xxx) según el PGC español.
                       </p>
                     </div>
@@ -991,7 +996,7 @@ export default function CuentasContablesProveedoresPage() {
                           size="sm"
                           disabled={isAcceptingAllGlobal}
                           onClick={acceptAllGlobalSuggestions}
-                          className="h-8 px-3.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded-lg shadow-md gap-1.5 transition-all"
+                          className="h-8 px-3.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg shadow-sm gap-1.5 transition-all"
                         >
                           <Zap className="h-3.5 w-3.5 fill-current" />
                           {isAcceptingAllGlobal ? 'Guardando...' : 'Aceptar todas las sugerencias'}
@@ -1030,7 +1035,7 @@ export default function CuentasContablesProveedoresPage() {
                           className={cn(
                             "flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none transition-all",
                             roleFilters.proveedor
-                              ? "bg-blue-500/15 border-blue-500/40 text-blue-300"
+                              ? "bg-blue-500/15 border-blue-500/40 text-blue-700 dark:text-blue-300"
                               : "bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/40"
                           )}
                         >
@@ -1039,7 +1044,7 @@ export default function CuentasContablesProveedoresPage() {
                             onCheckedChange={c => setRoleFilters(prev => ({ ...prev, proveedor: Boolean(c) }))}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 h-3.5 w-3.5"
                           />
-                          <ArrowDownLeft className="h-3 w-3 text-blue-400" />
+                          <ArrowDownLeft className="h-3 w-3 text-blue-500 dark:text-blue-400" />
                           <span>Proveedores</span>
                           <span className="text-[10px] font-mono opacity-80">({stats.proveedores})</span>
                         </label>
@@ -1053,7 +1058,7 @@ export default function CuentasContablesProveedoresPage() {
                           className={cn(
                             "flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none transition-all",
                             roleFilters.cliente
-                              ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                              ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
                               : "bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/40"
                           )}
                         >
@@ -1062,7 +1067,7 @@ export default function CuentasContablesProveedoresPage() {
                             onCheckedChange={c => setRoleFilters(prev => ({ ...prev, cliente: Boolean(c) }))}
                             className="data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600 h-3.5 w-3.5"
                           />
-                          <ArrowUpRight className="h-3 w-3 text-amber-400" />
+                          <ArrowUpRight className="h-3 w-3 text-amber-500 dark:text-amber-400" />
                           <span>Clientes</span>
                           <span className="text-[10px] font-mono opacity-80">({stats.clientes})</span>
                         </label>
@@ -1083,16 +1088,16 @@ export default function CuentasContablesProveedoresPage() {
                           className={cn(
                             "flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none transition-all",
                             statusFilters.sugerida
-                              ? "bg-violet-600/25 border-violet-500/50 text-violet-200 shadow-sm shadow-violet-900/30"
+                              ? "bg-primary/10 border-primary/30 text-primary dark:text-emerald-300 shadow-sm"
                               : "bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/40"
                           )}
                         >
                           <Checkbox
                             checked={statusFilters.sugerida}
                             onCheckedChange={c => setStatusFilters(prev => ({ ...prev, sugerida: Boolean(c) }))}
-                            className="data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600 h-3.5 w-3.5"
+                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary h-3.5 w-3.5"
                           />
-                          <Sparkles className="h-3 w-3 text-violet-400" />
+                          <Sparkles className="h-3 w-3 text-primary" />
                           <span>Sugerencias IA</span>
                           <span className="text-[10px] font-mono opacity-80">({stats.sugeridas})</span>
                         </label>
@@ -1106,7 +1111,7 @@ export default function CuentasContablesProveedoresPage() {
                           className={cn(
                             "flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none transition-all",
                             statusFilters.confirmada
-                              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
                               : "bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/40"
                           )}
                         >
@@ -1128,7 +1133,7 @@ export default function CuentasContablesProveedoresPage() {
                           className={cn(
                             "flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none transition-all",
                             statusFilters.sin_asignar
-                              ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                              ? "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300"
                               : "bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/40"
                           )}
                         >
@@ -1212,7 +1217,7 @@ export default function CuentasContablesProveedoresPage() {
                         <tr>
                           <td colSpan={10} className="text-center py-14 text-muted-foreground">
                             <div className="flex items-center justify-center gap-2.5">
-                              <RefreshCw className="h-4 w-4 animate-spin text-violet-400" />
+                              <RefreshCw className="h-4 w-4 animate-spin text-primary" />
                               <span className="font-medium text-xs">Cargando cuentas contables y sugerencias...</span>
                             </div>
                           </td>
@@ -1275,12 +1280,12 @@ export default function CuentasContablesProveedoresPage() {
                               {visibleColumns.rol && (
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   {isProveedor ? (
-                                    <Badge className="bg-blue-500/15 text-blue-300 border-blue-500/30 text-[10px] font-medium gap-1">
-                                      <ArrowDownLeft className="h-3 w-3 text-blue-400" /> Proveedor
+                                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[10px] font-medium gap-1">
+                                      <ArrowDownLeft className="h-3 w-3 text-blue-500 dark:text-blue-400" /> Proveedor
                                     </Badge>
                                   ) : (
-                                    <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[10px] font-medium gap-1">
-                                      <ArrowUpRight className="h-3 w-3 text-amber-400" /> Cliente
+                                    <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-medium gap-1">
+                                      <ArrowUpRight className="h-3 w-3 text-amber-500 dark:text-amber-400" /> Cliente
                                     </Badge>
                                   )}
                                 </td>
@@ -1344,8 +1349,8 @@ export default function CuentasContablesProveedoresPage() {
                               {visibleColumns.estado && (
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   {row.status === 'sugerida' && (
-                                    <Badge className="bg-violet-600/20 text-violet-300 border-violet-500/40 text-[10px] font-semibold gap-1 animate-pulse shadow-sm shadow-violet-900/30">
-                                      <Sparkles className="h-3 w-3 text-violet-400" /> Sugerencias listas
+                                    <Badge className="bg-primary/10 text-primary dark:text-emerald-300 border-primary/30 text-[10px] font-semibold gap-1 animate-pulse shadow-sm">
+                                      <Sparkles className="h-3 w-3 text-primary" /> Sugerencias listas
                                     </Badge>
                                   )}
                                   {row.status === 'confirmada' && (
@@ -1375,7 +1380,7 @@ export default function CuentasContablesProveedoresPage() {
                                     size="sm"
                                     disabled={isSaving}
                                     onClick={() => triggerAcceptRow(row)}
-                                    className="h-6 px-2.5 bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-semibold rounded shadow-sm gap-1 transition-all"
+                                    className="h-6 px-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold rounded shadow-sm gap-1 transition-all"
                                   >
                                     <Check className="h-3 w-3" /> Aceptar
                                   </Button>
@@ -1416,15 +1421,15 @@ export default function CuentasContablesProveedoresPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Bloque Compras (IVA Soportado - 472) */}
-                  <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-950/10 space-y-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-blue-500/20">
+                  <div className="p-4 rounded-xl border border-sky-500/25 bg-sky-500/[0.04] dark:bg-sky-950/20 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between pb-2 border-b border-sky-500/20">
                       <div className="flex items-center gap-2">
-                        <ArrowDownLeft className="h-4 w-4 text-blue-400" />
-                        <span className="text-xs font-semibold text-blue-300">
+                        <ArrowDownLeft className="h-4 w-4 text-sky-500 dark:text-sky-400" />
+                        <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">
                           Facturas Recibidas (Compras / Gastos - 472)
                         </span>
                       </div>
-                      <Badge className="bg-blue-500/20 text-blue-300 text-[10px]">IVA Soportado</Badge>
+                      <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30 text-[10px]">IVA Soportado</Badge>
                     </div>
 
                     <div className="space-y-3 text-xs">
@@ -1493,15 +1498,15 @@ export default function CuentasContablesProveedoresPage() {
                   </div>
 
                   {/* Bloque Ventas (IVA Repercutido - 477) */}
-                  <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-950/10 space-y-4">
+                  <div className="p-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.04] dark:bg-amber-950/20 space-y-4 shadow-sm">
                     <div className="flex items-center justify-between pb-2 border-b border-amber-500/20">
                       <div className="flex items-center gap-2">
-                        <ArrowUpRight className="h-4 w-4 text-amber-400" />
-                        <span className="text-xs font-semibold text-amber-300">
+                        <ArrowUpRight className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                        <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                           Facturas Emitidas (Ventas / Ingresos - 477)
                         </span>
                       </div>
-                      <Badge className="bg-amber-500/20 text-amber-300 text-[10px]">IVA Repercutido</Badge>
+                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px]">IVA Repercutido</Badge>
                     </div>
 
                     <div className="space-y-3 text-xs">
@@ -1720,24 +1725,24 @@ export default function CuentasContablesProveedoresPage() {
                 {/* 4 Tarjetas de Métricas Resumen (KPIs) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Total DEBE */}
-                  <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-1">
+                  <div className="p-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] dark:bg-emerald-950/20 space-y-1 shadow-sm">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="font-semibold text-emerald-400">Total DEBE (Cargos)</span>
-                      <ArrowDownLeft className="h-4 w-4 text-emerald-400" />
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">Total DEBE (Cargos)</span>
+                      <ArrowDownLeft className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
                     </div>
-                    <div className="text-xl font-bold font-mono text-emerald-300">
+                    <div className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-300">
                       {(balanceData?.totales.sumaDebe || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                     </div>
                     <p className="text-[10px] text-muted-foreground">Compras, Gastos e IVA Soportado</p>
                   </div>
 
                   {/* Total HABER */}
-                  <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-950/10 space-y-1">
+                  <div className="p-4 rounded-xl border border-sky-500/25 bg-sky-500/[0.04] dark:bg-sky-950/20 space-y-1 shadow-sm">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="font-semibold text-blue-400">Total HABER (Abonos)</span>
-                      <ArrowUpRight className="h-4 w-4 text-blue-400" />
+                      <span className="font-semibold text-sky-700 dark:text-sky-400">Total HABER (Abonos)</span>
+                      <ArrowUpRight className="h-4 w-4 text-sky-500 dark:text-sky-400" />
                     </div>
-                    <div className="text-xl font-bold font-mono text-blue-300">
+                    <div className="text-xl font-bold font-mono text-sky-700 dark:text-sky-300">
                       {(balanceData?.totales.sumaHaber || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                     </div>
                     <p className="text-[10px] text-muted-foreground">Acreedores, Ingresos e IVA Repercutido</p>
@@ -1745,10 +1750,10 @@ export default function CuentasContablesProveedoresPage() {
 
                   {/* Estado de Cuadre */}
                   <div className={cn(
-                    "p-4 rounded-xl border space-y-1",
+                    "p-4 rounded-xl border space-y-1 shadow-sm",
                     balanceData?.totales.isCuadrado
-                      ? "border-emerald-500/30 bg-emerald-950/20"
-                      : "border-amber-500/30 bg-amber-950/20"
+                      ? "border-emerald-500/30 bg-emerald-500/[0.04] dark:bg-emerald-950/20"
+                      : "border-amber-500/30 bg-amber-500/[0.04] dark:bg-amber-950/20"
                   )}>
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-foreground">Cuadre Contable</span>
@@ -1773,7 +1778,7 @@ export default function CuentasContablesProveedoresPage() {
                   <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">Documentos y Cuentas</span>
-                      <Layers className="h-4 w-4 text-violet-400" />
+                      <Layers className="h-4 w-4 text-primary" />
                     </div>
                     <div className="text-xl font-bold font-mono text-foreground">
                       {balanceData?.totales.totalCuentas || 0} <span className="text-xs font-normal text-muted-foreground">cuentas</span>
@@ -1851,7 +1856,7 @@ export default function CuentasContablesProveedoresPage() {
                         {loadingBalance ? (
                           <tr>
                             <td colSpan={7} className="py-12 text-center text-muted-foreground">
-                              <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-violet-400" />
+                              <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                               Calculando balance contable...
                             </td>
                           </tr>
@@ -1868,12 +1873,12 @@ export default function CuentasContablesProveedoresPage() {
                               <td className="py-2.5 px-4 font-mono font-bold text-foreground">
                                 <span className={cn(
                                   "px-2 py-0.5 rounded text-[11px] font-mono",
-                                  r.grupo === 'proveedor' && "bg-blue-500/15 text-blue-300 border border-blue-500/30",
-                                  r.grupo === 'cliente' && "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30",
-                                  r.grupo === 'gasto' && "bg-amber-500/15 text-amber-300 border border-amber-500/30",
-                                  r.grupo === 'ingreso' && "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
-                                  r.grupo === 'impuesto' && "bg-purple-500/15 text-purple-300 border border-purple-500/30",
-                                  r.grupo === 'otro' && "bg-muted text-muted-foreground"
+                                  r.grupo === 'proveedor' && "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30",
+                                  r.grupo === 'cliente' && "bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30",
+                                  r.grupo === 'gasto' && "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30",
+                                  r.grupo === 'ingreso' && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30",
+                                  r.grupo === 'impuesto' && "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30",
+                                  r.grupo === 'otro' && "bg-muted text-muted-foreground border border-border"
                                 )}>
                                   {r.cuenta}
                                 </span>
@@ -1894,7 +1899,7 @@ export default function CuentasContablesProveedoresPage() {
                               {/* Total DEBE */}
                               <td className="py-2.5 px-4 text-right font-mono font-medium">
                                 {r.totalDebe > 0 ? (
-                                  <span className="text-emerald-300 font-semibold">
+                                  <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
                                     {r.totalDebe.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                                   </span>
                                 ) : (
@@ -1905,7 +1910,7 @@ export default function CuentasContablesProveedoresPage() {
                               {/* Total HABER */}
                               <td className="py-2.5 px-4 text-right font-mono font-medium">
                                 {r.totalHaber > 0 ? (
-                                  <span className="text-blue-300 font-semibold">
+                                  <span className="text-sky-700 dark:text-sky-300 font-semibold">
                                     {r.totalHaber.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                                   </span>
                                 ) : (
@@ -1921,12 +1926,12 @@ export default function CuentasContablesProveedoresPage() {
                               {/* Naturaleza (Deudor / Acreedor) */}
                               <td className="py-2.5 px-4 text-center">
                                 {r.tipoSaldo === 'DEUDOR' && (
-                                  <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-[10px]">
+                                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">
                                     Deudor (Debe)
                                   </Badge>
                                 )}
                                 {r.tipoSaldo === 'ACREEDOR' && (
-                                  <Badge className="bg-blue-500/15 text-blue-300 border-blue-500/30 text-[10px]">
+                                  <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30 text-[10px]">
                                     Acreedor (Haber)
                                   </Badge>
                                 )}
@@ -1983,7 +1988,7 @@ export default function CuentasContablesProveedoresPage() {
           <Dialog open={retroactiveModalOpen} onOpenChange={setRetroactiveModalOpen}>
             <DialogContent className="max-w-md bg-card border-border shadow-2xl p-6">
               <DialogHeader className="space-y-2">
-                <div className="h-10 w-10 rounded-full bg-violet-600/20 border border-violet-500/40 flex items-center justify-center text-violet-400 mb-1">
+                <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center text-primary mb-1">
                   <History className="h-5 w-5" />
                 </div>
                 <DialogTitle className="text-base font-bold text-foreground">
@@ -2016,7 +2021,7 @@ export default function CuentasContablesProveedoresPage() {
                 <Button
                   size="sm"
                   onClick={() => handleConfirmRetroactive(true)}
-                  className="text-xs h-8 bg-violet-600 hover:bg-violet-500 text-white font-semibold gap-1.5"
+                  className="text-xs h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5 shadow-sm"
                 >
                   <Check className="h-3.5 w-3.5" />
                   Sí, actualizar las {pendingRowAction?.row.total_documentos} facturas

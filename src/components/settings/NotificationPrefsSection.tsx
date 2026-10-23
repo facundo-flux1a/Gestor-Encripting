@@ -129,10 +129,10 @@ export function NotificationPrefsSection() {
   }
 
   return (
-    <Card className="border-2 border-violet-100 dark:border-violet-900/40 shadow-sm">
+    <Card className="border border-border bg-card shadow-sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BellRing className="h-5 w-5 text-violet-500 animate-pulse" /> Preferencias de Notificaciones
+        <CardTitle className="text-lg font-headline font-semibold flex items-center gap-2 text-foreground">
+          <BellRing className="h-5 w-5 text-primary" /> Preferencias de Notificaciones
         </CardTitle>
         <CardDescription>
           Elige qué eventos internos dispararán notificaciones en tiempo real en la campana de tu barra superior.

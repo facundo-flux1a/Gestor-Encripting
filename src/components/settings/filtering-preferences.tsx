@@ -205,9 +205,9 @@ export function FilteringPreferences({ minimal }: { minimal?: boolean }) {
       </Card>
 
       {/* Hint informativo */}
-      <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30">
+      <Card className="border-primary/20 bg-primary/[0.04]">
         <CardContent className="pt-6">
-          <p className="text-sm text-blue-900 dark:text-blue-100">
+          <p className="text-sm text-foreground/80">
             <strong>💡 Pista:</strong> La dinamización implica filtrar las alertas en base a las empresas seleccionadas, y también puedes decidir el comportamiento al no tener ninguna seleccionada.
           </p>
         </CardContent>
