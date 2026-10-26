@@ -45,6 +45,7 @@ model usuarios {
   two_factor_code            String?                    @db.VarChar(10)
   two_factor_expires_at      DateTime?                  @db.DateTime(0)
   email_hash                 String?                    @unique(map: "email_hash") @db.VarChar(64)
+  muvail_testigo             String?                    @db.VarChar(500)           // Token SSO del Portal Muvail (solo servidor, nunca al browser)
   ai_daily_usage             ai_daily_usage[]
   ai_usage_log               ai_usage_log[]
   ai_user_config             ai_user_config?

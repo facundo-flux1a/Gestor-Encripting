@@ -20,6 +20,7 @@ const publicRoutes = [
   '/auth/accept-invitation',
   '/auth/2fa',
   '/auth/verify-email',
+  '/auth/portal',    // SSO entrada desde Portal Muvail
   '/legal(.*)',
 ];
 const rootRoute = '/';

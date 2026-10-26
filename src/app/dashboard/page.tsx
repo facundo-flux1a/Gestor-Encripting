@@ -94,11 +94,13 @@ import { TopProviders } from '@/components/dashboard/top-providers';
 import { TopClients } from '@/components/dashboard/top-clients';
 import { ResultadoIvaCard } from '@/components/dashboard/resultado-iva-card';
 import { DashboardPeriodFilter } from '@/components/dashboard/dashboard-period-filter';
+import { useMuvailSync } from '@/hooks/useMuvailSync';
 
 
 export default function DashboardPage() {
   const { selectedCompanyIds } = useCompanyContext();
   const { refreshKey } = useDataRefresh();
+  useMuvailSync(); // Sincroniza empresa activa con Portal Muvail (no-op si el user no entró via SSO)
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
