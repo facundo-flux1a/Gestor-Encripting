@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 // ---------------------------------------------------------------------------
 // /x/impersonate  — Panel de impersonación de admin
@@ -35,6 +36,23 @@ export default function ImpersonatePage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [impersonating, setImpersonating] = useState(false);
   const [error, setError] = useState('');
+  const [hasSession, setHasSession] = useState(false);
+  const router = useRouter();
+
+  // Detectar si hay sesión activa para saber a dónde volver al cerrar
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => { if (r.ok) setHasSession(true); }).catch(() => {});
+  }, []);
+
+  const handleClose = () => {
+    if (typeof window !== 'undefined' && window.history.length > 2) {
+      router.back();
+    } else if (hasSession) {
+      router.push('/dashboard');
+    } else {
+      router.push('/auth/login');
+    }
+  };
 
   const cargarUsuarios = useCallback(async (key: string) => {
     const res = await fetch('/api/dev/shadow-login', {
@@ -104,6 +122,21 @@ export default function ImpersonatePage() {
         </div>
 
         <div style={s.card}>
+          {/* Botón cerrar */}
+          <button
+            onClick={handleClose}
+            title={hasSession ? 'Volver al dashboard' : 'Ir al login'}
+            style={{
+              position: 'absolute', top: 14, right: 14,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: MUTED, fontSize: 20, lineHeight: 1, padding: 4,
+              borderRadius: 6, transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
+            onMouseLeave={e => (e.currentTarget.style.color = MUTED)}
+          >
+            ×
+          </button>
           <div style={s.cardHeader}>
             <div style={s.shieldWrap}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="1.5">
@@ -115,15 +148,26 @@ export default function ImpersonatePage() {
             <p style={s.subtitle}>Acceso restringido — solo administradores</p>
           </div>
 
-          <form onSubmit={handleGate} style={s.form}>
+          <form onSubmit={handleGate} style={s.form} autoComplete="on">
+            {/* Username fijo — le dice al browser que guarde esto como una credencial
+                separada de cualquier login de usuario real. Nunca puede ser un email válido. */}
+            <input
+              type="text"
+              name="username"
+              value="x-gestor-impersonate"
+              readOnly
+              autoComplete="username"
+              style={{ display: 'none' }}
+            />
             <label style={s.label}>Clave de administrador</label>
             <input
               type="password"
+              name="password"
               value={adminKey}
               onChange={(e) => setAdminKey(e.target.value)}
               placeholder="••••••••••••"
               autoFocus
-              autoComplete="off"
+              autoComplete="current-password"
               style={s.input}
             />
             {gateError && <p style={s.errorMsg}>{gateError}</p>}
@@ -148,6 +192,21 @@ export default function ImpersonatePage() {
       </div>
 
       <div style={{ ...s.card, maxWidth: 660 }}>
+        {/* Botón cerrar */}
+        <button
+          onClick={handleClose}
+          title={hasSession ? 'Volver al dashboard' : 'Ir al login'}
+          style={{
+            position: 'absolute', top: 14, right: 14,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: MUTED, fontSize: 20, lineHeight: 1, padding: 4,
+            borderRadius: 6, transition: 'color 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
+          onMouseLeave={e => (e.currentTarget.style.color = MUTED)}
+        >
+          ×
+        </button>
         <div style={s.cardHeader}>
           <div style={s.shieldWrap}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="1.5">
@@ -290,6 +349,7 @@ const s: Record<string, React.CSSProperties> = {
     letterSpacing: '0.3px',
   },
   card: {
+    position: 'relative' as const,
     background: SURFACE,
     border: `1px solid ${BORDER}`,
     borderRadius: 14,

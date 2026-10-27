@@ -35,7 +35,7 @@ export async function POST(
         const result = await createInvitation(empresaId.toString(), email, rol, session.nombre, session.userId);
 
         if (!result.success) {
-            return NextResponse.json({ error: result.error }, { status: 500 });
+            return NextResponse.json({ error: result.error }, { status: 409 });
         }
 
         return NextResponse.json({ success: true, message: 'Invitación enviada con éxito' });

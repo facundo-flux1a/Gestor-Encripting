@@ -119,9 +119,9 @@ export async function GET(_req: NextRequest) {
 
     // Buscar empresa por NIF — findMany para manejar NIFs duplicados entre usuarios distintos
     const cifHash = hashField(sociedadActiva.nif);
-    const empresas = await prisma.empresas.findMany({
+    const empresas = await (prisma.empresas as any).findMany({
       where: { OR: [{ cif_hash: cifHash }, { CIF: sociedadActiva.nif }] },
-      select: { id: true, id_de_usuario: true },
+      select: { id: true, id_de_usuario: true, muvail_sociedad_ref: true },
     });
 
     if (empresas.length === 0) {
@@ -129,10 +129,24 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ action: 'none', reason: 'empresa_no_encontrada' });
     }
 
-    const miEmpresa = empresas.find((emp) => {
-      const ids: any[] = Array.isArray(emp.id_de_usuario) ? (emp.id_de_usuario as any[]) : [];
-      return ids.some((id) => String(id) === String(session.userId));
-    });
+    // Prioridad 1: match directo por ref ya sellado
+    let miEmpresa = sociedadActiva.ref
+      ? empresas.find(
+          (e: any) =>
+            e.muvail_sociedad_ref === sociedadActiva.ref &&
+            (Array.isArray(e.id_de_usuario) ? e.id_de_usuario : []).some(
+              (id: any) => String(id) === String(session.userId)
+            )
+        )
+      : undefined;
+
+    // Prioridad 2: filtrar por userId (puede haber duplicados de NIF entre usuarios)
+    if (!miEmpresa) {
+      miEmpresa = empresas.find((emp: any) => {
+        const ids: any[] = Array.isArray(emp.id_de_usuario) ? emp.id_de_usuario : [];
+        return ids.some((id) => String(id) === String(session.userId));
+      });
+    }
 
     if (!miEmpresa) {
       console.warn(`[muvail-sync] userId=${session.userId} no pertenece a ninguna empresa con NIF ${sociedadActiva.nif}`);

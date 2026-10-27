@@ -48,6 +48,10 @@ export async function GET(req: NextRequest) {
     // Crear la sesión real
     // Nota: createSession de auth-service.ts usa cookies() de next/headers, lo cual SÍ funciona en un Route Handler 
     // y aplicará la cookie directamente a la respuesta en Next.js App Router.
+
+    // Limpiar testigo SSO si existe (evita que muvail-sync expulse al usuario si el token del Portal ya caducó)
+    (prisma.usuarios as any).update({ where: { id: user.id }, data: { muvail_testigo: null } }).catch(() => {});
+
     await createSession(
       user.id,
       user.email,

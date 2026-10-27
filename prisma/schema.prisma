@@ -80,6 +80,7 @@ model empresas {
   delsol_api_base_datos String?                 @db.VarChar(50)
   /// @encrypted
   delsol_api_password   String?                 @db.Text
+  muvail_sociedad_ref   String?                 @db.VarChar(100)
   actividad             actividad[]
   archivos_documento    archivos_documento[]
   documentos            documentos[]
@@ -94,6 +95,7 @@ model empresas {
   webhooks_empresa      webhooks_empresa[]
 
   @@index([cif_hash], map: "idx_cif_hash")
+  @@index([muvail_sociedad_ref], map: "idx_muvail_sociedad_ref")
 }
 
 model entidades_documento {

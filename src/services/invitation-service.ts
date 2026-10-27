@@ -11,11 +11,37 @@ export async function createInvitation(empresaId: string, email: string, rol: st
 
     const emp = await prisma.empresas.findUnique({
       where: { id: BigInt(empresaId) },
-      select: { nombre_de_empresa: true }
+      select: { nombre_de_empresa: true, cif_hash: true }
     });
     const empresaNombre = emp?.nombre_de_empresa || 'la empresa';
 
     const emailHash = crypto.createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
+
+    // ── Validación temprana: si el destinatario ya existe en el sistema y ya
+    //    pertenece a otra empresa con el mismo CIF, bloqueamos el envío de raíz.
+    //    Así el admin recibe el error al momento de invitar, no después.
+    if (emp?.cif_hash) {
+      const destinatario = await prisma.usuarios.findUnique({ where: { email_hash: emailHash }, select: { id: true } });
+      if (destinatario) {
+        const userId = Number(destinatario.id);
+        const mismoCIF = await prisma.empresas.findMany({
+          where: { id: { not: BigInt(empresaId) }, cif_hash: emp.cif_hash },
+          select: { id: true, id_de_usuario: true },
+        });
+        const yaEnOtra = mismoCIF.some((otra) => {
+          const ids: any[] = Array.isArray(otra.id_de_usuario) ? otra.id_de_usuario : [];
+          return ids.some((id) => String(id) === String(userId));
+        });
+        if (yaEnOtra) {
+          console.warn(`[createInvitation] ${email} ya pertenece a otra empresa con el mismo CIF. Invitación bloqueada.`);
+          return {
+            success: false,
+            error: 'Este usuario ya pertenece a otra empresa registrada con el mismo CIF. No puede pertenecer a dos instancias de la misma sociedad.',
+          };
+        }
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const inv = await prisma.invitaciones_empresa.create({
       data: {
@@ -112,7 +138,7 @@ export async function acceptInvitation(token: string, userId: string | number) {
 
     const empresa = await prisma.empresas.findUnique({
       where: { id: BigInt(empresaId) },
-      select: { id_de_usuario: true, config_roles: true }
+      select: { id_de_usuario: true, config_roles: true, cif_hash: true, CIF: true },
     });
 
     let adminIdsToNotify: number[] = [];
@@ -127,9 +153,43 @@ export async function acceptInvitation(token: string, userId: string | number) {
       if (!Array.isArray(userIds)) userIds = [];
 
       const parsedUserId = parseInt(String(userId));
+
+      // ── Validación: evitar que un usuario pertenezca a dos empresas con el mismo CIF ──
+      // Replicamos la misma regla que createCompany ya aplica al crear empresas.
+      // Usamos findMany porque puede haber varias empresas con el mismo CIF (distintos clientes)
+      // y necesitamos verificar si el usuario ya está en ALGUNA de ellas.
+      if (!userIds.includes(parsedUserId) && empresa.cif_hash) {
+        const mismoCIF = await prisma.empresas.findMany({
+          where: {
+            id: { not: BigInt(empresaId) }, // distinta a la que se está aceptando
+            cif_hash: empresa.cif_hash,
+          },
+          select: { id: true, id_de_usuario: true },
+        });
+
+        const yaEnOtraConMismoCIF = mismoCIF.some((otra) => {
+          const idsOtra: any[] = Array.isArray(otra.id_de_usuario) ? otra.id_de_usuario : [];
+          return idsOtra.some((id) => String(id) === String(parsedUserId));
+        });
+
+        if (yaEnOtraConMismoCIF) {
+          console.warn(
+            `[invitation-service] userId=${parsedUserId} ya pertenece a otra empresa con el mismo CIF. Invitación rechazada.`
+          );
+          return {
+            success: false,
+            error:
+              'Ya pertenecés a una empresa registrada con este CIF. No podés pertenecer a dos instancias de la misma sociedad.',
+          };
+        }
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
+
       if (!userIds.includes(parsedUserId)) {
         userIds.push(parsedUserId);
       }
+
 
       let configRoles: Record<string, string> = {};
       try {

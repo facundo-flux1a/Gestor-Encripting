@@ -340,6 +340,10 @@ export async function login(formData: FormData) {
 
     // BYPASS 2FA TEMPORAL PARA DEBUGGING
     const t = (v: any) => (typeof v === 'boolean' ? Number(v) : Number(v ?? 1));
+
+    // Limpiar testigo SSO si existe (evita que muvail-sync expulse al usuario si el token del Portal ya caducó)
+    (prisma.usuarios as any).update({ where: { id: userId }, data: { muvail_testigo: null } }).catch(() => {});
+
     await createSession(Number(userId), userEmail, userName,
       t(user.tutorial), t(user.tutorial_documentos), t(user.tutorial_trimestres),
       t(user.tutorial_actividad), t(user.tutorial_individual), t(user.tutorial_incidencias),
