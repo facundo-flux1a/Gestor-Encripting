@@ -77,7 +77,65 @@ export async function GET(request: NextRequest) {
         take: limit,
       });
 
-      return NextResponse.json({ table, rows: processRows(rows), count: rows.length });
+      const rawRows = processRows(rows);
+
+      // ── Enriquecimiento retroactivo para registros SUBIDA ───────────────────
+      // Para cualquier fila SUBIDA que tenga uploadId en detalle (vieja o nueva),
+      // completamos la info con lo que tiene la tabla actividad.
+      const subidaRows = rawRows.filter(
+        (r: any) => r.accion === 'SUBIDA' && r.detalle?.uploadId
+      );
+
+      if (subidaRows.length > 0) {
+        const uploadIds = subidaRows.map((r: any) => r.detalle.uploadId);
+        try {
+          const actividadRows = await prisma.actividad.findMany({
+            where: { upload_id: { in: uploadIds } },
+            select: {
+              upload_id: true,
+              batch_id: true,
+              documento_nombre: true,
+              documento_tipo: true,
+              documento_id: true,
+              file_path: true,
+              file_hash: true,
+              cif: true,
+              status: true,
+              completed_at: true,
+            },
+          });
+
+          const actividadMap = new Map<string, any>();
+          actividadRows.forEach((a: any) => {
+            if (a.upload_id && !actividadMap.has(a.upload_id)) {
+              actividadMap.set(a.upload_id, a);
+            }
+          });
+
+          rawRows.forEach((r: any) => {
+            if (r.accion !== 'SUBIDA' || !r.detalle?.uploadId) return;
+            const act = actividadMap.get(r.detalle.uploadId);
+            if (!act) return;
+            // Completar solo los campos que faltan en el detalle original
+            r.detalle = {
+              ...r.detalle,
+              batchId:         r.detalle.batchId       ?? act.batch_id       ?? undefined,
+              storagePath:     r.detalle.storagePath    ?? act.file_path      ?? undefined,
+              fileHash:        r.detalle.fileHash       ?? act.file_hash      ?? undefined,
+              cif:             r.detalle.cif            ?? act.cif            ?? undefined,
+              fileType:        r.detalle.fileType       ?? act.documento_tipo ?? undefined,
+              documentoId:     r.detalle.documentoId    ?? (act.documento_id ? Number(act.documento_id) : undefined),
+              statusFinal:     act.status               ?? undefined,
+              completadoEn:    act.completed_at         ?? undefined,
+            };
+          });
+        } catch (enrichErr) {
+          console.warn('⚠️ [audit-log] No se pudo enriquecer con actividad:', enrichErr);
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
+      return NextResponse.json({ table, rows: rawRows, count: rawRows.length });
     }
 
     if (table === 'eventos_sistema') {

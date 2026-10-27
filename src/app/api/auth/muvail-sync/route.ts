@@ -91,9 +91,11 @@ export async function GET(_req: NextRequest) {
       { headers: { Authorization: `Bearer ${userDb.muvail_testigo}` } }
     );
 
-    // 401 → el Portal cerró sesión → cerramos también la nuestra
-    if (portalRes.status === 401) {
-      console.log(`[muvail-sync] Portal cerró sesión para userId=${session.userId}. Cerrando Gestor.`);
+    // 401 → sesión del Portal cerrada / 403 → acceso revocado (licencia, 2FA, bloqueo)
+    // En ambos casos cerramos también la sesión del Gestor y borramos el testigo.
+    if (portalRes.status === 401 || portalRes.status === 403) {
+      const reason = portalRes.status === 403 ? 'acceso_revocado' : 'sesion_cerrada';
+      console.log(`[muvail-sync] Portal devolvió ${portalRes.status} (${reason}) para userId=${session.userId}. Cerrando Gestor.`);
       try {
         await (prisma.usuarios as any).update({
           where: { id: BigInt(session.userId) },

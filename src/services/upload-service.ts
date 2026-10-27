@@ -647,7 +647,25 @@ export async function uploadDocument(
         accion: 'SUBIDA',
         usuarioEmail: user?.email || 'API/Desconocido',
         userId: user?.id,
-        detalle: { fileName: normalizedFileName, fileHash: mainFileHash, uploadId },
+        detalle: {
+          fileName: normalizedFileName,
+          originalFileName,
+          fileHash: mainFileHash,
+          uploadId,
+          batchId: batchId || undefined,
+          fileSize,
+          fileSizeHuman: `${(fileSize / 1024 / 1024).toFixed(2)} MB`,
+          mimeType: fileMimeType,
+          fileType: normalizedFileType,
+          fileExtension,
+          isCompressed: isCompressedFile,
+          storageUrl: publicUrl,
+          storagePath: filePath,
+          empresa: nombreEmpresa,
+          cif,
+          recargo,
+          fechaSubida: now.toISOString(),
+        },
       });
     } catch (auditErr) {
       console.warn('⚠️ Error registrando auditoría SUBIDA:', auditErr);
