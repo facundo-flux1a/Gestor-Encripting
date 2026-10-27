@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { findUserByEmail, createSession } from '@/services/auth-service';
 import { hashField } from '@/lib/encryption';
@@ -94,24 +94,27 @@ export async function POST(req: NextRequest) {
     if (sociedad?.nif) {
       try {
         const cifHash = hashField(sociedad.nif);
-        const empresa = await prisma.empresas.findFirst({
+        // findMany porque puede haber varias empresas con el mismo NIF (ej: Ferrum de Javier + Ferrum de Facundo)
+        const empresas = await prisma.empresas.findMany({
           where: { OR: [{ cif_hash: cifHash }, { CIF: sociedad.nif }] },
           select: { id: true, id_de_usuario: true },
         });
 
-        if (!empresa) {
+        if (empresas.length === 0) {
           console.warn(`[muvail-pase] Empresa con NIF ${sociedad.nif} no encontrada en el Gestor.`);
         } else {
-          // Verificar que el usuario realmente pertenece a esa empresa
-          const usuariosDeEmpresa: number[] = Array.isArray(empresa.id_de_usuario)
-            ? (empresa.id_de_usuario as any[])
-            : [];
-          if (usuariosDeEmpresa.includes(Number(user.id))) {
-            empresaId = Number(empresa.id);
+          // Buscar la empresa que pertenece a ESTE usuario (puede haber duplicados de NIF)
+          const userId = Number(user.id);
+          const miEmpresa = empresas.find((emp) => {
+            const ids: any[] = Array.isArray(emp.id_de_usuario) ? (emp.id_de_usuario as any[]) : [];
+            return ids.some((id) => String(id) === String(userId));
+          });
+
+          if (miEmpresa) {
+            empresaId = Number(miEmpresa.id);
+            console.log(`[muvail-pase] Empresa encontrada: id=${empresaId} para userId=${userId}`);
           } else {
-            console.warn(
-              `[muvail-pase] El usuario ${usuario.correo} no pertenece a la empresa NIF ${sociedad.nif} en el Gestor.`
-            );
+            console.warn(`[muvail-pase] El usuario ${usuario.correo} no pertenece a ninguna empresa con NIF ${sociedad.nif} en el Gestor.`);
           }
         }
       } catch (e) {

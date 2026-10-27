@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useCompanyContext } from '@/context/CompanyProvider';
 
 const POLL_INTERVAL_MS = 60_000; // cada 60 segundos, igual que el testigo del Portal
 
@@ -13,13 +14,13 @@ const POLL_INTERVAL_MS = 60_000; // cada 60 segundos, igual que el testigo del P
  *
  * - Si el usuario no entró via SSO → el endpoint responde {action:'none',reason:'sin_testigo'}
  *   y el hook no hace nada (costo casi cero).
- * - Si el usuario cambió de empresa en el Portal → Redis se actualiza y el
- *   CompanyProvider recarga las empresas en el próximo ciclo.
+ * - Si el usuario cambió de empresa en el Portal → recarga las empresas del CompanyProvider.
  * - Si el Portal cerró sesión → el endpoint cierra la sesión del Gestor y
  *   este hook redirige al login.
  */
 export function useMuvailSync() {
   const router = useRouter();
+  const { reloadCompanies } = useCompanyContext();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -34,8 +35,11 @@ export function useMuvailSync() {
         if (data.action === 'logout') {
           // El Portal cerró sesión → redirigir al login
           router.replace('/auth/login');
+        } else if (data.action === 'empresa_actualizada') {
+          // El Portal cambió de empresa → recargar empresas en el CompanyProvider
+          console.log('[useMuvailSync] Empresa actualizada por el Portal → recargando');
+          await reloadCompanies();
         }
-        // 'empresa_actualizada': CompanyProvider lo detecta solo en su próximo ciclo
         // 'none': nada que hacer
       } catch {
         // Fallo de red transitorio → ignorar, reintentará en el próximo ciclo
@@ -51,5 +55,5 @@ export function useMuvailSync() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [router]);
+  }, [router, reloadCompanies]);
 }

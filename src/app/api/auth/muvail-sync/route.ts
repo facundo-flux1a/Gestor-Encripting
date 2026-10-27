@@ -11,14 +11,18 @@ const MUVAIL_CRM_URL = 'https://crm-263418105374.europe-southwest1.run.app';
 /**
  * GET /api/auth/muvail-sync
  *
- * El frontend llama a este endpoint periódicamente (ej: cada 60s) mientras el
+ * El frontend llama a este endpoint periódicamente (cada 60s) mientras el
  * usuario está logueado via SSO de Muvail.
  *
  * Comportamiento:
  *   - Sin testigo en DB  → usuario no entró via SSO, no hace nada
- *   - Portal responde OK → compara sociedad_activa con la empresa activa en Redis.
- *                          Si cambió, actualiza Redis (CompanyProvider la levanta)
+ *   - Portal responde OK → si cambió de empresa, actualiza Redis
  *   - Portal responde 401 → sesión del Portal cerrada → cierra también la del Gestor
+ *
+ * MODO MOCK (MUVAIL_MOCK=true):
+ *   - No llama al Portal real (evita que el testigo falso cause logout)
+ *   - MUVAIL_MOCK_LOGOUT=true  → simula que el Portal cerró sesión
+ *   - MUVAIL_MOCK_NIF2=B...    → simula cambio de empresa activa
  */
 export async function GET(_req: NextRequest) {
   try {
@@ -38,6 +42,49 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ action: 'none', reason: 'sin_testigo' });
     }
 
+    // ── MOCK ────────────────────────────────────────────────────────────────
+    if (process.env.MUVAIL_MOCK === 'true') {
+      // Simular logout del Portal
+      if (process.env.MUVAIL_MOCK_LOGOUT === 'true') {
+        console.log('[muvail-sync] MOCK: simulando logout del Portal');
+        try {
+          await (prisma.usuarios as any).update({
+            where: { id: BigInt(session.userId) },
+            data: { muvail_testigo: null },
+          });
+        } catch (_) {}
+        const cookieStore = await cookies();
+        cookieStore.delete(SESSION_COOKIE_NAME);
+        return NextResponse.json({ action: 'logout', reason: 'mock_logout' });
+      }
+
+      // Simular cambio de empresa activa
+      const nifAlternativo = process.env.MUVAIL_MOCK_NIF2;
+      if (nifAlternativo) {
+        const cifHash = hashField(nifAlternativo);
+        // findMany porque puede haber varias empresas con el mismo NIF (distintos clientes)
+        const empresas = await prisma.empresas.findMany({
+          where: { OR: [{ cif_hash: cifHash }, { CIF: nifAlternativo }] },
+          select: { id: true, id_de_usuario: true },
+        });
+        const miEmpresa = empresas.find((emp) => {
+          const ids: any[] = Array.isArray(emp.id_de_usuario) ? (emp.id_de_usuario as any[]) : [];
+          return ids.some((id) => String(id) === String(session.userId));
+        });
+        if (miEmpresa) {
+          const nuevaEmpresaId = Number(miEmpresa.id);
+          await saveSelectedCompanies(session.userId, [nuevaEmpresaId]);
+          console.log(`[muvail-sync] MOCK: empresa cambiada a ID=${nuevaEmpresaId}`);
+          return NextResponse.json({ action: 'empresa_actualizada', empresaId: nuevaEmpresaId });
+        }
+        console.warn(`[muvail-sync] MOCK: userId=${session.userId} no pertenece a ninguna empresa con NIF ${nifAlternativo}`);
+      }
+
+      // Sin cambios — sesión activa, nada que hacer
+      return NextResponse.json({ action: 'none', reason: 'mock_ok' });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Preguntar al Portal: ¿quién soy y en qué empresa estoy ahora?
     const portalRes = await fetch(
       `${MUVAIL_CRM_URL}/api/portal/quien-soy?modulo=gestor`,
@@ -53,7 +100,6 @@ export async function GET(_req: NextRequest) {
           data: { muvail_testigo: null },
         });
       } catch (_) {}
-      // Borrar la cookie de sesión del Gestor
       const cookieStore = await cookies();
       cookieStore.delete(SESSION_COOKIE_NAME);
       return NextResponse.json({ action: 'logout', reason: 'portal_cerro_sesion' });
@@ -71,36 +117,34 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ action: 'none', reason: 'sin_sociedad_activa' });
     }
 
-    // Buscar la empresa por NIF en nuestra DB
+    // Buscar empresa por NIF — findMany para manejar NIFs duplicados entre usuarios distintos
     const cifHash = hashField(sociedadActiva.nif);
-    const empresa = await prisma.empresas.findFirst({
+    const empresas = await prisma.empresas.findMany({
       where: { OR: [{ cif_hash: cifHash }, { CIF: sociedadActiva.nif }] },
       select: { id: true, id_de_usuario: true },
     });
 
-    if (!empresa) {
+    if (empresas.length === 0) {
       console.warn(`[muvail-sync] Empresa NIF ${sociedadActiva.nif} no encontrada en Gestor.`);
       return NextResponse.json({ action: 'none', reason: 'empresa_no_encontrada' });
     }
 
-    const nuevaEmpresaId = Number(empresa.id);
+    const miEmpresa = empresas.find((emp) => {
+      const ids: any[] = Array.isArray(emp.id_de_usuario) ? (emp.id_de_usuario as any[]) : [];
+      return ids.some((id) => String(id) === String(session.userId));
+    });
 
-    // Verificar que el usuario pertenece a esa empresa
-    const usuariosDeEmpresa: number[] = Array.isArray(empresa.id_de_usuario)
-      ? (empresa.id_de_usuario as any[])
-      : [];
-
-    if (!usuariosDeEmpresa.includes(session.userId)) {
-      console.warn(`[muvail-sync] userId=${session.userId} no pertenece a empresa ID ${nuevaEmpresaId}`);
+    if (!miEmpresa) {
+      console.warn(`[muvail-sync] userId=${session.userId} no pertenece a ninguna empresa con NIF ${sociedadActiva.nif}`);
       return NextResponse.json({ action: 'none', reason: 'usuario_no_en_empresa' });
     }
+
+    const nuevaEmpresaId = Number(miEmpresa.id);
 
     // Actualizar empresa activa en Redis → CompanyProvider la detecta y cambia la vista
     await saveSelectedCompanies(session.userId, [nuevaEmpresaId]);
 
-    console.log(
-      `✅ [muvail-sync] Empresa sincronizada | userId=${session.userId} | empresaId=${nuevaEmpresaId}`
-    );
+    console.log(`✅ [muvail-sync] Empresa sincronizada | userId=${session.userId} | empresaId=${nuevaEmpresaId}`);
 
     return NextResponse.json({ action: 'empresa_actualizada', empresaId: nuevaEmpresaId });
   } catch (error) {

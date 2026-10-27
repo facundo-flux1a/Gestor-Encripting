@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -37,8 +37,8 @@ export default function PortalPage() {
         const data = await res.json();
         if (res.ok) {
           setEstado('ok');
-          setMensaje('Acceso verificado. Entrando al Gestor...');
-          router.replace('/dashboard');
+          // Hard navigation — igual que en impersonate: fuerza remount del CompanyProvider
+          window.location.href = '/dashboard';
         } else {
           setEstado('error');
           setMensaje(

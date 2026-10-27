@@ -13,6 +13,7 @@ type CompanyContextType = {
   toggleCompanyId: (id: number) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  reloadCompanies: () => Promise<void>;
 };
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -48,8 +49,7 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   // ─── Load companies + restore saved selection ────────────────────────────
-  useEffect(() => {
-    async function loadCompanies() {
+  const loadCompanies = useCallback(async () => {
       const t0 = performance.now();
       try {
         setIsLoading(true);
@@ -109,11 +109,11 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
       } finally {
         setIsLoading(false);
       }
-    }
+  }, [saveSelectionToRedis]);
 
-    // Initial load
+  useEffect(() => {
     loadCompanies();
-  }, []);
+  }, [loadCompanies]);
 
   // ─── Toggle + save ────────────────────────────────────────────────────────
   const toggleCompanyId = useCallback((id: number) => {
@@ -160,7 +160,8 @@ export const CompanyProvider = ({ children }: { children: ReactNode }) => {
     toggleCompanyId,
     isLoading,
     setIsLoading,
-  }), [companies, selectedCompanyIds, isLoading, toggleCompanyId]);
+    reloadCompanies: loadCompanies,
+  }), [companies, selectedCompanyIds, isLoading, toggleCompanyId, loadCompanies]);
 
 
 

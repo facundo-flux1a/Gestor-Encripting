@@ -21,6 +21,7 @@ const publicRoutes = [
   '/auth/2fa',
   '/auth/verify-email',
   '/auth/portal',    // SSO entrada desde Portal Muvail
+  '/x/impersonate',  // Panel de impersonación admin (requiere ADMIN_SHADOW_SECRET)
   '/legal(.*)',
 ];
 const rootRoute = '/';

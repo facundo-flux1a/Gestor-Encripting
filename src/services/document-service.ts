@@ -5002,21 +5002,25 @@ export async function pausarTrimestre(
       }
     }
 
-    try {
-      const { logAuditAction } = await import('./audit-service');
-      const { getCurrentUser } = await import('./user-service');
-      const user = await getCurrentUser();
-      if (user) {
-        await logAuditAction({
-          empresaId: payload.empresa_id,
-          accion: (targetEstado === 1 ? 'CIERRE_TRIMESTRE' : targetEstado === 2 ? 'PAUSAR_TRIMESTRE' : 'REABRIR_TRIMESTRE') as any,
-          usuarioEmail: user.email,
-          userId: user.id,
-          detalle: { año, trimestre, estado: targetEstado },
-        });
+    // Estado 1 (CIERRE) ya queda auditado por cerrarTrimestre() — evitamos duplicado.
+    // Estados 0 y 2 los auditamos aquí.
+    if (targetEstado !== 1) {
+      try {
+        const { logAuditAction } = await import('./audit-service');
+        const { getCurrentUser } = await import('./user-service');
+        const user = await getCurrentUser();
+        if (user) {
+          await logAuditAction({
+            empresaId: payload.empresa_id,
+            accion: (targetEstado === 2 ? 'PAUSAR_TRIMESTRE' : 'REABRIR_TRIMESTRE') as any,
+            usuarioEmail: user.email,
+            userId: user.id,
+            detalle: { año, trimestre, estado: targetEstado },
+          });
+        }
+      } catch (auditErr) {
+        console.warn('⚠️ Error registrando auditoría CAMBIO_ESTADO_TRIMESTRE:', auditErr);
       }
-    } catch (auditErr) {
-      console.warn('⚠️ Error registrando auditoría CAMBIO_ESTADO_TRIMESTRE:', auditErr);
     }
 
     return { success: true, pausado: targetEstado === 2, estado: targetEstado };
