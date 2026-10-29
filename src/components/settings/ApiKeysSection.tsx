@@ -396,7 +396,9 @@ export function ApiKeysSection({ companies }: ApiKeysSectionProps) {
                   <code className="text-xs">año</code>,{' '}
                   <code className="text-xs">proveedor</code>,{' '}
                   <code className="text-xs">cliente</code>,{' '}
-                  <code className="text-xs">tipo</code> (emitidas | recibidas | todas)
+                  <code className="text-xs">tipo</code> (emitidas | recibidas | extranjeras | tickets | todas),{' '}
+                  <code className="text-xs">send_email</code> (true | false, default: false),{' '}
+                  <code className="text-xs">email_destinatario</code> (opcional, fallback: mail de la empresa)
                 </p>
               </div>
             </div>

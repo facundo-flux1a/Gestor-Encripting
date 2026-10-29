@@ -79,18 +79,45 @@ Todos los parámetros son **opcionales**. Si envías un JSON vacío `{}`, la API
 | `año` | `number` | Ej: `2024`. Filtra por un año específico. |
 | `proveedor` | `string` | Busca coincidencias en nombre o CIF del proveedor/emisor. |
 | `cliente` | `string` | Busca coincidencias en nombre o CIF del cliente/receptor. |
-| `tipo` | `string` | `"emitidas"`, `"recibidas"` o `"todas"`. (Default: `"todas"`). |
+| `tipo` | `string` | `"emitidas"`, `"recibidas"`, `"extranjeras"`, `"tickets"` o `"todas"`. (Default: `"todas"`). |
+| `send_email` | `boolean` | `true` o `false`. (Default: `false`). **Interruptor maestro.** Solo si se activa en `true` se enviará una notificación por correo con el paquete ZIP de respaldo. Por defecto es `false` para que la descarga sea limpia en integraciones automáticas. |
+| `email_destinatario` | `string` | *(Opcional)* Dirección de email de destino. Solo tiene efecto si `send_email: true`. Si se omite y `send_email: true`, **se usará como fallback el correo de carga (`mail_de_carga`) configurado para la empresa**. |
+| `url_expires_in` | `number` | *(Opcional)* Tiempo de validez en segundos para los enlaces de descarga presignados embebidos en el Excel y el ZIP (Default: `604800` = 7 días). |
 
 #### Ejemplo de Petición (cURL)
 ```bash
+# 1. Exportación limpia estándar (solo descarga el archivo Excel, sin enviar mails):
 curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Content-Type: application/json" \
      -d '{
-           "año": 2024,
-           "trimestre": 3,
+           "año": 2026,
+           "trimestre": 1,
            "tipo": "recibidas"
-         }' --output "Reporte_Trimestre3.xlsx"
+         }' --output "Reporte_Trimestre1.xlsx"
+
+# 2. Exportación enviando el ZIP a un destinatario específico:
+curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
+     -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "año": 2026,
+           "trimestre": 1,
+           "tipo": "recibidas",
+           "send_email": true,
+           "email_destinatario": "contabilidad@miempresa.com"
+         }' --output "Reporte_Trimestre1.xlsx"
+
+# 3. Exportación enviando el ZIP al mail de la empresa (fallback automático):
+curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
+     -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "año": 2026,
+           "trimestre": 1,
+           "tipo": "recibidas",
+           "send_email": true
+         }' --output "Reporte_Trimestre1.xlsx"
 ```
 
 #### Respuesta

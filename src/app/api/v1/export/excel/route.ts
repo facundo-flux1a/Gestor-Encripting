@@ -71,7 +71,7 @@ const adjustColumnWidths = (sheet: XLSX.WorkSheet) => {
  * POST /api/v1/export/excel
  *
  * Autenticación (header obligatorio):
- *   X-Api-Key: flux_xxxxx
+ *   X-Api-Key: muvail_xxxxx
  *
  * Body JSON (todos los campos son opcionales excepto la API key en el header):
  * {
@@ -79,10 +79,13 @@ const adjustColumnWidths = (sheet: XLSX.WorkSheet) => {
  *   "año": 2025,                 // number
  *   "proveedor": "García",       // string — filtra por nombre o CIF del proveedor/emisor (LIKE)
  *   "cliente": "Pérez",          // string — filtra por nombre o CIF del cliente/receptor (LIKE)
- *   "tipo": "recibidas"          // "emitidas" | "recibidas" | "todas" (default: "todas")
+ *   "tipo": "recibidas",         // "emitidas" | "recibidas" | "extranjeras" | "tickets" | "todas" (default: "todas")
+ *   "send_email": false,         // boolean (default: false). Si es true, envía notificación con enlace ZIP
+ *   "email_destinatario": "a@b.com", // string (opcional). Destinatario del correo. Si no se especifica y send_email es true, usa el mail de la empresa como fallback
+ *   "url_expires_in": 604800     // number en segundos (default: 7 días). TTL de los enlaces presignados
  * }
  *
- * Respuesta: binario .xlsx con dos hojas: "Documentos" y "Resumen IVA"
+ * Respuesta: binario .xlsx con dos hojas: "Documentos" y "Resumen IVA" + enlace maestro al ZIP en la fila 1
  */
 export async function POST(request: NextRequest) {
   try {
@@ -132,6 +135,21 @@ export async function POST(request: NextRequest) {
 
     const expiresRaw = body.url_expires_in ?? body.expires_in ?? searchParams.get('url_expires_in') ?? searchParams.get('expires_in');
     const urlExpiresIn = parsePresignedExpiresParam(expiresRaw, getExcelPresignedUrlExpires());
+
+    // 4. Parámetros de notificación por email
+    // send_email es el interruptor MAESTRO: si no es true, JAMÁS se envía correo (aunque venga un email_destinatario)
+    const sendEmailRaw = body.send_email ?? body.sendEmail ?? searchParams.get('send_email') ?? searchParams.get('sendEmail');
+    const sendEmail = sendEmailRaw === true || sendEmailRaw === 'true' || sendEmailRaw === 1 || sendEmailRaw === '1';
+
+    const customEmailRaw =
+      body.email_destinatario ??
+      body.emailDestinatario ??
+      body.notify_email ??
+      body.email ??
+      searchParams.get('email_destinatario') ??
+      searchParams.get('notify_email') ??
+      searchParams.get('email');
+    const customEmail = typeof customEmailRaw === 'string' && customEmailRaw.trim() ? customEmailRaw.trim() : null;
 
     // Validaciones básicas
     if (trimestre !== null && (trimestre < 1 || trimestre > 4)) {
@@ -230,7 +248,7 @@ export async function POST(request: NextRequest) {
       }),
       prisma.empresas.findUnique({
         where: { id: empresaId },
-        select: { CIF: true, nombre_de_empresa: true, mail_de_carga: true }
+        select: { CIF: true, nombre_de_empresa: true, mail_de_carga: true, email_notificaciones: true }
       })
     ]);
 
@@ -544,15 +562,18 @@ export async function POST(request: NextRequest) {
     // Presigned GET URL pre-reservada — válida para la misma duración que las URLs del Excel
     const masterLinkUrl = await getPresignedUrl(s3ZipKey, urlExpiresIn).catch(() => '');
 
-    // Disparar ZIP en background (fire-and-forget) con mail si hay mail_de_carga
-    const mailDeCarga: string | null = (empresaData as any)?.mail_de_carga || null;
+    // Disparar ZIP en background (fire-and-forget).
+    // Solo se envía notificación por correo si send_email es estrictamente true.
+    // Destinatario: email_destinatario (si se especificó) o fallback al mail de la empresa.
+    const fallbackEmail: string | null = (empresaData as any)?.mail_de_carga?.trim() || (empresaData as any)?.email_notificaciones?.trim() || null;
+    const emailDestino = sendEmail ? (customEmail || fallbackEmail || null) : null;
     const zipJobId = generateZipJobId();
     triggerZipGeneration(zipJobId, {
       documentIds: zipDocumentIds,
       empresaId: Number(empresaId),
       s3ZipKey,
       expiresInSec: urlExpiresIn,
-      notifyEmail: mailDeCarga || null,
+      notifyEmail: emailDestino,
       empresaNombre: empresaNombre,
       source: 'api',
       exportLabel: [

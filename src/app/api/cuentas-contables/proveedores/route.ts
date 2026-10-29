@@ -193,19 +193,74 @@ function inferSugerencias(
   // ── 4. Cuenta Ingreso (7xxx) ──
   if (isEmitida) {
     if (d.cuenta_ingreso_sugerida?.codigo) {
+      // Sugerencia IA guardada en datos_extra → prioridad máxima
       cuenta_ingreso_sugerida = d.cuenta_ingreso_sugerida;
     } else {
-      if (sub.includes('servicio') || sub.includes('licencia') || sub.includes('software') || cat.includes('servicio')) {
+      // Señales de SERVICIO: subcategoría, categoría, descripción de operación y nombre del cliente
+      // PGC: 705 = Prestaciones de servicios / 700 = Ventas de mercaderías
+      const esServicio =
+        // Señales en subcategoría / categoría del documento
+        sub.includes('servicio') ||
+        sub.includes('licencia') ||
+        sub.includes('software') ||
+        sub.includes('formacion') ||
+        sub.includes('formación') ||
+        sub.includes('honorario') ||
+        sub.includes('consultoria') ||
+        sub.includes('consultoría') ||
+        sub.includes('asesoria') ||
+        sub.includes('asesoría') ||
+        sub.includes('desarrollo') ||
+        sub.includes('mantenimiento') ||
+        sub.includes('intermediacion') ||
+        sub.includes('intermediación') ||
+        sub.includes('gestion') ||
+        sub.includes('gestión') ||
+        sub.includes('diseño') ||
+        sub.includes('reforma') ||
+        cat.includes('servicio') ||
+        desc.includes('servicio') ||
+        desc.includes('honorario') ||
+        // Señales en el NOMBRE del cliente (ya desencriptado)
+        nom.includes('system') ||
+        nom.includes('solution') ||
+        nom.includes('consulting') ||
+        nom.includes('consultor') ||
+        nom.includes('asesor') ||
+        nom.includes('gestio') ||   // gestión / gestiones
+        nom.includes('servici') ||  // servicio / servicios
+        nom.includes('diseño') ||
+        nom.includes('reforma') ||
+        nom.includes('desarrollo') ||
+        nom.includes('tecnolog') ||
+        nom.includes('digital') ||
+        nom.includes('software') ||
+        nom.includes('it ') ||
+        nom.startsWith('it') ||
+        nom.includes('securitas') ||
+        nom.includes('seguridad') ||
+        nom.includes('mantenimient') ||
+        nom.includes('ingenieria') ||
+        nom.includes('ingeniería') ||
+        nom.includes('arquitect') ||
+        nom.includes('abogad') ||
+        nom.includes('juridic') ||
+        nom.includes('notari') ||
+        nom.includes('gestor') ||
+        nom.includes('auditoria') ||
+        nom.includes('auditor');
+
+      if (esServicio) {
         cuenta_ingreso_sugerida = {
           codigo: '7050000',
           nombre: 'Prestaciones de servicios',
-          justificacion: 'Factura emitida por servicios / licencias (705)',
+          justificacion: 'Factura emitida por prestación de servicios (PGC 705)',
         };
       } else {
         cuenta_ingreso_sugerida = {
           codigo: '7000000',
           nombre: 'Ventas de mercaderías',
-          justificacion: 'Factura emitida por venta estándar (700)',
+          justificacion: 'Factura emitida por venta de producto/mercadería (PGC 700)',
         };
       }
     }

@@ -148,6 +148,7 @@ Genera un archivo Excel (`.xlsx`) con el libro de IVA y el resumen trimestral co
 En solicitudes `POST`, los parámetros de entrada se envían estructurados dentro del cuerpo del mensaje utilizando `-d` (`--data`):
 
 ```bash
+# Descarga limpia (por defecto send_email es false, no envía correos):
 curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
      -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
      -H "Content-Type: application/json" \
@@ -155,6 +156,31 @@ curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
            "año": 2026,
            "trimestre": 1,
            "tipo": "emitidas"
+         }' \
+     --output "Reporte_Trimestre_1_2026.xlsx"
+
+# Descarga solicitando notificación a un email específico:
+curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
+     -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "año": 2026,
+           "trimestre": 1,
+           "tipo": "emitidas",
+           "send_email": true,
+           "email_destinatario": "administracion@cliente.com"
+         }' \
+     --output "Reporte_Trimestre_1_2026.xlsx"
+
+# Descarga usando como fallback el email configurado para la empresa:
+curl -X POST "https://[tu-dominio]/api/v1/export/excel" \
+     -H "X-Api-Key: muvail_tu_clave_secreta_aqui" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "año": 2026,
+           "trimestre": 1,
+           "tipo": "emitidas",
+           "send_email": true
          }' \
      --output "Reporte_Trimestre_1_2026.xlsx"
 ```

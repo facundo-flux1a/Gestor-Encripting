@@ -35,6 +35,7 @@ import {
   Landmark,
   Archive,
   Scale,
+  History,
 } from "lucide-react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -335,6 +336,7 @@ export function MainLayout({ children, noPadding = false }: { children: React.Re
     { href: '/dashboard/sii', label: 'SII AEAT', icon: Landmark },
     { href: '/proveedores', label: 'Entidades', icon: Users },
     { href: '/cuentas-contables', label: 'Cuentas Contables', icon: Scale },
+    { href: '/trazabilidad', label: 'Trazabilidad', icon: History },
     { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
     { href: '/docs', label: 'Docs', icon: BookOpen },
   ];

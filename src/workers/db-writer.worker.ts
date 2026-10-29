@@ -1112,8 +1112,15 @@ export function startDbWriterWorker() {
               const tipoDoc = esEmitida ? 'emitida (venta)' : 'recibida (compra/gasto)';
               const cuentaGrupo = esEmitida ? 'ingresos (grupo 7 PGC español)' : 'gastos (grupo 6 PGC español)';
               const ejemplos = esEmitida
-                ? '700000 Ventas de mercaderías, 705000 Prestaciones de servicios, 752000 Ingresos por arrendamientos'
+                ? '700000 Ventas de mercaderías (productos físicos, alimentación, materiales), 705000 Prestaciones de servicios (honorarios, consultoría, desarrollo software, formación, asesoría, mantenimiento, diseño, intermediación, alquiler de servicios), 752000 Ingresos por arrendamientos inmobiliarios'
                 : '600000 Compras mercaderías, 621000 Arrendamientos, 623000 Servicios profesionales, 625000 Primas de seguros, 628000 Suministros (luz/agua/gas/telecom), 629000 Otros servicios (SaaS/cloud/software)';
+
+              const reglasEmitida = esEmitida ? `
+
+REGLA CRÍTICA para facturas emitidas (700 vs 705):
+- Usa 705000 (Prestaciones de servicios) si la empresa vende: consultoría, asesoría, desarrollo de software, formación, mantenimiento, diseño, intermediación, servicios jurídicos, servicios informáticos, o cualquier servicio inmaterial.
+- Usa 700000 (Ventas de mercaderías) SOLO si la empresa vende bienes físicos: alimentación, ropa, materiales, mobiliario, electrodomésticos, o cualquier producto tangible.
+- En caso de duda entre ambas, prefiere 705000 si el nombre del cliente o la descripción sugieren actividad de servicios.` : '';
 
               const prompt = `Eres un experto en contabilidad española (PGC). Necesito que determines la cuenta contable de ${cuentaGrupo} más apropiada para este proveedor/cliente.
 
@@ -1123,7 +1130,7 @@ Tipo de factura: ${tipoDoc}
 Descripción de conceptos facturados: ${descripcionLineas || 'No disponible'}
 
 Cuentas de referencia más comunes:
-${ejemplos}
+${ejemplos}${reglasEmitida}
 
 Responde SOLO con JSON válido, sin markdown:
 {"codigo": "6XXXXXX", "nombre": "Nombre cuenta PGC", "justificacion": "motivo breve"}`;

@@ -204,8 +204,22 @@ const excelParams: ParamDef[] = [
     label: 'Tipo de documento',
     description: 'Filtra qué tipo de facturas incluir en el Libro de IVA.',
     type: 'enum',
-    options: ['todas', 'emitidas', 'recibidas'],
+    options: ['todas', 'emitidas', 'recibidas', 'extranjeras', 'tickets'],
     defaultValue: 'todas',
+  },
+  {
+    key: 'send_email',
+    label: 'Notificar por email',
+    description: 'Si es true, envía un correo con el paquete ZIP adjunto. Por defecto es false.',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: 'email_destinatario',
+    label: 'Email destinatario (opcional)',
+    description: 'Dirección de correo de destino. Si se omite y send_email es true, se usará como fallback el mail de carga de la empresa.',
+    type: 'text',
+    defaultValue: '',
   },
 ];
 

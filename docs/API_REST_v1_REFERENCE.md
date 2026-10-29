@@ -88,7 +88,7 @@ Construye y exporta dinámicamente un reporte detallado (Libro de IVA, resumen t
 * **Content-Type:** `application/json`
 
 #### Body (JSON)
-* `año` (number), `trimestre` (number), `proveedor` (string), `cliente` (string), `tipo` (string).
+* `año` (number), `trimestre` (number), `proveedor` (string), `cliente` (string), `tipo` ("emitidas" | "recibidas" | "extranjeras" | "tickets" | "todas"), `send_email` (boolean, default: false), `email_destinatario` (string, opcional, fallback al mail de la empresa), `url_expires_in` (number en seg, default: 604800).
 
 ### 2.7 Gestión de Incidencias (Listar y Resolver)
 Permite a un ERP consultar documentos con errores matemáticos o de calidad, y resolverlos.
