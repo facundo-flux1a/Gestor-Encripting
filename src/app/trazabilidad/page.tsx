@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { TrazabilidadTutorialProvider } from '@/context/TrazabilidadTutorialProvider';
+import { TrazabilidadTutorialRouter } from '@/components/tutorials/TrazabilidadTutorialRouter';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -718,8 +720,8 @@ function FriendlyBatchCard({
 
 // ─── Página Principal ─────────────────────────────────────────────────────────
 
-export default function TrazabilidadPage() {
-  const { selectedCompanyIds } = useCompanyContext();
+function TrazabilidadContent() {
+  const { selectedCompanyIds, isLoading: isCompaniesLoading } = useCompanyContext();
 
   const [vista, setVista] = useState<Vista>('semanal');
   const [fechaReferencia, setFechaReferencia] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -745,7 +747,7 @@ export default function TrazabilidadPage() {
   const [searchFilter, setSearchFilter] = useState('');
 
   const [data, setData] = useState<HistorialData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Presets rápidos para el popover
@@ -1061,14 +1063,18 @@ export default function TrazabilidadPage() {
     );
   }, [data?.batches, searchFilter]);
 
+  const isPageSettled = !loading && !isCompaniesLoading && data !== null;
+
   return (
     <MainLayout>
+      <TrazabilidadTutorialRouter isDataLoading={!isPageSettled} />
       <div className="space-y-6 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {/* Cabecera Principal */}
         <PageHeader
           title="Trazabilidad de Ingesta"
           mobileTitle="Ingesta"
           icon={History}
+          data-tutorial="trazabilidad-header"
         >
           <div className="flex items-center gap-2">
             <CompaniesHeaderSelector />
@@ -1099,10 +1105,10 @@ export default function TrazabilidadPage() {
         )}
 
         {/* Resumen Superior */}
-        {resumen && resumen.total > 0 && (() => {
-          const pctSubida = resumen.pctSubida ?? Math.round(((resumen.total - resumen.fallidos) / resumen.total) * 100);
+        {resumen && (() => {
+          const pctSubida = resumen.pctSubida ?? (resumen.total > 0 ? Math.round(((resumen.total - resumen.fallidos) / resumen.total) * 100) : 100);
           return (
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+            <div data-tutorial="trazabilidad-metrics" className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
               <FriendlyMetricCard
                 title="Total Comprobantes"
                 value={resumen.total}
@@ -1153,7 +1159,7 @@ export default function TrazabilidadPage() {
         <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 sm:p-5 backdrop-blur-sm space-y-4 shadow-sm">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             {/* Selector de período con Día, Semana, Mes y Desde - Hasta con calendario desplegable */}
-            <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-slate-950/60 border border-white/10 flex-wrap">
+            <div data-tutorial="trazabilidad-period-tabs" className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-slate-950/60 border border-white/10 flex-wrap">
               <Button
                 size="sm"
                 variant={vista === 'diaria' ? 'default' : 'ghost'}
@@ -1327,7 +1333,7 @@ export default function TrazabilidadPage() {
               </Popover>
             </div>
 
-            <div className="flex items-center gap-2 self-stretch sm:self-auto justify-between sm:justify-end">
+            <div data-tutorial="trazabilidad-nav" className="flex items-center gap-2 self-stretch sm:self-auto justify-between sm:justify-end">
               <Button
                 size="sm"
                 variant="outline"
@@ -1354,31 +1360,37 @@ export default function TrazabilidadPage() {
                 <ArrowRight className="h-4 w-4" />
               </Button>
 
-              {!esHoy && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                  onClick={irAHoy}
-                  disabled={loading}
-                >
-                  Hoy
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(
+                  'h-8 px-2.5 text-xs font-medium rounded-lg transition-colors',
+                  esHoy
+                    ? 'opacity-40 cursor-default border-white/5 text-muted-foreground'
+                    : 'text-foreground hover:bg-white/10 border-white/15'
+                )}
+                onClick={irAHoy}
+                disabled={loading || esHoy}
+                title={esHoy ? 'Ya estás en el período actual' : 'Volver al día de hoy'}
+              >
+                Hoy
+              </Button>
             </div>
           </div>
 
-          <FriendlyBarChart
-            series={series}
-            maxVal={maxValSerie}
-            vista={vista}
-            onSelectSlot={handleSelectSlot}
-            loading={loading}
-          />
+          <div data-tutorial="trazabilidad-chart">
+            <FriendlyBarChart
+              series={series}
+              maxVal={maxValSerie}
+              vista={vista}
+              onSelectSlot={handleSelectSlot}
+              loading={loading}
+            />
+          </div>
         </div>
 
         {/* Filtros de la lista */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+        <div data-tutorial="trazabilidad-status-filters" className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
             {[
               { id: 'all', label: 'Todos', count: resumen?.total },
@@ -1425,7 +1437,7 @@ export default function TrazabilidadPage() {
         </div>
 
         {/* Lista de envíos */}
-        <div className="space-y-3">
+        <div data-tutorial="trazabilidad-batch-list" className="space-y-3">
           {loading && !data && (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mb-3 text-primary" />
@@ -1469,5 +1481,13 @@ export default function TrazabilidadPage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function TrazabilidadPage() {
+  return (
+    <TrazabilidadTutorialProvider>
+      <TrazabilidadContent />
+    </TrazabilidadTutorialProvider>
   );
 }

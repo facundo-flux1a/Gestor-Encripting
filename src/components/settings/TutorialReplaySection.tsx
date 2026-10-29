@@ -14,6 +14,7 @@ const TUTORIALS = [
     { id: 'cuentas-contables', name: 'Cuentas Contables', path: '/cuentas-contables', storageKey: 'force_tutorial_cuentas_contables' },
     { id: 'sii', name: 'SII AEAT (Libros Registro)', path: '/dashboard/sii', storageKey: 'force_tutorial_sii' },
     { id: 'comprobantes', name: 'Comprobantes (Exportación ZIP)', path: '/comprobantes', storageKey: 'force_tutorial_comprobantes' },
+    { id: 'trazabilidad', name: 'Trazabilidad de Ingesta', path: '/trazabilidad', storageKey: 'force_tutorial_trazabilidad' },
 ];
 
 export function TutorialReplaySection() {

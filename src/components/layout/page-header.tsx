@@ -34,7 +34,7 @@ export function PageHeader({
                         <Icon className="h-4 w-4 sm:h-6 sm:w-6 shrink-0 text-primary" />
                     </div>
 
-                    <h1 className="text-lg font-headline font-bold tracking-tight truncate sm:text-2xl lg:text-3xl text-foreground" data-tutorial={dataTutorial}>
+                    <h1 className="w-fit text-lg font-headline font-bold tracking-tight truncate sm:text-2xl lg:text-3xl text-foreground" data-tutorial={dataTutorial}>
                         <span className="sm:hidden">{mobileTitle || title}</span>
                         <span className="hidden sm:inline">{title}</span>
                     </h1>

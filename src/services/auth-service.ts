@@ -236,7 +236,8 @@ export async function createSession(
   tutorialUploadQueue: number = 0,
   tutorialCuentasContables: number = 0,
   tutorialSii: number = 0,
-  tutorialComprobantes: number = 0
+  tutorialComprobantes: number = 0,
+  tutorialTrazabilidad: number = 0
 ) {
   // Limpiar/actualizar inmediatamente el cache en memoria para este usuario
   activoCache.set(userId, { activo: true, expires: Date.now() + ACTIVO_TTL_MS });
@@ -248,7 +249,7 @@ export async function createSession(
     tutorialIndividual, tutorialIncidencias, tutorialProveedores,
     tutorialHealthCheck, tutorialWebhooks, tutorialDocs,
     tutorialUploadQueue, tutorialCuentasContables, tutorialSii,
-    tutorialComprobantes,
+    tutorialComprobantes, tutorialTrazabilidad,
     organization_rol: organizationRol
   });
 
@@ -350,7 +351,9 @@ export async function login(formData: FormData) {
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR',
-      t((user as any).tutorial_upload_queue));
+      t((user as any).tutorial_upload_queue),
+      0, 0, 0,
+      t((user as any).tutorial_trazabilidad));
     await logAuthEvent('LOGIN', userEmail);
 
     if (inviteToken) {
@@ -407,6 +410,7 @@ export async function register(formData: FormData) {
         tutorial_proveedores: true,
         tutorial_health_check: true,
         tutorial_upload_queue: true,
+        tutorial_trazabilidad: true,
         email_verified: false,
         two_factor_code: code,
         two_factor_expires_at: expiresAt,
@@ -498,7 +502,9 @@ export async function verifyEmailCode(formData: FormData) {
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR',
-      t((user as any).tutorial_upload_queue));
+      t((user as any).tutorial_upload_queue),
+      0, 0, 0,
+      t((user as any).tutorial_trazabilidad));
     await logAuthEvent('LOGIN', user.email as string);
 
     if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
@@ -542,7 +548,9 @@ export async function verify2FACode(formData: FormData) {
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR',
-      t((user as any).tutorial_upload_queue));
+      t((user as any).tutorial_upload_queue),
+      0, 0, 0,
+      t((user as any).tutorial_trazabilidad));
     await logAuthEvent('LOGIN', user.email as string);
 
     if (inviteToken) await acceptInvitation(inviteToken, Number(user.id));
@@ -578,6 +586,7 @@ export async function handleGoogleSignInOnServer(
           tutorial: true, tutorial_documentos: true, tutorial_trimestres: true,
           tutorial_actividad: true, tutorial_individual: true, tutorial_incidencias: true,
           tutorial_proveedores: true, tutorial_health_check: true, tutorial_upload_queue: true,
+          tutorial_trazabilidad: true,
         }
       });
       await createDefaultAIConfig(Number(newUser.id));
@@ -593,7 +602,9 @@ export async function handleGoogleSignInOnServer(
       t(user.tutorial_proveedores), t(user.tutorial_health_check),
       t((user as any).tutorial_webhooks), t((user as any).tutorial_docs),
       (user.organization_rol as any) || 'EDITOR',
-      t((user as any).tutorial_upload_queue));
+      t((user as any).tutorial_upload_queue),
+      0, 0, 0,
+      t((user as any).tutorial_trazabilidad));
     await logAuthEvent('LOGIN', email);
 
     return { success: true };
@@ -675,7 +686,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       'tutorial_upload_queue': 'tutorialUploadQueue',
       'tutorial_cuentas_contables': 'tutorialCuentasContables',
       'tutorial_sii': 'tutorialSii',
-      'tutorial_comprobantes': 'tutorialComprobantes'
+      'tutorial_comprobantes': 'tutorialComprobantes',
+      'tutorial_trazabilidad': 'tutorialTrazabilidad'
     };
 
     const payloadField = fieldMap[field];
@@ -702,7 +714,8 @@ async function updateUserTutorialField(field: string, value: number = 0) {
       (updatedPayload as any).tutorialUploadQueue ?? 0,
       (updatedPayload as any).tutorialCuentasContables ?? 0,
       (updatedPayload as any).tutorialSii ?? 0,
-      (updatedPayload as any).tutorialComprobantes ?? 0
+      (updatedPayload as any).tutorialComprobantes ?? 0,
+      (updatedPayload as any).tutorialTrazabilidad ?? 0
     );
 
     console.log(`✅ [auth-service] ${field} actualizado exitosamente`);
@@ -767,4 +780,8 @@ export async function completeTutorialSii() {
 
 export async function completeTutorialComprobantes() {
   return await updateUserTutorialField('tutorial_comprobantes', 0);
+}
+
+export async function completeTutorialTrazabilidad() {
+  return await updateUserTutorialField('tutorial_trazabilidad', 0);
 }
