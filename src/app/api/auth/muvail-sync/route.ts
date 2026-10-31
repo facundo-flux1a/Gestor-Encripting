@@ -6,7 +6,7 @@ import { saveSelectedCompanies } from '@/lib/upstash';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE_NAME } from '@/lib/session-config';
 
-const MUVAIL_CRM_URL = 'https://crm-263418105374.europe-southwest1.run.app';
+const MUVAIL_CRM_URL = process.env.MUVAIL_CRM_URL ?? 'https://crm-263418105374.europe-southwest1.run.app';
 
 /**
  * GET /api/auth/muvail-sync
